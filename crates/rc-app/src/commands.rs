@@ -240,6 +240,16 @@ pub enum Cmd {
     SnapQuadrant,
     SnapOff,
     SnapClose,
+    ProjectParameters,
+    ViewFilters,
+    LineStyles,
+    SaveSelection,
+    LoadSelection,
+    EditSelection,
+    SpotCoordinate,
+    SpotSlope,
+    FindReplace,
+    SelectJoined,
 }
 
 pub struct CmdInfo {
@@ -455,6 +465,16 @@ impl Cmd {
             ParkingComponent => ci("Parking Component", I::ParkingComponent, "Places parking spaces.", ""),
             PropertyLine => ci("Property Line", I::PropertyLine, "Sketches a closed property line; it reports its area.", ""),
             ModifySubElements => ci("Modify Sub Elements", I::SubElements, "Sets the elevation of toposolid points: type an elevation, then click points.", ""),
+            ProjectParameters => ci("Project Parameters", I::ProjectParams, "Adds parameters to categories of elements in the project.", ""),
+            ViewFilters => ci("Filters", I::ViewFilters, "Creates filters that control the visibility and graphics of elements in views.", ""),
+            LineStyles => ci("Line Styles", I::LineStyles, "Sets the weight, colour and pattern of line styles, and adds new ones.", ""),
+            SaveSelection => ci("Save", I::SelSave, "Saves the current selection so it can be loaded later.", ""),
+            LoadSelection => ci("Load", I::SelLoad, "Loads a saved selection.", ""),
+            EditSelection => ci("Edit", I::SelEdit, "Renames or deletes saved selections.", ""),
+            SpotCoordinate => ci("Spot Coordinate", I::SpotCoordinate, "Shows the North/East coordinates of a point.", ""),
+            SpotSlope => ci("Spot Slope", I::SpotSlope, "Shows the slope of a floor, roof or toposolid surface at a point.", ""),
+            FindReplace => ci("Find/Replace", I::FindReplace, "Finds and replaces text in text notes.", ""),
+            SelectJoined => ci("Select Joined Elements", I::Modify, "Adds the elements joined to the selection.", ""),
             ColorFillLegend => ci("Color Fill Legend", I::ColorLegend, "Places a legend of the room colors in the active plan.", ""),
             ScheduleFields => ci("Fields", I::Schedule, "Chooses the fields (columns) of the schedule.", ""),
             ScheduleFilter => ci("Filter", I::Filter, "Filters the rows of the schedule.", ""),
@@ -519,7 +539,8 @@ impl Cmd {
         Cmd::RevealHidden, Cmd::UnhideElements, Cmd::StyleWireframe, Cmd::StyleHidden, Cmd::StyleShaded, Cmd::StyleConsistent, Cmd::StyleRealistic,
         Cmd::ToggleShadows, Cmd::ToggleCrop, Cmd::ToggleCropShow, Cmd::ToggleSectionBox, Cmd::DetailCoarse, Cmd::DetailMedium, Cmd::DetailFine,
         Cmd::SnapEndpoint, Cmd::SnapMidpoint, Cmd::SnapNearest, Cmd::SnapIntersection, Cmd::SnapCenter, Cmd::SnapPerpendicular, Cmd::SnapTangent,
-        Cmd::SnapQuadrant, Cmd::SnapOff, Cmd::SnapClose,
+        Cmd::SnapQuadrant, Cmd::SnapOff, Cmd::SnapClose, Cmd::ProjectParameters, Cmd::ViewFilters, Cmd::LineStyles, Cmd::SaveSelection,
+        Cmd::LoadSelection, Cmd::EditSelection, Cmd::SpotCoordinate, Cmd::SpotSlope, Cmd::FindReplace, Cmd::SelectJoined,
     ];
 
     /// Stable name for saving custom shortcuts.

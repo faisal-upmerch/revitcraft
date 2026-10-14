@@ -115,8 +115,16 @@ fn vg(app: &mut App, ctx: &egui::Context) {
     window(&format!("Visibility/Graphic Overrides for {}: {}", v.type_label(), v.name)).open(&mut open).default_size(vec2(720.0, 560.0)).show(ctx, |ui| {
         let tab_id = egui::Id::new("vg-tab");
         let mut tab: u8 = ui.memory(|m| m.data.get_temp(tab_id)).unwrap_or(0);
-        tabs(ui, &mut tab, &["Model Categories", "Annotation Categories", "Imported Categories"]);
+        tabs(ui, &mut tab, &["Model Categories", "Annotation Categories", "Imported Categories", "Filters"]);
         ui.memory_mut(|m| m.data.insert_temp(tab_id, tab));
+        if tab == 3 {
+            let all = app.doc.data.filters.clone();
+            if filters_tab(ui, &all, &mut v) {
+                app.dialogs.filters = Some(v.overrides.iter().find_map(|o| o.filter).or(all.first().map(|f| f.id)));
+            }
+            footer = super::footer(ui, app, "vg", "Visibility/Graphics");
+            return;
+        }
         let cats: Vec<Category> = match tab {
             0 => Category::MODEL.to_vec(),
             1 => Category::ANNOTATION.iter().copied().filter(|c| *c != Category::ImportedCad).collect(),
@@ -262,6 +270,126 @@ fn vg(app: &mut App, ctx: &egui::Context) {
     if !open {
         app.dialogs.vg = None;
     }
+}
+
+/// The Filters tab of Visibility/Graphics: filters applied to the view with their visibility
+/// and graphic overrides. Returns true when Edit/New... was clicked.
+fn filters_tab(ui: &mut egui::Ui, all: &[ViewFilter], v: &mut View) -> bool {
+    let sel_id = egui::Id::new("vg-filter-sel");
+    let mut sel: Option<Id> = ui.memory(|m| m.data.get_temp::<Option<Id>>(sel_id)).flatten();
+    let mut edit = false;
+    ui.add_space(6.0);
+    let widths = [190.0, 70.0, 110.0, 110.0, 100.0, 70.0];
+    let total: f32 = widths.iter().sum();
+    egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(170))).show(ui, |ui| {
+        let (hr, _) = ui.allocate_exact_size(vec2(total, 36.0), egui::Sense::hover());
+        let p = ui.painter();
+        p.rect_filled(hr, 0.0, egui::Color32::from_rgb(246, 246, 246));
+        let line = egui::Stroke::new(1.0, egui::Color32::from_gray(200));
+        let mut xs = vec![hr.left()];
+        for w in widths {
+            xs.push(xs.last().unwrap() + w);
+        }
+        let mid = hr.top() + 17.0;
+        p.text(egui::pos2(xs[0] + widths[0] / 2.0, hr.center().y), egui::Align2::CENTER_CENTER, "Name", style::font(12.0), style::text());
+        p.text(egui::pos2(xs[1] + widths[1] / 2.0, hr.center().y), egui::Align2::CENTER_CENTER, "Visibility", style::font(12.0), style::text());
+        p.text(egui::pos2((xs[2] + xs[5]) / 2.0, hr.top() + 9.0), egui::Align2::CENTER_CENTER, "Projection/Surface", style::font(12.0), style::text());
+        p.line_segment([egui::pos2(xs[2], mid), egui::pos2(xs[5], mid)], line);
+        for (k, label) in [(2, "Lines"), (3, "Patterns"), (4, "Transparency")] {
+            p.text(egui::pos2(xs[k] + widths[k] / 2.0, mid + 9.0), egui::Align2::CENTER_CENTER, label, style::font(12.0), style::text());
+        }
+        p.text(egui::pos2(xs[5] + widths[5] / 2.0, hr.center().y), egui::Align2::CENTER_CENTER, "Halftone", style::font(12.0), style::text());
+        for (k, x) in xs.iter().enumerate().skip(1).take(5) {
+            let top = if k == 3 || k == 4 { mid } else { hr.top() };
+            p.line_segment([egui::pos2(*x, top), egui::pos2(*x, hr.bottom())], line);
+        }
+        p.line_segment([hr.left_bottom(), hr.right_bottom()], line);
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        let rows: Vec<usize> = (0..v.overrides.len()).filter(|k| v.overrides[*k].filter.is_some()).collect();
+        if rows.is_empty() {
+            let (r, _) = ui.allocate_exact_size(vec2(total, 60.0), egui::Sense::hover());
+            ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "No filters applied. Click Add to apply a filter to this view.", style::font(12.0), style::text_dim());
+        }
+        for k in rows {
+            let fid = v.overrides[k].filter.unwrap();
+            let name = all.iter().find(|f| f.id == fid).map(|f| f.name.clone()).unwrap_or_else(|| "(deleted)".into());
+            let o = &mut v.overrides[k];
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                let on = sel == Some(fid);
+                if cell(ui, widths[0], |ui| ui.add(egui::Button::selectable(on, name).frame(false))).clicked() {
+                    sel = Some(fid);
+                }
+                let mut vis = !o.hidden;
+                cell(ui, widths[1], |ui| {
+                    ui.add_space(22.0);
+                    if ui.checkbox(&mut vis, "").changed() {
+                        o.hidden = !vis;
+                    }
+                });
+                cell(ui, widths[2], |ui| {
+                    swatch(ui, &mut o.line_color);
+                    if o.line_color.is_some() || o.line_weight.is_some() {
+                        let mut w = o.line_weight.unwrap_or(0.0);
+                        ui.add(egui::DragValue::new(&mut w).range(0.0..=2.0).speed(0.01).max_decimals(2));
+                        o.line_weight = (w > 0.0).then_some(w);
+                    }
+                });
+                cell(ui, widths[3], |ui| swatch(ui, &mut o.fill_color));
+                cell(ui, widths[4], |ui| {
+                    if o.transparency > 0 || ui.rect_contains_pointer(ui.max_rect()) {
+                        let mut t = o.transparency as f64;
+                        ui.add(egui::DragValue::new(&mut t).range(0.0..=100.0).suffix(" %"));
+                        o.transparency = t as u8;
+                    }
+                });
+                cell(ui, widths[5], |ui| {
+                    ui.add_space(22.0);
+                    ui.checkbox(&mut o.halftone, "");
+                });
+            });
+        }
+    });
+    ui.add_space(6.0);
+    ui.horizontal(|ui| {
+        let unused: Vec<&ViewFilter> = all.iter().filter(|f| !v.overrides.iter().any(|o| o.filter == Some(f.id))).collect();
+        ui.add_enabled_ui(!unused.is_empty(), |ui| {
+            ui.menu_button("Add", |ui| {
+                for f in &unused {
+                    if ui.button(&f.name).clicked() {
+                        v.overrides.push(GraphicOverride { filter: Some(f.id), ..Default::default() });
+                        sel = Some(f.id);
+                        ui.close();
+                    }
+                }
+            });
+        });
+        let idx = sel.and_then(|s| v.overrides.iter().position(|o| o.filter == Some(s)));
+        if super::dlg_button(ui, "Remove", false, idx.is_some()) {
+            v.overrides.remove(idx.unwrap());
+            sel = None;
+        }
+        // Filter order sets priority: the first matching filter wins.
+        let filter_rows: Vec<usize> = (0..v.overrides.len()).filter(|k| v.overrides[*k].filter.is_some()).collect();
+        let pos = idx.and_then(|i| filter_rows.iter().position(|r| *r == i));
+        if super::dlg_button(ui, "Up", false, pos.is_some_and(|p| p > 0)) {
+            let p = pos.unwrap();
+            v.overrides.swap(filter_rows[p], filter_rows[p - 1]);
+        }
+        if super::dlg_button(ui, "Down", false, pos.is_some_and(|p| p + 1 < filter_rows.len())) {
+            let p = pos.unwrap();
+            v.overrides.swap(filter_rows[p], filter_rows[p + 1]);
+        }
+        ui.add_space(16.0);
+        if super::dlg_button(ui, "Edit/New...", false, true) {
+            edit = true;
+        }
+    });
+    if all.is_empty() {
+        ui.label(egui::RichText::new("This project has no filters yet. Use Edit/New... to create one.").size(11.5).color(style::text_dim()));
+    }
+    ui.memory_mut(|m| m.data.insert_temp(sel_id, sel));
+    edit
 }
 
 fn view_range(app: &mut App, ctx: &egui::Context) {

@@ -300,6 +300,9 @@ pub struct Element {
     /// Owner view for view-specific elements (annotations, detail lines, regions).
     #[serde(default)]
     pub view: Option<Id>,
+    /// Values of instance project parameters (numbers stored in internal units).
+    #[serde(default)]
+    pub params: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -349,6 +352,7 @@ impl Element {
             pinned: false,
             group: None,
             view: None,
+            params: BTreeMap::new(),
         }
     }
 
@@ -868,6 +872,8 @@ pub enum LineStyle {
     Centre,
     Overhead,
     Demolished,
+    /// A user line style: index into `Project::line_styles`.
+    Custom(u16),
 }
 
 impl LineStyle {
@@ -891,6 +897,7 @@ impl LineStyle {
             LineStyle::Centre => "<Centerline>",
             LineStyle::Overhead => "<Overhead>",
             LineStyle::Demolished => "<Demolished>",
+            LineStyle::Custom(_) => "Lines",
         }
     }
 }
@@ -966,6 +973,8 @@ pub enum DimKind {
     Diameter,
     ArcLength,
     SpotElevation,
+    SpotCoordinate,
+    SpotSlope,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1077,6 +1086,10 @@ pub enum SymbolKind {
     Revision,
     SpotElevation,
     BreakLine,
+    /// North/East coordinates of a point, two lines of text in `value`.
+    SpotCoordinate,
+    /// Slope arrow pointing downhill along `rotation_deg`; slope text in `value`.
+    SpotSlope,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -1657,31 +1670,6 @@ pub struct Sheet {
     pub approved_by: String,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum FilterOp {
-    Equals,
-    NotEquals,
-    Greater,
-    Less,
-    Contains,
-    BeginsWith,
-}
-
-impl FilterOp {
-    pub const ALL: [FilterOp; 6] =
-        [FilterOp::Equals, FilterOp::NotEquals, FilterOp::Greater, FilterOp::Less, FilterOp::Contains, FilterOp::BeginsWith];
-    pub fn label(self) -> &'static str {
-        match self {
-            FilterOp::Equals => "equals",
-            FilterOp::NotEquals => "does not equal",
-            FilterOp::Greater => "is greater than",
-            FilterOp::Less => "is less than",
-            FilterOp::Contains => "contains",
-            FilterOp::BeginsWith => "begins with",
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScheduleFilter {
     pub field: String,
@@ -1833,6 +1821,143 @@ pub struct GraphicOverride {
     /// Surface transparency 0-100.
     #[serde(default)]
     pub transparency: u8,
+    /// Set for the row of a view filter applied to the view.
+    #[serde(default)]
+    pub filter: Option<Id>,
+    /// View filters: elements passing the filter are hidden.
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+/// A rule-based view filter (View > Filters): categories plus parameter rules.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ViewFilter {
+    pub id: Id,
+    pub name: String,
+    pub categories: Vec<Category>,
+    pub rules: Vec<FilterRule>,
+    /// Elements pass when any rule holds (OR) instead of all of them (AND).
+    #[serde(default)]
+    pub any: bool,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FilterRule {
+    pub param: String,
+    pub op: FilterOp,
+    pub value: String,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum FilterOp {
+    #[default]
+    Equals,
+    NotEquals,
+    Greater,
+    GreaterOrEqual,
+    Less,
+    LessOrEqual,
+    Contains,
+    NotContains,
+    BeginsWith,
+    NotBeginsWith,
+    EndsWith,
+    NotEndsWith,
+    HasValue,
+    HasNoValue,
+}
+
+impl FilterOp {
+    pub const ALL: [FilterOp; 14] = [
+        FilterOp::Equals,
+        FilterOp::NotEquals,
+        FilterOp::Greater,
+        FilterOp::GreaterOrEqual,
+        FilterOp::Less,
+        FilterOp::LessOrEqual,
+        FilterOp::Contains,
+        FilterOp::NotContains,
+        FilterOp::BeginsWith,
+        FilterOp::NotBeginsWith,
+        FilterOp::EndsWith,
+        FilterOp::NotEndsWith,
+        FilterOp::HasValue,
+        FilterOp::HasNoValue,
+    ];
+    pub fn label(self) -> &'static str {
+        match self {
+            FilterOp::Equals => "equals",
+            FilterOp::NotEquals => "does not equal",
+            FilterOp::Greater => "is greater than",
+            FilterOp::GreaterOrEqual => "is greater than or equal to",
+            FilterOp::Less => "is less than",
+            FilterOp::LessOrEqual => "is less than or equal to",
+            FilterOp::Contains => "contains",
+            FilterOp::NotContains => "does not contain",
+            FilterOp::BeginsWith => "begins with",
+            FilterOp::NotBeginsWith => "does not begin with",
+            FilterOp::EndsWith => "ends with",
+            FilterOp::NotEndsWith => "does not end with",
+            FilterOp::HasValue => "has a value",
+            FilterOp::HasNoValue => "has no value",
+        }
+    }
+    /// Operators that take no value.
+    pub fn unary(self) -> bool {
+        matches!(self, FilterOp::HasValue | FilterOp::HasNoValue)
+    }
+
+    /// Applies the rule to a value shown as `text` (lower case) against `target` (lower
+    /// case); `numeric` holds (value, target) when both are numbers.
+    pub fn test(self, text: &str, target: &str, numeric: Option<(f64, f64)>) -> bool {
+        use FilterOp::*;
+        match self {
+            Equals => numeric.map(|(x, t)| (x - t).abs() < 1e-6).unwrap_or(text == target),
+            NotEquals => numeric.map(|(x, t)| (x - t).abs() >= 1e-6).unwrap_or(text != target),
+            Greater => numeric.map(|(x, t)| x > t + 1e-9).unwrap_or(text > target),
+            GreaterOrEqual => numeric.map(|(x, t)| x >= t - 1e-9).unwrap_or(text >= target),
+            Less => numeric.map(|(x, t)| x < t - 1e-9).unwrap_or(text < target),
+            LessOrEqual => numeric.map(|(x, t)| x <= t + 1e-9).unwrap_or(text <= target),
+            Contains => text.contains(target),
+            NotContains => !text.contains(target),
+            BeginsWith => text.starts_with(target),
+            NotBeginsWith => !text.starts_with(target),
+            EndsWith => text.ends_with(target),
+            NotEndsWith => !text.ends_with(target),
+            HasValue => !text.is_empty(),
+            HasNoValue => text.is_empty(),
+        }
+    }
+}
+
+/// A user parameter added to categories (Manage > Project Parameters).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct ProjectParameter {
+    pub name: String,
+    pub kind: ParamKind,
+    /// Properties group the parameter appears under.
+    pub group: String,
+    /// Instance parameter (else a type parameter).
+    pub instance: bool,
+    pub categories: Vec<Category>,
+}
+
+/// A named saved selection (Manage > Selection > Save).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SelectionSet {
+    pub name: String,
+    pub ids: Vec<Id>,
+}
+
+/// Graphics of a line style (Manage > Additional Settings > Line Styles).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct LineStyleDef {
+    pub name: String,
+    /// Projection line weight in paper millimetres.
+    pub weight: f32,
+    pub color: [u8; 3],
+    /// 0 solid, 1 dashed, 2 dash-dot, 3 dotted.
+    pub pattern: u8,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2128,6 +2253,21 @@ pub struct Project {
     /// Manage > Object Styles: project-wide line overrides per category.
     #[serde(default)]
     pub object_styles: BTreeMap<Category, ObjectStyle>,
+    /// Manage > Project Parameters.
+    #[serde(default)]
+    pub project_params: Vec<ProjectParameter>,
+    /// View > Filters.
+    #[serde(default)]
+    pub filters: Vec<ViewFilter>,
+    /// User line styles: `LineStyle::Custom(k)` is entry k.
+    #[serde(default)]
+    pub line_styles: Vec<LineStyleDef>,
+    /// Edited graphics of the built-in line styles, by name.
+    #[serde(default)]
+    pub builtin_line_styles: BTreeMap<String, LineStyleDef>,
+    /// Manage > Selection: saved selections.
+    #[serde(default)]
+    pub selection_sets: Vec<SelectionSet>,
 }
 
 /// Line graphics of a category (Object Styles). None keeps the built-in default.
@@ -2168,7 +2308,41 @@ impl Project {
             sun: SunSettings::default(),
             true_north: 0.0,
             object_styles: BTreeMap::new(),
+            project_params: Vec::new(),
+            filters: Vec::new(),
+            line_styles: Vec::new(),
+            builtin_line_styles: BTreeMap::new(),
+            selection_sets: Vec::new(),
         }
+    }
+
+    /// Display name of a line style (custom styles carry their own).
+    pub fn line_style_name(&self, s: LineStyle) -> String {
+        match s {
+            LineStyle::Custom(k) => self.line_styles.get(k as usize).map(|d| d.name.clone()).unwrap_or_else(|| "Lines".into()),
+            other => other.label().to_string(),
+        }
+    }
+
+    /// Every line style: the built-in ones, then the user ones.
+    pub fn all_line_styles(&self) -> Vec<LineStyle> {
+        let mut v: Vec<LineStyle> = LineStyle::ALL.to_vec();
+        v.extend((0..self.line_styles.len()).map(|k| LineStyle::Custom(k as u16)));
+        v
+    }
+
+    /// Finds a line style by its display name.
+    pub fn line_style_by_name(&self, name: &str) -> Option<LineStyle> {
+        self.all_line_styles().into_iter().find(|s| self.line_style_name(*s) == name)
+    }
+
+    /// Project parameter of this name bound to a category.
+    pub fn project_param(&self, c: Category, name: &str) -> Option<&ProjectParameter> {
+        self.project_params.iter().find(|q| q.name == name && q.categories.contains(&c))
+    }
+
+    pub fn filter(&self, id: Id) -> Option<&ViewFilter> {
+        self.filters.iter().find(|f| f.id == id)
     }
 
     pub fn new_id(&mut self) -> Id {

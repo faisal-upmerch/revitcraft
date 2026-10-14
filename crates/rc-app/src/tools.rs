@@ -120,6 +120,8 @@ impl ToolKind {
                 DimKind::Diameter => "Diameter Dimension",
                 DimKind::ArcLength => "Arc Length Dimension",
                 DimKind::SpotElevation => "Spot Elevation",
+                DimKind::SpotCoordinate => "Spot Coordinate",
+                DimKind::SpotSlope => "Spot Slope",
             },
             ToolKind::Symbol => "Symbol",
             ToolKind::Tag => "Tag",

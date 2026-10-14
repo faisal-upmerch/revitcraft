@@ -723,6 +723,9 @@ pub fn visible_in(p: &Project, view: &View, e: &Element) -> bool {
     if !view.shows_element(e) || !p.option_visible(view, e) {
         return false;
     }
+    if view.overrides.iter().any(|o| o.hidden) && crate::params::filter_hidden(p, view, e) {
+        return false;
+    }
     phase_filter_shows(view.phase_filter, phase_status(p, view, e))
 }
 

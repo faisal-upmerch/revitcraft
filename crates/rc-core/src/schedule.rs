@@ -193,20 +193,17 @@ fn get_field(p: &Project, def: &ScheduleDef, e: &Element, field: &str) -> Option
 }
 
 fn passes(p: &Project, filter: &ScheduleFilter, value: &Option<Value>, def: &ParamDef) -> bool {
+    rule_passes(p, filter.op, &filter.value, value, def)
+}
+
+/// One filter rule (schedule filters and view filters) against a parameter value.
+pub fn rule_passes(p: &Project, op: FilterOp, target: &str, value: &Option<Value>, def: &ParamDef) -> bool {
     let text = format_value(p, value, def).to_lowercase();
-    let target = filter.value.trim().to_lowercase();
     let numeric = match (value, &def.kind) {
-        (Some(Value::Num(x)), PKind::Value(k)) => p.units.parse(&filter.value, *k).map(|t| (*x, t)),
+        (Some(Value::Num(x)), PKind::Value(k)) => p.units.parse(target, *k).map(|t| (*x, t)),
         _ => None,
     };
-    match filter.op {
-        FilterOp::Equals => numeric.map(|(x, t)| (x - t).abs() < 1e-6).unwrap_or(text == target),
-        FilterOp::NotEquals => numeric.map(|(x, t)| (x - t).abs() >= 1e-6).unwrap_or(text != target),
-        FilterOp::Greater => numeric.map(|(x, t)| x > t).unwrap_or(text > target),
-        FilterOp::Less => numeric.map(|(x, t)| x < t).unwrap_or(text < target),
-        FilterOp::Contains => text.contains(&target),
-        FilterOp::BeginsWith => text.starts_with(&target),
-    }
+    op.test(text.trim(), &target.trim().to_lowercase(), numeric)
 }
 
 pub fn build(p: &Project, def: &ScheduleDef) -> Table {

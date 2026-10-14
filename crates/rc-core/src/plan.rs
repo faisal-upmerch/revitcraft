@@ -48,8 +48,28 @@ pub const REFPLANE: Stroke = Stroke::new(0.13, [30, 140, 60], Dash::DashDot);
 pub const ANNO: Stroke = Stroke::new(0.18, [0, 0, 0], Dash::Solid);
 pub const HALFTONE: [u8; 3] = [165, 165, 165];
 
-pub fn line_style_stroke(s: LineStyle) -> Stroke {
+/// Stroke of a line style, with Manage > Additional Settings > Line Styles edits applied.
+pub fn line_style_stroke(p: &Project, s: LineStyle) -> Stroke {
+    let def = match s {
+        LineStyle::Custom(k) => p.line_styles.get(k as usize),
+        other => p.builtin_line_styles.get(other.label()),
+    };
+    if let Some(d) = def {
+        let dash = match d.pattern {
+            1 => Dash::Dashed,
+            2 => Dash::DashDot,
+            3 => Dash::Dotted,
+            _ => Dash::Solid,
+        };
+        return Stroke::new(d.weight, d.color, dash);
+    }
+    builtin_line_stroke(s)
+}
+
+/// The default graphics of a line style.
+pub fn builtin_line_stroke(s: LineStyle) -> Stroke {
     match s {
+        LineStyle::Custom(_) => THIN,
         LineStyle::Thin => THIN,
         LineStyle::Medium => MEDIUM,
         LineStyle::Wide => HEAVY,
@@ -549,7 +569,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
             }
             ElementKind::Line(l) if e.view.is_none() && l.level.is_none_or(|lv| lv == c.level) => {
                 let pts = line_points(l);
-                d.line(Some(e.id), pts, l.closed, line_style_stroke(l.style));
+                d.line(Some(e.id), pts, l.closed, line_style_stroke(p, l.style));
             }
             ElementKind::Cad(cad) if e.view.is_none() && cad.level.is_none_or(|lv| lv == c.level) => {
                 for (pts, col) in &cad.polylines {
@@ -618,7 +638,7 @@ pub fn line_points(l: &LineElement) -> Vec<DVec2> {
 
 /// Applies overrides, halftone and phase graphics to the primitives an element just added.
 fn style_element(c: &Ctx, e: &Element, d: &mut Drawing, start: usize) {
-    if let Some(o) = c.view.override_for(e) {
+    if let Some(o) = crate::params::effective_override(c.p, c.view, e).as_ref() {
         let color = if o.halftone { Some(HALFTONE) } else { o.line_color };
         d.restyle(start, color, o.line_weight, None);
     }
@@ -1084,7 +1104,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 d.line(Some(e.id), vec![a, b], false, Stroke::new(0.13, r.color, Dash::Solid));
             }
             if r.pattern != FillPattern::Masking {
-                d.line(Some(e.id), r.boundary.clone(), true, line_style_stroke(r.boundary_style));
+                d.line(Some(e.id), r.boundary.clone(), true, line_style_stroke(p, r.boundary_style));
             }
         }
     }
@@ -1121,7 +1141,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     d.text(Some(e.id), lg.position - DVec2::new(0.0, h * 2.2), "No colors defined".to_string(), 2.5, Anchor::Left);
                 }
             }
-            ElementKind::Line(l) => d.line(Some(e.id), line_points(l), l.closed, line_style_stroke(l.style)),
+            ElementKind::Line(l) => d.line(Some(e.id), line_points(l), l.closed, line_style_stroke(p, l.style)),
             ElementKind::Dimension(dim) => dimension_graphics(p, e.id, dim, scale, d),
             ElementKind::Tag(t) => {
                 let text = annotation::tag_text(p, t);
@@ -1238,6 +1258,35 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     let r = 1.5 * scale;
                     d.line(Some(e.id), vec![s.position - DVec2::new(r, -r), s.position, s.position + DVec2::new(r, r), s.position + DVec2::new(r * 6.0, r)], false, ANNO);
                     d.text(Some(e.id), s.position + DVec2::new(r * 2.0, r * 2.2), s.value.clone(), 2.2, Anchor::Left);
+                }
+                SymbolKind::SpotCoordinate => {
+                    // Leader from the point to a shoulder, North over East above it.
+                    let r = 1.5 * scale;
+                    let elbow = s.position + DVec2::new(r * 3.0, r * 3.0);
+                    let lines: Vec<&str> = s.value.lines().collect();
+                    let width = lines.iter().map(|l| l.chars().count()).max().unwrap_or(4) as f64 * 1.45 * scale;
+                    let shoulder = elbow + DVec2::new(width.max(r * 4.0), 0.0);
+                    d.line(Some(e.id), vec![s.position, elbow, shoulder], false, ANNO);
+                    d.line(Some(e.id), circle(s.position, r * 0.35, 12), true, ANNO);
+                    let n = lines.len() as f64;
+                    for (k, l) in lines.iter().enumerate() {
+                        let y = elbow.y + (n - k as f64) * 3.0 * scale - 1.1 * scale;
+                        d.text(Some(e.id), DVec2::new(elbow.x + 0.6 * scale, y), l.to_string(), 2.2, Anchor::Left);
+                    }
+                }
+                SymbolKind::SpotSlope => {
+                    // A slope arrow centred on the point, pointing downhill, with the slope above.
+                    let a = s.rotation_deg.to_radians();
+                    let dir = DVec2::new(a.cos(), a.sin());
+                    let half = 6.0 * scale;
+                    let (tail, tip) = (s.position - dir * half, s.position + dir * half);
+                    d.line(Some(e.id), vec![tail, tip], false, ANNO);
+                    arrow(e.id, tip, tail, scale, d);
+                    let mut side = geom::perp(dir);
+                    if side.y < 0.0 || (side.y.abs() < 1e-9 && side.x > 0.0) {
+                        side = -side;
+                    }
+                    d.text_rot(Some(e.id), s.position + side * 1.8 * scale, s.value.clone(), 2.2, upright(dir.y.atan2(dir.x)) as f32);
                 }
                 SymbolKind::BreakLine => {
                     let a = s.rotation_deg.to_radians();

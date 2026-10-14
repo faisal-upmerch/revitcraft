@@ -1616,30 +1616,61 @@ fn context_menu(app: &mut App, resp: &egui::Response, view: &View) {
             });
         }
         ui.separator();
-        if !app.selection.is_empty() {
-            item(ui, "Delete", Cmd::Delete, &mut run);
-            item(ui, "Create Similar", Cmd::CreateSimilar, &mut run);
-            if app.selection.len() == 1 && app.el(app.selection[0]).is_some_and(|e| matches!(e.kind, ElementKind::Instance(_))) {
-                item(ui, "Edit Family", Cmd::EditFamily, &mut run);
-            }
-            if app.selection.iter().any(|id| app.doc.data.view(*id).is_some()) {
-                item(ui, "Go to View", Cmd::GoToView, &mut run);
+        let has_sel = !app.selection.is_empty();
+        let walls = app.selection.iter().any(|id| app.el(*id).is_some_and(|e| matches!(e.kind, ElementKind::Wall(_))));
+        let mut open_vg: Option<u8> = None;
+        if has_sel {
+            if walls {
+                item(ui, "Change wall's orientation", Cmd::FlipWall, &mut run);
+                item(ui, "Select Joined Elements", Cmd::SelectJoined, &mut run);
+                ui.separator();
             }
             ui.menu_button("Hide in View", |ui| {
                 item(ui, "Elements", Cmd::HideElements, &mut run);
                 item(ui, "Category", Cmd::HideCategory, &mut run);
+                if ui.button("By Filter...").clicked() {
+                    open_vg = Some(3);
+                    ui.close();
+                }
             });
-            item(ui, "Override Graphics in View...", Cmd::OverrideElements, &mut run);
+            ui.menu_button("Override Graphics in View", |ui| {
+                item(ui, "By Element...", Cmd::OverrideElements, &mut run);
+                if ui.button("By Category...").clicked() {
+                    open_vg = Some(0);
+                    ui.close();
+                }
+                if ui.button("By Filter...").clicked() {
+                    open_vg = Some(3);
+                    ui.close();
+                }
+            });
+            ui.separator();
+            item(ui, "Create Similar", Cmd::CreateSimilar, &mut run);
+            let family = app.selection.len() == 1 && app.el(app.selection[0]).is_some_and(|e| matches!(e.kind, ElementKind::Instance(_)));
+            if ui.add_enabled(family, egui::Button::new("Edit Family")).clicked() {
+                run = Some(Cmd::EditFamily);
+                ui.close();
+            }
+            ui.separator();
+        }
+        if ui.add_enabled(!app.prev_selection.is_empty(), egui::Button::new("Select Previous")).clicked() {
+            let prev = app.prev_selection.clone();
+            app.select(prev);
+            ui.close();
+        }
+        if has_sel {
             ui.menu_button("Select All Instances", |ui| {
                 item(ui, "Visible in View", Cmd::SelectAllVisible, &mut run);
                 item(ui, "In Entire Project", Cmd::SelectAllProject, &mut run);
             });
-            ui.separator();
+            item(ui, "Delete", Cmd::Delete, &mut run);
+            if app.selection.iter().any(|id| app.doc.data.view(*id).is_some()) {
+                item(ui, "Go to View", Cmd::GoToView, &mut run);
+            }
         }
-        if ui.button("Select Previous").clicked() {
-            let prev = app.prev_selection.clone();
-            app.select(prev);
-            ui.close();
+        if let Some(tab) = open_vg {
+            ui.ctx().memory_mut(|m| m.data.insert_temp(egui::Id::new("vg-tab"), tab));
+            app.dialogs.vg = app.active;
         }
         ui.separator();
         item(ui, "Zoom In Region", Cmd::ZoomRegion, &mut run);
@@ -1659,9 +1690,6 @@ fn context_menu(app: &mut App, resp: &egui::Response, view: &View) {
             item(ui, if app.settings.show_browser { "✓ Project Browser" } else { "Project Browser" }, Cmd::ToggleBrowser, &mut run);
         });
         item(ui, if app.settings.show_properties { "✓ Properties" } else { "Properties" }, Cmd::ToggleProperties, &mut run);
-        if view.is_graphical() {
-            item(ui, "View Range...", Cmd::ViewRange, &mut run);
-        }
     });
     if let Some(c) = run {
         actions::exec(app, c);

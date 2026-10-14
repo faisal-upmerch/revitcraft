@@ -30,7 +30,10 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         RoofExtrusion => view.is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
         Level => !plan && graphical_2d,
         DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine | FilledRegion | MaskingRegion | RevisionCloud
-        | Text | TagByCategory | TagAll | Symbol => graphical_2d && !in_sketch,
+        | Text | TagByCategory | TagAll | Symbol | SpotCoordinate | SpotSlope => graphical_2d && !in_sketch,
+        SaveSelection => sel,
+        LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
+        SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
         ExportCsv => view.is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
         PlaceView => view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_))),
         TypeProperties => true,
@@ -269,6 +272,9 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         DimDiameter => app.set_tool(ToolKind::Dimension(DimKind::Diameter)),
         DimArcLength => app.set_tool(ToolKind::Dimension(DimKind::ArcLength)),
         SpotElevation => app.set_tool(ToolKind::Dimension(DimKind::SpotElevation)),
+        SpotCoordinate => app.set_tool(ToolKind::Dimension(DimKind::SpotCoordinate)),
+        SpotSlope => app.set_tool(ToolKind::Dimension(DimKind::SpotSlope)),
+        FindReplace => app.dialogs.find_replace = Some(Default::default()),
         Text => app.set_tool(ToolKind::Text),
         TagByCategory => app.set_tool(ToolKind::Tag),
         TagAll => app.dialogs.tag_all = true,
@@ -377,6 +383,16 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.dialogs.message = Some(("IDs of Selection".into(), ids.join("; ")));
         }
         SelectById => app.dialogs.select_by_id = Some(String::new()),
+        ProjectParameters => app.dialogs.project_params = true,
+        ViewFilters => app.dialogs.filters = Some(app.doc.data.filters.first().map(|f| f.id)),
+        LineStyles => app.dialogs.line_styles = true,
+        SaveSelection => {
+            let n = app.doc.data.selection_sets.len() + 1;
+            app.dialogs.save_selection = Some(format!("Selection {n}"));
+        }
+        LoadSelection => app.dialogs.selection_sets = Some(false),
+        EditSelection => app.dialogs.selection_sets = Some(true),
+        SelectJoined => select_joined(app),
         Warnings => app.dialogs.warnings = true,
         KeyboardShortcuts => app.dialogs.shortcuts = Some(String::new()),
         Home => app.dialogs.home = !app.dialogs.home,
@@ -721,7 +737,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )
@@ -1124,6 +1140,25 @@ pub fn select_all_in_view(app: &mut App) {
         }
     }
     app.select(ids);
+}
+
+/// Adds walls joined at the ends of the selected walls (L, T and straight joins).
+fn select_joined(app: &mut App) {
+    let p = &app.doc.data;
+    let mut out: Vec<Id> = app.selection.clone();
+    let touches = |a: &Wall, b: &Wall| {
+        let on = |q: DVec2, w: &Wall| geom::distance_to_segment(w.start, w.end, q) < 1.0;
+        on(a.start, b) || on(a.end, b) || on(b.start, a) || on(b.end, a)
+    };
+    for id in &app.selection {
+        let Some(w) = p.wall(*id) else { continue };
+        for (e, other) in p.walls() {
+            if e.id != *id && !out.contains(&e.id) && touches(w, other) {
+                out.push(e.id);
+            }
+        }
+    }
+    app.select(out);
 }
 
 fn select_all_instances(app: &mut App, visible_only: bool) {

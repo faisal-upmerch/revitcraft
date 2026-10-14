@@ -77,6 +77,7 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     let p = &app.doc.data;
     let reveal = app.reveal_hidden.contains(&view_id);
     let mut halftone: HashSet<Id> = HashSet::new();
+    let mut overrides: std::collections::HashMap<Id, GraphicOverride> = std::collections::HashMap::new();
     let mut meshes: Vec<(Id, rc_core::mesh::MeshSet)> = Vec::new();
     for e in p.elements.iter().filter(|e| e.view.is_none()) {
         let visible = rc_core::analysis::visible_in(p, &view, e);
@@ -99,10 +100,15 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
         }
         let set = rc_core::build3d::element_mesh(p, e, &fp);
         if !set.is_empty() {
+            if !view.overrides.is_empty() {
+                if let Some(o) = rc_core::params::effective_override(p, &view, e) {
+                    overrides.insert(e.id, o);
+                }
+            }
             meshes.push((e.id, set));
         }
     }
-    let mut scene = renderer.upload(p, meshes, &HashSet::new(), key, &halftone);
+    let mut scene = renderer.upload(p, meshes, &HashSet::new(), key, &halftone, &overrides);
     renderer.set_selection(&mut scene, &sel, hover, sel_key ^ app.doc.revision.rotate_left(17));
     app.scenes.insert(view_id, scene);
     true

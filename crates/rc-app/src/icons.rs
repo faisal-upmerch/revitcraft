@@ -210,6 +210,16 @@ pub enum Icon {
     PropertyLine,
     SubElements,
     ColorLegend,
+    ProjectParams,
+    ViewFilters,
+    LineStyles,
+    AdditionalSettings,
+    SelSave,
+    SelLoad,
+    SelEdit,
+    SpotCoordinate,
+    SpotSlope,
+    FindReplace,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1364,6 +1374,62 @@ fn draw(g: &Pen, icon: Icon) {
                 g.rect(0.1, y, 0.36, y + 0.2, c, ink);
                 g.thin_line(&[(0.46, y + 0.1), (0.9, y + 0.1)], ink);
             }
+        }
+        ProjectParams => {
+            // A tag card with a "P" and a small plus.
+            g.poly(&[(0.12, 0.3), (0.66, 0.3), (0.86, 0.5), (0.66, 0.7), (0.12, 0.7)], Color32::WHITE, ink);
+            g.circle((0.7, 0.5), 0.04, Color32::TRANSPARENT, ink);
+            g.text_bold((0.36, 0.5), "P", 0.3, BLUE);
+            g.line_w(&[(0.78, 0.08), (0.78, 0.28)], GREEN, g.w * 1.4);
+            g.line_w(&[(0.68, 0.18), (0.88, 0.18)], GREEN, g.w * 1.4);
+        }
+        ViewFilters => {
+            g.poly(&[(0.06, 0.14), (0.66, 0.14), (0.42, 0.44), (0.42, 0.76), (0.3, 0.84), (0.3, 0.44)], LBLUE, ink);
+            for (k, c) in [ink, BLUE, RED].into_iter().enumerate() {
+                let y = 0.5 + k as f32 * 0.16;
+                g.line(&[(0.56, y), (0.94, y)], c);
+            }
+        }
+        LineStyles => {
+            g.line_w(&[(0.12, 0.2), (0.88, 0.2)], ink, g.w * 2.4);
+            g.line(&[(0.12, 0.44), (0.88, 0.44)], ink);
+            g.dashed((0.12, 0.64), (0.88, 0.64), ink);
+            g.pencil(0.62, 0.92, 0.22);
+        }
+        AdditionalSettings => {
+            // A wrench.
+            g.line_w(&[(0.22, 0.82), (0.62, 0.42)], GREY, g.w * 3.0);
+            g.arc((0.7, 0.32), 0.18, 0.6, 5.0, ink);
+        }
+        SelSave | SelLoad | SelEdit => {
+            g.rect(0.1, 0.1, 0.62, 0.62, Color32::TRANSPARENT, BLUE);
+            g.poly(&[(0.2, 0.2), (0.2, 0.52), (0.29, 0.44), (0.36, 0.58), (0.42, 0.55), (0.35, 0.41), (0.46, 0.41)], Color32::WHITE, ink);
+            match icon {
+                SelSave => {
+                    g.rect(0.52, 0.52, 0.92, 0.92, LBLUE, ink);
+                    g.rect(0.6, 0.52, 0.84, 0.66, Color32::WHITE, ink);
+                }
+                SelLoad => {
+                    g.arrow((0.92, 0.72), (0.6, 0.72), GREEN);
+                }
+                _ => g.pencil(0.62, 0.94, 0.26),
+            }
+        }
+        SpotCoordinate => {
+            g.line(&[(0.14, 0.86), (0.36, 0.64), (0.9, 0.64)], ink);
+            g.circle((0.14, 0.86), 0.06, Color32::TRANSPARENT, ink);
+            g.text((0.6, 0.28), "N", 0.22, BLUE);
+            g.text((0.6, 0.5), "E", 0.22, BLUE);
+        }
+        SpotSlope => {
+            g.line(&[(0.08, 0.86), (0.92, 0.42)], ink);
+            g.arrow((0.2, 0.6), (0.72, 0.34), BLUE);
+            g.text((0.36, 0.26), "%", 0.26, BLUE);
+        }
+        FindReplace => {
+            g.text_bold((0.3, 0.36), "A", 0.4, ink);
+            g.circle((0.62, 0.56), 0.18, Color32::from_rgba_unmultiplied(255, 255, 255, 120), ink);
+            g.line_w(&[(0.75, 0.69), (0.92, 0.88)], ink, g.w * 1.8);
         }
     }
     let _ = (CYAN, LGREEN);

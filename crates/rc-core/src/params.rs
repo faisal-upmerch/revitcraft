@@ -313,7 +313,7 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             phasing(p, &mut d);
         }
         ElementKind::Line(_) => {
-            d.push(def("Line Style", GRAPHICS, choice(&LineStyle::ALL, LineStyle::label), false, false));
+            d.push(def("Line Style", GRAPHICS, PKind::Choice(p.all_line_styles().into_iter().map(|s| p.line_style_name(s)).collect()), false, false));
             d.push(def("Length", DIMENSIONS, v(Length), true, false));
             d.push(def("Comments", IDENTITY, v(Text), false, false));
         }
@@ -360,7 +360,68 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Halftone", GRAPHICS, v(YesNo), false, false));
         }
     }
+    // Manage > Project Parameters bound to this category.
+    let c = e.category();
+    let typed = p.type_of(e).is_some();
+    for q in p.project_params.iter().filter(|q| q.categories.contains(&c)) {
+        if !d.iter().any(|x| x.name == q.name) {
+            d.push(def(&q.name, &q.group, v(q.kind), false, !q.instance && typed));
+        }
+    }
     d
+}
+
+fn numeric_kind(k: ParamKind) -> bool {
+    !matches!(k, ParamKind::Text | ParamKind::Material)
+}
+
+/// Stored value of a project parameter on an element or its type.
+fn project_param_raw(p: &Project, e: &Element, q: &ProjectParameter) -> Option<String> {
+    match p.type_of(e).filter(|_| !q.instance) {
+        Some(tid) => match p.sys_type(tid) {
+            Some(st) => st.texts.get(&q.name).cloned(),
+            None => p.family_type(tid).and_then(|(_, ft)| ft.values.get(&q.name).cloned()),
+        },
+        None => e.params.get(&q.name).cloned(),
+    }
+}
+
+/// Does an element pass a view filter (category and rules)?
+pub fn filter_passes(p: &Project, f: &ViewFilter, e: &Element) -> bool {
+    if !f.categories.contains(&e.category()) {
+        return false;
+    }
+    if f.rules.is_empty() {
+        return true;
+    }
+    let defs = element_params(p, e);
+    let mut test = f.rules.iter().map(|r| {
+        let Some(d) = defs.iter().find(|d| d.name == r.param) else { return false };
+        let value = get(p, e, &r.param);
+        crate::schedule::rule_passes(p, r.op, &r.value, &value, d)
+    });
+    if f.any { test.any(|b| b) } else { test.all(|b| b) }
+}
+
+/// The graphic override that applies to an element in a view: its own override first, then
+/// the view's filters (in order), then its category.
+pub fn effective_override(p: &Project, view: &View, e: &Element) -> Option<GraphicOverride> {
+    if let Some(o) = view.overrides.iter().find(|o| o.element == Some(e.id)) {
+        return Some(o.clone());
+    }
+    for o in view.overrides.iter().filter(|o| o.filter.is_some() && !o.hidden) {
+        if let Some(f) = o.filter.and_then(|id| p.filter(id)) {
+            if filter_passes(p, f, e) {
+                return Some(o.clone());
+            }
+        }
+    }
+    view.overrides.iter().find(|o| o.element.is_none() && o.filter.is_none() && o.category == Some(e.category())).cloned()
+}
+
+/// Hidden by a view filter whose visibility is off.
+pub fn filter_hidden(p: &Project, view: &View, e: &Element) -> bool {
+    view.overrides.iter().filter(|o| o.hidden).filter_map(|o| o.filter.and_then(|id| p.filter(id))).any(|f| filter_passes(p, f, e))
 }
 
 /// Fields available for a schedule of the given category ("Count" is always available).
@@ -445,6 +506,14 @@ fn top_name(p: &Project, l: Option<Id>) -> String {
 
 /// Reads a parameter value.
 pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
+    if let Some(q) = p.project_param(e.category(), name) {
+        return match project_param_raw(p, e, q) {
+            None if q.kind == ParamKind::YesNo => num(0.0),
+            None => None,
+            Some(s) if numeric_kind(q.kind) => s.parse::<f64>().ok().map(Value::Num),
+            Some(s) => text(s),
+        };
+    }
     match name {
         "Mark" if !matches!(e.kind, ElementKind::Room(_) | ElementKind::Area(_)) => return text(e.mark.clone()),
         "Comments" => return text(e.comments.clone()),
@@ -660,7 +729,7 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             }
         },
         ElementKind::Line(l) => match name {
-            "Line Style" => text(l.style.label()),
+            "Line Style" => text(p.line_style_name(l.style)),
             "Length" => num(crate::plan::line_points(l).windows(2).map(|w| w[0].distance(w[1])).sum()),
             _ => None,
         },
@@ -764,6 +833,23 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
     };
     let positive = |x: f64, what: &str| if x > 0.0 { Ok(x) } else { Err(format!("{what} must be greater than zero.")) };
 
+    if let Some(q) = p.project_param(e.category(), name).cloned() {
+        let s = t();
+        match p.type_of(&e).filter(|_| !q.instance) {
+            Some(tid) if p.sys_type(tid).is_some() => {
+                p.sys_type_mut(tid).unwrap().texts.insert(q.name.clone(), s);
+            }
+            Some(tid) => {
+                let fam = p.families.iter_mut().find(|f| f.types.iter().any(|ft| ft.id == tid)).ok_or("Type not found.")?;
+                fam.types.iter_mut().find(|ft| ft.id == tid).unwrap().values.insert(q.name.clone(), s);
+            }
+            None => {
+                p.element_mut(id).unwrap().params.insert(q.name.clone(), s);
+            }
+        }
+        return Ok(());
+    }
+
     match name {
         "Phase Created" => {
             let ph = phase_by_name(p, &t());
@@ -816,6 +902,7 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
     } else {
         None
     };
+    let line_style = if name == "Line Style" { p.line_style_by_name(&t()) } else { None };
     let el = p.element_mut(id).unwrap();
     match name {
         "Mark" if !matches!(el.kind, ElementKind::Room(_) | ElementKind::Area(_)) => {
@@ -995,7 +1082,7 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
             }
         },
         ElementKind::Line(l) => match name {
-            "Line Style" => l.style = *LineStyle::ALL.iter().find(|s| s.label() == t()).unwrap(),
+            "Line Style" => l.style = line_style.ok_or("Unknown line style.")?,
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Dimension(dm) => match name {
@@ -1080,5 +1167,63 @@ mod tests {
         assert!((get(&p, e, "Base Offset").unwrap().as_num().unwrap() - 457.2).abs() < 1e-9);
         let d = element_params(&p, e).into_iter().find(|d| d.name == "Base Offset").unwrap();
         assert_eq!(display(&p, e, &d), "1' - 6\"");
+    }
+
+    #[test]
+    fn project_parameters_filters_and_line_styles() {
+        let mut p = defaults::new_project(units::UnitSystem::Metric);
+        let lvl = p.levels()[0].0;
+        let ty = p.types_of(Category::Walls).next().unwrap().id;
+        let a = edit::add_wall(&mut p, lvl, ty, geom::DVec2::ZERO, geom::DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let b = edit::add_wall(&mut p, lvl, ty, geom::DVec2::new(0.0, 3000.0), geom::DVec2::new(4000.0, 3000.0), 3000.0).unwrap();
+        // Instance text parameter and type length parameter on walls.
+        p.project_params.push(ProjectParameter { name: "Fire Rating".into(), kind: ParamKind::Text, group: "Identity Data".into(), instance: true, categories: vec![Category::Walls] });
+        p.project_params.push(ProjectParameter { name: "Finish Depth".into(), kind: ParamKind::Length, group: "Dimensions".into(), instance: false, categories: vec![Category::Walls] });
+        let e = p.element(a).unwrap();
+        let defs = element_params(&p, e);
+        assert!(defs.iter().any(|d| d.name == "Fire Rating" && !d.type_param));
+        assert!(defs.iter().any(|d| d.name == "Finish Depth" && d.type_param));
+        assert!(category_fields(&p, Category::Walls).iter().any(|d| d.name == "Fire Rating"));
+        set(&mut p, a, "Fire Rating", "2 HR").unwrap();
+        set(&mut p, a, "Finish Depth", "25").unwrap();
+        assert_eq!(get(&p, p.element(a).unwrap(), "Fire Rating"), Some(Value::Text("2 HR".into())));
+        assert_eq!(get(&p, p.element(b).unwrap(), "Fire Rating"), None);
+        // The type value is shared by both walls of the type.
+        assert_eq!(get(&p, p.element(b).unwrap(), "Finish Depth"), Some(Value::Num(25.0)));
+
+        // A filter on the instance value: overrides and hides only the matching wall.
+        let fid = p.new_id();
+        p.filters.push(ViewFilter {
+            id: fid,
+            name: "Rated walls".into(),
+            categories: vec![Category::Walls],
+            rules: vec![FilterRule { param: "Fire Rating".into(), op: FilterOp::Contains, value: "hr".into() }],
+            any: false,
+        });
+        let f = p.filter(fid).unwrap().clone();
+        assert!(filter_passes(&p, &f, p.element(a).unwrap()));
+        assert!(!filter_passes(&p, &f, p.element(b).unwrap()));
+        let vid = p.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        p.view_mut(vid).unwrap().overrides.push(GraphicOverride { filter: Some(fid), line_color: Some([255, 0, 0]), ..Default::default() });
+        let view = p.view(vid).unwrap().clone();
+        assert_eq!(effective_override(&p, &view, p.element(a).unwrap()).and_then(|o| o.line_color), Some([255, 0, 0]));
+        assert!(effective_override(&p, &view, p.element(b).unwrap()).is_none());
+        p.view_mut(vid).unwrap().overrides[0].hidden = true;
+        let view = p.view(vid).unwrap().clone();
+        assert!(!analysis::visible_in(&p, &view, p.element(a).unwrap()));
+        assert!(analysis::visible_in(&p, &view, p.element(b).unwrap()));
+        // Numeric rule in project units.
+        let f2 = ViewFilter { id: 0, name: "Long".into(), categories: vec![Category::Walls], rules: vec![FilterRule { param: "Length".into(), op: FilterOp::GreaterOrEqual, value: "4000".into() }], any: false };
+        assert!(filter_passes(&p, &f2, p.element(a).unwrap()));
+
+        // A custom line style drives detail line graphics and is listed by name.
+        p.line_styles.push(LineStyleDef { name: "Red Dashed".into(), weight: 0.35, color: [255, 0, 0], pattern: 1 });
+        let style = p.line_style_by_name("Red Dashed").unwrap();
+        assert_eq!(style, LineStyle::Custom(0));
+        let st = crate::plan::line_style_stroke(&p, style);
+        assert_eq!((st.width, st.color, st.dash), (0.35, [255, 0, 0], crate::plan::Dash::Dashed));
+        let line = edit::add_line(&mut p, Some(vid), None, vec![geom::DVec2::ZERO, geom::DVec2::new(1000.0, 0.0)], None, LineStyle::Thin).unwrap();
+        set(&mut p, line, "Line Style", "Red Dashed").unwrap();
+        assert_eq!(get(&p, p.element(line).unwrap(), "Line Style"), Some(Value::Text("Red Dashed".into())));
     }
 }

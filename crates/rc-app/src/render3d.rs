@@ -6,7 +6,7 @@ use eframe::egui;
 use eframe::egui_wgpu::{self, wgpu};
 use glam::{DVec3, Mat4, Vec3, Vec4};
 use rc_core::mesh::MeshSet;
-use rc_core::model::{Id, Project, VisualStyle};
+use rc_core::model::{GraphicOverride, Id, Project, VisualStyle};
 use std::collections::{HashMap, HashSet};
 use wgpu::util::DeviceExt;
 
@@ -398,14 +398,15 @@ impl Renderer {
     }
 
     /// Uploads element meshes. `color_of` may override an element's colour (selection, phases).
-    pub fn upload(&self, p: &Project, meshes: Vec<(Id, MeshSet)>, selection: &HashSet<Id>, key: (u64, u64), halftone: &HashSet<Id>) -> Scene {
+    pub fn upload(&self, p: &Project, meshes: Vec<(Id, MeshSet)>, selection: &HashSet<Id>, key: (u64, u64), halftone: &HashSet<Id>, overrides: &HashMap<Id, GraphicOverride>) -> Scene {
         let mut opaque: Vec<Vertex> = Vec::new();
         let mut transparent: Vec<Vertex> = Vec::new();
         let mut lines: Vec<Vertex> = Vec::new();
         let mut bounds: Option<(DVec3, DVec3)> = None;
         for (id, set) in &meshes {
             let selected = selection.contains(id);
-            let half = halftone.contains(id);
+            let ov = overrides.get(id);
+            let half = halftone.contains(id) || ov.is_some_and(|o| o.halftone);
             if let Some((mn, mx)) = set.bounds() {
                 bounds = Some(match bounds {
                     Some((a, b)) => (a.min(mn), b.max(mx)),
@@ -414,14 +415,14 @@ impl Renderer {
             }
             for (mat_name, mesh) in &set.by_material {
                 let mat = p.material(mat_name);
-                let mut rgb = mat.map(|m| m.color).unwrap_or([200, 200, 200]);
+                let mut rgb = ov.and_then(|o| o.fill_color).or(mat.map(|m| m.color)).unwrap_or([200, 200, 200]);
                 if half {
                     rgb = [(rgb[0] as u16 / 2 + 110) as u8, (rgb[1] as u16 / 2 + 110) as u8, (rgb[2] as u16 / 2 + 110) as u8];
                 }
                 if selected {
                     rgb = [64, 140, 255];
                 }
-                let alpha = mat.map(|m| m.opacity as f32).unwrap_or(1.0);
+                let alpha = mat.map(|m| m.opacity as f32).unwrap_or(1.0) * (1.0 - ov.map(|o| o.transparency as f32 / 100.0).unwrap_or(0.0));
                 let shine = mat.map(|m| m.shininess as f32).unwrap_or(0.1);
                 let color = srgb_color(rgb, alpha);
                 let target = if alpha < 0.99 { &mut transparent } else { &mut opaque };
@@ -434,7 +435,11 @@ impl Renderer {
                         target.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: n, color, extra: [shine, 0.0, 0.0, 0.0] });
                     }
                 }
-                let edge_color = if selected { srgb_color([20, 70, 200], 1.0) } else if alpha < 0.99 { srgb_color([90, 110, 130], 1.0) } else { srgb_color([35, 35, 35], 1.0) };
+                let edge_color = if selected {
+                    srgb_color([20, 70, 200], 1.0)
+                } else if let Some(c) = ov.and_then(|o| o.line_color) {
+                    srgb_color(c, 1.0)
+                } else if alpha < 0.99 { srgb_color([90, 110, 130], 1.0) } else { srgb_color([35, 35, 35], 1.0) };
                 for (a, b) in feature_edges(mesh) {
                     for q in [a, b] {
                         lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: edge_color, extra: [0.0; 4] });

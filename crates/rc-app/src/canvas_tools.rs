@@ -122,6 +122,8 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Dimension(DimKind::Radial) | ToolKind::Dimension(DimKind::Diameter) => "Pick an arc or circle, then click to place.".into(),
         ToolKind::Dimension(DimKind::ArcLength) => "Pick an arc, then click to place the dimension.".into(),
         ToolKind::Dimension(DimKind::SpotElevation) => "Click a point to show its elevation.".into(),
+        ToolKind::Dimension(DimKind::SpotCoordinate) => "Click a point to show its North/East coordinates.".into(),
+        ToolKind::Dimension(DimKind::SpotSlope) => "Click a sloped floor, roof or toposolid to show its slope.".into(),
         ToolKind::Symbol => "Click to place the symbol.".into(),
         ToolKind::Section => if n == 0 { "Click the start of the section line.".into() } else { "Click the end of the section line.".into() },
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
@@ -1185,6 +1187,55 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
     let Some(c) = cursor else { return };
     let units = app.doc.data.units.clone();
     match kind {
+        DimKind::SpotCoordinate => {
+            let Some(pt) = point else { return };
+            let txt = format!("N {}\nE {}", units.length(pt.y), units.length(pt.x));
+            for (k, l) in txt.lines().enumerate() {
+                painter.text(xf.s(pt) + vec2(14.0, -26.0 + k as f32 * 14.0), egui::Align2::LEFT_BOTTOM, l, egui::FontId::proportional(12.0), style::TEMP_DIM);
+            }
+            painter.circle_stroke(xf.s(pt), 5.0, preview_stroke());
+            if clicked {
+                let vid = view.id;
+                if let Some(id) = app.run("Spot Coordinate", |p| {
+                    let id = edit::add_symbol(p, vid, SymbolKind::SpotCoordinate, pt);
+                    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        s.value = txt;
+                    }
+                    Ok(id)
+                }) {
+                    app.select(vec![id]);
+                }
+            }
+            return;
+        }
+        DimKind::SpotSlope => {
+            let Some(pt) = point else { return };
+            let slope = surface_at(app, view, pt).map(|(_, g)| g).filter(|g| g.length() > 1e-4);
+            let Some(g) = slope else {
+                style::canvas_tooltip(painter, xf.s(pt) + vec2(12.0, 12.0), "Pick a sloped floor, roof or toposolid");
+                return;
+            };
+            let down = -g.normalize();
+            let txt = format!("{:.2}%", g.length() * 100.0);
+            let half = 6.0 * view.scale;
+            painter.arrow(xf.s(pt - down * half), xf.s(pt + down * half) - xf.s(pt - down * half), preview_stroke());
+            painter.text(xf.s(pt) + vec2(12.0, -12.0), egui::Align2::LEFT_BOTTOM, &txt, egui::FontId::proportional(12.0), style::TEMP_DIM);
+            if clicked {
+                let vid = view.id;
+                let rot = down.y.atan2(down.x).to_degrees();
+                if let Some(id) = app.run("Spot Slope", |p| {
+                    let id = edit::add_symbol(p, vid, SymbolKind::SpotSlope, pt);
+                    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        s.value = txt;
+                        s.rotation_deg = rot;
+                    }
+                    Ok(id)
+                }) {
+                    app.select(vec![id]);
+                }
+            }
+            return;
+        }
         DimKind::SpotElevation => {
             let Some(pt) = point else { return };
             let z = spot_elevation(app, view, pt);
@@ -1405,9 +1456,45 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
 }
 
 /// Elevation at a plan point: the top of a floor under it, else the level.
+/// The highest floor, roof or toposolid top surface over a plan point: its elevation and the
+/// uphill gradient (rise over run in x and y).
+fn surface_at(app: &App, view: &View, pt: DVec2) -> Option<(f64, DVec2)> {
+    let p = &app.doc.data;
+    let fp = std::collections::HashMap::new();
+    let mut best: Option<(f64, DVec2)> = None;
+    for e in &p.elements {
+        if !matches!(e.kind, ElementKind::Floor(_) | ElementKind::Roof(_) | ElementKind::Toposolid(_)) || !analysis::visible_in(p, view, e) {
+            continue;
+        }
+        let set = rc_core::build3d::element_mesh(p, e, &fp);
+        for m in set.by_material.values() {
+            for tri in m.indices.chunks(3) {
+                let (a, b, c) = (m.positions[tri[0] as usize], m.positions[tri[1] as usize], m.positions[tri[2] as usize]);
+                let n = (b - a).cross(c - a);
+                if n.z.abs() < 1e-6 * n.length() {
+                    continue;
+                }
+                let (a2, b2, c2) = (a.truncate(), b.truncate(), c.truncate());
+                let s = [geom::cross2(b2 - a2, pt - a2), geom::cross2(c2 - b2, pt - b2), geom::cross2(a2 - c2, pt - c2)];
+                if !(s.iter().all(|x| *x >= -1e-6) || s.iter().all(|x| *x <= 1e-6)) {
+                    continue;
+                }
+                let z = a.z - (n.x * (pt.x - a.x) + n.y * (pt.y - a.y)) / n.z;
+                if best.is_none_or(|bz| z > bz.0 + 1e-6) {
+                    best = Some((z, DVec2::new(-n.x / n.z, -n.y / n.z)));
+                }
+            }
+        }
+    }
+    best
+}
+
 fn spot_elevation(app: &App, view: &View, pt: DVec2) -> f64 {
     let p = &app.doc.data;
     let Some(level) = view.plan_level() else { return pt.y };
+    if let Some((z, _)) = surface_at(app, view, pt) {
+        return z;
+    }
     let mut z = p.level_elevation(level);
     for e in &p.elements {
         if let ElementKind::Floor(f) = &e.kind {

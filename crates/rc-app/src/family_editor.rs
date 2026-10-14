@@ -1212,7 +1212,7 @@ fn preview_3d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
         ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "No GPU available for the 3D preview.", egui::FontId::proportional(13.0), style::text_dim());
         return;
     };
-    let scene = renderer.upload(&app.doc.data, vec![(0, set)], &Default::default(), (fe.scene_key, 0), &Default::default());
+    let scene = renderer.upload(&app.doc.data, vec![(0, set)], &Default::default(), (fe.scene_key, 0), &Default::default(), &Default::default());
     let ppp = ui.ctx().pixels_per_point();
     let size = [(rect.width() * ppp) as u32, (rect.height() * ppp) as u32];
     let settings = DrawSettings { style: VisualStyle::Shaded, shadows: false, sun: DVec3::new(0.4, -0.6, 0.9), section_box: None, background: [0.95, 0.96, 0.98] };

@@ -339,7 +339,7 @@ fn object_styles(app: &mut App, ctx: &egui::Context) {
     }
 }
 
-fn weight_combo(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, w: &mut Option<f32>) {
+pub(super) fn weight_combo(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, w: &mut Option<f32>) {
     // Pen numbers 1-8 like most BIM tools, mapped to paper widths.
     const PENS: [f32; 8] = [0.1, 0.13, 0.18, 0.25, 0.35, 0.5, 0.7, 1.0];
     let label = |w: Option<f32>| match w {

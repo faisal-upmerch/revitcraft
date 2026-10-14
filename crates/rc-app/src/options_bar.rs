@@ -98,9 +98,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::ModelLine | ToolKind::DetailLine => {
                 ui.label("Line Style:");
                 let mut s = app.opts.line_style;
-                egui::ComboBox::from_id_salt("line-style").selected_text(s.label()).width(120.0).show_ui(ui, |ui| {
-                    for l in LineStyle::ALL {
-                        ui.selectable_value(&mut s, l, l.label());
+                let styles = app.doc.data.all_line_styles();
+                let names: Vec<String> = styles.iter().map(|l| app.doc.data.line_style_name(*l)).collect();
+                egui::ComboBox::from_id_salt("line-style").selected_text(app.doc.data.line_style_name(s)).width(120.0).show_ui(ui, |ui| {
+                    for (l, n) in styles.iter().zip(&names) {
+                        ui.selectable_value(&mut s, *l, n);
                     }
                 });
                 app.opts.line_style = s;
@@ -254,6 +256,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::Revision => "Revision Tag",
                     SymbolKind::SpotElevation => "Spot Elevation",
                     SymbolKind::BreakLine => "Break Line",
+                    SymbolKind::SpotCoordinate => "Spot Coordinate",
+                    SymbolKind::SpotSlope => "Spot Slope",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {
                     for s in [SymbolKind::NorthArrow, SymbolKind::BreakLine, SymbolKind::SpotElevation] {

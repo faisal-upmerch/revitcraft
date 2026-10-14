@@ -141,14 +141,17 @@ fn annotate() -> Vec<Panel> {
                 Big(C::DimDiameter),
                 Labeled("Arc\nLength", C::DimArcLength, vec![]),
                 Labeled("Spot\nElevation", C::SpotElevation, vec![]),
+                Labeled("Spot\nCoordinate", C::SpotCoordinate, vec![]),
+                Labeled("Spot\nSlope", C::SpotSlope, vec![]),
             ],
         ),
         panel(
             "Detail",
             vec![Labeled("Detail\nLine", C::DetailLine, vec![]), Labeled("Region", C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]), Labeled("Revision\nCloud", C::RevisionCloud, vec![])],
         ),
-        panel("Text", vec![Big(C::Text)]),
+        panel("Text", vec![Big(C::Text), Labeled("Find/\nReplace", C::FindReplace, vec![])]),
         panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::RoomTag, C::AreaTag])]),
+        panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
         panel("Symbol", vec![Big(C::Symbol)]),
     ]
 }
@@ -190,6 +193,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
             vec![
                 Labeled("View\nTemplates", C::ViewTemplates, vec![C::ViewTemplates, C::TemplateFromView]),
                 Labeled("Visibility/\nGraphics", C::VisibilityGraphics, vec![]),
+                Big(C::ViewFilters),
                 Labeled("Thin\nLines", C::ThinLines, vec![]),
             ],
         ),
@@ -227,11 +231,20 @@ fn view_tab(_app: &App) -> Vec<Panel> {
 fn manage() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
-        panel("Settings", vec![Big(C::Materials), Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]), Stack(vec![C::ProjectUnits, C::Purge])]),
+        panel(
+            "Settings",
+            vec![
+                Big(C::Materials),
+                Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]),
+                Stack(vec![C::ProjectParameters, C::Purge, C::ProjectUnits]),
+                Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
+            ],
+        ),
         panel("Project Location", vec![Labeled("Sun\nSettings", C::Sun, vec![])]),
         panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![])]),
         panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),
+        panel("Selection", vec![Stack(vec![C::SaveSelection, C::LoadSelection, C::EditSelection])]),
         panel("Inquiry", vec![Stack(vec![C::IdsOfSelection, C::SelectById, C::Warnings])]),
     ]
 }
