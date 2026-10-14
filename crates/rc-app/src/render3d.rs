@@ -20,6 +20,8 @@ struct Uniforms {
     params: vec4<f32>,
     clip_min: vec4<f32>,
     clip_max: vec4<f32>,
+    // xy: target size in pixels.
+    viewport: vec4<f32>,
 };
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var shadow_map: texture_depth_2d;
@@ -125,6 +127,8 @@ fn vs_line(v: VIn) -> VOut {
     var o: VOut;
     var c = u.view_proj * vec4<f32>(v.pos, 1.0);
     c.z = c.z - u.params.x * c.w;
+    // extra.zw: a screen offset in pixels (thick selection edges are drawn several times).
+    c = vec4<f32>(c.xy + v.extra.zw * 2.0 / max(u.viewport.xy, vec2<f32>(1.0)) * c.w, c.z, c.w);
     o.clip = c;
     o.normal = v.normal;
     o.color = v.color;
@@ -164,6 +168,7 @@ struct Uniforms {
     params: [f32; 4],
     clip_min: [f32; 4],
     clip_max: [f32; 4],
+    viewport: [f32; 4],
 }
 
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
@@ -486,9 +491,13 @@ impl Renderer {
                         tris.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: n, color: fill, extra: [0.3, 1.0, 0.0, 0.0] });
                     }
                 }
+                // Thick edges: the same line drawn with small pixel offsets (wgpu lines are 1 px).
+                let offsets: &[[f32; 2]] = if hovered { &[[0.0, 0.0], [0.6, 0.6]] } else { &[[0.0, 0.0], [1.0, 0.0], [-1.0, 0.0], [0.0, 1.0], [0.0, -1.0]] };
                 for (a, b) in feature_edges(mesh) {
-                    for q in [a, b] {
-                        lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: edge, extra: [0.0; 4] });
+                    for o in offsets {
+                        for q in [a, b] {
+                            lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: edge, extra: [0.0, 0.0, o[0], o[1]] });
+                        }
                     }
                 }
             }
@@ -574,6 +583,7 @@ impl Renderer {
             params: [if cam.perspective { 0.0004 } else { ortho_bias(cam) }, if cam.perspective { 0.0 } else { 1.0 }, style_code, if shadows { 1.0 } else { 0.0 }],
             clip_min: [0.0; 4],
             clip_max: [0.0; 4],
+            viewport: [target.size[0] as f32, target.size[1] as f32, 0.0, 0.0],
         };
         if let Some((mn, mx)) = set.section_box {
             let (a, b) = ((mn * 0.001).as_vec3(), (mx * 0.001).as_vec3());
