@@ -108,7 +108,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Door => "Click on Wall to place Door (Space Bar to flip the instance left/right)".into(),
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
-        ToolKind::PlaceGroup => "Click to place the group origin.".into(),
+        ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => "Click to place the group origin.".into(),
         ToolKind::Room => "Click to place room".into(),
         ToolKind::CeilingAuto => "Click inside a room bounded by walls to place a ceiling, or choose Sketch Ceiling.".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
@@ -180,6 +180,24 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::Door | ToolKind::Window => hosted_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::PlaceDetailGroup => {
+            let Some(pt) = point else { return };
+            let ty = app.opts.group_type;
+            if let Some(gt) = app.doc.data.group_types.iter().find(|g| g.id == ty) {
+                for m in &gt.members {
+                    if let Some(s) = element_curve(m) {
+                        draw_segs(painter, xf, &[s.translated(pt)], preview_stroke());
+                    }
+                }
+            }
+            painter.circle_stroke(xf.s(pt), 6.0, preview_stroke());
+            if clicked {
+                let vid = view.id;
+                if let Some(id) = app.run("Place Detail Group", |p| edit::place_detail_group(p, ty, vid, pt)) {
+                    app.select(vec![id]);
+                }
+            }
+        }
         ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto => room_tool(app, painter, xf, view, cursor, clicked),
         ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => tag_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::ScopeBox => {
@@ -1084,6 +1102,9 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
         let param = match (kind, app.opts.tag_mode) {
             (ToolKind::Tag, 1) => "Family and Type",
             (ToolKind::Tag, 2) => "Material",
+            (ToolKind::Tag, 3) => "Keynote",
+            (ToolKind::Tag, 4) => "Material Keynote",
+            (ToolKind::Tag, 5) => "User Keynote",
             _ => "",
         };
         if let Some(id) = app.run("Tag", |p| {
@@ -1102,6 +1123,11 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
             Ok(id)
         }) {
             app.select(vec![id]);
+            // A keynote with no value yet asks for one, as the Keynotes dialog does.
+            let empty = app.el(id).is_some_and(|e| matches!(&e.kind, ElementKind::Tag(t) if t.parameter.contains("Keynote") && rc_core::annotation::tag_text(&app.doc.data, t) == "?"));
+            if empty {
+                app.dialogs.keynote_pick = Some(id);
+            }
         }
     }
 }

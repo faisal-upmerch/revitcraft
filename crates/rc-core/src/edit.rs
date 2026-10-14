@@ -252,7 +252,7 @@ pub fn add_tag(p: &mut Project, view: Id, host: Id, at: DVec2, leader: bool) -> 
     if p.element(host).is_none() {
         return Err("Nothing to tag.".into());
     }
-    Ok(push_in_view(p, view, ElementKind::Tag(Tag { host, position: at, leader, leader_end: None, parameter: String::new() })))
+    Ok(push_in_view(p, view, ElementKind::Tag(Tag { host, position: at, leader, leader_end: None, parameter: String::new(), key: String::new() })))
 }
 
 /// Tags every untagged element of the given categories visible in a plan view.
@@ -1510,36 +1510,81 @@ fn group_level_of(members: &[Element]) -> Option<Id> {
     members.iter().find_map(|m| m.level())
 }
 
-/// Creates a model group from elements; returns the group instance id.
+/// Creates a group from elements; returns the group instance id. Model elements make a
+/// model group and view-specific (detail) elements a detail group in their view; a mixed
+/// selection makes a model group with an attached detail group.
 pub fn create_group(p: &mut Project, ids: &[Id], name: &str) -> Result<Id, String> {
-    let members: Vec<Element> = p.elements.iter().filter(|e| ids.contains(&e.id) && e.view.is_none() && e.group.is_none() && !matches!(e.kind, ElementKind::Level(_) | ElementKind::GroupInstance(_))).cloned().collect();
-    if members.is_empty() {
-        return Err("Select model elements to group.".into());
+    let groupable = |e: &Element| ids.contains(&e.id) && e.group.is_none() && !matches!(e.kind, ElementKind::Level(_) | ElementKind::GroupInstance(_));
+    let model: Vec<Id> = p.elements.iter().filter(|e| groupable(e) && e.view.is_none()).map(|e| e.id).collect();
+    let detail: Vec<Id> = p.elements.iter().filter(|e| groupable(e) && e.view.is_some()).map(|e| e.id).collect();
+    if model.is_empty() && detail.is_empty() {
+        return Err("Select elements to group.".into());
     }
+    let views: BTreeSet<Id> = detail.iter().filter_map(|id| p.element(*id).and_then(|e| e.view)).collect();
+    if views.len() > 1 {
+        return Err("Detail elements of a group must be in one view.".into());
+    }
+    if model.is_empty() {
+        return group_of(p, &detail, name, views.first().copied());
+    }
+    let inst = group_of(p, &model, name, None)?;
+    if !detail.is_empty() {
+        let attached = unique_name(p.group_types.iter().map(|g| g.name.clone()), &format!("{name} - Detail"));
+        group_of(p, &detail, &attached, views.first().copied())?;
+    }
+    Ok(inst)
+}
+
+fn group_of(p: &mut Project, ids: &[Id], name: &str, view: Option<Id>) -> Result<Id, String> {
     if p.group_types.iter().any(|g| g.name == name) {
         return Err(format!("A group named '{name}' already exists."));
     }
-    let level = group_level_of(&members).or_else(|| p.levels().first().map(|l| l.0)).ok_or("No level.")?;
+    let members: Vec<Element> = p.elements.iter().filter(|e| ids.contains(&e.id)).cloned().collect();
+    let level = match view.and_then(|v| p.view(v)).and_then(|v| v.plan_level()) {
+        Some(l) => l,
+        None => group_level_of(&members).or_else(|| p.levels().first().map(|l| l.0)).ok_or("No level.")?,
+    };
     let fp = analysis::wall_footprints(p);
     let pts: Vec<DVec2> = members.iter().flat_map(|e| crate::plan::element_outline(p, e, &fp).into_iter().flatten()).collect();
     let (mn, mx) = geom::bounds(pts);
-    let origin = (mn + mx) / 2.0;
+    let origin = if mn.x <= mx.x { (mn + mx) / 2.0 } else { DVec2::ZERO };
     let mut stored: Vec<Element> = members.clone();
     for e in &mut stored {
         transform_element(e, &|q| q - origin, 0.0, false);
     }
     let type_id = p.new_id();
-    p.group_types.push(GroupType { id: type_id, name: name.into(), members: stored });
-    let inst = push(p, ElementKind::GroupInstance(GroupInstance { type_id, origin, level, rotation_deg: 0.0 }));
+    p.group_types.push(GroupType { id: type_id, name: name.into(), members: stored, detail: view.is_some() });
+    let inst = match view {
+        Some(v) => push_in_view(p, v, ElementKind::GroupInstance(GroupInstance { type_id, origin, level, rotation_deg: 0.0 })),
+        None => push(p, ElementKind::GroupInstance(GroupInstance { type_id, origin, level, rotation_deg: 0.0 })),
+    };
     for e in p.elements.iter_mut().filter(|e| ids.contains(&e.id)) {
         e.group = Some(inst);
     }
     Ok(inst)
 }
 
+/// Places a detail group type in a view.
+pub fn place_detail_group(p: &mut Project, type_id: Id, view: Id, origin: DVec2) -> Result<Id, String> {
+    let gt = p.group_types.iter().find(|g| g.id == type_id).cloned().ok_or("Group type not found.")?;
+    if !gt.detail {
+        return Err("This is a model group.".into());
+    }
+    if !p.view(view).is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. })) {
+        return Err("Detail groups are placed in 2D views.".into());
+    }
+    let level = p.view(view).and_then(|v| v.plan_level()).or_else(|| p.levels().first().map(|l| l.0)).ok_or("No level.")?;
+    let inst = push_in_view(p, view, ElementKind::GroupInstance(GroupInstance { type_id, origin, level, rotation_deg: 0.0 }));
+    instantiate_members(p, &gt, inst, origin, level, 0.0);
+    Ok(inst)
+}
+
 /// Places a group type at `origin` on `level`.
 pub fn place_group(p: &mut Project, type_id: Id, origin: DVec2, level: Id) -> Result<Id, String> {
     let gt = p.group_types.iter().find(|g| g.id == type_id).cloned().ok_or("Group type not found.")?;
+    if gt.detail {
+        return Err("This is a detail group; place it from Annotate > Detail Group.".into());
+    }
     let inst = push(p, ElementKind::GroupInstance(GroupInstance { type_id, origin, level, rotation_deg: 0.0 }));
     instantiate_members(p, &gt, inst, origin, level, 0.0);
     Ok(inst)
@@ -1552,11 +1597,15 @@ fn instantiate_members(p: &mut Project, gt: &GroupType, inst: Id, origin: DVec2,
         map.insert(m.id, p.new_id());
     }
     let r = DVec2::from_angle(rot.to_radians());
+    let inst_view = p.element(inst).and_then(|e| e.view);
     for m in &gt.members {
         let mut c = m.clone();
         c.id = map[&m.id];
         c.uid = uuid::Uuid::new_v4().to_string();
         c.group = Some(inst);
+        if gt.detail {
+            c.view = inst_view;
+        }
         transform_element(&mut c, &|q| origin + r.rotate(q), rot, false);
         match &mut c.kind {
             ElementKind::Instance(i) => {
@@ -1841,6 +1890,17 @@ pub fn new_material_takeoff(p: &mut Project, category: Category) -> Id {
             material_takeoff: true,
             ..Default::default()
         }),
+    ));
+    id
+}
+
+pub fn new_keynote_legend(p: &mut Project) -> Id {
+    let id = p.new_id();
+    p.views.push(View::new(
+        id,
+        unique_name(p.views.iter().map(|v| v.name.clone()), "Keynote Legend"),
+        100.0,
+        ViewKind::Schedule(ScheduleDef { category: Category::GenericModels, fields: vec!["Key Value".into(), "Keynote Text".into()], sort_by: vec!["Key Value".into()], keynote_legend: true, itemize: true, ..Default::default() }),
     ));
     id
 }
@@ -2241,6 +2301,31 @@ mod tests {
         })
         .unwrap();
         assert!((doc.data.wall(b).unwrap().start.x - 3500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn detail_groups_live_in_their_view() {
+        let (mut p, lvl, wt) = project();
+        let view = p.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        let a = add_line(&mut p, Some(view), None, vec![DVec2::ZERO, DVec2::new(1000.0, 0.0)], None, LineStyle::Thin).unwrap();
+        let b = add_text(&mut p, view, DVec2::new(0.0, 300.0), "NOTE", 2.5).unwrap();
+        let inst = create_group(&mut p, &[a, b], "Note").unwrap();
+        let gt = p.group_types.iter().find(|g| g.name == "Note").unwrap().clone();
+        assert!(gt.detail);
+        assert_eq!(gt.members.len(), 2);
+        assert_eq!(p.element(inst).unwrap().view, Some(view));
+        assert!(place_group(&mut p, gt.id, DVec2::ZERO, lvl).is_err());
+        let copy = place_detail_group(&mut p, gt.id, view, DVec2::new(5000.0, 0.0)).unwrap();
+        let members: Vec<&Element> = p.elements.iter().filter(|e| e.group == Some(copy)).collect();
+        assert_eq!(members.len(), 2);
+        assert!(members.iter().all(|e| e.view == Some(view)));
+        // A mixed selection makes a model group and an attached detail group.
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 5000.0), DVec2::new(4000.0, 5000.0), 3000.0).unwrap();
+        let c = add_line(&mut p, Some(view), None, vec![DVec2::new(0.0, 5500.0), DVec2::new(1000.0, 5500.0)], None, LineStyle::Thin).unwrap();
+        let g = create_group(&mut p, &[w, c], "Room A").unwrap();
+        assert_eq!(p.element(g).unwrap().view, None);
+        assert!(p.group_types.iter().any(|t| t.name == "Room A - Detail" && t.detail));
+        assert!(p.element(c).unwrap().group.is_some_and(|x| x != g));
     }
 
     #[test]

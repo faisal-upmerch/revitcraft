@@ -374,9 +374,13 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Halftone", GRAPHICS, v(YesNo), false, false));
         }
     }
+    // Every typed element has a Keynote type parameter.
+    let typed = p.type_of(e).is_some();
+    if typed && !d.iter().any(|x| x.name == "Keynote") {
+        d.push(def("Keynote", IDENTITY, v(Text), false, true));
+    }
     // Manage > Project Parameters bound to this category.
     let c = e.category();
-    let typed = p.type_of(e).is_some();
     for q in p.project_params.iter().filter(|q| q.categories.contains(&c)) {
         if !d.iter().any(|x| x.name == q.name) {
             d.push(def(&q.name, &q.group, v(q.kind), false, !q.instance && typed));
@@ -520,6 +524,9 @@ fn top_name(p: &Project, l: Option<Id>) -> String {
 
 /// Reads a parameter value.
 pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
+    if name == "Keynote" && p.type_of(e).is_some() {
+        return text(crate::keynote::element_keynote(p, e));
+    }
     if let Some(q) = p.project_param(e.category(), name) {
         return match project_param_raw(p, e, q) {
             None if q.kind == ParamKind::YesNo => num(0.0),
@@ -864,6 +871,21 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
     };
     let positive = |x: f64, what: &str| if x > 0.0 { Ok(x) } else { Err(format!("{what} must be greater than zero.")) };
 
+    if name == "Keynote" {
+        if let Some(tid) = p.type_of(&e) {
+            let s = t();
+            match p.sys_type_mut(tid) {
+                Some(st) => {
+                    st.texts.insert("Keynote".into(), s);
+                }
+                None => {
+                    let fam = p.families.iter_mut().find(|f| f.types.iter().any(|ft| ft.id == tid)).ok_or("Type not found.")?;
+                    fam.types.iter_mut().find(|ft| ft.id == tid).unwrap().values.insert("Keynote".into(), s);
+                }
+            }
+            return Ok(());
+        }
+    }
     if let Some(q) = p.project_param(e.category(), name).cloned() {
         let s = t();
         match p.type_of(&e).filter(|_| !q.instance) {

@@ -26,7 +26,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let Some(view) = app.doc.data.view(view_id).cloned() else { return };
     let ViewKind::Schedule(def) = &view.kind else { return };
     let Some(table) = app.table(view_id) else { return };
-    let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.material_takeoff).collect();
+    let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.keynote_legend && !def.material_takeoff).collect();
     let font = style::font(12.0);
     // Column widths from the content.
     let widths: Vec<f32> = (0..table.columns.len())

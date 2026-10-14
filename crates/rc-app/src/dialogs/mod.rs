@@ -103,6 +103,9 @@ pub struct Dialogs {
     pub selection_sets: Option<bool>,
     pub find_replace: Option<manage::FindReplace>,
     pub global_params: bool,
+    /// Keynotes dialog for a keynote tag.
+    pub keynote_pick: Option<Id>,
+    pub keynoting: bool,
     pub global_new: Option<GlobalParameter>,
     pub about: bool,
     pub save_reminder: bool,
@@ -150,6 +153,7 @@ pub fn open_by_name(app: &mut App, name: &str) {
         "filters" => d.filters = Some(app.doc.data.filters.first().map(|f| f.id)),
         "line-styles" => d.line_styles = true,
         "globals" => d.global_params = true,
+        "keynoting" => d.keynoting = true,
         "find" => d.find_replace = Some(Default::default()),
         "sun" => d.sun = true,
         _ => {}
@@ -786,25 +790,43 @@ fn create_group(app: &mut App, ctx: &egui::Context) {
     let Some(mut name) = app.dialogs.create_group.clone() else { return };
     let mut open = true;
     let mut ok = false;
-    window("Create Model Group").open(&mut open).resizable(false).show(ctx, |ui| {
-        ui.horizontal(|ui| {
+    let mut cancel = false;
+    // The group type follows the selection: detail elements make a detail group.
+    let detail_only = !app.selection.is_empty() && app.selection.iter().all(|id| app.el(*id).is_some_and(|e| e.view.is_some()));
+    let edit_id = egui::Id::new("create-group-edit");
+    window("Create Group").open(&mut open).resizable(false).show(ctx, |ui| {
+        let mut open_editor: bool = ui.memory(|m| m.data.get_temp(edit_id)).unwrap_or(false);
+        egui::Grid::new("cg").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
             ui.label("Name:");
-            ui.text_edit_singleline(&mut name);
+            ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
+            ui.end_row();
+            ui.label("Group Type:");
+            ui.horizontal(|ui| {
+                let _ = ui.add_enabled(!detail_only, egui::RadioButton::new(!detail_only, "Model"));
+                let _ = ui.add_enabled(detail_only, egui::RadioButton::new(detail_only, "Detail"));
+            });
+            ui.end_row();
         });
-        if ui.button("OK").clicked() {
-            ok = true;
-        }
+        ui.checkbox(&mut open_editor, "Open in group editor");
+        ui.memory_mut(|m| m.data.insert_temp(edit_id, open_editor));
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
     });
-    app.dialogs.create_group = if open && !ok { Some(name.clone()) } else { None };
+    app.dialogs.create_group = if open && !ok && !cancel { Some(name.clone()) } else { None };
     if ok {
         let ids = app.selection.clone();
-        if let Some(g) = app.run("Create Group", |p| {
-            let t = rc_core::edit::create_group(p, &ids, &name)?;
-            let inst = p.elements.iter().find(|e| matches!(&e.kind, ElementKind::GroupInstance(gi) if gi.type_id == t)).map(|e| e.id);
-            Ok(inst)
-        }) {
-            if let Some(g) = g {
-                app.select(vec![g]);
+        if let Some(g) = app.run("Create Group", |p| rc_core::edit::create_group(p, &ids, name.trim())) {
+            app.select(vec![g]);
+            if ctx.memory(|m| m.data.get_temp::<bool>(edit_id)).unwrap_or(false) {
+                actions::exec(app, Cmd::EditGroup);
             }
         }
     }

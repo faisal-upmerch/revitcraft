@@ -8,7 +8,7 @@ use crate::units::{UnitSystem, Units};
 use std::collections::BTreeMap;
 
 fn mat(name: &str, rgb: [u8; 3], opacity: f64, class: &str, cut: FillPattern) -> Material {
-    Material { name: name.into(), color: rgb, opacity, class: class.into(), cut_pattern: cut, shininess: if class == "Metal" || class == "Glass" { 0.8 } else { 0.1 } }
+    Material { name: name.into(), color: rgb, opacity, class: class.into(), cut_pattern: cut, shininess: if class == "Metal" || class == "Glass" { 0.8 } else { 0.1 }, keynote: String::new() }
 }
 
 pub fn materials() -> Vec<Material> {

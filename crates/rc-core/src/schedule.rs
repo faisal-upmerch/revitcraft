@@ -42,12 +42,15 @@ enum Rec {
     Element(Id),
     Material(Id, String, f64),
     Sheet(Id),
+    /// A keynote legend row: the key.
+    Keynote(String),
 }
 
 impl Rec {
     fn id(&self) -> Id {
         match self {
             Rec::Element(id) | Rec::Material(id, ..) | Rec::Sheet(id) => *id,
+            Rec::Keynote(_) => 0,
         }
     }
 }
@@ -58,6 +61,9 @@ fn text_def(name: &str, kind: ParamKind) -> ParamDef {
 
 /// All fields offered for a schedule definition.
 pub fn available_fields(p: &Project, def: &ScheduleDef) -> Vec<ParamDef> {
+    if def.keynote_legend {
+        return ["Key Value", "Keynote Text"].iter().map(|n| text_def(n, ParamKind::Text)).collect();
+    }
     if def.sheet_list {
         return ["Sheet Number", "Sheet Name", "Drawn By", "Checked By", "Approved By", "Issue Date", "Current Revision", "Sheet Size"].iter().map(|n| text_def(n, ParamKind::Text)).collect();
     }
@@ -120,6 +126,29 @@ fn records(p: &Project, def: &ScheduleDef) -> Vec<Rec> {
     if def.sheet_list {
         return p.views.iter().filter(|v| matches!(v.kind, ViewKind::Sheet(_))).map(|v| Rec::Sheet(v.id)).collect();
     }
+    if def.keynote_legend {
+        // Every key shown by a keynote tag in the project.
+        let mut keys: Vec<String> = p
+            .elements
+            .iter()
+            .filter_map(|e| match &e.kind {
+                ElementKind::Tag(t) => {
+                    let host = p.element(t.host)?;
+                    let k = match t.parameter.as_str() {
+                        "Keynote" => crate::keynote::element_keynote(p, host),
+                        "Material Keynote" => crate::keynote::material_keynote(p, host),
+                        "User Keynote" => t.key.clone(),
+                        _ => return None,
+                    };
+                    (!k.is_empty()).then_some(k)
+                }
+                _ => None,
+            })
+            .collect();
+        keys.sort();
+        keys.dedup();
+        return keys.into_iter().map(Rec::Keynote).collect();
+    }
     let mut out = Vec::new();
     for e in p.elements.iter().filter(|e| e.category() == def.category && e.view.is_none()) {
         if def.material_takeoff {
@@ -145,6 +174,11 @@ fn records(p: &Project, def: &ScheduleDef) -> Vec<Rec> {
 
 fn raw_get(p: &Project, def: &ScheduleDef, r: &Rec, field: &str) -> Option<Value> {
     match r {
+        Rec::Keynote(k) => match field {
+            "Key Value" => Some(Value::Text(k.clone())),
+            "Keynote Text" => Some(Value::Text(crate::keynote::text_of(p, k).unwrap_or_default())),
+            _ => None,
+        },
         Rec::Sheet(id) => {
             let v = p.view(*id)?;
             let ViewKind::Sheet(s) = &v.kind else { return None };

@@ -32,10 +32,11 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine | FilledRegion | MaskingRegion | RevisionCloud
         | Text | TagByCategory | TagAll | Symbol | SpotCoordinate | SpotSlope => graphical_2d && !in_sketch,
         SaveSelection => sel,
-        Insulation | DetailComponent | MultiCategoryTag | MaterialTag => graphical_2d && !in_sketch,
+        Insulation | DetailComponent | MultiCategoryTag | MaterialTag | ElementKeynote | MaterialKeynote | UserKeynote => graphical_2d && !in_sketch,
         ScopeBox => plan && !in_sketch,
         JoinGeometry | UnjoinGeometry => !in_sketch && view.is_some_and(|v| v.is_graphical()),
         ShowHiddenLines | RemoveHiddenLines => graphical_2d && !in_sketch,
+        PlaceDetailGroup => graphical_2d && !in_sketch,
         SwitchWindows => !app.open_tabs().is_empty(),
         LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
@@ -238,12 +239,17 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         CurtainGrid => app.set_tool(ToolKind::CurtainGrid),
         ModelLine => start_drawing(app, ToolKind::ModelLine),
         DetailLine => start_drawing(app, ToolKind::DetailLine),
-        PlaceGroup => {
-            if app.doc.data.group_types.is_empty() {
-                app.error("The project has no groups. Select elements and use Create Group first.");
+        PlaceGroup | PlaceDetailGroup => {
+            let detail = cmd == PlaceDetailGroup;
+            let types: Vec<Id> = app.doc.data.group_types.iter().filter(|g| g.detail == detail).map(|g| g.id).collect();
+            if types.is_empty() {
+                app.error(if detail { "The project has no detail groups. Select detail elements and use Create Group first." } else { "The project has no model groups. Select elements and use Create Group first." });
                 return;
             }
-            app.set_tool(ToolKind::PlaceGroup);
+            if !types.contains(&app.opts.group_type) {
+                app.opts.group_type = types[0];
+            }
+            app.set_tool(if detail { ToolKind::PlaceDetailGroup } else { ToolKind::PlaceGroup });
         }
         CreateGroup => app.dialogs.create_group = Some(next_group_name(app)),
         Room => app.set_tool(ToolKind::Room),
@@ -293,6 +299,16 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.opts.tag_mode = 2;
             app.set_tool(ToolKind::Tag);
         }
+        ElementKeynote | MaterialKeynote | UserKeynote => {
+            app.opts.tag_mode = match cmd {
+                ElementKeynote => 3,
+                MaterialKeynote => 4,
+                _ => 5,
+            };
+            app.opts.tag_leader = true;
+            app.set_tool(ToolKind::Tag);
+        }
+        KeynotingSettings => app.dialogs.keynoting = true,
         ScopeBox => app.set_tool(ToolKind::ScopeBox),
         JoinGeometry => app.set_tool(ToolKind::JoinGeometry),
         UnjoinGeometry => app.set_tool(ToolKind::UnjoinGeometry),
@@ -364,6 +380,11 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         Schedule => app.dialogs.new_schedule = Some(false),
         MaterialTakeoff => app.dialogs.new_schedule = Some(true),
+        KeynoteLegend => {
+            if let Some(id) = app.run("Keynote Legend", |p| Ok(edit::new_keynote_legend(p))) {
+                app.open_view(id);
+            }
+        }
         SheetList => {
             if let Some(id) = app.run("Sheet List", |p| Ok(edit::new_sheet_list(p))) {
                 app.open_view(id);
@@ -766,7 +787,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )
@@ -1320,7 +1341,7 @@ fn create_similar(app: &mut App) {
         ElementKind::Tag(_) => exec(app, Cmd::TagByCategory),
         ElementKind::GroupInstance(g) => {
             app.opts.group_type = g.type_id;
-            exec(app, Cmd::PlaceGroup);
+            exec(app, if e.view.is_some() { Cmd::PlaceDetailGroup } else { Cmd::PlaceGroup });
         }
         _ => app.error("Create Similar is not available for this element."),
     }

@@ -179,7 +179,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui.checkbox(&mut app.opts.tag_on_placement, "Tag on Placement");
                 ui.checkbox(&mut app.opts.tag_leader, "Leader");
             }
-            ToolKind::Component | ToolKind::IsolatedFooting | ToolKind::PlaceGroup => {
+            ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => {
+                let detail = kind == ToolKind::PlaceDetailGroup;
+                ui.label(if detail { "Detail Group:" } else { "Model Group:" });
+                let types: Vec<(Id, String)> = app.doc.data.group_types.iter().filter(|g| g.detail == detail).map(|g| (g.id, g.name.clone())).collect();
+                let mut t = app.opts.group_type;
+                let shown = types.iter().find(|x| x.0 == t).map(|x| x.1.clone()).unwrap_or_default();
+                egui::ComboBox::from_id_salt("group-type").selected_text(shown).width(160.0).show_ui(ui, |ui| {
+                    for (id, n) in &types {
+                        ui.selectable_value(&mut t, *id, n);
+                    }
+                });
+                app.opts.group_type = t;
+            }
+            ToolKind::Component | ToolKind::IsolatedFooting => {
                 ui.label("Rotation:");
                 number_field(ui, &mut app.opts.rotation, 1.0, 0.0..=360.0, "°");
                 ui.label(egui::RichText::new("Space rotates by 90°.").color(style::text_dim()));

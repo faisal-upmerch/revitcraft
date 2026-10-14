@@ -230,6 +230,8 @@ pub enum Icon {
     ShowHidden,
     RemoveHidden,
     GlobalParams,
+    DetailGroup,
+    Keynote,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1455,6 +1457,17 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.28, 0.1, 0.72, 0.9, LBROWN, ink);
             g.line(&[(0.28, 0.1), (0.72, 0.9)], ink);
             g.line(&[(0.72, 0.1), (0.28, 0.9)], ink);
+        }
+        Keynote => {
+            g.line(&[(0.1, 0.9), (0.42, 0.56)], ink);
+            g.rect(0.42, 0.18, 0.92, 0.56, Color32::WHITE, ink);
+            g.text_bold((0.67, 0.37), "1", 0.24, BLUE);
+        }
+        DetailGroup => {
+            g.rect(0.08, 0.14, 0.92, 0.86, Color32::TRANSPARENT, GREY);
+            g.line(&[(0.2, 0.7), (0.5, 0.3)], ink);
+            g.line(&[(0.5, 0.3), (0.8, 0.7)], ink);
+            g.dashed((0.2, 0.74), (0.8, 0.74), BLUE);
         }
         GlobalParams => {
             g.circle((0.42, 0.5), 0.3, LBLUE, ink);

@@ -18,6 +18,175 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     find_replace(app, ctx);
     global_params(app, ctx);
     global_new(app, ctx);
+    keynote_pick(app, ctx);
+    keynoting(app, ctx);
+}
+
+// ---------------------------------------------------------------- keynotes
+
+fn keynote_pick(app: &mut App, ctx: &egui::Context) {
+    let Some(tag_id) = app.dialogs.keynote_pick else { return };
+    let Some(ElementKind::Tag(tag)) = app.el(tag_id).map(|e| e.kind.clone()) else {
+        app.dialogs.keynote_pick = None;
+        return;
+    };
+    let table = rc_core::keynote::table(&app.doc.data);
+    let mut open = true;
+    let mut chosen: Option<String> = None;
+    let mut cancel = false;
+    let sel_id = egui::Id::new("kn-sel");
+    let filter_id = egui::Id::new("kn-filter");
+    window("Keynotes").open(&mut open).resizable(false).show(ctx, |ui| {
+        let mut sel: Option<String> = ui.memory(|m| m.data.get_temp(sel_id));
+        let mut filter: String = ui.memory(|m| m.data.get_temp(filter_id)).unwrap_or_default();
+        ui.horizontal(|ui| {
+            ui.label("Search:");
+            ui.add(egui::TextEdit::singleline(&mut filter).desired_width(240.0));
+        });
+        ui.add_space(4.0);
+        let f = filter.to_lowercase();
+        list_box(ui, "kn-list", vec2(460.0, 320.0), |ui| {
+            for k in &table {
+                let depth = {
+                    let mut d = 0;
+                    let mut parent = k.parent.clone();
+                    while !parent.is_empty() && d < 6 {
+                        d += 1;
+                        parent = table.iter().find(|x| x.key == parent).map(|x| x.parent.clone()).unwrap_or_default();
+                    }
+                    d
+                };
+                if !f.is_empty() && !k.key.to_lowercase().contains(&f) && !k.text.to_lowercase().contains(&f) {
+                    continue;
+                }
+                let line = format!("{}{}   {}", "    ".repeat(depth), k.key, k.text);
+                let r = list_row(ui, 452.0, sel.as_deref() == Some(k.key.as_str()), line);
+                if r.clicked() {
+                    sel = Some(k.key.clone());
+                }
+                if r.double_clicked() {
+                    chosen = Some(k.key.clone());
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, sel.is_some()) {
+                chosen = sel.clone();
+            }
+        });
+        ui.memory_mut(|m| {
+            match &sel {
+                Some(s) => {
+                    m.data.insert_temp(sel_id, s.clone());
+                }
+                None => m.data.remove::<String>(sel_id),
+            }
+            m.data.insert_temp(filter_id, filter.clone());
+        });
+    });
+    if let Some(key) = chosen {
+        let host = tag.host;
+        app.run("Keynote", |p| match tag.parameter.as_str() {
+            "Keynote" => params::set(p, host, "Keynote", &key),
+            "Material Keynote" => {
+                let e = p.element(host).ok_or("Element not found.")?.clone();
+                let m = rc_core::annotation::element_material(p, &e);
+                let mat = p.materials.iter_mut().find(|x| x.name == m).ok_or("This element has no material to keynote.")?;
+                mat.keynote = key;
+                Ok(())
+            }
+            _ => {
+                if let Some(ElementKind::Tag(t)) = p.element_mut(tag_id).map(|e| &mut e.kind) {
+                    t.key = key;
+                }
+                Ok(())
+            }
+        });
+        app.dialogs.keynote_pick = None;
+        return;
+    }
+    if cancel || !open {
+        app.dialogs.keynote_pick = None;
+    }
+}
+
+fn keynoting(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.keynoting {
+        return;
+    }
+    let mut open = true;
+    let mut out = Footer::None;
+    session_begin(app, "keynoting");
+    let mut display = app.doc.data.keynote_display;
+    let file = app.doc.data.keynote_file.clone();
+    let mut load: Option<Option<std::path::PathBuf>> = None;
+    window("Keynoting Settings").open(&mut open).resizable(false).show(ctx, |ui| {
+        group(ui, "Keynote Table", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Path:");
+                let shown = if file.is_empty() { "Built-in keynote table".to_string() } else { file.clone() };
+                ui.add(egui::TextEdit::singleline(&mut shown.clone()).desired_width(300.0).interactive(false));
+                if dlg_button(ui, "Browse...", false, true) {
+                    load = Some(rfd::FileDialog::new().add_filter("Keynote file", &["txt"]).pick_file());
+                }
+            });
+            ui.horizontal(|ui| {
+                ui.label(egui::RichText::new(format!("{} keynotes", rc_core::keynote::table(&app.doc.data).len())).size(11.5).color(style::text_dim()));
+                if !file.is_empty() && dlg_button(ui, "Use Built-in", false, true) {
+                    load = Some(None);
+                }
+            });
+        });
+        ui.add_space(6.0);
+        group(ui, "Keynote Display", |ui| {
+            for (k, l) in [(0u8, "Keynote Number"), (1, "Keynote Text"), (2, "Keynote Number and Text")] {
+                if ui.radio(display == k, l).clicked() {
+                    display = k;
+                }
+            }
+        });
+        out = footer(ui, app, "keynoting", "Keynoting Settings");
+    });
+    match load {
+        Some(Some(path)) => match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|s| rc_core::keynote::parse(&s)) {
+            Ok(table) => {
+                let name = path.display().to_string();
+                app.run("Load Keynote Table", |p| {
+                    p.keynotes = table;
+                    p.keynote_file = name;
+                    Ok(())
+                });
+            }
+            Err(e) => app.error(format!("Could not read the keynote file: {e}")),
+        },
+        Some(None) => {
+            app.run("Built-in Keynote Table", |p| {
+                p.keynotes.clear();
+                p.keynote_file.clear();
+                Ok(())
+            });
+        }
+        None => {}
+    }
+    if out == Footer::None && open && display != app.doc.data.keynote_display {
+        app.run("Keynote Display", |p| {
+            p.keynote_display = display;
+            Ok(())
+        });
+    }
+    if out != Footer::None {
+        open = false;
+    } else if !open {
+        session_cancel(app, "keynoting");
+    }
+    if !open {
+        app.dialogs.keynoting = false;
+    }
 }
 
 // ---------------------------------------------------------------- global parameters

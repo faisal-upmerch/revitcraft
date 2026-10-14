@@ -86,6 +86,12 @@ pub fn default_tag_parameter(c: Category) -> &'static str {
 /// Text a tag displays.
 pub fn tag_text(p: &Project, t: &Tag) -> String {
     let Some(host) = p.element(t.host) else { return "?".into() };
+    match t.parameter.as_str() {
+        "Keynote" => return crate::keynote::display(p, &crate::keynote::element_keynote(p, host)),
+        "Material Keynote" => return crate::keynote::display(p, &crate::keynote::material_keynote(p, host)),
+        "User Keynote" => return crate::keynote::display(p, &t.key),
+        _ => {}
+    }
     let param = if t.parameter.is_empty() { default_tag_parameter(host.category()) } else { t.parameter.as_str() };
     let v = match params::get(p, host, param) {
         Some(params::Value::Text(s)) if !s.is_empty() => s,

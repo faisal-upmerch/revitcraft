@@ -161,6 +161,9 @@ fn materials(app: &mut App, ctx: &egui::Context) {
                     ui.label("Class");
                     ui.text_edit_singleline(&mut mm.class);
                     ui.end_row();
+                    ui.label("Keynote");
+                    ui.text_edit_singleline(&mut mm.keynote);
+                    ui.end_row();
                     ui.label(egui::RichText::new("Graphics").strong());
                     ui.end_row();
                     ui.label("Shading color");

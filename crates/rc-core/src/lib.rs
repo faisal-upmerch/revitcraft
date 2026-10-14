@@ -15,6 +15,7 @@ pub mod formula;
 pub mod geom;
 pub mod ifc;
 pub mod io;
+pub mod keynote;
 pub mod library;
 pub mod mesh;
 pub mod model;

@@ -1036,8 +1036,12 @@ pub struct Tag {
     #[serde(default)]
     pub leader_end: Option<DVec2>,
     /// Parameter shown ("Mark", "Type Mark", "Name", ...); empty = the category default.
+    /// "Keynote", "Material Keynote" and "User Keynote" make keynote tags.
     #[serde(default)]
     pub parameter: String,
+    /// User keynotes: the key chosen for this tag.
+    #[serde(default)]
+    pub key: String,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1180,6 +1184,17 @@ pub struct Material {
     /// Shininess 0..1 for the realistic style.
     #[serde(default)]
     pub shininess: f64,
+    #[serde(default)]
+    pub keynote: String,
+}
+
+/// One row of the keynote table.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct Keynote {
+    pub key: String,
+    pub text: String,
+    /// Key of the parent row (division); empty at the top level.
+    pub parent: String,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -1753,6 +1768,9 @@ pub struct ScheduleDef {
     /// Sheet list instead of an element schedule.
     #[serde(default)]
     pub sheet_list: bool,
+    /// Keynote legend: one row per keynote used in the project.
+    #[serde(default)]
+    pub keynote_legend: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2237,6 +2255,9 @@ pub struct GroupType {
     pub id: Id,
     pub name: String,
     pub members: Vec<Element>,
+    /// Detail group: view-specific members, placed in one view.
+    #[serde(default)]
+    pub detail: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2344,6 +2365,15 @@ pub struct Project {
     /// Manage > Global Parameters.
     #[serde(default)]
     pub global_params: Vec<GlobalParameter>,
+    /// Loaded keynote table (empty = the built-in table).
+    #[serde(default)]
+    pub keynotes: Vec<Keynote>,
+    /// Name of the loaded keynote file.
+    #[serde(default)]
+    pub keynote_file: String,
+    /// Keynote tags show 0 the key, 1 the text, 2 both.
+    #[serde(default)]
+    pub keynote_display: u8,
 }
 
 /// Line graphics of a category (Object Styles). None keeps the built-in default.
@@ -2391,6 +2421,9 @@ impl Project {
             selection_sets: Vec::new(),
             joins: Vec::new(),
             global_params: Vec::new(),
+            keynotes: Vec::new(),
+            keynote_file: String::new(),
+            keynote_display: 0,
         }
     }
 

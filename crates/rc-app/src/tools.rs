@@ -90,6 +90,7 @@ pub enum ToolKind {
     UnjoinGeometry,
     ShowHiddenLines,
     RemoveHiddenLines,
+    PlaceDetailGroup,
 }
 
 impl ToolKind {
@@ -168,6 +169,7 @@ impl ToolKind {
             ToolKind::UnjoinGeometry => "Unjoin Geometry",
             ToolKind::ShowHiddenLines => "Show Hidden Lines",
             ToolKind::RemoveHiddenLines => "Remove Hidden Lines",
+            ToolKind::PlaceDetailGroup => "Detail Group",
         }
     }
 

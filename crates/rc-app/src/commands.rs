@@ -262,6 +262,12 @@ pub enum Cmd {
     ShowHiddenLines,
     RemoveHiddenLines,
     GlobalParameters,
+    PlaceDetailGroup,
+    ElementKeynote,
+    MaterialKeynote,
+    UserKeynote,
+    KeynotingSettings,
+    KeynoteLegend,
 }
 
 pub struct CmdInfo {
@@ -495,6 +501,12 @@ impl Cmd {
             UnjoinGeometry => ci("Unjoin Geometry", I::UnjoinGeometry, "Removes the join between two elements.", ""),
             ShowHiddenLines => ci("Show Hidden Lines", I::ShowHidden, "Shows the lines of an element hidden by another element as dashed lines.", ""),
             RemoveHiddenLines => ci("Remove Hidden Lines", I::RemoveHidden, "Stops showing the hidden lines of an element.", ""),
+            ElementKeynote => ci("Element Keynote", I::Keynote, "Tags an element with the keynote of its type.", ""),
+            MaterialKeynote => ci("Material Keynote", I::Keynote, "Tags an element with the keynote of its material.", ""),
+            UserKeynote => ci("User Keynote", I::Keynote, "Places a keynote whose key you choose for this tag.", ""),
+            KeynoteLegend => ci("Keynote Legend", I::Keynote, "Creates a legend listing the keynotes used in the project.", ""),
+            KeynotingSettings => ci("Keynoting Settings", I::Keynote, "Chooses the keynote table and how keynote tags read.", ""),
+            PlaceDetailGroup => ci("Place Detail Group", I::DetailGroup, "Places an instance of a detail group in the view.", ""),
             GlobalParameters => ci("Global Parameters", I::GlobalParams, "Creates project-wide values that drive dimensions and element parameters.", ""),
             CanvasTheme => ci("Canvas Theme", I::CanvasTheme, "Switches the view canvas between the light and dark theme.", ""),
             SwitchWindows => ci("Switch Windows", I::SwitchWindows, "Switches to another open view.", ""),
@@ -566,7 +578,8 @@ impl Cmd {
         Cmd::SnapQuadrant, Cmd::SnapOff, Cmd::SnapClose, Cmd::ProjectParameters, Cmd::ViewFilters, Cmd::LineStyles, Cmd::SaveSelection,
         Cmd::LoadSelection, Cmd::EditSelection, Cmd::SpotCoordinate, Cmd::SpotSlope, Cmd::FindReplace, Cmd::SelectJoined,
         Cmd::ScopeBox, Cmd::Insulation, Cmd::DetailComponent, Cmd::MultiCategoryTag, Cmd::MaterialTag,
-        Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows, Cmd::CanvasTheme, Cmd::ShowHiddenLines, Cmd::RemoveHiddenLines, Cmd::GlobalParameters,
+        Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows, Cmd::CanvasTheme, Cmd::ShowHiddenLines, Cmd::RemoveHiddenLines, Cmd::GlobalParameters, Cmd::PlaceDetailGroup,
+        Cmd::ElementKeynote, Cmd::MaterialKeynote, Cmd::UserKeynote, Cmd::KeynotingSettings, Cmd::KeynoteLegend,
     ];
 
     /// Stable name for saving custom shortcuts.
