@@ -1107,7 +1107,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
     let tool_kind = app.tool.kind;
     // Hosted and click-inside tools work from the raw cursor and show no snaps.
-    let cursor_tool = matches!(tool_kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto | ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag)
+    let cursor_tool = matches!(tool_kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto | ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag | ToolKind::TopoPoints)
         || (tool_kind.uses_draw_modes() && app.opts.draw_mode.is_pick() && canvas_tools::modes_for(tool_kind).contains(&app.opts.draw_mode));
     let wants_snap = (!app.tool.is_select() && !cursor_tool) || matches!(app.interact.drag, Some(Drag::Move { .. }) | Some(Drag::Grip { .. }) | Some(Drag::SketchVertex { .. }));
     let reference = canvas_tools::reference_point(app);

@@ -7,17 +7,78 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 
 // ---------------------------------------------------------------- walls
 
-/// Top-surface triangles of a toposolid (absolute z).
+/// Top-surface triangles of a toposolid (absolute z): the boundary triangulated with its
+/// interior points inserted, then improved towards Delaunay without touching the boundary.
 pub fn topo_triangles(p: &Project, t: &Toposolid) -> Vec<[DVec3; 3]> {
-    if t.boundary.len() < 3 {
+    let n = t.boundary.len();
+    if n < 3 {
         return vec![];
     }
     let base = p.level_elevation(t.level);
-    let h = |k: usize| base + t.heights.get(k).copied().unwrap_or(0.0);
-    geom::triangulate(&t.boundary)
-        .into_iter()
-        .map(|[a, b, c]| [t.boundary[a].extend(h(a)), t.boundary[b].extend(h(b)), t.boundary[c].extend(h(c))])
-        .collect()
+    let mut verts: Vec<DVec2> = t.boundary.clone();
+    let mut zs: Vec<f64> = (0..n).map(|k| base + t.heights.get(k).copied().unwrap_or(0.0)).collect();
+    let ccw = |a: DVec2, b: DVec2, c: DVec2| geom::cross2(b - a, c - a);
+    let orient = |tri: [usize; 3], v: &[DVec2]| if ccw(v[tri[0]], v[tri[1]], v[tri[2]]) < 0.0 { [tri[0], tri[2], tri[1]] } else { tri };
+    let mut tris: Vec<[usize; 3]> = geom::triangulate(&verts).into_iter().map(|tr| orient(tr, &verts)).collect();
+    // Insert interior points by splitting the triangle that contains them.
+    for (q, h) in &t.points {
+        let Some(k) = tris.iter().position(|tr| {
+            let (a, b, c) = (verts[tr[0]], verts[tr[1]], verts[tr[2]]);
+            ccw(a, b, *q) >= -1e-9 && ccw(b, c, *q) >= -1e-9 && ccw(c, a, *q) >= -1e-9
+        }) else {
+            continue;
+        };
+        let i = verts.len();
+        verts.push(*q);
+        zs.push(base + h);
+        let [a, b, c] = tris.swap_remove(k);
+        for (u, v) in [(a, b), (b, c), (c, a)] {
+            if ccw(verts[u], verts[v], *q).abs() > 1e-6 * verts[u].distance(verts[v]).max(1.0) {
+                tris.push([u, v, i]);
+            } else if let Some(j) = tris.iter().position(|tr| tr.contains(&u) && tr.contains(&v)) {
+                // The point lies on this edge: split the neighbour too, so no crack opens.
+                let other = tris.swap_remove(j);
+                let w = *other.iter().find(|&&x| x != u && x != v).unwrap();
+                tris.push(orient([u, w, i], &verts));
+                tris.push(orient([w, v, i], &verts));
+            }
+        }
+    }
+    // Lawson flips of interior edges.
+    let is_boundary = |a: usize, b: usize| a < n && b < n && ((a + 1) % n == b || (b + 1) % n == a);
+    let in_circle = |a: DVec2, b: DVec2, c: DVec2, d: DVec2| {
+        let (ax, ay, bx, by, cx, cy) = (a.x - d.x, a.y - d.y, b.x - d.x, b.y - d.y, c.x - d.x, c.y - d.y);
+        (ax * ax + ay * ay) * (bx * cy - cx * by) - (bx * bx + by * by) * (ax * cy - cx * ay) + (cx * cx + cy * cy) * (ax * by - bx * ay) > 1e-6
+    };
+    for _ in 0..(tris.len() * 4 + 16) {
+        let mut flipped = false;
+        'outer: for i in 0..tris.len() {
+            for e in 0..3 {
+                let (u, v, w1) = (tris[i][e], tris[i][(e + 1) % 3], tris[i][(e + 2) % 3]);
+                if is_boundary(u, v) {
+                    continue;
+                }
+                let Some(j) = (0..tris.len()).find(|&j| j != i && tris[j].contains(&u) && tris[j].contains(&v)) else { continue };
+                let w2 = *tris[j].iter().find(|&&x| x != u && x != v).unwrap();
+                if !in_circle(verts[u], verts[v], verts[w1], verts[w2]) {
+                    continue;
+                }
+                // Only flip convex quads: u and v on opposite sides of w1-w2.
+                let (s1, s2) = (ccw(verts[w1], verts[w2], verts[u]), ccw(verts[w1], verts[w2], verts[v]));
+                if s1 * s2 >= 0.0 {
+                    continue;
+                }
+                tris[i] = orient([u, w2, w1], &verts);
+                tris[j] = orient([v, w1, w2], &verts);
+                flipped = true;
+                break 'outer;
+            }
+        }
+        if !flipped {
+            break;
+        }
+    }
+    tris.into_iter().map(|[a, b, c]| [verts[a].extend(zs[a]), verts[b].extend(zs[b]), verts[c].extend(zs[c])]).collect()
 }
 
 /// Contour segments of a toposolid: (a, b, major) every `interval` with a major line every fifth.

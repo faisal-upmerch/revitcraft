@@ -811,6 +811,9 @@ pub struct Toposolid {
     pub thickness: f64,
     #[serde(default)]
     pub material: String,
+    /// Elevation points inside the boundary: (position, height above the level).
+    #[serde(default)]
+    pub points: Vec<(DVec2, f64)>,
 }
 
 /// A closed site property line.

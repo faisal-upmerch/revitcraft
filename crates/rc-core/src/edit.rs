@@ -303,17 +303,52 @@ pub fn add_toposolid(p: &mut Project, level: Id, boundary: Vec<DVec2>, height: f
     }
     let boundary = geom::ensure_ccw(&boundary);
     let heights = vec![height; boundary.len()];
-    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary, heights, thickness, material: String::new() })))
+    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary, heights, thickness, material: String::new(), points: vec![] })))
 }
 
-/// Sets the top height (above its level) of one toposolid boundary point.
+/// Sets the height (above its level) of a toposolid point: boundary points first, then the
+/// interior points (index boundary.len() + k).
 pub fn set_topo_point(p: &mut Project, id: Id, index: usize, height: f64) -> Result<(), String> {
     match p.element_mut(id).map(|e| &mut e.kind) {
         Some(ElementKind::Toposolid(t)) if index < t.heights.len() => {
             t.heights[index] = height;
             Ok(())
         }
+        Some(ElementKind::Toposolid(t)) if index - t.heights.len() < t.points.len() => {
+            let k = index - t.heights.len();
+            t.points[k].1 = height;
+            Ok(())
+        }
         _ => Err("Pick a point of a toposolid.".into()),
+    }
+}
+
+/// Adds an elevation point inside a toposolid.
+pub fn add_topo_point(p: &mut Project, id: Id, at: DVec2, height: f64) -> Result<(), String> {
+    match p.element_mut(id).map(|e| &mut e.kind) {
+        Some(ElementKind::Toposolid(t)) => {
+            if !geom::contains(&t.boundary, at) {
+                return Err("Points must be inside the toposolid boundary.".into());
+            }
+            if t.points.iter().any(|(q, _)| q.distance(at) < 10.0) || t.boundary.iter().any(|q| q.distance(at) < 10.0) {
+                return Err("There is already a point here.".into());
+            }
+            t.points.push((at, height));
+            Ok(())
+        }
+        _ => Err("Click inside a toposolid.".into()),
+    }
+}
+
+/// Removes an interior point (index as in `set_topo_point`); boundary points stay.
+pub fn remove_topo_point(p: &mut Project, id: Id, index: usize) -> Result<(), String> {
+    match p.element_mut(id).map(|e| &mut e.kind) {
+        Some(ElementKind::Toposolid(t)) if index >= t.heights.len() && index - t.heights.len() < t.points.len() => {
+            let k = index - t.heights.len();
+            t.points.remove(k);
+            Ok(())
+        }
+        _ => Err("Only interior points can be deleted; boundary points shape the toposolid.".into()),
     }
 }
 
@@ -347,12 +382,22 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
     let mut out = Vec::new();
     match what {
         ByFace::Walls | ByFace::CurtainSystem => {
+            // The exterior finish face lies on the mass face: centrelines run on the outline
+            // inset by half the wall thickness (so the corners still join), clockwise so the
+            // exterior side faces out.
+            let half = p.sys_type(type_id).map(|t| t.thickness()).unwrap_or(200.0) / 2.0;
+            let mut centre = geom::offset(&ring, -half);
+            if centre.len() != n {
+                centre = ring.clone();
+            }
+            centre.reverse();
             for k in 0..n {
-                let id = add_wall(p, m.level, type_id, ring[k], ring[(k + 1) % n], m.height)?;
+                let id = add_wall(p, m.level, type_id, centre[k], centre[(k + 1) % n], m.height)?;
                 if let Some(w) = p.element_mut(id).and_then(Element::as_wall_mut) {
                     w.base_offset = m.base_offset;
                     w.top_level = None;
                     w.unconnected_height = m.height;
+                    w.location_line = LocationLine::FinishFaceExterior;
                 }
                 out.push(id);
             }
@@ -722,6 +767,9 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
         ElementKind::Mass(m) => poly(&mut m.boundary),
         ElementKind::Toposolid(t) => {
             poly(&mut t.boundary);
+            for q in t.points.iter_mut() {
+                q.0 = f(q.0);
+            }
             if mirror {
                 t.boundary.reverse();
                 t.heights.reverse();
@@ -1964,6 +2012,21 @@ mod tests {
         let m = add_mass(&mut p, lvl, sq.clone(), 7000.0).unwrap();
         let walls = model_by_face(&mut p, m, ByFace::Walls, wt).unwrap();
         assert_eq!(walls.len(), 4);
+        // Exterior faces lie on the mass faces and the body is inside the mass.
+        for id in &walls {
+            let w = p.wall(*id).unwrap().clone();
+            let half = analysis::wall_thickness(&p, &w) / 2.0;
+            let mid = (w.start + w.end) / 2.0;
+            let ext = mid + w.normal() * half;
+            let on_face = ext.x.abs() < 1e-6 || (ext.x - 10000.0).abs() < 1e-6 || ext.y.abs() < 1e-6 || (ext.y - 8000.0).abs() < 1e-6;
+            assert!(on_face, "exterior face at {ext:?}");
+            assert!(geom::contains(&sq, mid));
+        }
+        // Consecutive walls share corner points, so they join.
+        for k in 0..4 {
+            let (a, b) = (p.wall(walls[k]).unwrap().end, p.wall(walls[(k + 1) % 4]).unwrap().start);
+            assert!(a.distance(b) < 1e-6);
+        }
         assert!((analysis::wall_height(&p, p.wall(walls[0]).unwrap()) - 7000.0).abs() < 1e-6);
         let ft = p.types_of(Category::Floors).next().unwrap().id;
         // Levels at 0 and 3000 cut a 7000 mm mass.
@@ -1975,6 +2038,18 @@ mod tests {
         let ElementKind::Toposolid(ts) = p.element(t).unwrap().kind.clone() else { panic!() };
         let c = analysis::topo_contours(&p, &ts, 1000.0);
         assert!(c.len() >= 3, "{}", c.len());
+        // An interior point raises the middle of the surface.
+        let before = analysis::topo_triangles(&p, &ts).len();
+        add_topo_point(&mut p, t, DVec2::new(5000.0, 4000.0), 6000.0).unwrap();
+        let ElementKind::Toposolid(ts2) = p.element(t).unwrap().kind.clone() else { panic!() };
+        let tris = analysis::topo_triangles(&p, &ts2);
+        assert_eq!(tris.len(), before + 2);
+        assert!(tris.iter().flatten().any(|q| (q.z - 6000.0).abs() < 1e-6));
+        let area: f64 = tris.iter().map(|[a, b, c]| geom::cross2(b.truncate() - a.truncate(), c.truncate() - a.truncate()) / 2.0).sum();
+        assert!((area - 80e6).abs() < 1.0, "{area}");
+        set_topo_point(&mut p, t, 4, 1000.0).unwrap();
+        remove_topo_point(&mut p, t, 4).unwrap();
+        assert!(remove_topo_point(&mut p, t, 0).is_err());
         crate::params::set(&mut p, t, "Height Offset From Level", "500").unwrap();
         let ElementKind::Toposolid(ts) = p.element(t).unwrap().kind.clone() else { panic!() };
         assert!((ts.heights[0] - 500.0).abs() < 1e-6 && (ts.heights[2] - 4000.0).abs() < 1e-6);

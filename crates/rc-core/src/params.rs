@@ -568,13 +568,21 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
         },
         ElementKind::Toposolid(t) => match name {
             "Level" => text(p.level_name(t.level)),
-            "Height Offset From Level" => num(t.heights.iter().cloned().fold(f64::MAX, f64::min).min(1e12)),
+            "Height Offset From Level" => num(t.heights.iter().cloned().chain(t.points.iter().map(|q| q.1)).fold(f64::MAX, f64::min).min(1e12)),
             "Thickness" => num(t.thickness),
             "Area" => num(geom::area(&t.boundary).abs()),
             "Volume" => {
-                let avg = if t.heights.is_empty() { 0.0 } else { t.heights.iter().sum::<f64>() / t.heights.len() as f64 };
-                let lo = t.heights.iter().cloned().fold(f64::MAX, f64::min);
-                num(geom::area(&t.boundary).abs() * (avg - lo + t.thickness))
+                // Prisms under each surface triangle down to the flat bottom.
+                let tris = analysis::topo_triangles(p, t);
+                let bottom = tris.iter().flat_map(|tr| tr.iter().map(|q| q.z)).fold(f64::MAX, f64::min) - t.thickness;
+                let v: f64 = tris
+                    .iter()
+                    .map(|[a, b, c]| {
+                        let area = geom::cross2(b.truncate() - a.truncate(), c.truncate() - a.truncate()).abs() / 2.0;
+                        area * ((a.z + b.z + c.z) / 3.0 - bottom)
+                    })
+                    .sum();
+                num(v)
             }
             "Material" => text(t.material.clone()),
             _ => None,
@@ -930,11 +938,14 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
         ElementKind::Toposolid(ts) => match name {
             "Level" => ts.level = level_id.unwrap(),
             "Height Offset From Level" => {
-                let lo = ts.heights.iter().cloned().fold(f64::MAX, f64::min);
+                let lo = ts.heights.iter().cloned().chain(ts.points.iter().map(|q| q.1)).fold(f64::MAX, f64::min);
                 let lo = if lo == f64::MAX { 0.0 } else { lo };
                 let dz = n() - lo;
                 for h in ts.heights.iter_mut() {
                     *h += dz;
+                }
+                for q in ts.points.iter_mut() {
+                    q.1 += dz;
                 }
             }
             "Thickness" => ts.thickness = positive(n(), "Thickness")?,

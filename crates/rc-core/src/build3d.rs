@@ -51,7 +51,7 @@ fn toposolid(p: &Project, t: &Toposolid) -> MeshSet {
     let mat = if t.material.is_empty() { "Site - Earth" } else { t.material.as_str() };
     let base = p.level_elevation(t.level);
     let top = |k: usize| base + t.heights.get(k).copied().unwrap_or(0.0);
-    let low = (0..n).map(top).fold(f64::MAX, f64::min) - t.thickness.max(1.0);
+    let low = (0..n).map(top).chain(t.points.iter().map(|q| base + q.1)).fold(f64::MAX, f64::min) - t.thickness.max(1.0);
     let m = set.mesh(mat);
     for [a, b, c] in analysis::topo_triangles(p, t) {
         m.add_triangle(a, b, c);

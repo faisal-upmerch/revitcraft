@@ -154,7 +154,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::AttachTop | ToolKind::AttachBase => "Pick a roof, floor or ceiling to attach the selected walls to.".into(),
         ToolKind::PickHost => "Pick a wall to host the selected door or window.".into(),
         ToolKind::Paste => "Click to place the pasted elements.".into(),
-        ToolKind::TopoPoints => "Click toposolid points to give them the elevation in the Options Bar. Esc to finish.".into(),
+        ToolKind::TopoPoints => "Click a point to set its elevation, click inside to add a point, Shift+click deletes a point. Esc to finish.".into(),
         ToolKind::ColorLegend => "Click to place the color fill legend.".into(),
         _ => String::new(),
     }
@@ -215,17 +215,35 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::TopoPoints => {
-            // Points of every toposolid; the hovered one gets the options-bar elevation on click.
+            // Boundary and interior points of every toposolid: click a point to give it the
+            // Options Bar elevation, click inside to add one, Shift+click deletes an interior one.
             let Some(c) = cursor else { return };
+            let shift = ui.input(|i| i.modifiers.shift);
             let mut best: Option<(f64, Id, usize)> = None;
+            let mut inside: Option<Id> = None;
             let units = app.doc.data.units.clone();
             for e in &app.doc.data.elements {
                 let ElementKind::Toposolid(t) = &e.kind else { continue };
-                for (k, q) in t.boundary.iter().enumerate() {
-                    let sp = xf.s(*q);
+                if geom::contains(&t.boundary, c) {
+                    inside = Some(e.id);
+                }
+                let pts: Vec<(DVec2, f64, bool)> = t
+                    .boundary
+                    .iter()
+                    .enumerate()
+                    .map(|(k, q)| (*q, t.heights.get(k).copied().unwrap_or(0.0), false))
+                    .chain(t.points.iter().map(|(q, h)| (*q, *h, true)))
+                    .collect();
+                for (k, (q, h, interior)) in pts.into_iter().enumerate() {
+                    let sp = xf.s(q);
                     let hot = sp.distance(xf.s(c)) < 9.0;
-                    painter.rect(egui::Rect::from_center_size(sp, vec2(7.0, 7.0)), 0.0, if hot { style::PRESELECT } else { Color32::WHITE }, Stroke::new(1.2, style::SELECT), egui::StrokeKind::Middle);
-                    let h = t.heights.get(k).copied().unwrap_or(0.0);
+                    let r = egui::Rect::from_center_size(sp, vec2(7.0, 7.0));
+                    let fill = if hot { style::PRESELECT } else if interior { style::accent_light() } else { Color32::WHITE };
+                    if interior {
+                        painter.circle(sp, 4.0, fill, Stroke::new(1.2, style::SELECT));
+                    } else {
+                        painter.rect(r, 0.0, fill, Stroke::new(1.2, style::SELECT), egui::StrokeKind::Middle);
+                    }
                     painter.text(sp + vec2(6.0, -6.0), egui::Align2::LEFT_BOTTOM, units.length(h), style::font(10.5), style::TEMP_DIM);
                     let dd = q.distance(c);
                     if hot && best.is_none_or(|b| dd < b.0) {
@@ -233,10 +251,24 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                     }
                 }
             }
+            if best.is_none() && inside.is_some() {
+                let sp = xf.s(c);
+                painter.circle_stroke(sp, 4.0, Stroke::new(1.0, style::PREVIEW));
+                style::canvas_tooltip(painter, sp + vec2(8.0, 10.0), "Click to add a point");
+            }
             if clicked {
-                if let Some((_, id, k)) = best {
-                    let h = app.opts.topo_point_height;
-                    app.run("Modify Sub Elements", |p| edit::set_topo_point(p, id, k, h));
+                let h = app.opts.topo_point_height;
+                match (best, inside) {
+                    (Some((_, id, k)), _) if shift => {
+                        app.run("Delete Point", |p| edit::remove_topo_point(p, id, k));
+                    }
+                    (Some((_, id, k)), _) => {
+                        app.run("Modify Sub Elements", |p| edit::set_topo_point(p, id, k, h));
+                    }
+                    (None, Some(id)) => {
+                        app.run("Add Point", |p| edit::add_topo_point(p, id, c, h));
+                    }
+                    _ => app.error("Click a toposolid point, or inside a toposolid to add one."),
                 }
             }
         }
