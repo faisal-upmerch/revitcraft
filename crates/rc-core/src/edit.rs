@@ -339,8 +339,8 @@ pub fn place_hosted(p: &mut Project, type_id: Id, wall_id: Id, along: f64, flip_
     };
     check_opening_fits(p, &wall, wall_id, None, along, ow, sill, oh)?;
     let id = push(p, ElementKind::Instance(FamilyInstance { elevation: sill, ..probe }));
-    if category == Category::Doors {
-        let mark = next_mark(p, Category::Doors);
+    if matches!(category, Category::Doors | Category::Windows) {
+        let mark = next_mark(p, category);
         if let Some(e) = p.element_mut(id) {
             e.mark = mark;
         }
@@ -348,8 +348,8 @@ pub fn place_hosted(p: &mut Project, type_id: Id, wall_id: Id, along: f64, flip_
     Ok(id)
 }
 
-/// The next door Mark: one more than the highest numeric Mark in the category, like the
-/// automatic numbering of placed doors in the reference app.
+/// The next door or window Mark: one more than the highest numeric Mark in the category
+/// (doors and windows count separately).
 pub fn next_mark(p: &Project, cat: Category) -> String {
     let max = p.elements.iter().filter(|e| e.category() == cat).filter_map(|e| e.mark.trim().parse::<u64>().ok()).max().unwrap_or(0);
     (max + 1).to_string()
@@ -802,9 +802,10 @@ pub fn copy_elements(p: &mut Project, ids: &[Id], delta: DVec2) -> Vec<Id> {
         created.push(map[&e.id]);
     }
     for id in &created {
-        // Copied doors with numeric Marks get the next free number.
-        if p.element(*id).is_some_and(|e| e.category() == Category::Doors && e.mark.trim().parse::<u64>().is_ok()) {
-            let mark = next_mark(p, Category::Doors);
+        // Copied doors and windows with numeric Marks get the next free number.
+        let numbered = p.element(*id).filter(|e| matches!(e.category(), Category::Doors | Category::Windows) && e.mark.trim().parse::<u64>().is_ok()).map(|e| e.category());
+        if let Some(cat) = numbered {
+            let mark = next_mark(p, cat);
             if let Some(e) = p.element_mut(*id) {
                 e.mark = mark;
             }
@@ -1853,7 +1854,7 @@ mod tests {
     }
 
     #[test]
-    fn doors_number_their_marks() {
+    fn doors_and_windows_number_their_marks() {
         let (mut p, lvl, wt) = project();
         let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(10000.0, 0.0), 3000.0).unwrap();
         let door = p.families.iter().find(|f| f.name == "Single-Flush").unwrap().types[0].id;
@@ -1865,6 +1866,13 @@ mod tests {
         let marks: Vec<String> = c.iter().filter_map(|id| p.element(*id)).filter(|e| e.category() == Category::Doors).map(|e| e.mark.clone()).collect();
         assert_eq!(marks.len(), 2);
         assert!(marks.contains(&"3".to_string()) && marks.contains(&"4".to_string()), "{marks:?}");
+        // Windows keep their own sequence.
+        let window = p.families.iter().find(|f| f.name == "Fixed").unwrap().types[0].id;
+        let w1 = place_hosted(&mut p, window, w, 8000.0, false).unwrap();
+        assert_eq!(p.element(w1).unwrap().mark, "1");
+        let copy = copy_elements(&mut p, &[w, w1], DVec2::new(0.0, 8000.0));
+        let wm: Vec<String> = copy.iter().filter_map(|id| p.element(*id)).filter(|e| e.category() == Category::Windows).map(|e| e.mark.clone()).collect();
+        assert_eq!(wm, vec!["2".to_string()]);
     }
 
     #[test]
