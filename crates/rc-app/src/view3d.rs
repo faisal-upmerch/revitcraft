@@ -180,7 +180,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
 
     // Navigation.
     let mut moved = false;
-    let left_drag = resp.dragged_by(egui::PointerButton::Primary);
+    let wheel_on = crate::wheel::load(ui, view_id).on;
+    let left_drag = resp.dragged_by(egui::PointerButton::Primary) && !wheel_on;
     let section_drag: Option<(usize, Pos2)> = ui.memory(|m| m.data.get_temp(egui::Id::new(("sbox-drag", view_id))));
     if left_drag && section_drag.is_none() && (drag_from_cube || shift || mode == NavMode::Orbit) {
         let d = resp.drag_delta();
@@ -227,6 +228,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         }
     }
     let _ = moved;
+    if wheel_on && !over_cube && !over_nav {
+        wheel_3d(app, ui, &resp, rect, view_id, &mut cam, view.section_box);
+    }
     app.cams3d.insert(view_id, cam);
 
     // Render.
@@ -258,7 +262,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
 
     // Picking and window selection.
     let aspect = rect.width() / rect.height().max(1.0);
-    if is_active && !over_cube && !over_nav {
+    if wheel_on {
+        let st = crate::wheel::load(ui, view_id);
+        if let (Some(c), Some(p)) = (st.center, ui.input(|i| i.pointer.latest_pos())) {
+            let hot = st.drag.or_else(|| crate::wheel::wedge_at(true, c, p));
+            crate::wheel::paint(&painter, c, true, hot, st.drag);
+            app.interact.prompt = crate::wheel::prompt(hot).into();
+        }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            crate::wheel::store(ui, view_id, Default::default());
+        }
+        ui.ctx().request_repaint();
+    }
+    if is_active && !over_cube && !over_nav && !wheel_on {
         if let Some(hp) = resp.hover_pos() {
             let nx = ((hp.x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
             let ny = (1.0 - (hp.y - rect.top()) / rect.height() * 2.0) as f64;
@@ -595,6 +611,99 @@ fn point_in_quad(p: Pos2, q: &[Pos2; 4]) -> bool {
     true
 }
 
+/// The Full Navigation Wheel: Zoom, Pan, Rewind, Orbit (outer) and Center, Look, Up/Down,
+/// Walk (inner), driven by dragging from a wedge.
+fn wheel_3d(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, view_id: Id, cam: &mut Camera, clip: Option<(DVec3, DVec3)>) {
+    use crate::wheel::{self, Wedge};
+    let mut st = wheel::load(ui, view_id);
+    let Some(p) = ui.input(|i| i.pointer.latest_pos()).filter(|p| rect.contains(*p)) else { return };
+    // The wheel appears under the cursor once it has left the navigation bar.
+    if st.center.is_none() && p.x > rect.right() - 60.0 {
+        return;
+    }
+    let c = if st.drag.is_some() { st.center.unwrap_or(p) } else { wheel::follow(&mut st, p) };
+    let pressed = resp.drag_started_by(egui::PointerButton::Primary) || (resp.clicked_by(egui::PointerButton::Primary) && st.drag.is_none());
+    if pressed {
+        let press = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);
+        if wheel::on_close(c, press) {
+            wheel::store(ui, view_id, Default::default());
+            return;
+        }
+        st.drag = wheel::wedge_at(true, c, press);
+        st.accum = 0.0;
+        if st.drag.is_some() && st.drag != Some(Wedge::Rewind) {
+            let h = app.cam3d_history.entry(view_id).or_default();
+            h.push(*cam);
+            if h.len() > 50 {
+                h.remove(0);
+            }
+        }
+    }
+    let dist = (cam.target - cam.eye).length().max(1.0);
+    if resp.dragged_by(egui::PointerButton::Primary) {
+        let d = resp.drag_delta();
+        match st.drag {
+            Some(Wedge::Zoom) => {
+                let f = (d.y as f64 * 0.01).exp();
+                cam.eye = cam.target + (cam.eye - cam.target) * f;
+                cam.ortho_height *= f;
+            }
+            Some(Wedge::Pan) => {
+                pan(cam, d, rect);
+                st.center = Some(c + d);
+            }
+            Some(Wedge::Orbit) => orbit(cam, d.x, d.y),
+            Some(Wedge::Look) => {
+                // Turn the view direction around the eye.
+                let off = cam.target - cam.eye;
+                let r = off.length();
+                let mut yaw = off.y.atan2(off.x);
+                let mut pitch = (off.z / r).clamp(-1.0, 1.0).asin();
+                yaw -= d.x as f64 * 0.005;
+                pitch = (pitch - d.y as f64 * 0.005).clamp(-1.5, 1.5);
+                cam.target = cam.eye + DVec3::new(yaw.cos() * pitch.cos(), yaw.sin() * pitch.cos(), pitch.sin()) * r;
+            }
+            Some(Wedge::Walk) => {
+                let f = (cam.target - cam.eye) * DVec3::new(1.0, 1.0, 0.0);
+                let step = f.normalize_or_zero() * (-d.y as f64 * dist * 0.004);
+                cam.eye += step;
+                cam.target += step;
+            }
+            Some(Wedge::UpDown) => {
+                let step = DVec3::Z * (-d.y as f64 * dist * 0.004);
+                cam.eye += step;
+                cam.target += step;
+            }
+            Some(Wedge::Rewind) => {
+                st.accum += d.x;
+                if st.accum < -40.0 {
+                    if let Some(prev) = app.cam3d_history.get_mut(&view_id).and_then(|h| h.pop()) {
+                        *cam = prev;
+                    }
+                    st.accum = 0.0;
+                }
+            }
+            _ => {}
+        }
+    }
+    // Center: a click on the model makes the point under the wheel the pivot.
+    if resp.clicked_by(egui::PointerButton::Primary) && st.drag == Some(Wedge::Center) {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let nx = ((c.x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
+        let ny = (1.0 - (c.y - rect.top()) / rect.height() * 2.0) as f64;
+        let (o, dir) = cam.ray(nx, ny, aspect);
+        if let Some((_, hit)) = app.scenes.get(&view_id).and_then(|s| render3d::pick(s, o, dir, clip)) {
+            let off = cam.eye - cam.target;
+            cam.target = hit;
+            cam.eye = hit + off;
+        }
+    }
+    if resp.drag_stopped() || ui.input(|i| i.pointer.any_released()) {
+        st.drag = None;
+    }
+    wheel::store(ui, view_id, st);
+}
+
 fn nav_bar(app: &mut App, ui: &mut egui::Ui, area: Rect, view_id: Id, mode: NavMode) {
     // Same slim bar as the 2D views: the navigation wheel (orbit with the left button) and the
     // zoom button with its menu.
@@ -604,7 +713,7 @@ fn nav_bar(app: &mut App, ui: &mut egui::Ui, area: Rect, view_id: Id, mode: NavM
     painter.rect_stroke(area, 3.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
     let r = Rect::from_min_size(area.min + vec2(2.0, 3.0), vec2(22.0, 22.0));
     let resp = ui.interact(r, egui::Id::new(("navbar-wheel", view_id)), Sense::click());
-    let orbiting = mode == NavMode::Orbit;
+    let orbiting = crate::wheel::load(ui, view_id).on;
     if orbiting {
         ui.painter().rect_filled(r, 2.0, style::accent_light());
     } else if resp.hovered() {
@@ -615,9 +724,9 @@ fn nav_bar(app: &mut App, ui: &mut egui::Ui, area: Rect, view_id: Id, mode: NavM
     ui.painter().circle_stroke(c, 8.0, Stroke::new(1.0, Color32::from_rgb(70, 76, 86)));
     ui.painter().circle_filled(c, 2.5, Color32::from_rgb(40, 90, 170));
     if resp.clicked() {
-        set_nav_mode(ui, view_id, if orbiting { NavMode::Select } else { NavMode::Orbit });
+        crate::wheel::store(ui, view_id, crate::wheel::WheelState { on: !orbiting, ..Default::default() });
     }
-    resp.on_hover_text("Navigation wheel: left-drag orbits while on (Shift+middle drag always orbits)");
+    resp.on_hover_text("Full Navigation Wheel (Esc closes). Shift+middle drag orbits at any time.");
     let sep_y = area.top() + 30.0;
     ui.painter().line_segment([pos2(area.left() + 4.0, sep_y), pos2(area.right() - 4.0, sep_y)], Stroke::new(1.0, style::border()));
     let r = Rect::from_min_size(pos2(area.left() + 2.0, sep_y + 2.0), vec2(22.0, 28.0));

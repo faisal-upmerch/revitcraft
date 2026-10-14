@@ -29,6 +29,7 @@ mod tempdims;
 mod tools;
 mod view3d;
 mod viewbar;
+mod wheel;
 
 use eframe::egui;
 

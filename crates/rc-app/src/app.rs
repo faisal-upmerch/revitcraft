@@ -151,6 +151,8 @@ pub struct App {
     pub cams: HashMap<Id, Cam2>,
     pub nav_history: HashMap<Id, canvas::NavHistory>,
     pub cams3d: HashMap<Id, Camera>,
+    /// Earlier cameras of each 3D view (navigation wheel Rewind).
+    pub cam3d_history: HashMap<Id, Vec<Camera>>,
     pub cache: Cache,
     pub scenes: HashMap<Id, Scene>,
     pub toast: Option<Toast>,
@@ -203,6 +205,7 @@ impl App {
             cams: HashMap::new(),
             nav_history: HashMap::new(),
             cams3d: HashMap::new(),
+            cam3d_history: HashMap::new(),
             cache: Cache::default(),
             scenes: HashMap::new(),
             toast: None,

@@ -78,8 +78,80 @@ pub fn can_step(app: &App, view: Id, back: bool) -> bool {
     app.nav_history.get(&view).is_some_and(|h| if back { !h.back.is_empty() } else { !h.fwd.is_empty() })
 }
 
-fn pan_mode(ui: &egui::Ui, view: Id) -> bool {
-    ui.memory(|m| m.data.get_temp(egui::Id::new(("nav2d-pan", view)))).unwrap_or(false)
+fn wheel_on(ui: &egui::Ui, view: Id) -> bool {
+    crate::wheel::load(ui, view).on
+}
+
+/// Runs the 2D Wheel: it floats under the cursor; pressing ZOOM, PAN or REWIND and dragging
+/// navigates the view.
+fn wheel_2d(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, view: Id, scale: f64, cam: &mut Cam2) {
+    use crate::wheel::{self, Wedge};
+    let mut st = wheel::load(ui, view);
+    if !st.on {
+        return;
+    }
+    let Some(p) = ui.input(|i| i.pointer.latest_pos()).filter(|p| rect.contains(*p)) else { return };
+    // The wheel appears under the cursor once it has left the navigation bar.
+    if st.center.is_none() && p.x > rect.right() - 60.0 {
+        return;
+    }
+    let c = if st.drag.is_some() { st.center.unwrap_or(p) } else { wheel::follow(&mut st, p) };
+    if resp.drag_started_by(egui::PointerButton::Primary) || (resp.clicked_by(egui::PointerButton::Primary) && st.drag.is_none()) {
+        let press = ui.input(|i| i.pointer.press_origin()).unwrap_or(p);
+        if wheel::on_close(c, press) {
+            st = wheel::WheelState::default();
+            wheel::store(ui, view, st);
+            return;
+        }
+        st.drag = wheel::wedge_at(false, c, press);
+        st.accum = 0.0;
+        // Wheel moves are history steps right away (Rewind goes back to them).
+        if st.drag.is_some_and(|w| w != Wedge::Rewind) {
+            let h = app.nav_history.entry(view).or_default();
+            if h.back.last().is_none_or(|b| !same_cam(b, cam)) {
+                h.back.push(*cam);
+                h.fwd.clear();
+            }
+        }
+    }
+    if resp.dragged_by(egui::PointerButton::Primary) {
+        let d = resp.drag_delta();
+        match st.drag {
+            Some(Wedge::Zoom) => {
+                let factor = (-d.y as f64 * 0.01).exp();
+                let xf = Xf { rect, center: cam.center, zoom: cam.zoom, scale, thin: false };
+                let pivot = xf.w(c);
+                cam.zoom = (cam.zoom * factor).clamp(1e-5, 50.0);
+                let xf2 = Xf { rect, center: cam.center, zoom: cam.zoom, scale, thin: false };
+                cam.center += pivot - xf2.w(c);
+            }
+            Some(Wedge::Pan) => {
+                cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
+                st.center = Some(c + d);
+            }
+            Some(Wedge::Rewind) => {
+                st.accum += d.x;
+                if st.accum.abs() > 40.0 {
+                    app.cams.insert(view, *cam);
+                    history_step(app, view, st.accum < 0.0);
+                    if let Some(n) = app.cams.get(&view) {
+                        *cam = *n;
+                    }
+                    st.accum = 0.0;
+                }
+            }
+            _ => {}
+        }
+    }
+    if resp.drag_stopped() || ui.input(|i| i.pointer.any_released()) {
+        if st.drag.is_some() {
+            let h = app.nav_history.entry(view).or_default();
+            h.settled = Some(*cam);
+            h.moving_since = None;
+        }
+        st.drag = None;
+    }
+    wheel::store(ui, view, st);
 }
 
 /// The navigation bar at the top right of 2D views: the 2D wheel (pan) and the zoom tools.
@@ -88,7 +160,7 @@ fn nav_bar_2d(app: &mut App, ui: &mut egui::Ui, rect: Rect, view: Id) {
     let p = ui.painter();
     p.rect_filled(area, 3.0, Color32::from_rgba_unmultiplied(244, 246, 248, 235));
     p.rect_stroke(area, 3.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
-    let pan_on = pan_mode(ui, view);
+    let pan_on = wheel_on(ui, view);
     // 2D wheel.
     let r = Rect::from_min_size(area.min + vec2(2.0, 3.0), vec2(22.0, 22.0));
     let resp = ui.interact(r, egui::Id::new(("nav2d-wheel", view)), Sense::click());
@@ -102,9 +174,9 @@ fn nav_bar_2d(app: &mut App, ui: &mut egui::Ui, rect: Rect, view: Id) {
     ui.painter().circle_stroke(c, 8.0, Stroke::new(1.0, Color32::from_rgb(70, 76, 86)));
     ui.painter().text(c, egui::Align2::CENTER_CENTER, "2D", style::font(7.5), Color32::from_rgb(40, 90, 170));
     if resp.clicked() {
-        ui.memory_mut(|m| m.data.insert_temp(egui::Id::new(("nav2d-pan", view)), !pan_on));
+        crate::wheel::store(ui, view, crate::wheel::WheelState { on: !pan_on, ..Default::default() });
     }
-    resp.on_hover_text("2D Wheel: drag to pan (click again or Esc to end); the wheel zooms");
+    resp.on_hover_text("2D Wheel: Zoom, Pan and Rewind under the cursor (Esc closes)");
     let sep_y = area.top() + 30.0;
     ui.painter().line_segment([pos2(area.left() + 4.0, sep_y), pos2(area.right() - 4.0, sep_y)], Stroke::new(1.0, style::border()));
     // Zoom: click = Zoom In Region, arrow = menu.
@@ -373,8 +445,8 @@ pub fn fit(app: &mut App, view: Id, rect: Rect) {
 }
 
 fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, view: Id, scale: f64) {
-    let pan = pan_mode(ui, view);
     let mut cam = app.cams.get(&view).copied().unwrap_or_default();
+    wheel_2d(app, ui, resp, rect, view, scale, &mut cam);
     if let Some(hover) = resp.hover_pos() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
         let zoom_delta = ui.input(|i| i.zoom_delta());
@@ -387,7 +459,7 @@ fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, vie
             cam.center += before - xf2.w(hover);
         }
     }
-    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) || (pan && resp.dragged_by(egui::PointerButton::Primary)) {
+    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) {
         let d = resp.drag_delta();
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
     }
@@ -1007,11 +1079,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     }
     app.interact.view = Some(view_id);
     app.interact.xf = Some(xf);
-    if pan_mode(ui, view_id) {
-        app.interact.prompt = "Drag to pan; the wheel zooms. Click the 2D Wheel again or press Esc to end.".into();
-        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
-            ui.memory_mut(|m| m.data.insert_temp(egui::Id::new(("nav2d-pan", view_id)), false));
+    if wheel_on(ui, view_id) {
+        let st = crate::wheel::load(ui, view_id);
+        if let (Some(c), Some(p)) = (st.center, ui.input(|i| i.pointer.latest_pos())) {
+            let hot = st.drag.or_else(|| crate::wheel::wedge_at(false, c, p));
+            crate::wheel::paint(&painter, c, false, hot, st.drag);
+            app.interact.prompt = crate::wheel::prompt(hot).into();
         }
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            crate::wheel::store(ui, view_id, Default::default());
+        }
+        ui.ctx().request_repaint();
         return;
     }
 
