@@ -13,6 +13,7 @@ mod commands;
 mod dialogs;
 mod family_editor;
 mod grips;
+mod home;
 mod icons;
 mod options_bar;
 mod properties;

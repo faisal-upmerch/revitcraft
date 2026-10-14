@@ -178,6 +178,8 @@ pub struct App {
     pub input_script: Option<crate::script::InputScript>,
     pub family_editor: Option<crate::family_editor::FamilyEditor>,
     pub settings_dirty: bool,
+    /// Home screen thumbnails per recent project path (None = no thumbnail).
+    pub thumbs: HashMap<String, Option<egui::TextureHandle>>,
     /// When the project was last saved or the save reminder last answered.
     pub save_reminder_at: f64,
 }
@@ -227,6 +229,7 @@ impl App {
             input_script: crate::script::InputScript::from_env(),
             family_editor: None,
             settings_dirty: false,
+            thumbs: HashMap::new(),
             save_reminder_at: 0.0,
         };
         app.open_first_plan();
@@ -295,6 +298,11 @@ impl App {
                     self.settings.dark = true;
                 }
                 "--tile" => actions::exec(self, Cmd::TileViews),
+                "--save-as" => {
+                    if let Some(path) = next(&mut k) {
+                        self.save_to(std::path::Path::new(&path));
+                    }
+                }
                 path => self.open_path(std::path::Path::new(path)),
             }
             k += 1;
@@ -749,6 +757,7 @@ impl App {
                 self.doc.path = Some(path.to_path_buf());
                 self.doc.dirty = false;
                 self.add_recent(path);
+                crate::home::write_thumb(self, path);
                 self.info(format!("Saved {}", path.display()));
                 true
             }
@@ -993,6 +1002,13 @@ impl App {
             return;
         }
 
+        if self.dialogs.home {
+            crate::home::show(self, ui);
+            crate::dialogs::show(self, &ctx);
+            self.show_toast(&ctx);
+            self.screenshot_step(&ctx);
+            return;
+        }
         egui::Panel::top("ribbon").frame(style::ribbon_frame()).show(ui, |ui| ribbon::show(self, ui));
         if self.settings.show_options_bar {
             let contextual = !self.tool.is_select() || !self.selection.is_empty() || self.sketch.is_some();

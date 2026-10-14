@@ -339,7 +339,6 @@ pub fn footer(ui: &mut egui::Ui, app: &mut App, key: &'static str, title: &str) 
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
     CENTER.with(|c| c.set(ctx.content_rect().center()));
-    home(app, ctx);
     new_project(app, ctx);
     pending(app, ctx);
     if let Some(w) = app.dialogs.import_warnings.clone() {
@@ -386,82 +385,6 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
 }
 
 // ---------------------------------------------------------------- start
-
-fn tile(ui: &mut egui::Ui, icon: Icon, title: &str, sub: &str) -> bool {
-    let (r, resp) = ui.allocate_exact_size(vec2(200.0, 64.0), Sense::click());
-    ui.painter().rect_filled(r, 4.0, if resp.hovered() { style::hover() } else { style::field() });
-    ui.painter().rect_stroke(r, 4.0, egui::Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
-    icons::paint(ui.painter(), egui::Rect::from_min_size(r.min + vec2(10.0, 14.0), vec2(36.0, 36.0)), icon, true);
-    ui.painter().text(r.min + vec2(56.0, 16.0), egui::Align2::LEFT_TOP, title, egui::FontId::proportional(13.5), style::text());
-    ui.painter().text(r.min + vec2(56.0, 36.0), egui::Align2::LEFT_TOP, sub, egui::FontId::proportional(11.0), style::text_dim());
-    resp.clicked()
-}
-
-fn home(app: &mut App, ctx: &egui::Context) {
-    if !app.dialogs.home {
-        return;
-    }
-    let mut open = true;
-    let mut close = false;
-    egui::Window::new("RevitCraft — Home").collapsible(false).resizable(false).anchor(egui::Align2::CENTER_CENTER, vec2(0.0, 0.0)).open(&mut open).show(ctx, |ui| {
-        ui.horizontal_top(|ui| {
-            ui.vertical(|ui| {
-                ui.heading("Models");
-                ui.add_space(6.0);
-                if tile(ui, Icon::New, "New (Metric)", "Millimetres, metric template") {
-                    app.new_project(UnitSystem::Metric);
-                    close = true;
-                }
-                if tile(ui, Icon::New, "New (Imperial)", "Feet and inches template") {
-                    app.new_project(UnitSystem::Imperial);
-                    close = true;
-                }
-                if tile(ui, Icon::Open, "Open...", "Project (.rcx) or IFC model") {
-                    close = true;
-                    app.open_dialog();
-                }
-                if tile(ui, Icon::Home, "Sample Project", "A small house to explore") {
-                    app.open_sample();
-                    close = true;
-                }
-                ui.add_space(8.0);
-                ui.heading("Families");
-                ui.add_space(6.0);
-                if tile(ui, Icon::FamilyTypes, "New Family...", "Parametric family editor") {
-                    close = true;
-                    crate::family_editor::new_custom(app, "Custom Family");
-                }
-            });
-            ui.add_space(16.0);
-            ui.vertical(|ui| {
-                ui.set_width(340.0);
-                ui.heading("Recent");
-                ui.add_space(6.0);
-                if app.settings.recent.is_empty() {
-                    ui.label(egui::RichText::new("Projects you open or save appear here.").color(style::text_dim()));
-                }
-                for r in app.settings.recent.clone() {
-                    let name = std::path::Path::new(&r).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(r.clone());
-                    if tile(ui, Icon::Save, &name, &truncate(&r, 46)) {
-                        app.open_path(std::path::Path::new(&r));
-                        close = true;
-                    }
-                }
-            });
-        });
-    });
-    if !open || close {
-        app.dialogs.home = false;
-    }
-}
-
-fn truncate(s: &str, n: usize) -> String {
-    if s.chars().count() <= n {
-        s.to_string()
-    } else {
-        format!("…{}", s.chars().rev().take(n).collect::<Vec<_>>().into_iter().rev().collect::<String>())
-    }
-}
 
 fn new_project(app: &mut App, ctx: &egui::Context) {
     if !app.dialogs.new_project {
@@ -719,7 +642,7 @@ fn export_pdf(app: &mut App, ids: &[Id]) {
 }
 
 /// Rasterises a 2D drawing to RGB (simple scanline renderer for image export).
-fn raster_2d(app: &mut App, view: &View, width: u32) -> Option<rc_core::pdf::Image> {
+pub(crate) fn raster_2d(app: &mut App, view: &View, width: u32) -> Option<rc_core::pdf::Image> {
     let d = app.drawing(view.id);
     let (mn, mx) = d.bounds()?;
     let size = (mx - mn) * 1.06;

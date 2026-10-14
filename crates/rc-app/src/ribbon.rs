@@ -635,7 +635,7 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
 }
 
 fn qat(ui: &mut egui::Ui, app: &mut App) {
-    for c in [C::Open, C::Save, C::Undo, C::Redo, C::Measure, C::DimAligned, C::TagByCategory, C::Text, C::Default3D, C::Section, C::ThinLines, C::CloseInactive] {
+    for c in [C::Home, C::Open, C::Save, C::Undo, C::Redo, C::Measure, C::DimAligned, C::TagByCategory, C::Text, C::Default3D, C::Section, C::ThinLines, C::CloseInactive] {
         icon_button(ui, app, c, 20.0);
     }
     // Switch windows.

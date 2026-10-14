@@ -324,6 +324,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         SelectById => app.dialogs.select_by_id = Some(String::new()),
         Warnings => app.dialogs.warnings = true,
         KeyboardShortcuts => app.dialogs.shortcuts = Some(String::new()),
+        Home => app.dialogs.home = !app.dialogs.home,
         ViewRange => app.dialogs.view_range = app.active,
 
         // ---------------- modify

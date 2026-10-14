@@ -21,6 +21,7 @@ pub enum Cmd {
     Exit,
     Undo,
     Redo,
+    Home,
     // Architecture
     Modify,
     Wall,
@@ -254,6 +255,7 @@ impl Cmd {
             ExportCsv => ci("Schedule (CSV)", I::Schedule, "Exports the open schedule as comma-separated values.", ""),
             Options => ci("Options", I::Options, "Application options: theme, background, user name, shortcuts.", ""),
             Exit => ci("Exit", I::Close, "Closes RevitCraft.", ""),
+            Home => ci("Home", I::Home, "Shows the Home screen with recent projects.", ""),
             Undo => ci("Undo", I::Undo, "Undoes the last change.", ""),
             Redo => ci("Redo", I::Redo, "Redoes the last undone change.", ""),
 
@@ -463,7 +465,7 @@ impl Cmd {
 
     pub const ALL: &'static [Cmd] = &[
         Cmd::New, Cmd::Open, Cmd::Save, Cmd::SaveAs, Cmd::OpenSample, Cmd::ImportIfc, Cmd::ExportIfc, Cmd::ExportDxf, Cmd::ExportPdf, Cmd::ExportImage,
-        Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
+        Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Home, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,
         Cmd::Shaft, Cmd::WallOpening, Cmd::Level, Cmd::Grid, Cmd::RefPlane, Cmd::Beam, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad,
