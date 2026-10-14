@@ -226,6 +226,10 @@ pub enum Icon {
     MultiTag,
     MaterialTag,
     UnjoinGeometry,
+    CanvasTheme,
+    ShowHidden,
+    RemoveHidden,
+    GlobalParams,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1451,6 +1455,35 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.28, 0.1, 0.72, 0.9, LBROWN, ink);
             g.line(&[(0.28, 0.1), (0.72, 0.9)], ink);
             g.line(&[(0.72, 0.1), (0.28, 0.9)], ink);
+        }
+        GlobalParams => {
+            g.circle((0.42, 0.5), 0.3, LBLUE, ink);
+            g.line(&[(0.12, 0.5), (0.72, 0.5)], ink);
+            g.arc((0.42, 0.5), 0.14, -FRAC_PI_2, FRAC_PI_2, ink);
+            g.arc((0.42, 0.5), 0.14, FRAC_PI_2, PI + FRAC_PI_2, ink);
+            g.text_bold((0.8, 0.26), "π", 0.26, BLUE);
+        }
+        ShowHidden | RemoveHidden => {
+            g.cube(0.42, 0.42, 0.56, Color32::WHITE, LGREY, GREY);
+            g.dashed((0.3, 0.86), (0.92, 0.86), BLUE);
+            g.dashed((0.92, 0.86), (0.92, 0.34), BLUE);
+            if icon == RemoveHidden {
+                g.line_w(&[(0.62, 0.62), (0.92, 0.92)], RED, g.w * 1.4);
+                g.line_w(&[(0.92, 0.62), (0.62, 0.92)], RED, g.w * 1.4);
+            }
+        }
+        CanvasTheme => {
+            // Half-dark disc: light and dark canvas.
+            g.circle((0.5, 0.5), 0.34, Color32::WHITE, ink);
+            let pts: Vec<(f32, f32)> = (0..=16).map(|k| {
+                let a = -FRAC_PI_2 + PI * k as f32 / 16.0;
+                (0.5 + 0.34 * a.cos(), 0.5 + 0.34 * a.sin())
+            }).collect();
+            g.poly(&pts, Color32::from_rgb(45, 52, 60), ink);
+            for k in 0..8 {
+                let a = k as f32 * TAU / 8.0;
+                g.line(&[(0.5 + 0.4 * a.cos(), 0.5 + 0.4 * a.sin()), (0.5 + 0.47 * a.cos(), 0.5 + 0.47 * a.sin())], ink);
+            }
         }
         UnjoinGeometry => {
             draw(g, JoinGeometry);

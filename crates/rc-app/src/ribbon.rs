@@ -201,6 +201,8 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Visibility/\nGraphics", C::VisibilityGraphics, vec![]),
                 Big(C::ViewFilters),
                 Labeled("Thin\nLines", C::ThinLines, vec![]),
+                Labeled("Show\nHidden Lines", C::ShowHiddenLines, vec![]),
+                Labeled("Remove\nHidden Lines", C::RemoveHiddenLines, vec![]),
             ],
         ),
         panel(
@@ -231,6 +233,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                     C::ToggleProperties,
                     vec![C::ToggleProperties, C::ToggleBrowser, C::ToggleStatusBar, C::ToggleOptionsBar, C::ToggleViewCube, C::ToggleNavBar, C::KeyboardShortcuts],
                 ),
+                Labeled("Canvas\nTheme", C::CanvasTheme, vec![]),
             ],
         ),
     ]
@@ -244,7 +247,8 @@ fn manage() -> Vec<Panel> {
             vec![
                 Big(C::Materials),
                 Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]),
-                Stack(vec![C::ProjectParameters, C::Purge, C::ProjectUnits]),
+                Stack(vec![C::ProjectParameters, C::GlobalParameters]),
+                Stack(vec![C::Purge, C::ProjectUnits]),
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],
         ),
@@ -483,6 +487,7 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::ToggleProperties => app.settings.show_properties,
         C::ThinLines => app.thin_lines,
         C::ShowMass => app.show_mass,
+        C::CanvasTheme => app.settings.black_canvas,
         C::ModifySubElements => k == T::TopoPoints,
         C::ColorFillLegend => k == T::ColorLegend,
         _ => false,

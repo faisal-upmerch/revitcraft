@@ -470,6 +470,7 @@ fn element_properties(app: &mut App, ui: &mut egui::Ui, sel: &[Id]) {
         }
     }
     let mut edits: Vec<(String, String)> = Vec::new();
+    let mut link: Option<(String, Option<String>)> = None;
     for (g, defs) in groups {
         let open = group_open(ui, &g);
         if style::group_header_ui(ui, &g, open).clicked() {
@@ -484,11 +485,64 @@ fn element_properties(app: &mut App, ui: &mut egui::Ui, sel: &[Id]) {
                 let same = values.iter().all(|v| *v == values[0]);
                 let shown = if same { values[0].clone() } else { String::new() };
                 prop_label(ui, &d.name, d.read_only);
-                if let Some(v) = value_editor(ui, app, &d, &shown, ("elem", sel.first().copied().unwrap_or(0), d.name.clone())) {
-                    edits.push((d.name.clone(), v));
+                // Parameters that can be associated with a global parameter of the same type.
+                let globals: Vec<String> = match &d.kind {
+                    PKind::Value(k) if !d.read_only && elems.len() == 1 => p.global_params.iter().filter(|g| g.kind == *k).map(|g| g.name.clone()).collect(),
+                    _ => vec![],
+                };
+                let linked = if elems.len() == 1 { elems[0].global_links.get(&d.name).cloned() } else { None };
+                if globals.is_empty() && linked.is_none() {
+                    if let Some(v) = value_editor(ui, app, &d, &shown, ("elem", sel.first().copied().unwrap_or(0), d.name.clone())) {
+                        edits.push((d.name.clone(), v));
+                    }
+                } else {
+                    let avail = ui.available_width();
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 2.0;
+                        let w = (avail - 22.0).max(40.0);
+                        ui.allocate_ui(vec2(w, 20.0), |ui| {
+                            ui.set_width(w);
+                            if linked.is_some() {
+                                ui.add(egui::Label::new(egui::RichText::new(&shown).color(style::text_dim())).truncate());
+                            } else if let Some(v) = value_editor(ui, app, &d, &shown, ("elem", sel.first().copied().unwrap_or(0), d.name.clone())) {
+                                edits.push((d.name.clone(), v));
+                            }
+                        });
+                        let tip = match &linked {
+                            Some(g) => format!("Associated with global parameter: {g}"),
+                            None => "Associate Global Parameter".to_string(),
+                        };
+                        let b = ui.add(egui::Button::new(egui::RichText::new(if linked.is_some() { "=" } else { "⊞" }).size(11.0)).min_size(vec2(18.0, 18.0)).selected(linked.is_some())).on_hover_text(tip);
+                        egui::Popup::menu(&b).show(|ui| {
+                            ui.label(egui::RichText::new("Associate Global Parameter").strong());
+                            if ui.selectable_label(linked.is_none(), "<None>").clicked() {
+                                link = Some((d.name.clone(), None));
+                            }
+                            for g in &globals {
+                                if ui.selectable_label(linked.as_deref() == Some(g.as_str()), g).clicked() {
+                                    link = Some((d.name.clone(), Some(g.clone())));
+                                }
+                            }
+                        });
+                    });
                 }
                 ui.end_row();
             }
+        });
+    }
+    if let Some((param, g)) = link {
+        let id = sel[0];
+        app.run("Associate Global Parameter", |p| {
+            let e = p.element_mut(id).ok_or("Element not found.")?;
+            match g {
+                Some(g) => {
+                    e.global_links.insert(param, g);
+                }
+                None => {
+                    e.global_links.remove(&param);
+                }
+            }
+            Ok(())
         });
     }
     if !edits.is_empty() {

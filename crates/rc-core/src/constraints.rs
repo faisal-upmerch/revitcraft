@@ -3,6 +3,8 @@
 
 use crate::annotation;
 use crate::edit;
+use crate::formula;
+use crate::params;
 use crate::geom::DVec2;
 use crate::model::*;
 
@@ -26,6 +28,8 @@ pub fn apply(p: &mut Project, before: &Project) -> Result<(), String> {
             }
         }
     }
+
+    apply_globals(p)?;
 
     // Locked and EQ dimensions: move dependent references back into place.
     for _pass in 0..4 {
@@ -87,6 +91,82 @@ pub fn apply(p: &mut Project, before: &Project) -> Result<(), String> {
         }
         if !changed {
             return Ok(());
+        }
+    }
+    Ok(())
+}
+
+/// Global parameters: evaluates their formulas, then pushes their values into associated
+/// element parameters and labelled dimensions.
+fn apply_globals(p: &mut Project) -> Result<(), String> {
+    if p.global_params.is_empty() {
+        return Ok(());
+    }
+    for _ in 0..p.global_params.len().max(1) {
+        let mut changed = false;
+        for k in 0..p.global_params.len() {
+            let g = &p.global_params[k];
+            if g.formula.trim().is_empty() || g.is_text() {
+                continue;
+            }
+            let vals: std::collections::HashMap<String, f64> = p.global_params.iter().filter(|x| !x.is_text()).map(|x| (x.name.clone(), x.value)).collect();
+            let me = g.name.clone();
+            let mut resolve = |n: &str| {
+                if n == me {
+                    return Err(formula::FormulaError(format!("'{me}' cannot refer to itself.")));
+                }
+                vals.get(n).copied().ok_or_else(|| formula::FormulaError(format!("Unknown global parameter '{n}'.")))
+            };
+            let v = formula::evaluate(&g.formula, &mut resolve).map_err(|e| format!("Global parameter '{me}': {}", e.0))?;
+            if (v - p.global_params[k].value).abs() > 1e-9 {
+                p.global_params[k].value = v;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    // Element parameters associated with a global.
+    let links: Vec<(Id, String, String)> = p.elements.iter().flat_map(|e| e.global_links.iter().map(move |(k, v)| (e.id, k.clone(), v.clone()))).collect();
+    for (id, param, gname) in links {
+        let Some(g) = p.global(&gname).cloned() else {
+            if let Some(e) = p.element_mut(id) {
+                e.global_links.remove(&param);
+            }
+            continue;
+        };
+        let Some(e) = p.element(id) else { continue };
+        let want = if g.is_text() { params::Value::Text(g.text.clone()) } else { params::Value::Num(g.value) };
+        let same = match (params::get(p, e, &param), &want) {
+            (Some(params::Value::Num(a)), params::Value::Num(b)) => (a - b).abs() < 1e-6,
+            (Some(params::Value::Text(a)), params::Value::Text(b)) => a == *b,
+            _ => false,
+        };
+        if !same {
+            params::set_value(p, id, &param, want).map_err(|e| format!("Global parameter '{gname}': {e}"))?;
+        }
+    }
+    // Dimensions labelled with a global drive their (single) segment.
+    let dims: Vec<(Id, Dimension)> = p
+        .elements
+        .iter()
+        .filter_map(|e| match &e.kind {
+            ElementKind::Dimension(d) if !d.label.is_empty() && d.refs.len() == 2 => Some((e.id, d.clone())),
+            _ => None,
+        })
+        .collect();
+    for (_, d) in dims {
+        let Some(g) = p.global(&d.label).filter(|g| !g.is_text()).cloned() else { continue };
+        let now = annotation::coordinates(p, &d);
+        let have = now[1] - now[0];
+        let want = if have < 0.0 { -g.value } else { g.value };
+        let delta = want - have;
+        if delta.abs() < 0.01 {
+            continue;
+        }
+        if !move_ref(p, &d.refs[1], d.direction * delta) && !move_ref(p, &d.refs[0], -d.direction * delta) {
+            return Err(format!("The dimension labelled '{}' cannot change: its references are pinned.", g.name));
         }
     }
     Ok(())

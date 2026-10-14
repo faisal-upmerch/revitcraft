@@ -2242,4 +2242,45 @@ mod tests {
         .unwrap();
         assert!((doc.data.wall(b).unwrap().start.x - 3500.0).abs() < 1e-6);
     }
+
+    #[test]
+    fn global_parameters_drive_dimensions_and_parameters() {
+        let (p, lvl, wt) = project();
+        let mut doc = Document::new(p);
+        let (a, b) = doc
+            .transact("walls", |p| Ok((add_wall(p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(0.0, 4000.0), 3000.0)?, add_wall(p, lvl, wt, DVec2::new(3000.0, 0.0), DVec2::new(3000.0, 4000.0), 3000.0)?)))
+            .unwrap();
+        let view = doc.data.views[0].id;
+        // Width drives the dimension; Height = Width / 2 drives a wall parameter.
+        doc.transact("globals", |p| {
+            p.global_params.push(GlobalParameter { name: "Width".into(), kind: ParamKind::Length, value: 5000.0, ..Default::default() });
+            p.global_params.push(GlobalParameter { name: "Height".into(), kind: ParamKind::Length, formula: "Width / 2".into(), ..Default::default() });
+            let d = add_dimension(p, view, vec![DimRef { element: Some(a), part: RefPart::WallCenter, point: DVec2::new(0.0, 2000.0) }, DimRef { element: Some(b), part: RefPart::WallCenter, point: DVec2::new(3000.0, 2000.0) }], DVec2::X, DVec2::new(0.0, -1000.0))?;
+            if let Some(Element { kind: ElementKind::Dimension(dm), .. }) = p.element_mut(d) {
+                dm.label = "Width".into();
+            }
+            crate::params::set(p, a, "Top Constraint", "Unconnected")?;
+            p.element_mut(a).unwrap().global_links.insert("Unconnected Height".into(), "Height".into());
+            Ok(())
+        })
+        .unwrap();
+        assert!((doc.data.wall(b).unwrap().start.x - 5000.0).abs() < 1e-6);
+        assert!((doc.data.global("Height").unwrap().value - 2500.0).abs() < 1e-9);
+        assert!((doc.data.wall(a).unwrap().unconnected_height - 2500.0).abs() < 1e-6);
+        // Changing the global moves the wall and updates the linked height.
+        doc.transact("edit", |p| {
+            p.global_params[0].value = 6000.0;
+            Ok(())
+        })
+        .unwrap();
+        assert!((doc.data.wall(b).unwrap().start.x - 6000.0).abs() < 1e-6);
+        assert!((doc.data.wall(a).unwrap().unconnected_height - 3000.0).abs() < 1e-6);
+        // A self-referencing formula is refused.
+        assert!(doc
+            .transact("bad", |p| {
+                p.global_params[1].formula = "Height + 1".into();
+                Ok(())
+            })
+            .is_err());
+    }
 }

@@ -308,6 +308,9 @@ pub struct Element {
     /// Values of instance project parameters (numbers stored in internal units).
     #[serde(default)]
     pub params: BTreeMap<String, String>,
+    /// Instance parameters associated with global parameters: parameter -> global name.
+    #[serde(default)]
+    pub global_links: BTreeMap<String, String>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -359,6 +362,7 @@ impl Element {
             group: None,
             view: None,
             params: BTreeMap::new(),
+            global_links: BTreeMap::new(),
         }
     }
 
@@ -1977,6 +1981,29 @@ pub struct ProjectParameter {
     pub categories: Vec<Category>,
 }
 
+/// A project-wide value (Manage > Global Parameters) that can drive dimensions and element
+/// parameters; numbers in internal units.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GlobalParameter {
+    pub name: String,
+    pub kind: ParamKind,
+    #[serde(default)]
+    pub value: f64,
+    #[serde(default)]
+    pub text: String,
+    /// When set, the value is computed from other global parameters.
+    #[serde(default)]
+    pub formula: String,
+    #[serde(default)]
+    pub group: String,
+}
+
+impl GlobalParameter {
+    pub fn is_text(&self) -> bool {
+        matches!(self.kind, ParamKind::Text | ParamKind::Material)
+    }
+}
+
 /// A named saved selection (Manage > Selection > Save).
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct SelectionSet {
@@ -2069,6 +2096,9 @@ pub struct View {
     /// Plans cropped to a scope box.
     #[serde(default)]
     pub scope_box: Option<Id>,
+    /// View > Show Hidden Lines: elements whose obscured edges are drawn dashed.
+    #[serde(default)]
+    pub show_hidden: Vec<Id>,
 }
 
 impl View {
@@ -2104,6 +2134,7 @@ impl View {
             title_on_sheet: String::new(),
             marker: None,
             scope_box: None,
+            show_hidden: Vec::new(),
         }
     }
 
@@ -2310,6 +2341,9 @@ pub struct Project {
     /// Modify > Join Geometry: pairs of joined elements (their cuts merge in sections).
     #[serde(default)]
     pub joins: Vec<(Id, Id)>,
+    /// Manage > Global Parameters.
+    #[serde(default)]
+    pub global_params: Vec<GlobalParameter>,
 }
 
 /// Line graphics of a category (Object Styles). None keeps the built-in default.
@@ -2356,7 +2390,12 @@ impl Project {
             builtin_line_styles: BTreeMap::new(),
             selection_sets: Vec::new(),
             joins: Vec::new(),
+            global_params: Vec::new(),
         }
+    }
+
+    pub fn global(&self, name: &str) -> Option<&GlobalParameter> {
+        self.global_params.iter().find(|g| g.name == name)
     }
 
     /// Display name of a line style (custom styles carry their own).

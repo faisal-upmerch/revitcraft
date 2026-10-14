@@ -258,6 +258,10 @@ pub enum Cmd {
     JoinGeometry,
     UnjoinGeometry,
     SwitchWindows,
+    CanvasTheme,
+    ShowHiddenLines,
+    RemoveHiddenLines,
+    GlobalParameters,
 }
 
 pub struct CmdInfo {
@@ -489,6 +493,10 @@ impl Cmd {
             MaterialTag => ci("Material Tag", I::MaterialTag, "Tags the material of an element.", ""),
             JoinGeometry => ci("Join Geometry", I::JoinGeometry, "Joins two elements so their cut geometry cleans up in sections.", "JG"),
             UnjoinGeometry => ci("Unjoin Geometry", I::UnjoinGeometry, "Removes the join between two elements.", ""),
+            ShowHiddenLines => ci("Show Hidden Lines", I::ShowHidden, "Shows the lines of an element hidden by another element as dashed lines.", ""),
+            RemoveHiddenLines => ci("Remove Hidden Lines", I::RemoveHidden, "Stops showing the hidden lines of an element.", ""),
+            GlobalParameters => ci("Global Parameters", I::GlobalParams, "Creates project-wide values that drive dimensions and element parameters.", ""),
+            CanvasTheme => ci("Canvas Theme", I::CanvasTheme, "Switches the view canvas between the light and dark theme.", ""),
             SwitchWindows => ci("Switch Windows", I::SwitchWindows, "Switches to another open view.", ""),
             SelectJoined => ci("Select Joined Elements", I::Modify, "Adds the elements joined to the selection.", ""),
             ColorFillLegend => ci("Color Fill Legend", I::ColorLegend, "Places a legend of the room colors in the active plan.", ""),
@@ -558,7 +566,7 @@ impl Cmd {
         Cmd::SnapQuadrant, Cmd::SnapOff, Cmd::SnapClose, Cmd::ProjectParameters, Cmd::ViewFilters, Cmd::LineStyles, Cmd::SaveSelection,
         Cmd::LoadSelection, Cmd::EditSelection, Cmd::SpotCoordinate, Cmd::SpotSlope, Cmd::FindReplace, Cmd::SelectJoined,
         Cmd::ScopeBox, Cmd::Insulation, Cmd::DetailComponent, Cmd::MultiCategoryTag, Cmd::MaterialTag,
-        Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows,
+        Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows, Cmd::CanvasTheme, Cmd::ShowHiddenLines, Cmd::RemoveHiddenLines, Cmd::GlobalParameters,
     ];
 
     /// Stable name for saving custom shortcuts.

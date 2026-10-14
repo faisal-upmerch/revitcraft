@@ -88,6 +88,8 @@ pub enum ToolKind {
     DetailComponent,
     JoinGeometry,
     UnjoinGeometry,
+    ShowHiddenLines,
+    RemoveHiddenLines,
 }
 
 impl ToolKind {
@@ -164,6 +166,8 @@ impl ToolKind {
             ToolKind::DetailComponent => "Detail Component",
             ToolKind::JoinGeometry => "Join Geometry",
             ToolKind::UnjoinGeometry => "Unjoin Geometry",
+            ToolKind::ShowHiddenLines => "Show Hidden Lines",
+            ToolKind::RemoveHiddenLines => "Remove Hidden Lines",
         }
     }
 

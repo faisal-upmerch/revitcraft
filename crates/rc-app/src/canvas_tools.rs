@@ -161,6 +161,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::ScopeBox => if n == 0 { "Click to enter the first corner of the scope box.".into() } else { "Click to enter the opposite corner.".into() },
         ToolKind::Insulation => if n == 0 { "Click to enter the insulation start point.".into() } else { "Click to enter the insulation end point.".into() },
         ToolKind::DetailComponent => "Click to place the detail component. Space rotates it.".into(),
+        ToolKind::ShowHiddenLines | ToolKind::RemoveHiddenLines => if t.picked.is_empty() { "Select an element that is obscuring other elements.".into() } else { "Select element whose lines are hidden.".into() },
         ToolKind::JoinGeometry => if t.picked.is_empty() { "Select first geometry to join.".into() } else { "Select second geometry to join to the first.".into() },
         ToolKind::UnjoinGeometry => if t.picked.is_empty() { "Select geometry to unjoin.".into() } else { "Select the element to unjoin it from.".into() },
         _ => String::new(),
@@ -2059,6 +2060,30 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                 let f = app.opts.scale_factor;
                 app.run("Scale", |p| edit::scale_elements(p, &ids, pt, f));
                 app.set_tool(ToolKind::Select);
+            }
+        }
+        ToolKind::ShowHiddenLines | ToolKind::RemoveHiddenLines => {
+            let target = canvas::pick_candidates(app, view, d, c, tol).into_iter().find(|id| app.el(*id).is_some_and(|e| e.view.is_none()));
+            if clicked {
+                if let Some(id) = target {
+                    if app.tool.picked.is_empty() {
+                        app.tool.picked.push(id);
+                        app.select(vec![id]);
+                    } else {
+                        let show = app.tool.kind == ToolKind::ShowHiddenLines;
+                        let vid = view.id;
+                        app.run(if show { "Show Hidden Lines" } else { "Remove Hidden Lines" }, |p| {
+                            let v = p.view_mut(vid).ok_or("No view.")?;
+                            v.show_hidden.retain(|x| *x != id);
+                            if show {
+                                v.show_hidden.push(id);
+                            }
+                            Ok(())
+                        });
+                        app.tool.picked.clear();
+                        app.select(vec![]);
+                    }
+                }
             }
         }
         ToolKind::JoinGeometry | ToolKind::UnjoinGeometry => {

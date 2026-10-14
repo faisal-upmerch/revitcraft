@@ -334,7 +334,14 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Prefix", TEXT, v(Text), false, false));
             d.push(def("Suffix", TEXT, v(Text), false, false));
             d.push(def("Text Override", TEXT, v(Text), false, false));
-            d.push(def("Label", OTHER, v(Text), false, false));
+            if e.view.is_some() {
+                // Project dimensions are labelled with a length global parameter.
+                let mut names = vec!["<None>".to_string()];
+                names.extend(p.global_params.iter().filter(|g| g.kind == ParamKind::Length).map(|g| g.name.clone()));
+                d.push(def("Label", OTHER, PKind::Choice(names), false, false));
+            } else {
+                d.push(def("Label", OTHER, v(Text), false, false));
+            }
         }
         ElementKind::Tag(_) => {
             d.push(def("Leader Line", GRAPHICS, v(YesNo), false, false));
@@ -755,6 +762,7 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             "Prefix" => text(dm.prefix.clone()),
             "Suffix" => text(dm.suffix.clone()),
             "Text Override" => text(dm.text_override.clone()),
+            "Label" if e.view.is_some() && dm.label.is_empty() => text("<None>"),
             "Label" => text(dm.label.clone()),
             _ => None,
         },
@@ -841,6 +849,14 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
         return Err(format!("'{name}' is read-only."));
     }
     let value = parse(p, &d, input)?;
+    set_value(p, id, name, value)
+}
+
+/// Writes an already parsed value (numbers in internal units). Must be called inside a
+/// transaction.
+pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<(), String> {
+    let e = p.element(id).ok_or("Element not found.")?.clone();
+    let d = element_params(p, &e).into_iter().find(|d| d.name == name).ok_or_else(|| format!("No parameter '{name}'."))?;
     let n = || value.as_num().unwrap_or(0.0);
     let t = || match &value {
         Value::Text(s) => s.clone(),
@@ -1112,7 +1128,7 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
             "Prefix" => dm.prefix = t(),
             "Suffix" => dm.suffix = t(),
             "Text Override" => dm.text_override = t(),
-            "Label" => dm.label = t(),
+            "Label" => dm.label = if t() == "<None>" { String::new() } else { t() },
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Tag(tg) => match name {

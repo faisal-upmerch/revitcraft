@@ -102,6 +102,8 @@ pub struct Dialogs {
     /// Saved selections list: false = Load, true = Edit.
     pub selection_sets: Option<bool>,
     pub find_replace: Option<manage::FindReplace>,
+    pub global_params: bool,
+    pub global_new: Option<GlobalParameter>,
     pub about: bool,
     pub save_reminder: bool,
     /// OK/Cancel sessions: dialog key -> (undo depth when opened, last time shown).
@@ -147,6 +149,7 @@ pub fn open_by_name(app: &mut App, name: &str) {
         "params" => d.project_params = true,
         "filters" => d.filters = Some(app.doc.data.filters.first().map(|f| f.id)),
         "line-styles" => d.line_styles = true,
+        "globals" => d.global_params = true,
         "find" => d.find_replace = Some(Default::default()),
         "sun" => d.sun = true,
         _ => {}

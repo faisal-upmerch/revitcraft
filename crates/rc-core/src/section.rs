@@ -323,8 +323,9 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
         }
     }
 
-    // Visible edges beyond the cut.
+    // Visible edges beyond the cut; obscured edges dashed for Show Hidden Lines elements.
     for it in &items {
+        let reveal = view.show_hidden.contains(&it.id);
         let stroke = match it.status {
             analysis::PhaseStatus::Existing => Stroke::new(0.13, [120, 120, 120], Dash::Solid),
             analysis::PhaseStatus::Demolished => Stroke::new(0.13, [120, 120, 120], Dash::Dotted),
@@ -339,11 +340,13 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
             let len = va.distance(vb);
             let steps = ((len / (zb.px * 0.7)).ceil() as usize).clamp(1, 4000);
             let mut run: Vec<DVec2> = Vec::new();
+            let mut hidden_run: Vec<DVec2> = Vec::new();
             for s in 0..=steps {
                 let t = s as f64 / steps as f64;
                 let q = va.lerp(vb, t);
                 let dep = da + (db - da) * t;
-                let ok = (!f.cuts || dep >= -1.0) && zb.visible(q, dep) && f.far.is_none_or(|far| dep <= far);
+                let in_range = (!f.cuts || dep >= -1.0) && f.far.is_none_or(|far| dep <= far);
+                let ok = in_range && zb.visible(q, dep);
                 if ok {
                     run.push(q);
                 } else if run.len() >= 2 {
@@ -352,9 +355,20 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
                 } else {
                     run.clear();
                 }
+                if reveal && in_range && !ok {
+                    hidden_run.push(q);
+                } else {
+                    if hidden_run.len() >= 2 {
+                        d.line(Some(it.id), vec![hidden_run[0], *hidden_run.last().unwrap()], false, plan::HIDDEN);
+                    }
+                    hidden_run.clear();
+                }
             }
             if run.len() >= 2 {
                 d.line(Some(it.id), vec![run[0], *run.last().unwrap()], false, stroke);
+            }
+            if hidden_run.len() >= 2 {
+                d.line(Some(it.id), vec![hidden_run[0], *hidden_run.last().unwrap()], false, plan::HIDDEN);
             }
         }
     }

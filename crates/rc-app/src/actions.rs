@@ -35,6 +35,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         Insulation | DetailComponent | MultiCategoryTag | MaterialTag => graphical_2d && !in_sketch,
         ScopeBox => plan && !in_sketch,
         JoinGeometry | UnjoinGeometry => !in_sketch && view.is_some_and(|v| v.is_graphical()),
+        ShowHiddenLines | RemoveHiddenLines => graphical_2d && !in_sketch,
         SwitchWindows => !app.open_tabs().is_empty(),
         LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
@@ -295,7 +296,13 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ScopeBox => app.set_tool(ToolKind::ScopeBox),
         JoinGeometry => app.set_tool(ToolKind::JoinGeometry),
         UnjoinGeometry => app.set_tool(ToolKind::UnjoinGeometry),
+        ShowHiddenLines => app.set_tool(ToolKind::ShowHiddenLines),
+        RemoveHiddenLines => app.set_tool(ToolKind::RemoveHiddenLines),
         SwitchWindows => app.cycle_views(),
+        CanvasTheme => {
+            app.settings.black_canvas = !app.settings.black_canvas;
+            app.scenes.clear();
+        }
         Insulation => app.set_tool(ToolKind::Insulation),
         DetailComponent => app.set_tool(ToolKind::DetailComponent),
         TagAll => app.dialogs.tag_all = true,
@@ -405,6 +412,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         SelectById => app.dialogs.select_by_id = Some(String::new()),
         ProjectParameters => app.dialogs.project_params = true,
+        GlobalParameters => app.dialogs.global_params = true,
         ViewFilters => app.dialogs.filters = Some(app.doc.data.filters.first().map(|f| f.id)),
         LineStyles => app.dialogs.line_styles = true,
         SaveSelection => {
@@ -758,7 +766,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )

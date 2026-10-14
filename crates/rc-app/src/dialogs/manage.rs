@@ -16,6 +16,214 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     save_selection(app, ctx);
     selection_sets(app, ctx);
     find_replace(app, ctx);
+    global_params(app, ctx);
+    global_new(app, ctx);
+}
+
+// ---------------------------------------------------------------- global parameters
+
+fn global_params(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.global_params {
+        return;
+    }
+    let mut open = true;
+    let mut out = Footer::None;
+    session_begin(app, "global-params");
+    let sel_id = egui::Id::new("gp-sel");
+    let mut list = app.doc.data.global_params.clone();
+    let units = app.doc.data.units.clone();
+    let mut new = false;
+    window("Global Parameters").open(&mut open).resizable(false).show(ctx, |ui| {
+        let mut sel: Option<usize> = ui.memory(|m| m.data.get_temp::<Option<usize>>(sel_id)).flatten().filter(|k| *k < list.len());
+        let widths = [170.0, 150.0, 220.0];
+        let total: f32 = widths.iter().sum();
+        egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(170))).show(ui, |ui| {
+            ui.set_width(total);
+            {
+                let (r, _) = ui.allocate_exact_size(vec2(total, 21.0), egui::Sense::hover());
+                let p = ui.painter();
+                p.rect_filled(r, 0.0, egui::Color32::from_rgb(246, 246, 246));
+                p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, egui::Color32::from_gray(190)));
+                let mut x = r.left();
+                for (k, h) in ["Parameter", "Value", "Formula"].iter().enumerate() {
+                    p.text(egui::pos2(x + widths[k] / 2.0, r.center().y), egui::Align2::CENTER_CENTER, *h, style::font(12.0), style::text());
+                    x += widths[k];
+                    if k < 2 {
+                        p.line_segment([egui::pos2(x, r.top()), egui::pos2(x, r.bottom())], egui::Stroke::new(1.0, egui::Color32::from_gray(200)));
+                    }
+                }
+            }
+            egui::ScrollArea::vertical().id_salt("gp-scroll").max_height(300.0).min_scrolled_height(200.0).auto_shrink([false, false]).show(ui, |ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                // Grouped like the Properties palette.
+                let mut groups: Vec<String> = list.iter().map(|g| if g.group.is_empty() { "Other".to_string() } else { g.group.clone() }).collect();
+                groups.sort();
+                groups.dedup();
+                if list.is_empty() {
+                    ui.add_space(30.0);
+                    ui.vertical_centered(|ui| ui.label(egui::RichText::new("No global parameters. Click New to add one.").color(style::text_dim())));
+                }
+                for grp in groups {
+                    let (r, _) = ui.allocate_exact_size(vec2(total, 20.0), egui::Sense::hover());
+                    ui.painter().rect_filled(r, 0.0, style::group_header());
+                    ui.painter().text(r.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &grp, style::bold(12.0), style::text());
+                    for k in 0..list.len() {
+                        let g_group = if list[k].group.is_empty() { "Other" } else { list[k].group.as_str() };
+                        if g_group != grp {
+                            continue;
+                        }
+                        ui.horizontal(|ui| {
+                            ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                            if list_row(ui, widths[0], sel == Some(k), list[k].name.clone()).clicked() {
+                                sel = Some(k);
+                            }
+                            let g = &mut list[k];
+                            let computed = !g.formula.trim().is_empty();
+                            let (r, _) = ui.allocate_exact_size(vec2(widths[1], 19.0), egui::Sense::hover());
+                            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(3.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+                            if g.kind == ParamKind::YesNo {
+                                let mut b = g.value != 0.0;
+                                if child.add_enabled(!computed, egui::Checkbox::new(&mut b, "")).changed() {
+                                    g.value = if b { 1.0 } else { 0.0 };
+                                }
+                            } else if g.is_text() {
+                                child.add(egui::TextEdit::singleline(&mut g.text).desired_width(widths[1] - 8.0));
+                            } else {
+                                let key = egui::Id::new(("gp-val", k));
+                                let shown = units.format(g.value, g.kind);
+                                let mut text: String = child.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| shown.clone());
+                                let r = child.add_enabled(!computed, egui::TextEdit::singleline(&mut text).desired_width(widths[1] - 8.0));
+                                if r.has_focus() {
+                                    child.memory_mut(|m| m.data.insert_temp(key, text.clone()));
+                                }
+                                if r.lost_focus() {
+                                    child.memory_mut(|m| m.data.remove::<String>(key));
+                                    if let Some(v) = units.parse(&text, g.kind) {
+                                        g.value = v;
+                                    }
+                                }
+                            }
+                            let (r, _) = ui.allocate_exact_size(vec2(widths[2], 19.0), egui::Sense::hover());
+                            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(3.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+                            if !g.is_text() {
+                                let key = egui::Id::new(("gp-f", k));
+                                let mut text: String = child.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| g.formula.clone());
+                                let r = child.add(egui::TextEdit::singleline(&mut text).desired_width(widths[2] - 8.0).hint_text("="));
+                                if r.has_focus() {
+                                    child.memory_mut(|m| m.data.insert_temp(key, text.clone()));
+                                }
+                                if r.lost_focus() {
+                                    child.memory_mut(|m| m.data.remove::<String>(key));
+                                    g.formula = text.trim().trim_start_matches('=').trim().to_string();
+                                }
+                            }
+                        });
+                    }
+                }
+            });
+        });
+        ui.add_space(4.0);
+        ui.horizontal(|ui| {
+            if dlg_button(ui, "New...", false, true) {
+                new = true;
+            }
+            if dlg_button(ui, "Delete", false, sel.is_some()) {
+                list.remove(sel.unwrap());
+                sel = None;
+            }
+            if dlg_button(ui, "Move Up", false, sel.is_some_and(|k| k > 0)) {
+                let k = sel.unwrap();
+                list.swap(k, k - 1);
+                sel = Some(k - 1);
+            }
+            if dlg_button(ui, "Move Down", false, sel.is_some_and(|k| k + 1 < list.len())) {
+                let k = sel.unwrap();
+                list.swap(k, k + 1);
+                sel = Some(k + 1);
+            }
+        });
+        ui.label(egui::RichText::new("Associate element parameters with the button at the right of their value in Properties; label dimensions from their Label property.").size(11.0).color(style::text_dim()));
+        ui.memory_mut(|m| m.data.insert_temp(sel_id, sel));
+        out = footer(ui, app, "global-params", "Global Parameters");
+    });
+    if new {
+        app.dialogs.global_new = Some(GlobalParameter { kind: ParamKind::Length, group: "Dimensions".into(), ..Default::default() });
+    }
+    if out == Footer::None && open && list != app.doc.data.global_params {
+        app.run("Global Parameters", |p| {
+            p.global_params = list;
+            Ok(())
+        });
+    }
+    if out != Footer::None {
+        open = false;
+    } else if !open {
+        session_cancel(app, "global-params");
+    }
+    if !open {
+        app.dialogs.global_params = false;
+        app.dialogs.global_new = None;
+    }
+}
+
+fn global_new(app: &mut App, ctx: &egui::Context) {
+    let Some(mut g) = app.dialogs.global_new.clone() else { return };
+    let mut open = true;
+    let mut ok = false;
+    let mut cancel = false;
+    window("Global Parameter Properties").open(&mut open).resizable(false).show(ctx, |ui| {
+        egui::Grid::new("gpn").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
+            ui.label("Name:");
+            ui.add(egui::TextEdit::singleline(&mut g.name).desired_width(200.0));
+            ui.end_row();
+            ui.label("Discipline:");
+            ui.add_enabled_ui(false, |ui| {
+                egui::ComboBox::from_id_salt("gpn-disc").selected_text("Common").width(200.0).show_ui(ui, |_| {});
+            });
+            ui.end_row();
+            ui.label("Type of Parameter:");
+            egui::ComboBox::from_id_salt("gpn-kind").selected_text(g.kind.label()).width(200.0).show_ui(ui, |ui| {
+                for k in ParamKind::USER {
+                    ui.selectable_value(&mut g.kind, k, k.label());
+                }
+            });
+            ui.end_row();
+            ui.label("Group parameter under:");
+            egui::ComboBox::from_id_salt("gpn-group").selected_text(g.group.as_str()).width(200.0).show_ui(ui, |ui| {
+                for x in GROUPS {
+                    ui.selectable_value(&mut g.group, x.to_string(), x);
+                }
+            });
+            ui.end_row();
+        });
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        g.name = g.name.trim().to_string();
+        if g.name.is_empty() {
+            app.error("Enter a parameter name.");
+        } else if app.doc.data.global(&g.name).is_some() {
+            app.error("A global parameter with this name already exists.");
+        } else {
+            let g2 = g.clone();
+            app.run("New Global Parameter", |p| {
+                p.global_params.push(g2);
+                Ok(())
+            });
+            app.dialogs.global_new = None;
+        }
+        return;
+    }
+    app.dialogs.global_new = if open && !cancel { Some(g) } else { None };
 }
 
 /// Properties groups a project parameter can be listed under.
