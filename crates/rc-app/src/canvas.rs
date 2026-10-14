@@ -1238,8 +1238,8 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                 let (a, b) = (xf.s(start), xf.s(c));
                 let crossing = b.x < a.x;
                 let r = Rect::from_two_pos(a, b);
-                painter.rect_filled(r, 0.0, if crossing { Color32::from_rgba_unmultiplied(60, 200, 90, 30) } else { Color32::from_rgba_unmultiplied(40, 120, 255, 30) });
-                let st = Stroke::new(1.0, style::ACCENT);
+                // Plain thin rectangle: solid for window, dashed for crossing selection.
+                let st = Stroke::new(1.0, Color32::from_gray(40));
                 if crossing {
                     painter.extend(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], st, 5.0, 3.0));
                 } else {
