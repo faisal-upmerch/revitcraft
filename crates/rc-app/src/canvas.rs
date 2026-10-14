@@ -148,11 +148,18 @@ pub fn paint_polyline(painter: &egui::Painter, pts: &[Pos2], closed: bool, strok
     }
 }
 
+/// Snaps a font size to a small set of sizes (fewer glyph rasterisations while zooming).
+fn quantize_font(h: f32) -> f32 {
+    let step = if h < 10.0 { 1.0 } else if h < 24.0 { 2.0 } else if h < 48.0 { 4.0 } else { 8.0 };
+    (h / step).round().max(1.0) * step
+}
+
 pub fn paint_text(painter: &egui::Painter, pos: Pos2, text: &str, h: f32, color: Color32, anchor: Anchor, angle: f32) {
     if h < 3.0 || text.is_empty() {
         return;
     }
-    let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(h.min(96.0)), color);
+    let h = quantize_font(h.min(96.0));
+    let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(h), color);
     let align = match anchor {
         Anchor::Center => egui::Align2::CENTER_CENTER,
         Anchor::Left => egui::Align2::LEFT_BOTTOM,
@@ -315,10 +322,14 @@ pub fn pick_candidates(app: &App, view: &View, d: &Drawing, pt: DVec2, tol: f64)
             push(score, id, &mut scored);
         }
     }
-    if is_plan(view) {
-        let fp = app.footprints();
-        for id in plan::pick_all(&app.doc.data, view, &fp, pt, tol) {
-            push(tol * 0.85, id, &mut scored);
+    if let Some(shapes) = app.cache.picks.get(&view.id) {
+        for s in shapes.iter() {
+            if pt.x < s.min.x - tol || pt.y < s.min.y - tol || pt.x > s.max.x + tol || pt.y > s.max.y + tol {
+                continue;
+            }
+            if s.hit(pt, tol) {
+                push(tol * 0.6 + s.prio as f64 * tol * 0.04, s.id, &mut scored);
+            }
         }
     }
     scored.sort_by(|a, b| a.0.total_cmp(&b.0));
@@ -332,6 +343,83 @@ pub fn pick_candidates(app: &App, view: &View, d: &Drawing, pt: DVec2, tol: f64)
         }
     }
     out
+}
+
+/// A plan element's pick outlines (computed once per model change).
+pub struct PickShape {
+    pub id: Id,
+    pub prio: i32,
+    pub outlines: Vec<Vec<DVec2>>,
+    /// Closed outlines that pick from inside (walls, rooms, components...).
+    pub fill: bool,
+    pub open: bool,
+    pub min: DVec2,
+    pub max: DVec2,
+}
+
+impl PickShape {
+    pub fn hit(&self, pt: DVec2, tol: f64) -> bool {
+        self.outlines.iter().any(|o| {
+            let n = o.len();
+            let edge = (0..n.saturating_sub(1)).any(|k| geom::distance_to_segment(o[k], o[k + 1], pt) <= tol)
+                || (!self.open && n > 2 && geom::distance_to_segment(o[n - 1], o[0], pt) <= tol);
+            edge || (self.fill && n > 2 && geom::contains(o, pt))
+        })
+    }
+}
+
+/// Builds the plan pick outlines of a view (no-op when cached).
+pub fn ensure_picks(app: &mut App, view_id: Id) {
+    if app.cache.picks.contains_key(&view_id) {
+        return;
+    }
+    let fp = app.footprints();
+    let p = &app.doc.data;
+    let mut out = Vec::new();
+    if let Some(view) = p.view(view_id).filter(|v| is_plan(v)) {
+        let index = app.cache.index.clone();
+        let get = |id: Id| index.get(&id).and_then(|i| p.elements.get(*i));
+        let priority = |c: Category| match c {
+            Category::Dimensions | Category::Tags | Category::TextNotes | Category::Symbols => 0,
+            Category::Doors | Category::Windows => 1,
+            Category::Furniture | Category::Casework | Category::PlumbingFixtures | Category::SpecialtyEquipment | Category::GenericModels => 2,
+            Category::Columns | Category::StructuralColumns | Category::StructuralFraming | Category::StructuralFoundations => 2,
+            Category::Grids | Category::ReferencePlanes | Category::Lines | Category::RoomSeparation | Category::AreaBoundary | Category::Railings | Category::Stairs => 3,
+            Category::Walls | Category::Groups => 4,
+            Category::Rooms | Category::Areas => 5,
+            Category::FilledRegions | Category::ImportedCad | Category::Roofs | Category::Ceilings | Category::ShaftOpenings => 6,
+            Category::Floors => 7,
+            _ => 8,
+        };
+        for e in &p.elements {
+            if matches!(e.kind, ElementKind::GroupInstance(_)) {
+                continue;
+            }
+            let target = e.group.and_then(get).unwrap_or(e);
+            let shown = if target.id != e.id { plan::in_plan(p, view, target) && rc_core::analysis::visible_in(p, view, e) } else { plan::in_plan(p, view, e) };
+            if !shown {
+                continue;
+            }
+            let c = e.category();
+            let outlines: Vec<Vec<DVec2>> = plan::element_outline(p, e, &fp).into_iter().filter(|o| !o.is_empty()).collect();
+            if outlines.is_empty() {
+                continue;
+            }
+            let open = matches!(
+                e.kind,
+                ElementKind::Line(_) | ElementKind::Grid(_) | ElementKind::RefPlane(_) | ElementKind::Railing(_) | ElementKind::RoomSeparation(_) | ElementKind::AreaBoundary(_) | ElementKind::Dimension(_) | ElementKind::WallFoundation(_)
+            );
+            let fill = !open && !matches!(c, Category::Floors | Category::Roofs | Category::Ceilings | Category::FilledRegions | Category::ImportedCad);
+            let (min, max) = geom::bounds(outlines.iter().flatten().copied());
+            out.push(PickShape { id: target.id, prio: if target.id != e.id { priority(Category::Groups) } else { priority(c) }, outlines, fill, open, min, max });
+        }
+    }
+    app.cache.picks.insert(view_id, Rc::new(out));
+}
+
+/// Cached outlines of one element in a plan view (room/area boundaries for highlighting).
+fn cached_outlines(app: &App, view: Id, id: Id) -> Vec<Vec<DVec2>> {
+    app.cache.picks.get(&view).and_then(|v| v.iter().find(|s| s.id == id).map(|s| s.outlines.clone())).unwrap_or_default()
 }
 
 /// Maps a picked id to what gets selected (group members select their group), or None when
@@ -545,6 +633,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, canvas_bg(app));
     let drawing = app.drawing(view_id);
+    ensure_picks(app, view_id);
 
     // ---- model graphics
     let temp = app.temp_hide.get(&view_id).cloned();
@@ -617,11 +706,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     paint_highlight(&painter, &drawing, &sel_draw, &xf, style::SELECT, move_offset);
     if is_plan(&view) {
         // Rooms and areas highlight their boundary.
-        let fp = app.footprints();
+        let _fp = app.footprints();
         for id in &app.selection {
             if let Some(e) = app.el(*id) {
                 if matches!(e.kind, ElementKind::Room(_) | ElementKind::Area(_)) {
-                    for o in plan::element_outline(&app.doc.data, e, &fp) {
+                    for o in cached_outlines(app, view_id, *id) {
                         let pts: Vec<Pos2> = o.iter().map(|q| xf.s(*q + move_offset)).collect();
                         paint_polyline(&painter, &pts, true, Stroke::new(2.0, style::SELECT), Dash::Solid, &xf);
                     }
@@ -639,8 +728,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             if is_plan(&view) {
                 if let Some(e) = app.el(h) {
                     if matches!(e.kind, ElementKind::Room(_) | ElementKind::Area(_)) {
-                        let fp = app.footprints();
-                        for o in plan::element_outline(&app.doc.data, e, &fp) {
+                        for o in cached_outlines(app, view_id, h) {
                             let pts: Vec<Pos2> = o.iter().map(|q| xf.s(*q)).collect();
                             paint_polyline(&painter, &pts, true, Stroke::new(1.5, style::PRESELECT), Dash::Dashed, &xf);
                         }

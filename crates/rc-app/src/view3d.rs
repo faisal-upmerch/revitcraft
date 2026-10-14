@@ -35,10 +35,11 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     let mut h: u64 = 1469598103934665603;
     let mut ids: Vec<Id> = sel.iter().copied().collect();
     ids.sort();
-    let mut feed = |x: u64| h = (h ^ x).wrapping_mul(1099511628211);
-    for id in ids {
-        feed(id as u64);
+    let mut sel_key: u64 = 1469598103934665603;
+    for id in &ids {
+        sel_key = (sel_key ^ *id as u64).wrapping_mul(1099511628211);
     }
+    let mut feed = |x: u64| h = (h ^ x).wrapping_mul(1099511628211);
     for id in &temp.hidden_elements {
         feed(*id as u64 + (1 << 33));
     }
@@ -59,6 +60,9 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     }
     let key = (app.doc.revision, h);
     if app.scenes.get(&view_id).is_some_and(|s| s.key == key) {
+        if let (Some(scene), Some(r)) = (app.scenes.get_mut(&view_id), app.renderer.as_ref()) {
+            r.set_selection(scene, &sel, sel_key ^ app.doc.revision.rotate_left(17));
+        }
         return true;
     }
     let Some(renderer) = app.renderer.as_ref() else { return false };
@@ -88,7 +92,8 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
             meshes.push((e.id, set));
         }
     }
-    let scene = renderer.upload(p, meshes, &sel, key, &halftone);
+    let mut scene = renderer.upload(p, meshes, &HashSet::new(), key, &halftone);
+    renderer.set_selection(&mut scene, &sel, sel_key ^ app.doc.revision.rotate_left(17));
     app.scenes.insert(view_id, scene);
     true
 }

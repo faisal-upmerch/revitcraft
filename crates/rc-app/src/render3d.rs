@@ -266,6 +266,10 @@ pub struct Scene {
     opaque: Option<(wgpu::Buffer, u32)>,
     transparent: Option<(wgpu::Buffer, u32)>,
     edges: Option<(wgpu::Buffer, u32)>,
+    /// Selection highlight overlay (rebuilt only when the selection changes).
+    pub selection_key: u64,
+    sel: Option<(wgpu::Buffer, u32)>,
+    sel_edges: Option<(wgpu::Buffer, u32)>,
 }
 
 struct Target {
@@ -430,7 +434,55 @@ impl Renderer {
                 (device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some(label), contents: bytemuck::cast_slice(verts), usage: wgpu::BufferUsages::VERTEX }), verts.len() as u32)
             })
         };
-        Scene { key, meshes: Vec::new(), bounds, opaque: buf(&opaque, "rc-opaque"), transparent: buf(&transparent, "rc-transparent"), edges: buf(&lines, "rc-edges") }.with_meshes(meshes)
+        Scene {
+            key,
+            meshes: Vec::new(),
+            bounds,
+            opaque: buf(&opaque, "rc-opaque"),
+            transparent: buf(&transparent, "rc-transparent"),
+            edges: buf(&lines, "rc-edges"),
+            selection_key: 0,
+            sel: None,
+            sel_edges: None,
+        }
+        .with_meshes(meshes)
+    }
+
+    /// Rebuilds the blue selection overlay from the cached meshes.
+    pub fn set_selection(&self, scene: &mut Scene, selection: &HashSet<Id>, key: u64) {
+        if scene.selection_key == key {
+            return;
+        }
+        scene.selection_key = key;
+        let mut tris: Vec<Vertex> = Vec::new();
+        let mut lines: Vec<Vertex> = Vec::new();
+        let fill = srgb_color([64, 140, 255], 1.0);
+        let edge = srgb_color([20, 70, 200], 1.0);
+        for (id, set) in &scene.meshes {
+            if !selection.contains(id) {
+                continue;
+            }
+            for mesh in set.by_material.values() {
+                for tri in mesh.indices.chunks(3) {
+                    let (a, b, c) = (mesh.positions[tri[0] as usize], mesh.positions[tri[1] as usize], mesh.positions[tri[2] as usize]);
+                    let n = (b - a).cross(c - a).normalize_or_zero().as_vec3().to_array();
+                    for q in [a, b, c] {
+                        tris.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: n, color: fill, extra: [0.3, 0.0, 0.0, 0.0] });
+                    }
+                }
+                for (a, b) in feature_edges(mesh) {
+                    for q in [a, b] {
+                        lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: edge, extra: [0.0; 4] });
+                    }
+                }
+            }
+        }
+        let device = &self.state.device;
+        let buf = |verts: &[Vertex]| -> Option<(wgpu::Buffer, u32)> {
+            (!verts.is_empty()).then(|| (device.create_buffer_init(&wgpu::util::BufferInitDescriptor { label: Some("rc-sel"), contents: bytemuck::cast_slice(verts), usage: wgpu::BufferUsages::VERTEX }), verts.len() as u32))
+        };
+        scene.sel = buf(&tris);
+        scene.sel_edges = buf(&lines);
     }
 
     fn make_target(&self, size: [u32; 2]) -> Target {
@@ -567,6 +619,19 @@ impl Renderer {
                     pass.set_vertex_buffer(0, vb.slice(..));
                     pass.draw(0..*n, 0..1);
                 }
+            }
+            // Selection overlay (same geometry, drawn on top with LessEqual depth).
+            if let Some((vb, n)) = &scene.sel {
+                if !wire {
+                    pass.set_pipeline(&self.tri);
+                    pass.set_vertex_buffer(0, vb.slice(..));
+                    pass.draw(0..*n, 0..1);
+                }
+            }
+            if let Some((vb, n)) = &scene.sel_edges {
+                pass.set_pipeline(if wire { &self.lines_no_depth } else { &self.lines });
+                pass.set_vertex_buffer(0, vb.slice(..));
+                pass.draw(0..*n, 0..1);
             }
             if !wire {
                 if let Some((vb, n)) = &scene.transparent {

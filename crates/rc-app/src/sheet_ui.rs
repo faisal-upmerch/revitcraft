@@ -9,7 +9,7 @@ use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, pos2, vec2};
 use rc_core::geom::DVec2;
 use rc_core::model::*;
 use rc_core::plan::{Dash, Prim};
-use rc_core::sheet::{self, SheetPrim};
+use rc_core::sheet::SheetPrim;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let Some(view) = app.doc.data.view(view_id).cloned() else { return };
@@ -45,9 +45,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     painter.rect_filled(paper.translate(vec2(4.0, 4.0)), 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 60));
     painter.rect_filled(paper, 0.0, Color32::WHITE);
 
-    let fp = app.footprints();
-    let prims = sheet::layout(&app.doc.data, &view, &fp);
-    for prim in &prims {
+    let _fp = app.footprints();
+    let layout = app.sheet_layout(view_id);
+    for prim in &layout.0 {
         match prim {
             SheetPrim::Line { pts, closed, width, color, dashed } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
@@ -97,7 +97,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         return;
     }
     // Viewport selection and moves.
-    let boxes = sheet::viewport_boxes(&app.doc.data, sh, &fp);
+    let boxes = layout.1.clone();
     let cursor = resp.hover_pos().map(|s| xf.w(s));
     let hover = cursor.and_then(|c| boxes.iter().find(|b| c.x >= b.min.x && c.x <= b.max.x && c.y >= b.min.y && c.y <= b.max.y)).map(|b| b.view);
     let sel_vp: Option<Id> = app.selection.iter().copied().find(|id| sh.viewports.iter().any(|vp| vp.view == *id));

@@ -150,7 +150,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt("browser-scroll").show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
         ui.spacing_mut().indent = 14.0;
-        let p = app.doc.data.clone();
+        let p = app.snapshot();
         let open_default = !f.is_empty();
         egui::CollapsingHeader::new(egui::RichText::new("Views (all)").strong()).default_open(true).open(open_default.then_some(true)).show(ui, |ui| {
             let groups: [(&str, fn(&View) -> bool); 9] = [

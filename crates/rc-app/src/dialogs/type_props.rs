@@ -10,7 +10,7 @@ use rc_core::model::*;
 
 pub fn show(app: &mut App, ctx: &egui::Context) {
     let Some(tid) = app.dialogs.type_props else { return };
-    let p = app.doc.data.clone();
+    let p = app.snapshot();
     let cat = p.sys_type(tid).map(|t| t.category).or_else(|| p.family_type(tid).map(|(f, _)| f.category));
     let Some(cat) = cat else {
         app.dialogs.type_props = None;

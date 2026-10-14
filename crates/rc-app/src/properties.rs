@@ -245,7 +245,7 @@ fn set_group_open(ui: &egui::Ui, name: &str, open: bool) {
 }
 
 fn element_properties(app: &mut App, ui: &mut egui::Ui, sel: &[Id]) {
-    let p = app.doc.data.clone();
+    let p = app.snapshot();
     let elems: Vec<&Element> = sel.iter().filter_map(|id| p.element(*id)).collect();
     if elems.is_empty() {
         return;
@@ -369,7 +369,7 @@ fn row_label(ui: &mut egui::Ui, s: &str) {
 fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
     let Some(v) = app.doc.data.view(vid).cloned() else { return };
     let mut changed = v.clone();
-    let p = app.doc.data.clone();
+    let p = app.snapshot();
     let mut open_vg = false;
     let mut open_range = false;
     let section = |ui: &mut egui::Ui, name: &str| -> bool {

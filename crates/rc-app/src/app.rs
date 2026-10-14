@@ -127,6 +127,12 @@ pub struct Cache {
     pub bounds: Option<Option<(DVec3, DVec3)>>,
     /// Element id → index in `Project::elements`.
     pub index: Rc<HashMap<Id, usize>>,
+    /// Read-only copy of the project for palettes (made at most once per change).
+    pub snapshot: Option<Rc<Project>>,
+    /// Plan pick outlines per view.
+    pub picks: HashMap<Id, Rc<Vec<canvas::PickShape>>>,
+    /// Sheet layouts and viewport boxes per sheet.
+    pub sheets: HashMap<Id, Rc<(Vec<rc_core::sheet::SheetPrim>, Vec<rc_core::sheet::ViewportBox>)>>,
 }
 
 pub struct App {
@@ -379,6 +385,9 @@ impl App {
         self.cache.snap.clear();
         self.cache.tables.clear();
         self.cache.bounds = None;
+        self.cache.snapshot = None;
+        self.cache.picks.clear();
+        self.cache.sheets.clear();
         self.cache.index = Rc::new(self.doc.data.elements.iter().enumerate().map(|(i, e)| (e.id, i)).collect());
         let p = &self.doc.data;
         self.selection.retain(|id| p.element(*id).is_some());
@@ -397,6 +406,39 @@ impl App {
     /// Fast element lookup through the cached index.
     pub fn el(&self, id: Id) -> Option<&Element> {
         self.cache.index.get(&id).and_then(|i| self.doc.data.elements.get(*i)).filter(|e| e.id == id).or_else(|| self.doc.data.element(id))
+    }
+
+    /// A cheap shared copy of the project for UI code that must read while it edits.
+    pub fn snapshot(&mut self) -> Rc<Project> {
+        self.refresh_cache();
+        if let Some(s) = &self.cache.snapshot {
+            return s.clone();
+        }
+        let s = Rc::new(self.doc.data.clone());
+        self.cache.snapshot = Some(s.clone());
+        s
+    }
+
+    /// Sheet layout (primitives and viewport boxes), cached per change.
+    pub fn sheet_layout(&mut self, sheet: Id) -> Rc<(Vec<rc_core::sheet::SheetPrim>, Vec<rc_core::sheet::ViewportBox>)> {
+        if let Some(s) = self.cache.sheets.get(&sheet) {
+            return s.clone();
+        }
+        let fp = self.footprints();
+        let p = &self.doc.data;
+        let r = match p.view(sheet) {
+            Some(v) => {
+                let prims = rc_core::sheet::layout(p, v, &fp);
+                let boxes = match &v.kind {
+                    ViewKind::Sheet(sh) => rc_core::sheet::viewport_boxes(p, sh, &fp),
+                    _ => vec![],
+                };
+                Rc::new((prims, boxes))
+            }
+            None => Rc::new((vec![], vec![])),
+        };
+        self.cache.sheets.insert(sheet, r.clone());
+        r
     }
 
     pub fn footprints(&self) -> Rc<HashMap<Id, Footprint>> {

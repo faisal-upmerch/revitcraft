@@ -716,7 +716,7 @@ fn design_options(app: &mut App, ctx: &egui::Context) {
             }
         });
         ui.separator();
-        let p = app.doc.data.clone();
+        let p = app.snapshot();
         for set in &p.option_sets {
             ui.group(|ui| {
                 ui.horizontal(|ui| {

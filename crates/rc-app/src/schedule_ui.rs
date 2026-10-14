@@ -41,7 +41,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     });
     let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.material_takeoff).collect();
     let n = table.columns.len().max(1);
-    let p = app.doc.data.clone();
     let mut edits: Vec<(Id, String, String)> = Vec::new();
     let mut select_rows: Option<Vec<Id>> = None;
     egui::Frame::new().fill(style::field()).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
@@ -102,5 +101,5 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             Ok(())
         });
     }
-    let _ = (p, vec2(0.0, 0.0), Stroke::NONE);
+    let _ = (vec2(0.0, 0.0), Stroke::NONE);
 }
