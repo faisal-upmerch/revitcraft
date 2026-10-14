@@ -1,0 +1,554 @@
+//! Grips (drag controls) and click controls of selected elements: wall ends and shape handles,
+//! flip arrows, grid bubbles, dimension locks and EQ, section ends/depth, crop region edges.
+
+use crate::app::App;
+use crate::canvas::{self, Xf};
+use crate::style;
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, vec2};
+use rc_core::analysis;
+use rc_core::geom::{self, DVec2};
+use rc_core::model::*;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GripKind {
+    WallEnd(bool),
+    WallMid,
+    WallShape,
+    WallFlip,
+    Vertex(usize),
+    LineMid,
+    GridEnd(bool),
+    GridBubble(bool),
+    BeamEnd(bool),
+    FlipFacing,
+    FlipHand,
+    TagHead,
+    TagLeader,
+    TextPos,
+    DimLine,
+    DimLock(usize),
+    DimEq,
+    RoomPoint,
+    SectionEnd(bool),
+    SectionDepth,
+    SectionFlip,
+    ElevationMarker,
+    CropEdge(u8),
+    SymbolPos,
+    LevelElevation,
+}
+
+impl GripKind {
+    /// Controls are clicked rather than dragged.
+    pub fn is_control(&self) -> bool {
+        matches!(self, GripKind::WallFlip | GripKind::FlipFacing | GripKind::FlipHand | GripKind::GridBubble(_) | GripKind::DimLock(_) | GripKind::DimEq | GripKind::SectionFlip)
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct Grip {
+    pub id: Id,
+    pub kind: GripKind,
+    pub pos: DVec2,
+    /// Direction for arrow controls, or a state flag for toggles.
+    pub dir: DVec2,
+    pub on: bool,
+}
+
+fn g(id: Id, kind: GripKind, pos: DVec2) -> Grip {
+    Grip { id, kind, pos, dir: DVec2::X, on: false }
+}
+
+pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
+    let mut out = Vec::new();
+    if app.selection.len() > 30 {
+        return out;
+    }
+    let p = &app.doc.data;
+    let px = |k: f32| xf.len(k);
+    let plan_view = canvas::is_plan(view);
+    for id in &app.selection {
+        let id = *id;
+        if let Some(e) = app.el(id) {
+            if e.pinned {
+                continue;
+            }
+            match &e.kind {
+                ElementKind::Wall(w) if plan_view => {
+                    out.push(g(id, GripKind::WallEnd(true), w.start));
+                    out.push(g(id, GripKind::WallEnd(false), w.end));
+                    let t = analysis::wall_thickness(p, w);
+                    let (mid, n) = match w.arc() {
+                        Some(a) => {
+                            out.push(g(id, GripKind::WallMid, a.mid()));
+                            (a.mid(), geom::perp(a.tangent(0.5)))
+                        }
+                        None => ((w.start + w.end) / 2.0, w.normal()),
+                    };
+                    if app.selection.len() == 1 {
+                        out.push(Grip { id, kind: GripKind::WallShape, pos: mid - n * (t / 2.0 + px(10.0)), dir: -n, on: false });
+                        out.push(Grip { id, kind: GripKind::WallFlip, pos: mid + n * (t / 2.0 + px(14.0)), dir: n, on: false });
+                    }
+                }
+                ElementKind::Line(l) if l.pts.len() >= 2 && (plan_view || e.view == Some(view.id)) => {
+                    for (k, q) in l.pts.iter().enumerate() {
+                        out.push(g(id, GripKind::Vertex(k), *q));
+                    }
+                    if let (Some(m), 2) = (l.arc_mid, l.pts.len()) {
+                        out.push(g(id, GripKind::LineMid, m));
+                    }
+                }
+                ElementKind::RefPlane(r) if plan_view => {
+                    out.push(g(id, GripKind::Vertex(0), r.start));
+                    out.push(g(id, GripKind::Vertex(1), r.end));
+                }
+                ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) if plan_view => {
+                    out.push(g(id, GripKind::Vertex(0), s.start));
+                    out.push(g(id, GripKind::Vertex(1), s.end));
+                }
+                ElementKind::Grid(gr) if plan_view => {
+                    out.push(g(id, GripKind::GridEnd(true), gr.start));
+                    out.push(g(id, GripKind::GridEnd(false), gr.end));
+                    let d = (gr.end - gr.start).normalize_or_zero();
+                    let n = geom::perp(d);
+                    out.push(Grip { id, kind: GripKind::GridBubble(true), pos: gr.start + n * px(16.0), dir: d, on: gr.bubble_start });
+                    out.push(Grip { id, kind: GripKind::GridBubble(false), pos: gr.end + n * px(16.0), dir: d, on: gr.bubble_end });
+                }
+                ElementKind::Instance(i) if plan_view => {
+                    if let Some(end) = i.end {
+                        out.push(g(id, GripKind::BeamEnd(true), i.location));
+                        out.push(g(id, GripKind::BeamEnd(false), end));
+                    }
+                    if let (Some(h), true) = (i.host.and_then(|h| p.wall(h)), app.selection.len() == 1) {
+                        let (pt, dir) = analysis::wall_point(h, i.offset_along_host);
+                        let n = geom::perp(dir);
+                        let t = analysis::wall_thickness(p, h);
+                        let facing = if i.flip_facing { -n } else { n };
+                        out.push(Grip { id, kind: GripKind::FlipFacing, pos: pt + facing * (t / 2.0 + px(16.0)), dir: facing, on: false });
+                        let (ow, _) = analysis::opening_size(p, i);
+                        let hand = if i.flip_hand { -dir } else { dir };
+                        out.push(Grip { id, kind: GripKind::FlipHand, pos: pt + hand * (ow / 2.0 + px(14.0)) - facing * (t / 2.0 + px(6.0)), dir: hand, on: false });
+                    }
+                }
+                ElementKind::Tag(t) => {
+                    out.push(g(id, GripKind::TagHead, t.position));
+                    if t.leader {
+                        if let Some(end) = t.leader_end {
+                            out.push(g(id, GripKind::TagLeader, end));
+                        }
+                    }
+                }
+                ElementKind::Text(t) => out.push(g(id, GripKind::TextPos, t.position)),
+                ElementKind::Symbol(s) => out.push(g(id, GripKind::SymbolPos, s.position)),
+                ElementKind::Room(r) if plan_view => out.push(g(id, GripKind::RoomPoint, r.location)),
+                ElementKind::Area(a) if plan_view => out.push(g(id, GripKind::RoomPoint, a.location)),
+                ElementKind::Dimension(d) if matches!(d.kind, DimKind::Aligned | DimKind::Linear) && d.refs.len() >= 2 => {
+                    let coords = rc_core::annotation::coordinates(p, d);
+                    let base = d.line_point - d.direction * d.line_point.dot(d.direction);
+                    let pts: Vec<DVec2> = coords.iter().map(|c| base + d.direction * *c).collect();
+                    let n = geom::perp(d.direction);
+                    let mid = (pts[0] + pts[pts.len() - 1]) / 2.0;
+                    out.push(g(id, GripKind::DimLine, mid + n * px(2.0)));
+                    if app.selection.len() == 1 {
+                        for k in 0..pts.len() - 1 {
+                            let m = (pts[k] + pts[k + 1]) / 2.0;
+                            out.push(Grip { id, kind: GripKind::DimLock(k), pos: m - n * px(12.0), dir: d.direction, on: d.locks.get(k).copied().unwrap_or(false) });
+                        }
+                        if pts.len() >= 3 {
+                            out.push(Grip { id, kind: GripKind::DimEq, pos: mid + n * px(16.0), dir: d.direction, on: d.equal });
+                        }
+                    }
+                }
+                ElementKind::Level(_) if !plan_view && view.is_graphical() => {
+                    // In sections/elevations the level line's right end drags its elevation.
+                    if let Some((a, b)) = level_line(app, view, id) {
+                        out.push(g(id, GripKind::LevelElevation, a.max(b)));
+                    }
+                }
+                _ => {}
+            }
+            continue;
+        }
+        // Views: section/elevation markers and the crop region of this view.
+        let Some(v) = p.view(id) else { continue };
+        if id == view.id {
+            if let Some((a, b)) = v.crop {
+                let (mn, mx) = (a.min(b), a.max(b));
+                let c = (mn + mx) / 2.0;
+                out.push(g(id, GripKind::CropEdge(0), DVec2::new(mn.x, c.y)));
+                out.push(g(id, GripKind::CropEdge(1), DVec2::new(mx.x, c.y)));
+                out.push(g(id, GripKind::CropEdge(2), DVec2::new(c.x, mn.y)));
+                out.push(g(id, GripKind::CropEdge(3), DVec2::new(c.x, mx.y)));
+            }
+            continue;
+        }
+        if !plan_view {
+            continue;
+        }
+        match &v.kind {
+            ViewKind::Section { start, end, depth, .. } => {
+                let d = (*end - *start).normalize_or_zero();
+                let look = -geom::perp(d);
+                out.push(g(id, GripKind::SectionEnd(true), *start));
+                out.push(g(id, GripKind::SectionEnd(false), *end));
+                out.push(Grip { id, kind: GripKind::SectionDepth, pos: (*start + *end) / 2.0 + look * *depth, dir: look, on: false });
+                out.push(Grip { id, kind: GripKind::SectionFlip, pos: (*start + *end) / 2.0 - look * px(18.0), dir: look, on: false });
+            }
+            ViewKind::Elevation { .. } => {
+                if let Some((o, _)) = v.marker {
+                    out.push(g(id, GripKind::ElevationMarker, o));
+                }
+            }
+            _ => {}
+        }
+    }
+    out
+}
+
+/// The level line of `level` in a section/elevation drawing (from the cached drawing).
+fn level_line(app: &App, view: &View, level: Id) -> Option<(DVec2, DVec2)> {
+    let d = app.cache.drawings.get(&view.id)?;
+    d.prims.iter().find_map(|(id, prim)| match prim {
+        rc_core::plan::Prim::Line { pts, .. } if *id == Some(level) && pts.len() == 2 => Some((pts[0], pts[1])),
+        _ => None,
+    })
+}
+
+pub fn paint(painter: &egui::Painter, xf: &Xf, grips: &[Grip], hover: Option<&GripKind>) {
+    for gr in grips {
+        let p = xf.s(gr.pos);
+        let hot = hover == Some(&gr.kind);
+        let fill = if hot { Color32::from_rgb(120, 190, 255) } else { Color32::WHITE };
+        let st = Stroke::new(1.5, style::SELECT);
+        match &gr.kind {
+            GripKind::WallFlip | GripKind::FlipFacing | GripKind::FlipHand | GripKind::SectionFlip => {
+                // Double arrow.
+                let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
+                let n = vec2(-d.y, d.x);
+                let c = if hot { style::PRESELECT } else { style::SELECT };
+                for s in [1.0f32, -1.0] {
+                    let tip = p + d * 9.0 * s;
+                    painter.add(egui::Shape::convex_polygon(vec![tip, p + d * 2.0 * s + n * 5.0, p + d * 2.0 * s - n * 5.0], c, Stroke::NONE));
+                }
+            }
+            GripKind::WallShape | GripKind::SectionDepth => {
+                let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
+                let n = vec2(-d.y, d.x);
+                painter.add(egui::Shape::convex_polygon(vec![p + d * 8.0, p - d * 4.0 + n * 6.0, p - d * 4.0 - n * 6.0], fill, st));
+            }
+            GripKind::GridBubble(_) => {
+                let r = Rect::from_center_size(p, vec2(9.0, 9.0));
+                painter.rect_filled(r, 0.0, Color32::WHITE);
+                painter.rect_stroke(r, 0.0, Stroke::new(1.0, style::SELECT), egui::StrokeKind::Middle);
+                if gr.on {
+                    painter.line_segment([r.left_center() + vec2(1.5, 0.0), r.center_bottom() + vec2(0.0, -2.0)], Stroke::new(1.5, style::SELECT));
+                    painter.line_segment([r.center_bottom() + vec2(0.0, -2.0), r.right_top() + vec2(-1.5, 2.0)], Stroke::new(1.5, style::SELECT));
+                }
+            }
+            GripKind::DimLock(_) => paint_lock(painter, p, gr.on, hot),
+            GripKind::DimEq => {
+                let c = if hot { style::PRESELECT } else { style::SELECT };
+                painter.text(p, egui::Align2::CENTER_CENTER, "EQ", egui::FontId::proportional(11.0), c);
+                if !gr.on {
+                    painter.line_segment([p + vec2(-9.0, 6.0), p + vec2(9.0, -6.0)], Stroke::new(1.2, c));
+                }
+            }
+            GripKind::CropEdge(_) | GripKind::LevelElevation => {
+                painter.circle(p, 4.5, fill, st);
+            }
+            _ => {
+                painter.rect(Rect::from_center_size(p, vec2(8.0, 8.0)), 1.0, fill, st, egui::StrokeKind::Middle);
+            }
+        }
+    }
+}
+
+fn paint_lock(painter: &egui::Painter, p: Pos2, locked: bool, hot: bool) {
+    let c = if hot { style::PRESELECT } else { style::SELECT };
+    let body = Rect::from_center_size(p + vec2(0.0, 2.0), vec2(9.0, 7.0));
+    painter.rect(body, 1.0, if locked { c } else { Color32::WHITE }, Stroke::new(1.2, c), egui::StrokeKind::Middle);
+    let shackle: Vec<Pos2> = (0..=10)
+        .map(|k| {
+            let a = std::f32::consts::PI * (1.0 + k as f32 / 10.0);
+            let cx = if locked { p.x } else { p.x + 3.0 };
+            Pos2::new(cx + 3.0 * a.cos(), p.y - 1.5 + 3.5 * a.sin())
+        })
+        .collect();
+    painter.add(egui::Shape::line(shackle, Stroke::new(1.2, c)));
+}
+
+/// Walls whose ends coincide with `pt` (joined there), excluding `skip`.
+pub fn walls_joined_at(p: &Project, pt: DVec2, skip: Id) -> Vec<(Id, bool)> {
+    let mut out = Vec::new();
+    for (e, w) in p.walls() {
+        if e.id == skip {
+            continue;
+        }
+        if w.start.distance(pt) < 1.0 {
+            out.push((e.id, true));
+        } else if w.end.distance(pt) < 1.0 {
+            out.push((e.id, false));
+        }
+    }
+    out
+}
+
+/// Moves a wall perpendicular to itself; walls joined at its ends stretch to follow.
+pub fn move_wall_with_joins(p: &mut Project, id: Id, delta: DVec2) -> Result<(), String> {
+    let w = p.wall(id).ok_or("Wall not found.")?.clone();
+    let js = walls_joined_at(p, w.start, id);
+    let je = walls_joined_at(p, w.end, id);
+    rc_core::edit::move_elements(p, &[id], delta);
+    for (jid, at_start) in js.into_iter().chain(je) {
+        if let Some(j) = p.element_mut(jid).and_then(Element::as_wall_mut) {
+            if at_start {
+                j.start += delta;
+            } else {
+                j.end += delta;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The point a grip drag ends at, constrained where the element requires it.
+fn constrained(p: &Project, id: Id, kind: &GripKind, start: DVec2, pt: DVec2) -> DVec2 {
+    match kind {
+        GripKind::GridEnd(_) => {
+            if let Some(ElementKind::Grid(gr)) = p.element(id).map(|e| &e.kind) {
+                if gr.arc_mid.is_none() {
+                    let d = (gr.end - gr.start).normalize_or_zero();
+                    return gr.start + d * (pt - gr.start).dot(d);
+                }
+            }
+            pt
+        }
+        GripKind::WallShape | GripKind::SectionDepth => {
+            let n = match p.element(id).map(|e| &e.kind) {
+                Some(ElementKind::Wall(w)) => w.normal(),
+                _ => match p.view(id).map(|v| &v.kind) {
+                    Some(ViewKind::Section { start, end, .. }) => geom::perp((*end - *start).normalize_or_zero()),
+                    _ => DVec2::X,
+                },
+            };
+            start + n * (pt - start).dot(n)
+        }
+        GripKind::LevelElevation => DVec2::new(start.x, pt.y),
+        _ => pt,
+    }
+}
+
+pub fn preview(app: &App, painter: &egui::Painter, xf: &Xf, view: &View, id: Id, kind: &GripKind, start: DVec2, pt: DVec2) {
+    let p = &app.doc.data;
+    let pt = constrained(p, id, kind, start, pt);
+    let st = Stroke::new(1.5, style::PREVIEW);
+    let units = &p.units;
+    match (p.element(id).map(|e| &e.kind), kind) {
+        (Some(ElementKind::Wall(w)), GripKind::WallEnd(s)) => {
+            let fixed = if *s { w.end } else { w.start };
+            let t = analysis::wall_thickness(p, w) / 2.0;
+            let d = (pt - fixed).normalize_or_zero();
+            let n = geom::perp(d);
+            let q = [fixed + n * t, pt + n * t, pt - n * t, fixed - n * t];
+            painter.add(egui::Shape::closed_line(q.iter().map(|x| xf.s(*x)).collect(), st));
+            canvas::temp_dim(painter, xf, fixed, pt, &units.length(fixed.distance(pt)), -20.0);
+        }
+        (Some(ElementKind::Wall(w)), GripKind::WallMid) => {
+            if let Some(a) = geom::Arc2::through(w.start, pt, w.end) {
+                let pts: Vec<Pos2> = a.tessellate(200.0).iter().map(|q| xf.s(*q)).collect();
+                painter.add(egui::Shape::line(pts, st));
+                canvas::temp_dim(painter, xf, a.center, pt, &format!("R {}", units.length(a.radius)), 14.0);
+            }
+        }
+        (Some(ElementKind::Wall(w)), GripKind::WallShape) => {
+            let delta = pt - start;
+            painter.line_segment([xf.s(w.start + delta), xf.s(w.end + delta)], st);
+            canvas::temp_dim(painter, xf, start, pt, &units.length(start.distance(pt)), -16.0);
+        }
+        _ => {
+            painter.extend(egui::Shape::dashed_line(&[xf.s(start), xf.s(pt)], Stroke::new(1.0, style::PREVIEW), 5.0, 3.0));
+            painter.circle_stroke(xf.s(pt), 5.0, st);
+            if start.distance(pt) > 1.0 {
+                canvas::temp_dim(painter, xf, start, pt, &units.length(start.distance(pt)), -16.0);
+            }
+        }
+    }
+    let _ = view;
+}
+
+pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, pt: DVec2) {
+    let pt = constrained(&app.doc.data, id, kind, start, pt);
+    if pt.distance(start) < 1e-6 {
+        return;
+    }
+    let kind = kind.clone();
+    let view_id = view.id;
+    app.run("Drag", move |p| {
+        if p.element(id).is_some() {
+            if let GripKind::WallShape = kind {
+                return move_wall_with_joins(p, id, pt - start);
+            }
+            if let GripKind::WallEnd(s) = kind {
+                let old = { let w = p.wall(id).ok_or("Wall not found.")?; if s { w.start } else { w.end } };
+                let joined = walls_joined_at(p, old, id);
+                if let Some(w) = p.element_mut(id).and_then(Element::as_wall_mut) {
+                    if s {
+                        w.start = pt;
+                    } else {
+                        w.end = pt;
+                    }
+                    if w.start.distance(w.end) < 10.0 {
+                        return Err("The wall would be too short.".into());
+                    }
+                }
+                for (jid, at_start) in joined {
+                    if let Some(j) = p.element_mut(jid).and_then(Element::as_wall_mut) {
+                        if at_start {
+                            j.start = pt;
+                        } else {
+                            j.end = pt;
+                        }
+                    }
+                }
+                return Ok(());
+            }
+            if let GripKind::LevelElevation = kind {
+                if let Some(ElementKind::Level(l)) = p.element_mut(id).map(|e| &mut e.kind) {
+                    l.elevation = pt.y;
+                }
+                return Ok(());
+            }
+            let e = p.element_mut(id).unwrap();
+            match (&mut e.kind, &kind) {
+                (ElementKind::Wall(w), GripKind::WallMid) => w.arc_mid = Some(pt),
+                (ElementKind::Line(l), GripKind::Vertex(k)) => {
+                    if let Some(q) = l.pts.get_mut(*k) {
+                        *q = pt;
+                    }
+                }
+                (ElementKind::Line(l), GripKind::LineMid) => l.arc_mid = Some(pt),
+                (ElementKind::RefPlane(r), GripKind::Vertex(k)) => {
+                    if *k == 0 {
+                        r.start = pt
+                    } else {
+                        r.end = pt
+                    }
+                }
+                (ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s), GripKind::Vertex(k)) => {
+                    if *k == 0 {
+                        s.start = pt
+                    } else {
+                        s.end = pt
+                    }
+                }
+                (ElementKind::Grid(gr), GripKind::GridEnd(s)) => {
+                    if *s {
+                        gr.start = pt
+                    } else {
+                        gr.end = pt
+                    }
+                }
+                (ElementKind::Instance(i), GripKind::BeamEnd(s)) => {
+                    if *s {
+                        i.location = pt
+                    } else {
+                        i.end = Some(pt)
+                    }
+                }
+                (ElementKind::Tag(t), GripKind::TagHead) => t.position = pt,
+                (ElementKind::Tag(t), GripKind::TagLeader) => t.leader_end = Some(pt),
+                (ElementKind::Text(t), GripKind::TextPos) => t.position = pt,
+                (ElementKind::Symbol(s), GripKind::SymbolPos) => s.position = pt,
+                (ElementKind::Room(r), GripKind::RoomPoint) => r.location = pt,
+                (ElementKind::Area(a), GripKind::RoomPoint) => a.location = pt,
+                (ElementKind::Dimension(d), GripKind::DimLine) => d.line_point = pt,
+                _ => {}
+            }
+            return Ok(());
+        }
+        let v = p.view_mut(id).ok_or("View not found.")?;
+        match (&mut v.kind, &kind) {
+            (ViewKind::Section { start: s, .. }, GripKind::SectionEnd(true)) => *s = pt,
+            (ViewKind::Section { end: e, .. }, GripKind::SectionEnd(false)) => *e = pt,
+            (ViewKind::Section { start: s, end: e, depth, .. }, GripKind::SectionDepth) => {
+                let d = (*e - *s).normalize_or_zero();
+                let look = -geom::perp(d);
+                let mid = (*s + *e) / 2.0;
+                *depth = (pt - mid).dot(look).max(100.0);
+            }
+            (ViewKind::Elevation { .. }, GripKind::ElevationMarker) => {
+                if let Some((o, _)) = v.marker.as_mut() {
+                    *o = pt;
+                }
+            }
+            (_, GripKind::CropEdge(k)) => {
+                if let Some((a, b)) = v.crop.as_mut() {
+                    let (mut mn, mut mx) = (a.min(*b), a.max(*b));
+                    match k {
+                        0 => mn.x = pt.x.min(mx.x - 100.0),
+                        1 => mx.x = pt.x.max(mn.x + 100.0),
+                        2 => mn.y = pt.y.min(mx.y - 100.0),
+                        _ => mx.y = pt.y.max(mn.y + 100.0),
+                    }
+                    *a = mn;
+                    *b = mx;
+                }
+            }
+            _ => {}
+        }
+        let _ = view_id;
+        Ok(())
+    });
+}
+
+/// Click controls. Returns true when the click was consumed.
+pub fn click(app: &mut App, _view: &View, id: Id, kind: &GripKind) -> bool {
+    if !kind.is_control() {
+        return false;
+    }
+    let kind = kind.clone();
+    let name = match kind {
+        GripKind::WallFlip => "Flip Wall",
+        GripKind::FlipFacing => "Flip Facing",
+        GripKind::FlipHand => "Flip Hand",
+        GripKind::GridBubble(_) => "Show Bubble",
+        GripKind::DimLock(_) => "Lock Dimension",
+        GripKind::DimEq => "Equality Constraint",
+        _ => "Flip Section",
+    };
+    app.run(name, move |p| {
+        if let GripKind::WallFlip = kind {
+            return rc_core::edit::flip_wall(p, id);
+        }
+        if let Some(e) = p.element_mut(id) {
+            match (&mut e.kind, &kind) {
+                (ElementKind::Instance(i), GripKind::FlipFacing) => i.flip_facing = !i.flip_facing,
+                (ElementKind::Instance(i), GripKind::FlipHand) => i.flip_hand = !i.flip_hand,
+                (ElementKind::Grid(g), GripKind::GridBubble(s)) => {
+                    if *s {
+                        g.bubble_start = !g.bubble_start
+                    } else {
+                        g.bubble_end = !g.bubble_end
+                    }
+                }
+                (ElementKind::Dimension(d), GripKind::DimLock(k)) => {
+                    let n = d.refs.len().saturating_sub(1);
+                    d.locks.resize(n, false);
+                    if let Some(l) = d.locks.get_mut(*k) {
+                        *l = !*l;
+                    }
+                }
+                (ElementKind::Dimension(d), GripKind::DimEq) => d.equal = !d.equal,
+                _ => {}
+            }
+            return Ok(());
+        }
+        if let Some(v) = p.view_mut(id) {
+            if let ViewKind::Section { start, end, .. } = &mut v.kind {
+                std::mem::swap(start, end);
+            }
+        }
+        Ok(())
+    });
+    true
+}

@@ -1,0 +1,118 @@
+//! Annotation logic: resolving dimension references, measuring, and tag text.
+
+use crate::analysis;
+use crate::geom::{self, DVec2};
+use crate::model::*;
+use crate::params;
+
+/// A resolved reference: a point on it and, for linear references, its direction.
+#[derive(Clone, Copy, Debug)]
+pub struct Resolved {
+    pub point: DVec2,
+    pub dir: Option<DVec2>,
+}
+
+/// Lateral offset of a wall face from the wall centreline (+ = exterior/left side).
+pub fn wall_face_offset(p: &Project, w: &Wall, exterior: bool) -> f64 {
+    let t = analysis::wall_thickness(p, w) / 2.0;
+    if exterior { t } else { -t }
+}
+
+pub fn resolve(p: &Project, r: &DimRef) -> Resolved {
+    let fallback = Resolved { point: r.point, dir: None };
+    let Some(e) = r.element.and_then(|id| p.element(id)) else { return fallback };
+    let on_line = |a: DVec2, b: DVec2| {
+        let d = (b - a).normalize_or_zero();
+        let q = a + d * (r.point - a).dot(d);
+        Resolved { point: q, dir: Some(d) }
+    };
+    match (&e.kind, &r.part) {
+        (ElementKind::Wall(w), RefPart::WallCenter | RefPart::WallExterior | RefPart::WallInterior) => {
+            let off = match r.part {
+                RefPart::WallExterior => wall_face_offset(p, w, true),
+                RefPart::WallInterior => wall_face_offset(p, w, false),
+                _ => 0.0,
+            };
+            let n = w.normal() * off;
+            on_line(w.start + n, w.end + n)
+        }
+        (ElementKind::Wall(w), RefPart::EndStart) => Resolved { point: w.start, dir: None },
+        (ElementKind::Wall(w), RefPart::EndEnd) => Resolved { point: w.end, dir: None },
+        (ElementKind::Grid(g), _) => on_line(g.start, g.end),
+        (ElementKind::RefPlane(rp), _) => on_line(rp.start, rp.end),
+        (ElementKind::Line(l), RefPart::EndStart) => Resolved { point: l.pts.first().copied().unwrap_or(r.point), dir: None },
+        (ElementKind::Line(l), RefPart::EndEnd) => Resolved { point: l.pts.last().copied().unwrap_or(r.point), dir: None },
+        (ElementKind::Line(l), _) if l.pts.len() >= 2 => on_line(l.pts[0], l.pts[1]),
+        (ElementKind::Instance(i), _) => {
+            let c = analysis::instance_location(p, i);
+            let f = crate::build3d::instance_frame(p, i);
+            // The instance's centre plane runs along its facing (y) direction.
+            on_line(c, c + f.y)
+        }
+        _ => fallback,
+    }
+}
+
+/// Coordinates of each reference along the dimension direction.
+pub fn coordinates(p: &Project, d: &Dimension) -> Vec<f64> {
+    d.refs.iter().map(|r| resolve(p, r).point.dot(d.direction)).collect()
+}
+
+/// Segment values (mm) of a linear/aligned dimension.
+pub fn segments(p: &Project, d: &Dimension) -> Vec<f64> {
+    let c = coordinates(p, d);
+    c.windows(2).map(|w| (w[1] - w[0]).abs()).collect()
+}
+
+/// Text for one segment.
+pub fn segment_text(p: &Project, d: &Dimension, value: f64) -> String {
+    if !d.text_override.is_empty() {
+        return d.text_override.clone();
+    }
+    let core = if d.equal { "EQ".to_string() } else { p.units.length(value) };
+    format!("{}{}{}", d.prefix, core, d.suffix)
+}
+
+/// The default parameter shown by a tag for its host's category.
+pub fn default_tag_parameter(c: Category) -> &'static str {
+    match c {
+        Category::Rooms => "Name",
+        Category::Areas => "Name",
+        Category::Walls | Category::Floors | Category::Roofs | Category::Ceilings => "Type Mark",
+        _ => "Mark",
+    }
+}
+
+/// Text a tag displays.
+pub fn tag_text(p: &Project, t: &Tag) -> String {
+    let Some(host) = p.element(t.host) else { return "?".into() };
+    let param = if t.parameter.is_empty() { default_tag_parameter(host.category()) } else { t.parameter.as_str() };
+    let v = match params::get(p, host, param) {
+        Some(params::Value::Text(s)) => s,
+        Some(params::Value::Num(x)) => p.units.length(x),
+        None => String::new(),
+    };
+    if host.category() == Category::Rooms {
+        let number = match params::get(p, host, "Number") {
+            Some(params::Value::Text(s)) => s,
+            _ => String::new(),
+        };
+        return format!("{v}\n{number}");
+    }
+    if v.is_empty() { "?".into() } else { v }
+}
+
+/// Where a tag points (the host's location in plan).
+pub fn host_point(p: &Project, host: &Element) -> DVec2 {
+    match &host.kind {
+        ElementKind::Wall(w) => (w.start + w.end) / 2.0,
+        ElementKind::Instance(i) => analysis::instance_location(p, i),
+        ElementKind::Room(r) => r.location,
+        ElementKind::Area(a) => a.location,
+        ElementKind::Floor(f) => geom::centroid(&f.boundary),
+        ElementKind::Ceiling(c) => geom::centroid(&c.boundary),
+        ElementKind::Roof(r) => geom::centroid(&r.footprint),
+        ElementKind::Stair(s) => s.runs.first().map(|r| (r.start + r.end) / 2.0).unwrap_or_default(),
+        _ => DVec2::ZERO,
+    }
+}
