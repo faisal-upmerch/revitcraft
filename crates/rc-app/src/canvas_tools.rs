@@ -154,6 +154,8 @@ pub fn prompt(app: &App) -> String {
         ToolKind::AttachTop | ToolKind::AttachBase => "Pick a roof, floor or ceiling to attach the selected walls to.".into(),
         ToolKind::PickHost => "Pick a wall to host the selected door or window.".into(),
         ToolKind::Paste => "Click to place the pasted elements.".into(),
+        ToolKind::TopoPoints => "Click toposolid points to give them the elevation in the Options Bar. Esc to finish.".into(),
+        ToolKind::ColorLegend => "Click to place the color fill legend.".into(),
         _ => String::new(),
     }
 }
@@ -193,6 +195,51 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::ColorLegend => {
+            if let Some(pt) = point {
+                let r = egui::Rect::from_min_size(xf.s(pt), vec2(90.0, 60.0));
+                painter.rect_stroke(r, 0.0, Stroke::new(1.0, style::PREVIEW), egui::StrokeKind::Inside);
+                painter.text(r.min + vec2(4.0, 4.0), egui::Align2::LEFT_TOP, "Room Legend", style::font(11.0), style::PREVIEW);
+                if clicked {
+                    let vid = view.id;
+                    if let Some(id) = app.run("Color Fill Legend", |p| {
+                        if let Some(ViewKind::FloorPlan { room_colors, .. }) = p.view_mut(vid).map(|v| &mut v.kind) {
+                            *room_colors = true;
+                        }
+                        Ok(edit::add_color_legend(p, vid, pt))
+                    }) {
+                        app.select(vec![id]);
+                        app.set_tool(ToolKind::Select);
+                    }
+                }
+            }
+        }
+        ToolKind::TopoPoints => {
+            // Points of every toposolid; the hovered one gets the options-bar elevation on click.
+            let Some(c) = cursor else { return };
+            let mut best: Option<(f64, Id, usize)> = None;
+            let units = app.doc.data.units.clone();
+            for e in &app.doc.data.elements {
+                let ElementKind::Toposolid(t) = &e.kind else { continue };
+                for (k, q) in t.boundary.iter().enumerate() {
+                    let sp = xf.s(*q);
+                    let hot = sp.distance(xf.s(c)) < 9.0;
+                    painter.rect(egui::Rect::from_center_size(sp, vec2(7.0, 7.0)), 0.0, if hot { style::PRESELECT } else { Color32::WHITE }, Stroke::new(1.2, style::SELECT), egui::StrokeKind::Middle);
+                    let h = t.heights.get(k).copied().unwrap_or(0.0);
+                    painter.text(sp + vec2(6.0, -6.0), egui::Align2::LEFT_BOTTOM, units.length(h), style::font(10.5), style::TEMP_DIM);
+                    let dd = q.distance(c);
+                    if hot && best.is_none_or(|b| dd < b.0) {
+                        best = Some((dd, e.id, k));
+                    }
+                }
+            }
+            if clicked {
+                if let Some((_, id, k)) = best {
+                    let h = app.opts.topo_point_height;
+                    app.run("Modify Sub Elements", |p| edit::set_topo_point(p, id, k, h));
+                }
+            }
+        }
         ToolKind::CurtainGrid | ToolKind::WallOpening | ToolKind::WallFoundation => wall_pick_tool(app, painter, xf, view, d, cursor, point, clicked),
         _ => modify_tool(app, ui, resp, painter, xf, view, d, cursor, point, clicked),
     }

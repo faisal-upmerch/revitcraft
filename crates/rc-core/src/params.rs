@@ -58,6 +58,7 @@ const PHASING: &str = "Phasing";
 const GRAPHICS: &str = "Graphics";
 const TEXT: &str = "Text";
 const OTHER: &str = "Other";
+const MATERIALS: &str = "Materials and Finishes";
 
 fn type_identity(d: &mut Vec<ParamDef>) {
     d.push(def("Family", IDENTITY, v(ParamKind::Text), true, true));
@@ -201,6 +202,33 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::Mass(_) => {
+            d.push(def("Level", CONSTRAINTS, PKind::Level, false, false));
+            d.push(def("Base Offset", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Height", DIMENSIONS, v(Length), false, false));
+            d.push(def("Gross Floor Area", DIMENSIONS, v(Area), true, false));
+            d.push(def("Gross Surface Area", DIMENSIONS, v(Area), true, false));
+            d.push(def("Gross Volume", DIMENSIONS, v(Volume), true, false));
+            d.push(def("Name", IDENTITY, v(Text), false, false));
+            mark_comments(&mut d);
+            phasing(p, &mut d);
+        }
+        ElementKind::Toposolid(_) => {
+            d.push(def("Level", CONSTRAINTS, PKind::Level, false, false));
+            d.push(def("Height Offset From Level", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Thickness", DIMENSIONS, v(Length), false, false));
+            d.push(def("Area", DIMENSIONS, v(Area), true, false));
+            d.push(def("Volume", DIMENSIONS, v(Volume), true, false));
+            d.push(def("Material", MATERIALS, v(Material), false, false));
+            mark_comments(&mut d);
+            phasing(p, &mut d);
+        }
+        ElementKind::PropertyLine(_) => {
+            d.push(def("Name", IDENTITY, v(Text), false, false));
+            d.push(def("Area", DIMENSIONS, v(Area), true, false));
+            d.push(def("Perimeter", DIMENSIONS, v(Length), true, false));
+        }
+        ElementKind::ColorLegend(_) => {}
         ElementKind::Shaft(s) => {
             d.push(def("Base Constraint", CONSTRAINTS, PKind::Level, false, false));
             d.push(def("Base Offset", CONSTRAINTS, v(Length), false, false));
@@ -523,6 +551,41 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             "Railing Height" => st.map(|t| Value::Num(t.prop("Height", 1000.0))),
             _ => sys_common(st, name),
         },
+        ElementKind::Mass(m) => match name {
+            "Level" => text(p.level_name(m.level)),
+            "Base Offset" => num(m.base_offset),
+            "Height" => num(m.height),
+            "Gross Floor Area" => {
+                // Floor area at every level that cuts the mass.
+                let z0 = p.level_elevation(m.level) + m.base_offset;
+                let n = p.levels().iter().filter(|(_, l)| l.elevation >= z0 - 1.0 && l.elevation < z0 + m.height - 1.0).count();
+                num(geom::area(&m.boundary).abs() * n as f64)
+            }
+            "Gross Surface Area" => num(geom::area(&m.boundary).abs() * 2.0 + geom::perimeter(&m.boundary) * m.height),
+            "Gross Volume" => num(geom::area(&m.boundary).abs() * m.height),
+            "Name" => text(m.name.clone()),
+            _ => None,
+        },
+        ElementKind::Toposolid(t) => match name {
+            "Level" => text(p.level_name(t.level)),
+            "Height Offset From Level" => num(t.heights.iter().cloned().fold(f64::MAX, f64::min).min(1e12)),
+            "Thickness" => num(t.thickness),
+            "Area" => num(geom::area(&t.boundary).abs()),
+            "Volume" => {
+                let avg = if t.heights.is_empty() { 0.0 } else { t.heights.iter().sum::<f64>() / t.heights.len() as f64 };
+                let lo = t.heights.iter().cloned().fold(f64::MAX, f64::min);
+                num(geom::area(&t.boundary).abs() * (avg - lo + t.thickness))
+            }
+            "Material" => text(t.material.clone()),
+            _ => None,
+        },
+        ElementKind::PropertyLine(l) => match name {
+            "Name" => text(l.name.clone()),
+            "Area" => num(geom::area(&l.boundary).abs()),
+            "Perimeter" => num(geom::perimeter(&l.boundary)),
+            _ => None,
+        },
+        ElementKind::ColorLegend(_) => None,
         ElementKind::Shaft(s) => match name {
             "Base Constraint" => text(p.level_name(s.base_level)),
             "Base Offset" => num(s.base_offset),
@@ -855,6 +918,31 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
             "Top Constraint" => s.top_level = top_choice.unwrap(),
             "Top Offset" => s.top_offset = n(),
             "Unconnected Height" => s.unconnected_height = positive(n(), "Height")?,
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::Mass(m) => match name {
+            "Level" => m.level = level_id.unwrap(),
+            "Base Offset" => m.base_offset = n(),
+            "Height" => m.height = positive(n(), "Height")?,
+            "Name" => m.name = t(),
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::Toposolid(ts) => match name {
+            "Level" => ts.level = level_id.unwrap(),
+            "Height Offset From Level" => {
+                let lo = ts.heights.iter().cloned().fold(f64::MAX, f64::min);
+                let lo = if lo == f64::MAX { 0.0 } else { lo };
+                let dz = n() - lo;
+                for h in ts.heights.iter_mut() {
+                    *h += dz;
+                }
+            }
+            "Thickness" => ts.thickness = positive(n(), "Thickness")?,
+            "Material" => ts.material = t(),
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::PropertyLine(l) => match name {
+            "Name" => l.name = t(),
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Room(r) => match name {

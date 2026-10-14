@@ -17,19 +17,23 @@ pub enum Tab {
     Structure,
     Insert,
     Annotate,
+    Analyze,
+    MassingSite,
     View,
     Manage,
     Modify,
 }
 
 impl Tab {
-    const ALL: [Tab; 7] = [Tab::Architecture, Tab::Structure, Tab::Insert, Tab::Annotate, Tab::View, Tab::Manage, Tab::Modify];
+    const ALL: [Tab; 9] = [Tab::Architecture, Tab::Structure, Tab::Insert, Tab::Annotate, Tab::Analyze, Tab::MassingSite, Tab::View, Tab::Manage, Tab::Modify];
     fn label(self) -> &'static str {
         match self {
             Tab::Architecture => "Architecture",
             Tab::Structure => "Structure",
             Tab::Insert => "Insert",
             Tab::Annotate => "Annotate",
+            Tab::Analyze => "Analyze",
+            Tab::MassingSite => "Massing & Site",
             Tab::View => "View",
             Tab::Manage => "Manage",
             Tab::Modify => "Modify",
@@ -146,6 +150,35 @@ fn annotate() -> Vec<Panel> {
         panel("Text", vec![Big(C::Text)]),
         panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::RoomTag, C::AreaTag])]),
         panel("Symbol", vec![Big(C::Symbol)]),
+    ]
+}
+
+fn analyze() -> Vec<Panel> {
+    vec![
+        panel("Select", vec![Big(C::Modify)]),
+        panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
+        panel("Reports & Schedules", vec![Labeled("Schedule/\nQuantities", C::Schedule, vec![C::Schedule, C::MaterialTakeoff])]),
+    ]
+}
+
+fn massing_site() -> Vec<Panel> {
+    vec![
+        panel("Select", vec![Big(C::Modify)]),
+        panel("Conceptual Mass", vec![Labeled("Show\nMass", C::ShowMass, vec![]), Labeled("In-Place\nMass", C::InPlaceMass, vec![])]),
+        panel(
+            "Model by Face",
+            vec![Labeled("Curtain\nSystem", C::CurtainSystemByFace, vec![]), Labeled("Roof", C::RoofByFace, vec![]), Labeled("Wall", C::WallByFace, vec![]), Labeled("Floor", C::FloorByFace, vec![])],
+        ),
+        panel(
+            "Model Site",
+            vec![
+                Big(C::Toposolid),
+                Labeled("Site\nComponent", C::SiteComponent, vec![]),
+                Labeled("Parking\nComponent", C::ParkingComponent, vec![]),
+                Labeled("Property\nLine", C::PropertyLine, vec![]),
+            ],
+        ),
+        panel("Modify Site", vec![Labeled("Modify Sub\nElements", C::ModifySubElements, vec![])]),
     ]
 }
 
@@ -428,6 +461,9 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::Section => k == T::Section,
         C::ToggleProperties => app.settings.show_properties,
         C::ThinLines => app.thin_lines,
+        C::ShowMass => app.show_mass,
+        C::ModifySubElements => k == T::TopoPoints,
+        C::ColorFillLegend => k == T::ColorLegend,
         _ => false,
     }
 }
@@ -555,10 +591,12 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
     ui.horizontal_top(|ui| {
         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
         for p in panels.into_iter() {
+            let title_w = ui.painter().layout_no_wrap(p.title.to_string(), style::font(11.5), Color32::BLACK).size().x + 14.0;
             let resp = ui.vertical(|ui| {
                 ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                 ui.horizontal_top(|ui| {
                     ui.set_min_height(BIG_H + 2.0);
+                    ui.set_min_width(title_w);
                     ui.spacing_mut().item_spacing = vec2(1.0, 0.0);
                     ui.add_space(3.0);
                     for item in &p.items {
@@ -840,6 +878,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     Tab::Structure => show_panels(ui, app, structure()),
                     Tab::Insert => show_panels(ui, app, insert()),
                     Tab::Annotate => show_panels(ui, app, annotate()),
+                    Tab::Analyze => show_panels(ui, app, analyze()),
+                    Tab::MassingSite => show_panels(ui, app, massing_site()),
                     Tab::View => {
                         let p = view_tab(app);
                         show_panels(ui, app, p)

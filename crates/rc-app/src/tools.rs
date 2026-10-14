@@ -81,6 +81,8 @@ pub enum ToolKind {
     AttachBase,
     PickHost,
     Paste,
+    TopoPoints,
+    ColorLegend,
 }
 
 impl ToolKind {
@@ -148,6 +150,8 @@ impl ToolKind {
             ToolKind::AttachBase => "Attach Base",
             ToolKind::PickHost => "Pick New Host",
             ToolKind::Paste => "Paste",
+            ToolKind::TopoPoints => "Modify Sub Elements",
+            ToolKind::ColorLegend => "Color Fill Legend",
         }
     }
 
@@ -189,6 +193,8 @@ impl ToolKind {
                 | ToolKind::IsolatedFooting
                 | ToolKind::WallFoundation
                 | ToolKind::CeilingAuto
+                | ToolKind::TopoPoints
+                | ToolKind::ColorLegend
                 | ToolKind::Room
                 | ToolKind::Area
                 | ToolKind::RoomTag
@@ -301,6 +307,9 @@ pub enum SketchKind {
     Railing,
     Stair,
     RevisionCloud,
+    Mass,
+    Toposolid,
+    PropertyLine,
     EditFloor(Id),
     EditCeiling(Id),
     EditRoof(Id),
@@ -319,6 +328,9 @@ impl SketchKind {
             SketchKind::Railing => "Create Railing Path",
             SketchKind::Stair => "Create Stair",
             SketchKind::RevisionCloud => "Create Revision Cloud Sketch",
+            SketchKind::Mass => "Create Mass",
+            SketchKind::Toposolid => "Create Toposolid Boundary",
+            SketchKind::PropertyLine => "Create Property Line Sketch",
         }
     }
     pub fn is_roof(self) -> bool {
@@ -552,6 +564,11 @@ pub struct ToolOptions {
     pub stair_width: f64,
     pub room_tag: bool,
     pub room_upper: f64,
+    pub mass_height: f64,
+    pub topo_height: f64,
+    pub topo_thickness: f64,
+    /// Modify Sub Elements: elevation given to clicked toposolid points.
+    pub topo_point_height: f64,
     pub section_depth: f64,
     pub opening_height: f64,
     pub opening_sill: f64,
@@ -631,6 +648,10 @@ impl ToolOptions {
             stair_width: if imperial { 1066.8 } else { 1200.0 },
             room_tag: true,
             room_upper: if imperial { 2438.4 } else { 2500.0 },
+            mass_height: if imperial { 9144.0 } else { 10000.0 },
+            topo_height: 0.0,
+            topo_thickness: if imperial { 3048.0 } else { 3000.0 },
+            topo_point_height: 0.0,
             section_depth: 15000.0,
             opening_height: 2100.0,
             opening_sill: 0.0,

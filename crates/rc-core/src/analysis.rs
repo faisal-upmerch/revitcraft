@@ -1,11 +1,53 @@
 //! Derived quantities, wall paths and joins, and room/area boundary detection.
 
 use crate::family_params::Resolver;
-use crate::geom::{self, DVec2};
+use crate::geom::{self, DVec2, DVec3};
 use crate::model::*;
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 // ---------------------------------------------------------------- walls
+
+/// Top-surface triangles of a toposolid (absolute z).
+pub fn topo_triangles(p: &Project, t: &Toposolid) -> Vec<[DVec3; 3]> {
+    if t.boundary.len() < 3 {
+        return vec![];
+    }
+    let base = p.level_elevation(t.level);
+    let h = |k: usize| base + t.heights.get(k).copied().unwrap_or(0.0);
+    geom::triangulate(&t.boundary)
+        .into_iter()
+        .map(|[a, b, c]| [t.boundary[a].extend(h(a)), t.boundary[b].extend(h(b)), t.boundary[c].extend(h(c))])
+        .collect()
+}
+
+/// Contour segments of a toposolid: (a, b, major) every `interval` with a major line every fifth.
+pub fn topo_contours(p: &Project, t: &Toposolid, interval: f64) -> Vec<(DVec2, DVec2, bool)> {
+    let mut out = Vec::new();
+    if interval <= 0.0 {
+        return out;
+    }
+    for tri in topo_triangles(p, t) {
+        let zmin = tri.iter().map(|q| q.z).fold(f64::MAX, f64::min);
+        let zmax = tri.iter().map(|q| q.z).fold(f64::MIN, f64::max);
+        let mut k = (zmin / interval).ceil() as i64;
+        while (k as f64) * interval <= zmax && zmax - zmin > 1e-6 {
+            let z = k as f64 * interval;
+            let mut pts = Vec::new();
+            for i in 0..3 {
+                let (a, b) = (tri[i], tri[(i + 1) % 3]);
+                if (a.z - z) * (b.z - z) < 0.0 || ((a.z - z).abs() < 1e-9 && (b.z - z).abs() > 1e-9) {
+                    let s = (z - a.z) / (b.z - a.z);
+                    pts.push((a + (b - a) * s).truncate());
+                }
+            }
+            if pts.len() >= 2 && pts[0].distance(pts[1]) > 1e-3 {
+                out.push((pts[0], pts[1], k.rem_euclid(5) == 0));
+            }
+            k += 1;
+        }
+    }
+    out
+}
 
 pub fn wall_type<'a>(p: &'a Project, w: &Wall) -> Option<&'a SystemType> {
     p.sys_type(w.type_id)

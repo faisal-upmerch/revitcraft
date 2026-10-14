@@ -286,6 +286,99 @@ pub fn tag_all(p: &mut Project, view: Id, categories: &[Category]) -> Result<usi
     Ok(n)
 }
 
+pub fn add_mass(p: &mut Project, level: Id, boundary: Vec<DVec2>, height: f64) -> Result<Id, String> {
+    if boundary.len() < 3 || geom::area(&boundary).abs() < 1.0 {
+        return Err("The mass needs a closed boundary.".into());
+    }
+    if height <= 0.0 {
+        return Err("The mass height must be positive.".into());
+    }
+    let n = p.elements.iter().filter(|e| matches!(e.kind, ElementKind::Mass(_))).count() + 1;
+    Ok(push(p, ElementKind::Mass(Mass { level, boundary: geom::ensure_ccw(&boundary), height, base_offset: 0.0, name: format!("Mass {n}") })))
+}
+
+pub fn add_toposolid(p: &mut Project, level: Id, boundary: Vec<DVec2>, height: f64, thickness: f64) -> Result<Id, String> {
+    if boundary.len() < 3 || geom::area(&boundary).abs() < 1.0 {
+        return Err("The toposolid needs a closed boundary.".into());
+    }
+    let boundary = geom::ensure_ccw(&boundary);
+    let heights = vec![height; boundary.len()];
+    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary, heights, thickness, material: String::new() })))
+}
+
+/// Sets the top height (above its level) of one toposolid boundary point.
+pub fn set_topo_point(p: &mut Project, id: Id, index: usize, height: f64) -> Result<(), String> {
+    match p.element_mut(id).map(|e| &mut e.kind) {
+        Some(ElementKind::Toposolid(t)) if index < t.heights.len() => {
+            t.heights[index] = height;
+            Ok(())
+        }
+        _ => Err("Pick a point of a toposolid.".into()),
+    }
+}
+
+pub fn add_property_line(p: &mut Project, level: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
+    if boundary.len() < 3 {
+        return Err("A property line needs at least three points.".into());
+    }
+    let n = p.elements.iter().filter(|e| matches!(e.kind, ElementKind::PropertyLine(_))).count() + 1;
+    Ok(push(p, ElementKind::PropertyLine(PropertyLine { level, boundary: geom::ensure_ccw(&boundary), name: format!("Property Line {n}") })))
+}
+
+pub fn add_color_legend(p: &mut Project, view: Id, at: DVec2) -> Id {
+    push_in_view(p, view, ElementKind::ColorLegend(ColorLegend { position: at }))
+}
+
+/// Model by Face: elements made from a mass's faces.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ByFace {
+    Walls,
+    CurtainSystem,
+    Floors,
+    Roof,
+}
+
+pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Result<Vec<Id>, String> {
+    let Some(ElementKind::Mass(m)) = p.element(mass).map(|e| e.kind.clone()) else { return Err("Select a mass.".into()) };
+    let z0 = p.level_elevation(m.level) + m.base_offset;
+    let z1 = z0 + m.height;
+    let ring = geom::ensure_ccw(&m.boundary);
+    let n = ring.len();
+    let mut out = Vec::new();
+    match what {
+        ByFace::Walls | ByFace::CurtainSystem => {
+            for k in 0..n {
+                let id = add_wall(p, m.level, type_id, ring[k], ring[(k + 1) % n], m.height)?;
+                if let Some(w) = p.element_mut(id).and_then(Element::as_wall_mut) {
+                    w.base_offset = m.base_offset;
+                    w.top_level = None;
+                    w.unconnected_height = m.height;
+                }
+                out.push(id);
+            }
+        }
+        ByFace::Floors => {
+            let levels: Vec<Id> = p.levels().into_iter().filter(|(_, l)| l.elevation >= z0 - 1.0 && l.elevation < z1 - 1.0).map(|(id, _)| id).collect();
+            if levels.is_empty() {
+                return Err("No level cuts the mass. Floors by face need mass floors at levels.".into());
+            }
+            for lv in levels {
+                out.push(add_floor(p, lv, type_id, ring.clone())?);
+            }
+        }
+        ByFace::Roof => {
+            let top = p.levels().into_iter().min_by(|a, b| (a.1.elevation - z1).abs().total_cmp(&(b.1.elevation - z1).abs())).map(|(id, _)| id).unwrap_or(m.level);
+            let id = add_roof(p, top, type_id, ring.clone(), RoofShape::Flat, 0.0)?;
+            let base = z1 - p.level_elevation(top);
+            if let Some(ElementKind::Roof(r)) = p.element_mut(id).map(|e| &mut e.kind) {
+                r.base_offset = base;
+            }
+            out.push(id);
+        }
+    }
+    Ok(out)
+}
+
 pub fn add_symbol(p: &mut Project, view: Id, kind: SymbolKind, at: DVec2) -> Id {
     push_in_view(p, view, ElementKind::Symbol(Symbol { kind, position: at, rotation_deg: 0.0, points: vec![], value: String::new() }))
 }
@@ -626,6 +719,16 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             c.holes.iter_mut().for_each(poly);
         }
         ElementKind::Shaft(s) => poly(&mut s.boundary),
+        ElementKind::Mass(m) => poly(&mut m.boundary),
+        ElementKind::Toposolid(t) => {
+            poly(&mut t.boundary);
+            if mirror {
+                t.boundary.reverse();
+                t.heights.reverse();
+            }
+        }
+        ElementKind::PropertyLine(l) => poly(&mut l.boundary),
+        ElementKind::ColorLegend(c) => c.position = f(c.position),
         ElementKind::Roof(r) => {
             poly(&mut r.footprint);
             if let RoofKind::Extrusion { start, end, .. } = &mut r.kind {
@@ -1852,6 +1955,32 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn masses_toposolids_and_model_by_face() {
+        let (mut p, lvl, wt) = project();
+        let sq = vec![DVec2::new(0.0, 0.0), DVec2::new(10000.0, 0.0), DVec2::new(10000.0, 8000.0), DVec2::new(0.0, 8000.0)];
+        let m = add_mass(&mut p, lvl, sq.clone(), 7000.0).unwrap();
+        let walls = model_by_face(&mut p, m, ByFace::Walls, wt).unwrap();
+        assert_eq!(walls.len(), 4);
+        assert!((analysis::wall_height(&p, p.wall(walls[0]).unwrap()) - 7000.0).abs() < 1e-6);
+        let ft = p.types_of(Category::Floors).next().unwrap().id;
+        // Levels at 0 and 3000 cut a 7000 mm mass.
+        let floors = model_by_face(&mut p, m, ByFace::Floors, ft).unwrap();
+        assert_eq!(floors.len(), 2);
+        // A toposolid with one raised corner has contours, and Height Offset shifts every point.
+        let t = add_toposolid(&mut p, lvl, sq, 0.0, 2000.0).unwrap();
+        set_topo_point(&mut p, t, 2, 3500.0).unwrap();
+        let ElementKind::Toposolid(ts) = p.element(t).unwrap().kind.clone() else { panic!() };
+        let c = analysis::topo_contours(&p, &ts, 1000.0);
+        assert!(c.len() >= 3, "{}", c.len());
+        crate::params::set(&mut p, t, "Height Offset From Level", "500").unwrap();
+        let ElementKind::Toposolid(ts) = p.element(t).unwrap().kind.clone() else { panic!() };
+        assert!((ts.heights[0] - 500.0).abs() < 1e-6 && (ts.heights[2] - 4000.0).abs() < 1e-6);
+        assert!(!crate::build3d::element_mesh(&p, p.element(t).unwrap(), &Default::default()).is_empty());
+        let pl = add_property_line(&mut p, lvl, vec![DVec2::new(-1000.0, -1000.0), DVec2::new(12000.0, -1000.0), DVec2::new(12000.0, 9000.0)]).unwrap();
+        assert!(crate::params::get(&p, p.element(pl).unwrap(), "Area").is_some());
     }
 
     #[test]

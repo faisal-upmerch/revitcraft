@@ -217,21 +217,30 @@ fn fill_tris(mp: &MultiPolygon<f64>) -> Vec<[DVec2; 3]> {
         .collect()
 }
 
-/// Pastel colour per room (stable by element id) for colour-filled plans.
-pub fn room_color(id: Id) -> [u8; 4] {
-    const PALETTE: [[u8; 3]; 8] = [
-        [255, 224, 178],
-        [200, 230, 201],
-        [187, 222, 251],
-        [248, 187, 208],
-        [225, 190, 231],
-        [255, 249, 196],
-        [178, 235, 242],
-        [215, 204, 200],
+/// Colour of a room in the "by Name" colour scheme: every room with the same name shares it.
+pub fn room_name_color(name: &str) -> [u8; 4] {
+    const PALETTE: [[u8; 3]; 12] = [
+        [255, 204, 153],
+        [204, 255, 204],
+        [153, 204, 255],
+        [255, 179, 217],
+        [221, 187, 255],
+        [255, 255, 170],
+        [170, 238, 238],
+        [221, 204, 187],
+        [255, 170, 170],
+        [187, 221, 136],
+        [170, 187, 238],
+        [238, 221, 170],
     ];
-    let c = PALETTE[(id as usize * 7) % PALETTE.len()];
-    [c[0], c[1], c[2], 150]
+    let mut h: u32 = 2166136261;
+    for b in name.trim().to_lowercase().bytes() {
+        h = (h ^ b as u32).wrapping_mul(16777619);
+    }
+    let c = PALETTE[(h as usize) % PALETTE.len()];
+    [c[0], c[1], c[2], 160]
 }
+
 
 pub fn circle(c: DVec2, r: f64, n: usize) -> Vec<DVec2> {
     (0..n).map(|k| {
@@ -375,7 +384,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
             ElementKind::Room(r) if r.level == c.level && area_plan.is_none() => {
                 let b = analysis::room_boundary(p, r);
                 if let (Some(b), true) = (&b, room_colors) {
-                    d.fill(Some(e.id), &b.interior, room_color(e.id));
+                    d.fill(Some(e.id), &b.interior, room_name_color(&r.name));
                 }
                 let _ = b;
             }
@@ -402,6 +411,22 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 for h in &f.holes {
                     d.line(Some(e.id), h.clone(), true, THIN);
                 }
+            }
+            ElementKind::Mass(m) if m.boundary.len() >= 3 => {
+                let z0 = p.level_elevation(m.level) + m.base_offset;
+                if z0 <= c.cut_z && z0 + m.height >= p.level_elevation(c.level) {
+                    d.line(Some(e.id), m.boundary.clone(), true, MEDIUM);
+                }
+            }
+            ElementKind::Toposolid(t) if t.boundary.len() >= 3 && p.level_elevation(t.level) <= c.cut_z => {
+                let interval = if p.units.system == crate::units::UnitSystem::Imperial { 1524.0 } else { 1000.0 };
+                for (a, b, major) in analysis::topo_contours(p, t, interval) {
+                    d.line(Some(e.id), vec![a, b], false, if major { Stroke::new(0.25, [70, 70, 70], Dash::Solid) } else { Stroke::new(0.13, [130, 130, 130], Dash::Solid) });
+                }
+                d.line(Some(e.id), t.boundary.clone(), true, MEDIUM);
+            }
+            ElementKind::PropertyLine(l) if l.boundary.len() >= 2 => {
+                d.line(Some(e.id), l.boundary.clone(), true, Stroke::new(0.35, [0, 0, 0], Dash::DashDot));
             }
             ElementKind::Shaft(s) if s.base_level == c.level || shaft_spans(p, s, c.cut_z) => {
                 d.line(Some(e.id), s.boundary.clone(), true, MEDIUM);
@@ -1068,6 +1093,34 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
             continue;
         }
         match &e.kind {
+            ElementKind::ColorLegend(lg) => {
+                // Title, then one swatch per room name on the view's level.
+                let h = 2.5 * scale;
+                d.text(Some(e.id), lg.position, "Room Legend".to_string(), 3.0, Anchor::Left);
+                let level = view.plan_level();
+                let mut names: Vec<String> = p
+                    .elements
+                    .iter()
+                    .filter_map(|x| match &x.kind {
+                        ElementKind::Room(r) if level.is_none_or(|l| l == r.level) => Some(r.name.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                names.sort();
+                names.dedup();
+                for (k, name) in names.iter().enumerate() {
+                    let y = lg.position.y - h * 2.2 * (k as f64 + 1.0);
+                    let a = DVec2::new(lg.position.x, y);
+                    let sw = [a, a + DVec2::new(h * 2.0, 0.0), a + DVec2::new(h * 2.0, h * 1.4), a + DVec2::new(0.0, h * 1.4)];
+                    let c = room_name_color(name);
+                    d.fill(Some(e.id), &sw, [c[0], c[1], c[2], 255]);
+                    d.line(Some(e.id), sw.to_vec(), true, ANNO);
+                    d.text(Some(e.id), a + DVec2::new(h * 2.8, h * 0.7), name.clone(), 2.5, Anchor::Left);
+                }
+                if names.is_empty() {
+                    d.text(Some(e.id), lg.position - DVec2::new(0.0, h * 2.2), "No colors defined".to_string(), 2.5, Anchor::Left);
+                }
+            }
             ElementKind::Line(l) => d.line(Some(e.id), line_points(l), l.closed, line_style_stroke(l.style)),
             ElementKind::Dimension(dim) => dimension_graphics(p, e.id, dim, scale, d),
             ElementKind::Tag(t) => {
@@ -1357,6 +1410,16 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::Floor(f) => vec![f.boundary.clone()],
         ElementKind::Ceiling(c) => vec![c.boundary.clone()],
         ElementKind::Shaft(s) => vec![s.boundary.clone()],
+        ElementKind::Mass(m) => vec![m.boundary.clone()],
+        ElementKind::Toposolid(t) => vec![t.boundary.clone()],
+        ElementKind::PropertyLine(l) => {
+            let mut v = l.boundary.clone();
+            if let Some(f) = v.first().copied() {
+                v.push(f);
+            }
+            vec![v]
+        }
+        ElementKind::ColorLegend(c) => vec![vec![c.position, c.position + DVec2::new(4000.0, 0.0), c.position + DVec2::new(4000.0, -3000.0), c.position + DVec2::new(0.0, -3000.0)]],
         ElementKind::Roof(r) => {
             if r.footprint.len() < 3 {
                 return vec![];

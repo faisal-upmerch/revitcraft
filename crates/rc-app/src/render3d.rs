@@ -853,7 +853,7 @@ pub fn frame_bounds(bounds: Option<(DVec3, DVec3)>, dir: DVec3, perspective: boo
     let c = (mn + mx) / 2.0;
     let r = (mx - mn).length().max(3000.0);
     let dir = dir.normalize_or(DVec3::new(-0.6, -0.9, 0.55));
-    Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 0.8 }
+    Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 0.9 }
 }
 
 /// Sun direction (towards the sun) from azimuth (clockwise from north) and altitude in degrees.

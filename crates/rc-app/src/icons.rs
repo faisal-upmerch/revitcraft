@@ -198,6 +198,18 @@ pub enum Icon {
     LoadIntoProject,
     ViewRange,
     Search,
+    Mass,
+    ShowMass,
+    WallByFace,
+    FloorByFace,
+    RoofByFace,
+    CurtainByFace,
+    Toposolid,
+    SiteComponent,
+    ParkingComponent,
+    PropertyLine,
+    SubElements,
+    ColorLegend,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1291,6 +1303,67 @@ fn draw(g: &Pen, icon: Icon) {
         Search => {
             g.circle((0.42, 0.42), 0.26, Color32::TRANSPARENT, ink);
             g.line_w(&[(0.62, 0.62), (0.88, 0.88)], ink, g.w * 1.6);
+        }
+        Mass => {
+            // A rounded block with a sparkle (in-place mass).
+            g.poly(&[(0.12, 0.34), (0.56, 0.18), (0.56, 0.78), (0.12, 0.92)], LGREY, ink);
+            g.poly(&[(0.56, 0.18), (0.84, 0.3), (0.84, 0.86), (0.56, 0.78)], GREY, ink);
+            g.poly(&[(0.12, 0.34), (0.56, 0.18), (0.84, 0.3), (0.4, 0.46)], Color32::WHITE, ink);
+            g.star((0.82, 0.14), 0.12, ORANGE);
+        }
+        ShowMass => {
+            g.poly(&[(0.12, 0.34), (0.56, 0.18), (0.56, 0.78), (0.12, 0.92)], LGREY, ink);
+            g.poly(&[(0.56, 0.18), (0.84, 0.3), (0.84, 0.86), (0.56, 0.78)], GREY, ink);
+            g.poly(&[(0.12, 0.34), (0.56, 0.18), (0.84, 0.3), (0.4, 0.46)], Color32::WHITE, ink);
+        }
+        WallByFace | FloorByFace | RoofByFace | CurtainByFace => {
+            g.poly(&[(0.1, 0.36), (0.5, 0.2), (0.5, 0.8), (0.1, 0.94)], Color32::WHITE, ink);
+            g.poly(&[(0.5, 0.2), (0.9, 0.34), (0.9, 0.9), (0.5, 0.8)], LGREY, ink);
+            match icon {
+                WallByFace => g.poly(&[(0.5, 0.2), (0.9, 0.34), (0.9, 0.9), (0.5, 0.8)], LBLUE, BLUE),
+                FloorByFace => g.poly(&[(0.1, 0.62), (0.5, 0.48), (0.9, 0.6), (0.5, 0.74)], LBLUE, BLUE),
+                RoofByFace => g.poly(&[(0.1, 0.36), (0.5, 0.2), (0.9, 0.34), (0.5, 0.5)], LBLUE, BLUE),
+                _ => {
+                    for k in 1..4 {
+                        let t = k as f32 / 4.0;
+                        g.thin_line(&[(0.5 + 0.4 * t, 0.2 + 0.14 * t), (0.5 + 0.4 * t, 0.8 + 0.1 * t)], BLUE);
+                    }
+                    g.thin_line(&[(0.5, 0.5), (0.9, 0.62)], BLUE);
+                }
+            }
+        }
+        Toposolid => {
+            g.poly(&[(0.06, 0.6), (0.3, 0.36), (0.52, 0.48), (0.74, 0.3), (0.94, 0.5), (0.94, 0.72), (0.06, 0.86)], LGREEN, ink);
+            g.poly(&[(0.06, 0.86), (0.94, 0.72), (0.94, 0.84), (0.06, 0.96)], BROWN, ink);
+        }
+        SiteComponent => {
+            g.rect(0.46, 0.6, 0.54, 0.92, BROWN, ink);
+            g.poly(&[(0.5, 0.08), (0.84, 0.66), (0.16, 0.66)], LGREEN, GREEN);
+        }
+        ParkingComponent => {
+            for x in [0.14f32, 0.5, 0.86] {
+                g.line(&[(x, 0.12), (x, 0.88)], ink);
+            }
+            g.line(&[(0.14, 0.12), (0.86, 0.12)], ink);
+        }
+        PropertyLine => {
+            g.dashdot((0.1, 0.2), (0.82, 0.12), ink);
+            g.dashdot((0.82, 0.12), (0.9, 0.86), ink);
+            g.dashdot((0.9, 0.86), (0.14, 0.9), ink);
+            g.dashdot((0.14, 0.9), (0.1, 0.2), ink);
+        }
+        SubElements => {
+            draw(g, Toposolid);
+            for q in [(0.3, 0.36), (0.74, 0.3), (0.52, 0.48)] {
+                g.dot(q, 0.06, BLUE);
+            }
+        }
+        ColorLegend => {
+            for (k, c) in [ORANGE, LGREEN, LBLUE].into_iter().enumerate() {
+                let y = 0.14 + k as f32 * 0.28;
+                g.rect(0.1, y, 0.36, y + 0.2, c, ink);
+                g.thin_line(&[(0.46, y + 0.1), (0.9, y + 0.1)], ink);
+            }
         }
     }
     let _ = (CYAN, LGREEN);

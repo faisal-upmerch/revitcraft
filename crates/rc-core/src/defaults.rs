@@ -36,6 +36,10 @@ pub fn materials() -> Vec<Material> {
         mat("Acoustic Tile", [236, 236, 232], 1.0, "Finish", CrossHatch),
         mat("Gravel", [150, 145, 135], 1.0, "Earth", Concrete),
         mat("Grass", [96, 150, 72], 1.0, "Earth", Solid),
+        mat("Site - Earth", [176, 160, 132], 1.0, "Earth", Concrete),
+        mat("Foliage", [92, 140, 70], 1.0, "Earth", Solid),
+        mat("Paint - White", [248, 248, 248], 1.0, "Paint", Solid),
+        mat("Default Mass", [196, 206, 222], 0.45, "Generic", Solid),
     ]
 }
 

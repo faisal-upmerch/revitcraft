@@ -615,6 +615,9 @@ fn cached_outlines(app: &App, view: Id, id: Id) -> Vec<Vec<DVec2>> {
 /// Maps a picked id to what gets selected (group members select their group), or None when
 /// it may not be selected now.
 pub fn selectable_id(app: &App, view: &View, id: Id) -> Option<Id> {
+    if !app.show_mass && app.el(id).is_some_and(|e| matches!(e.kind, ElementKind::Mass(_))) {
+        return None;
+    }
     if let Some(e) = app.el(id) {
         if temp_hidden(app, view.id, e) {
             return None;
@@ -934,9 +937,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let black = app.settings.black_canvas;
     {
         let p = &app.doc.data;
+        let show_mass = app.show_mass;
         let color_of = |id: Option<Id>, rgb: [u8; 3]| -> Option<Color32> {
             if let Some(e) = id.and_then(|i| index.get(&i)).and_then(|i| p.elements.get(*i)) {
                 if temp.as_ref().is_some_and(|t| t.hides(e.id, e.category())) {
+                    return None;
+                }
+                if !show_mass && matches!(e.kind, ElementKind::Mass(_)) {
                     return None;
                 }
                 if let Some(g) = group {

@@ -119,6 +119,27 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     number_field(ui, &mut app.opts.roof_slope, 0.5, 1.0..=80.0, "°");
                     sep(ui);
                 }
+                if sk_kind == Some(SketchKind::Mass) {
+                    ui.label("Height:");
+                    let mut h = app.opts.mass_height;
+                    if length_field(ui, app, "mass-h", &mut h, 80.0) {
+                        app.opts.mass_height = h.max(100.0);
+                    }
+                    sep(ui);
+                }
+                if sk_kind == Some(SketchKind::Toposolid) {
+                    ui.label("Height Offset From Level:");
+                    let mut h = app.opts.topo_height;
+                    if length_field(ui, app, "topo-h", &mut h, 80.0) {
+                        app.opts.topo_height = h;
+                    }
+                    ui.label("Thickness:");
+                    let mut t = app.opts.topo_thickness;
+                    if length_field(ui, app, "topo-t", &mut t, 80.0) {
+                        app.opts.topo_thickness = t.max(10.0);
+                    }
+                    sep(ui);
+                }
                 if sk_kind == Some(SketchKind::Stair) {
                     ui.label("Location Line: Run: Center");
                     ui.label("Actual Run Width:");
@@ -143,6 +164,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     sep(ui);
                 }
                 draw_common(app, ui, mode, true);
+            }
+            ToolKind::TopoPoints => {
+                ui.label("Elevation:");
+                let mut h = app.opts.topo_point_height;
+                if length_field(ui, app, "topo-pt", &mut h, 80.0) {
+                    app.opts.topo_point_height = h;
+                }
+                ui.label(egui::RichText::new("(relative to the toposolid level)").color(style::text_dim()));
             }
             ToolKind::Door | ToolKind::Window => {
                 ui.checkbox(&mut app.opts.tag_on_placement, "Tag on Placement");

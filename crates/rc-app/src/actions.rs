@@ -169,6 +169,59 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         RoofFootprint => start_sketch(app, SketchKind::Roof, DrawMode::PickWalls),
         RoofExtrusion => start_sketch(app, SketchKind::RoofExtrusion, DrawMode::Line),
         Shaft => start_sketch(app, SketchKind::Shaft, DrawMode::Rect),
+        InPlaceMass => {
+            app.show_mass = true;
+            start_sketch(app, SketchKind::Mass, DrawMode::Rect)
+        }
+        Toposolid => start_sketch(app, SketchKind::Toposolid, DrawMode::Line),
+        PropertyLine => start_sketch(app, SketchKind::PropertyLine, DrawMode::Line),
+        ShowMass => app.show_mass = !app.show_mass,
+        SiteComponent | ParkingComponent => {
+            let cats: &[Category] = if cmd == ParkingComponent { &[Category::Parking] } else { &[Category::Planting, Category::Site] };
+            // The last used site type, else the first planting, else any site family.
+            let cur = app.opts.component_type;
+            let fams = &app.doc.data.families;
+            let t = fams
+                .iter()
+                .find(|f| cats.contains(&f.category) && f.types.iter().any(|t| t.id == cur))
+                .map(|_| cur)
+                .or_else(|| cats.iter().find_map(|c| fams.iter().filter(|f| f.category == *c).find_map(|f| f.types.first()).map(|t| t.id)));
+            match t {
+                Some(t) => {
+                    app.opts.component_type = t;
+                    app.set_tool(ToolKind::Component);
+                }
+                None => app.error("No site families are loaded. Use Load Family to load one."),
+            }
+        }
+        WallByFace | CurtainSystemByFace | FloorByFace | RoofByFace => {
+            let masses: Vec<Id> = app.selection.iter().copied().filter(|id| app.el(*id).is_some_and(|e| matches!(e.kind, ElementKind::Mass(_)))).collect();
+            if masses.is_empty() {
+                app.error("Select a mass first, then choose a Model by Face tool.");
+                return;
+            }
+            let p = &app.doc.data;
+            let (what, ty) = match cmd {
+                WallByFace => (edit::ByFace::Walls, app.opts.wall_type),
+                CurtainSystemByFace => (
+                    edit::ByFace::CurtainSystem,
+                    p.types_of(Category::Walls).find(|t| t.wall_kind == WallKind::Curtain).map(|t| t.id).unwrap_or(app.opts.wall_type),
+                ),
+                FloorByFace => (edit::ByFace::Floors, app.opts.floor_type),
+                _ => (edit::ByFace::Roof, app.opts.roof_type),
+            };
+            if let Some(made) = app.run(cmd.info().label, |p| {
+                let mut all = Vec::new();
+                for m in &masses {
+                    all.extend(edit::model_by_face(p, *m, what, ty)?);
+                }
+                Ok(all)
+            }) {
+                app.select(made);
+            }
+        }
+        ModifySubElements => app.set_tool(ToolKind::TopoPoints),
+        ColorFillLegend => app.set_tool(ToolKind::ColorLegend),
         Railing => start_sketch(app, SketchKind::Railing, DrawMode::Line),
         Stair => start_sketch(app, SketchKind::Stair, DrawMode::Line),
         FilledRegion => start_sketch(app, SketchKind::Region { masking: false }, DrawMode::Rect),
@@ -855,6 +908,9 @@ pub fn finish_sketch(app: &mut App) {
                         })
                     }
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
+                    SketchKind::Mass => app.run("Create Mass", |p| edit::add_mass(p, level, outer, o.mass_height)),
+                    SketchKind::Toposolid => app.run("Create Toposolid", |p| edit::add_toposolid(p, level, outer, o.topo_height, o.topo_thickness)),
+                    SketchKind::PropertyLine => app.run("Create Property Line", |p| edit::add_property_line(p, level, outer)),
                     SketchKind::Region { masking } => app.run(if masking { "Masking Region" } else { "Filled Region" }, |p| {
                         let id = edit::add_region(p, vid, outer, if masking { FillPattern::Masking } else { o.fill_pattern })?;
                         if let Some(ElementKind::Region(r)) = p.element_mut(id).map(|e| &mut e.kind) {

@@ -62,6 +62,9 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     if let Some((g, _)) = &app.group_edit {
         feed(*g as u64 + (1 << 38));
     }
+    if !app.show_mass {
+        feed(1 << 39);
+    }
     let key = (app.doc.revision, h);
     if app.scenes.get(&view_id).is_some_and(|s| s.key == key) {
         if let (Some(scene), Some(r)) = (app.scenes.get_mut(&view_id), app.renderer.as_ref()) {
@@ -90,6 +93,9 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
             if e.group != Some(*g) && e.id != *g {
                 halftone.insert(e.id);
             }
+        }
+        if !app.show_mass && matches!(e.kind, ElementKind::Mass(_)) {
+            continue;
         }
         let set = rc_core::build3d::element_mesh(p, e, &fp);
         if !set.is_empty() {

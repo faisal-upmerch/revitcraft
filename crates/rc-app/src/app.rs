@@ -166,6 +166,8 @@ pub struct App {
     pub temp_hide: HashMap<Id, TempHide>,
     pub reveal_hidden: HashSet<Id>,
     pub thin_lines: bool,
+    /// Show conceptual masses (Massing & Site > Show Mass).
+    pub show_mass: bool,
     pub settings: Settings,
     pub active_option: Option<Id>,
     pub group_edit: Option<(Id, Project)>,
@@ -218,6 +220,7 @@ impl App {
             temp_hide: HashMap::new(),
             reveal_hidden: HashSet::new(),
             thin_lines: false,
+            show_mass: true,
             settings,
             active_option: None,
             group_edit: None,

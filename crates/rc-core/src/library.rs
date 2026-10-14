@@ -90,6 +90,26 @@ pub fn template_params(t: FamilyTemplate) -> Vec<FamilyParameter> {
             }
             v
         }
+        Tree => vec![
+            param("Width", Length, DIM, "4000"),
+            param("Depth", Length, DIM, "4000"),
+            param("Height", Length, DIM, "6000"),
+            param("Trunk Diameter", Length, DIM, "300"),
+            param("Canopy Material", Material, MAT, "Foliage"),
+            param("Trunk Material", Material, MAT, "Wood"),
+        ],
+        ParkingSpace => vec![
+            param("Width", Length, DIM, "2500"),
+            param("Depth", Length, DIM, "5000"),
+            param("Line Width", Length, DIM, "100"),
+            param("Paint Material", Material, MAT, "Paint - White"),
+        ],
+        Bench => vec![
+            param("Width", Length, DIM, "1800"),
+            param("Depth", Length, DIM, "600"),
+            param("Seat Height", Length, DIM, "450"),
+            param("Material", Material, MAT, "Wood"),
+        ],
         Table => vec![
             param("Width", Length, DIM, "1600"),
             param("Depth", Length, DIM, "800"),
@@ -286,6 +306,14 @@ pub fn catalog(units: UnitSystem) -> Catalog {
         ("Double Hung", DoubleHungWindow, vec![wh(if imp { 36.0 } else { 900.0 }, if imp { 60.0 } else { 1500.0 }, vec![sill(if imp { 30.0 } else { 750.0 }), cost(560.0)])]),
         ("Sliding", SlidingWindow, vec![wh(if imp { 60.0 } else { 1500.0 }, if imp { 36.0 } else { 900.0 }, vec![sill(if imp { 42.0 } else { 1050.0 }), cost(470.0)])]),
         ("Round", RoundWindow, vec![(if imp { "36\" Diameter".into() } else { "900 Diameter".into() }, vec![("Diameter", if imp { inch(36.0) } else { mm(900.0) }), sill(if imp { 48.0 } else { 1200.0 }), cost(450.0)])]),
+        ("Tree - Deciduous", Tree, vec![
+            (if imp { "13' Canopy".into() } else { "4m Canopy".into() }, vec![("Width", if imp { inch(156.0) } else { mm(4000.0) }), ("Depth", if imp { inch(156.0) } else { mm(4000.0) }), ("Height", if imp { inch(240.0) } else { mm(6000.0) })]),
+            (if imp { "20' Canopy".into() } else { "6m Canopy".into() }, vec![("Width", if imp { inch(240.0) } else { mm(6000.0) }), ("Depth", if imp { inch(240.0) } else { mm(6000.0) }), ("Height", if imp { inch(360.0) } else { mm(9000.0) })]),
+        ]),
+        ("Parking Space", ParkingSpace, vec![
+            (if imp { "9' x 18'".into() } else { "2500 x 5000".into() }, vec![("Width", if imp { inch(108.0) } else { mm(2500.0) }), ("Depth", if imp { inch(216.0) } else { mm(5000.0) })]),
+        ]),
+        ("Bench", Bench, vec![(if imp { "6'".into() } else { "1800".into() }, vec![("Width", if imp { inch(72.0) } else { mm(1800.0) })])]),
         ("Table-Dining", Table, vec![("1600 x 800".into(), vec![("Width", mm(1600.0)), ("Depth", mm(800.0))]), ("2000 x 1000".into(), vec![("Width", mm(2000.0)), ("Depth", mm(1000.0))])]),
         ("Chair-Dining", Chair, vec![("Standard".into(), vec![])]),
         ("Sofa", Sofa, vec![("2000 x 900".into(), vec![]), ("2400 x 950".into(), vec![("Width", mm(2400.0)), ("Depth", mm(950.0))])]),

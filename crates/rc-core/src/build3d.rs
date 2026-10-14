@@ -28,8 +28,42 @@ pub fn element_mesh(p: &Project, e: &Element, footprints: &HashMap<Id, Footprint
         ElementKind::Railing(r) => railing(p, r),
         ElementKind::WallFoundation(f) => wall_foundation(p, f),
         ElementKind::Instance(i) => family_geom::instance_mesh(p, i),
+        ElementKind::Mass(m) => {
+            let mut set = MeshSet::default();
+            if m.boundary.len() >= 3 && m.height > 0.0 {
+                let z0 = p.level_elevation(m.level) + m.base_offset;
+                set.add_extrusion("Default Mass", &geom::ensure_ccw(&m.boundary), z0, z0 + m.height);
+            }
+            set
+        }
+        ElementKind::Toposolid(t) => toposolid(p, t),
         _ => MeshSet::default(),
     }
+}
+
+/// Toposolid: the triangulated top surface, a flat bottom and vertical sides.
+fn toposolid(p: &Project, t: &Toposolid) -> MeshSet {
+    let mut set = MeshSet::default();
+    let n = t.boundary.len();
+    if n < 3 {
+        return set;
+    }
+    let mat = if t.material.is_empty() { "Site - Earth" } else { t.material.as_str() };
+    let base = p.level_elevation(t.level);
+    let top = |k: usize| base + t.heights.get(k).copied().unwrap_or(0.0);
+    let low = (0..n).map(top).fold(f64::MAX, f64::min) - t.thickness.max(1.0);
+    let m = set.mesh(mat);
+    for [a, b, c] in analysis::topo_triangles(p, t) {
+        m.add_triangle(a, b, c);
+    }
+    let ring: Vec<DVec2> = t.boundary.clone();
+    for k in 0..n {
+        let (a, b) = (ring[k], ring[(k + 1) % n]);
+        m.add_quad(a.extend(low), b.extend(low), b.extend(top((k + 1) % n)), a.extend(top(k)));
+    }
+    let bottom: Vec<DVec3> = ring.iter().rev().map(|q| q.extend(low)).collect();
+    m.add_polygon_facing(&bottom, DVec3::NEG_Z);
+    set
 }
 
 // ---------------------------------------------------------------- walls

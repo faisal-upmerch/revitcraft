@@ -294,6 +294,36 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
             }
             b.prism_xz(&glass, &inner, -4.0, 4.0);
         }
+        Tree => {
+            let (w, h, td) = (num("Width", 4000.0), num("Height", 6000.0), num("Trunk Diameter", 300.0));
+            let (canopy, trunk) = (txt("Canopy Material", "Foliage"), txt("Trunk Material", "Wood"));
+            b.prism(&trunk, &circle(DVec2::ZERO, td / 2.0, 12), 0.0, h * 0.45);
+            // A rounded canopy from stacked discs.
+            let (c0, c1) = (h * 0.3, h);
+            let n = 8;
+            for k in 0..n {
+                let (t0, t1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
+                let tm = (t0 + t1) / 2.0;
+                let r = (w / 2.0) * (1.0 - (2.0 * tm - 1.0).powi(2)).max(0.05).sqrt();
+                b.prism(&canopy, &circle(DVec2::ZERO, r, 16), c0 + (c1 - c0) * t0, c0 + (c1 - c0) * t1);
+            }
+        }
+        ParkingSpace => {
+            let (w, d, lw) = (num("Width", 2500.0), num("Depth", 5000.0), num("Line Width", 100.0));
+            let paint = txt("Paint Material", "Paint - White");
+            b.cube(&paint, -w / 2.0, -w / 2.0 + lw, -d / 2.0, d / 2.0, 0.0, 5.0);
+            b.cube(&paint, w / 2.0 - lw, w / 2.0, -d / 2.0, d / 2.0, 0.0, 5.0);
+            b.cube(&paint, -w / 2.0, w / 2.0, d / 2.0 - lw, d / 2.0, 0.0, 5.0);
+        }
+        Bench => {
+            let (w, d, sh) = (num("Width", 1800.0), num("Depth", 600.0), num("Seat Height", 450.0));
+            let m = txt("Material", "Wood");
+            b.cube(&m, -w / 2.0, w / 2.0, -d / 2.0, d / 2.0, sh - 50.0, sh);
+            for sx in [-1.0, 1.0] {
+                let cx = sx * (w / 2.0 - 150.0);
+                b.cube("Steel", cx - 40.0, cx + 40.0, -d / 2.0 + 50.0, d / 2.0 - 50.0, 0.0, sh - 50.0);
+            }
+        }
         Table => {
             let (w, d, h) = (num("Width", 1600.0), num("Depth", 800.0), num("Height", 750.0));
             let (tt, ls) = (num("Top Thickness", 40.0), num("Leg Size", 60.0));
@@ -609,6 +639,29 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
         Footing => {
             let (w, d) = (num("Width", 1500.0), num("Depth", 1500.0));
             out.push(line(rect(-w / 2.0, w / 2.0, -d / 2.0, d / 2.0), true, SymStyle::Hidden));
+        }
+        Tree => {
+            // Canopy circle with a scalloped edge and the trunk, the usual plan tree symbol.
+            let w = num("Width", 4000.0);
+            let r = w / 2.0;
+            let n = 36;
+            let pts: Vec<DVec2> = (0..n)
+                .map(|k| {
+                    let a = std::f64::consts::TAU * k as f64 / n as f64;
+                    let rr = r * if k % 2 == 0 { 1.0 } else { 0.93 };
+                    f.plan(rr * a.cos(), rr * a.sin())
+                })
+                .collect();
+            out.push(line(pts, true, SymStyle::Projection));
+            for k in 0..6 {
+                let a = std::f64::consts::TAU * k as f64 / 6.0;
+                out.push(line(vec![f.plan(0.0, 0.0), f.plan(r * 0.55 * a.cos(), r * 0.55 * a.sin())], false, SymStyle::Detail));
+            }
+            out.push(line(circle(DVec2::ZERO, num("Trunk Diameter", 300.0) / 2.0, 12).into_iter().map(|q| f.plan(q.x, q.y)).collect(), true, SymStyle::Detail));
+        }
+        ParkingSpace => {
+            let (w, d) = (num("Width", 2500.0), num("Depth", 5000.0));
+            out.push(line(vec![f.plan(-w / 2.0, -d / 2.0), f.plan(-w / 2.0, d / 2.0), f.plan(w / 2.0, d / 2.0), f.plan(w / 2.0, -d / 2.0)], false, SymStyle::Projection));
         }
         Custom => {
             if let Some(def) = &r.family().definition {

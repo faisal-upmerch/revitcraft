@@ -44,10 +44,17 @@ pub enum Category {
     Symbols,
     Groups,
     ImportedCad,
+    Mass,
+    Toposolid,
+    Site,
+    Parking,
+    Planting,
+    PropertyLines,
+    ColorFillLegends,
 }
 
 impl Category {
-    pub const ALL: [Category; 34] = [
+    pub const ALL: [Category; 41] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -82,10 +89,17 @@ impl Category {
         Category::Symbols,
         Category::Groups,
         Category::ImportedCad,
+        Category::Mass,
+        Category::Toposolid,
+        Category::Site,
+        Category::Parking,
+        Category::Planting,
+        Category::PropertyLines,
+        Category::ColorFillLegends,
     ];
 
     /// Model categories (shown in Visibility/Graphics' model tab).
-    pub const MODEL: [Category; 25] = [
+    pub const MODEL: [Category; 31] = [
         Category::Walls,
         Category::Floors,
         Category::Roofs,
@@ -111,10 +125,16 @@ impl Category {
         Category::AreaBoundary,
         Category::Lines,
         Category::Groups,
+        Category::Mass,
+        Category::Toposolid,
+        Category::Site,
+        Category::Parking,
+        Category::Planting,
+        Category::PropertyLines,
     ];
 
     /// Annotation categories.
-    pub const ANNOTATION: [Category; 9] = [
+    pub const ANNOTATION: [Category; 10] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -124,10 +144,11 @@ impl Category {
         Category::FilledRegions,
         Category::Symbols,
         Category::ImportedCad,
+        Category::ColorFillLegends,
     ];
 
     /// Categories that can be scheduled.
-    pub const SCHEDULABLE: [Category; 19] = [
+    pub const SCHEDULABLE: [Category; 23] = [
         Category::Walls,
         Category::Floors,
         Category::Roofs,
@@ -147,6 +168,10 @@ impl Category {
         Category::PlumbingFixtures,
         Category::SpecialtyEquipment,
         Category::GenericModels,
+        Category::Mass,
+        Category::Toposolid,
+        Category::Parking,
+        Category::Planting,
     ];
 
     pub fn label(self) -> &'static str {
@@ -185,6 +210,13 @@ impl Category {
             Category::Symbols => "Symbols",
             Category::Groups => "Model Groups",
             Category::ImportedCad => "Imported CAD",
+            Category::Mass => "Mass",
+            Category::Toposolid => "Toposolid",
+            Category::Site => "Site",
+            Category::Parking => "Parking",
+            Category::Planting => "Planting",
+            Category::PropertyLines => "Property Lines",
+            Category::ColorFillLegends => "Color Fill Legends",
         }
     }
 
@@ -224,6 +256,13 @@ impl Category {
             Category::Symbols => "Symbol",
             Category::Groups => "Model Group",
             Category::ImportedCad => "Imported CAD",
+            Category::Mass => "Mass",
+            Category::Toposolid => "Toposolid",
+            Category::Site => "Site Component",
+            Category::Parking => "Parking Component",
+            Category::Planting => "Planting",
+            Category::PropertyLines => "Property Line",
+            Category::ColorFillLegends => "Color Fill Legend",
         }
     }
 
@@ -290,6 +329,10 @@ pub enum ElementKind {
     Symbol(Symbol),
     GroupInstance(GroupInstance),
     Cad(CadImport),
+    Mass(Mass),
+    Toposolid(Toposolid),
+    PropertyLine(PropertyLine),
+    ColorLegend(ColorLegend),
 }
 
 impl Element {
@@ -340,6 +383,10 @@ impl Element {
             ElementKind::Symbol(_) => Category::Symbols,
             ElementKind::GroupInstance(_) => Category::Groups,
             ElementKind::Cad(_) => Category::ImportedCad,
+            ElementKind::Mass(_) => Category::Mass,
+            ElementKind::Toposolid(_) => Category::Toposolid,
+            ElementKind::PropertyLine(_) => Category::PropertyLines,
+            ElementKind::ColorLegend(_) => Category::ColorFillLegends,
         }
     }
 
@@ -359,6 +406,9 @@ impl Element {
             ElementKind::Area(a) => Some(a.level),
             ElementKind::Line(l) => l.level,
             ElementKind::GroupInstance(g) => Some(g.level),
+            ElementKind::Mass(m) => Some(m.level),
+            ElementKind::Toposolid(t) => Some(t.level),
+            ElementKind::PropertyLine(l) => Some(l.level),
             _ => None,
         }
     }
@@ -737,6 +787,45 @@ pub struct Railing {
     /// Stair the railing follows (its height then follows the stair slope).
     #[serde(default)]
     pub host: Option<Id>,
+}
+
+/// An in-place conceptual mass: an extruded footprint.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Mass {
+    pub level: Id,
+    pub boundary: Vec<DVec2>,
+    pub height: f64,
+    #[serde(default)]
+    pub base_offset: f64,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// A toposolid: a solid of terrain with a height per boundary vertex (above its level).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Toposolid {
+    pub level: Id,
+    pub boundary: Vec<DVec2>,
+    /// Top-surface height of each boundary vertex relative to the level.
+    pub heights: Vec<f64>,
+    pub thickness: f64,
+    #[serde(default)]
+    pub material: String,
+}
+
+/// A closed site property line.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PropertyLine {
+    pub level: Id,
+    pub boundary: Vec<DVec2>,
+    #[serde(default)]
+    pub name: String,
+}
+
+/// A room colour fill legend placed in a plan view (view-specific).
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ColorLegend {
+    pub position: DVec2,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1240,13 +1329,16 @@ pub enum FamilyTemplate {
     RectBeam,
     SteelBeam,
     Footing,
+    Tree,
+    ParkingSpace,
+    Bench,
     #[default]
     /// Parametric family built in the family editor from reference planes and forms.
     Custom,
 }
 
 impl FamilyTemplate {
-    pub const ALL: [FamilyTemplate; 32] = [
+    pub const ALL: [FamilyTemplate; 35] = [
         FamilyTemplate::SingleDoor,
         FamilyTemplate::DoubleDoor,
         FamilyTemplate::SlidingDoor,
@@ -1277,6 +1369,9 @@ impl FamilyTemplate {
         FamilyTemplate::RectBeam,
         FamilyTemplate::SteelBeam,
         FamilyTemplate::Footing,
+        FamilyTemplate::Tree,
+        FamilyTemplate::ParkingSpace,
+        FamilyTemplate::Bench,
         FamilyTemplate::Box,
         FamilyTemplate::Custom,
     ];
@@ -1312,6 +1407,9 @@ impl FamilyTemplate {
             FamilyTemplate::RectBeam => "Concrete Beam",
             FamilyTemplate::SteelBeam => "Steel Beam (I-section)",
             FamilyTemplate::Footing => "Isolated Footing",
+            FamilyTemplate::Tree => "Tree",
+            FamilyTemplate::ParkingSpace => "Parking Space",
+            FamilyTemplate::Bench => "Site Bench",
             FamilyTemplate::Box => "Box",
             FamilyTemplate::Custom => "Generic Model (custom)",
         }
@@ -1329,6 +1427,9 @@ impl FamilyTemplate {
             SteelColumn => Category::StructuralColumns,
             RectBeam | SteelBeam => Category::StructuralFraming,
             Footing => Category::StructuralFoundations,
+            Tree => Category::Planting,
+            ParkingSpace => Category::Parking,
+            Bench => Category::Site,
             Box | Custom => Category::GenericModels,
         }
     }
