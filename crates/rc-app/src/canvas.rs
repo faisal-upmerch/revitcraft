@@ -202,6 +202,8 @@ pub struct Interact {
     pub hover: Option<Id>,
     pub hover_seg: Option<usize>,
     pub tab_pressed: bool,
+    /// Element under the cursor in a 3D view (blue edges).
+    pub hover3d: Option<Id>,
     pub tab_index: usize,
     pub tab_at: Option<DVec2>,
     pub temp_dim_edit: Option<TempDimEdit>,

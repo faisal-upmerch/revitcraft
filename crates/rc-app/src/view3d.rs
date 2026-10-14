@@ -41,6 +41,8 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     for id in &ids {
         sel_key = (sel_key ^ *id as u64).wrapping_mul(1099511628211);
     }
+    let hover = app.interact.hover3d.filter(|_| app.active == Some(view_id));
+    sel_key = (sel_key ^ hover.map(|h| h as u64 + (1 << 40)).unwrap_or(7)).wrapping_mul(1099511628211);
     let mut feed = |x: u64| h = (h ^ x).wrapping_mul(1099511628211);
     for id in &temp.hidden_elements {
         feed(*id as u64 + (1 << 33));
@@ -63,7 +65,7 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
     let key = (app.doc.revision, h);
     if app.scenes.get(&view_id).is_some_and(|s| s.key == key) {
         if let (Some(scene), Some(r)) = (app.scenes.get_mut(&view_id), app.renderer.as_ref()) {
-            r.set_selection(scene, &sel, sel_key ^ app.doc.revision.rotate_left(17));
+            r.set_selection(scene, &sel, hover, sel_key ^ app.doc.revision.rotate_left(17));
         }
         return true;
     }
@@ -95,7 +97,7 @@ pub fn ensure_scene(app: &mut App, view_id: Id) -> bool {
         }
     }
     let mut scene = renderer.upload(p, meshes, &HashSet::new(), key, &halftone);
-    renderer.set_selection(&mut scene, &sel, sel_key ^ app.doc.revision.rotate_left(17));
+    renderer.set_selection(&mut scene, &sel, hover, sel_key ^ app.doc.revision.rotate_left(17));
     app.scenes.insert(view_id, scene);
     true
 }
@@ -169,7 +171,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
 
     // ViewCube and nav bar areas take input first.
     let cube_rect = Rect::from_min_size(rect.right_top() + vec2(-128.0, 10.0), vec2(118.0, 118.0));
-    let nav_rect = Rect::from_min_size(rect.right_top() + vec2(-40.0, 140.0), vec2(30.0, 120.0));
+    let nav_rect = Rect::from_min_size(rect.right_top() + vec2(-38.0, 136.0), vec2(30.0, 66.0));
     let pointer = ui.input(|i| i.pointer.interact_pos());
     let over_cube = app.settings.show_viewcube && pointer.is_some_and(|p| cube_rect.contains(p));
     let over_nav = app.settings.show_navbar && pointer.is_some_and(|p| nav_rect.contains(p));
@@ -263,6 +265,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             let (o, d) = cam.ray(nx, ny, aspect);
             let hit = app.scenes.get(&view_id).and_then(|s| render3d::pick(s, o, d, view.section_box));
             let hit_id = hit.map(|h| h.0).and_then(|id| crate::canvas::selectable_id(app, &view, id));
+            if app.interact.hover3d != hit_id {
+                app.interact.hover3d = hit_id;
+                ui.ctx().request_repaint();
+            }
             app.interact.prompt = hit_id.map(|id| crate::canvas::describe(app, id)).unwrap_or_else(|| "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into());
             if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() {
                 match hit_id {
@@ -590,30 +596,60 @@ fn point_in_quad(p: Pos2, q: &[Pos2; 4]) -> bool {
 }
 
 fn nav_bar(app: &mut App, ui: &mut egui::Ui, area: Rect, view_id: Id, mode: NavMode) {
+    // Same slim bar as the 2D views: the navigation wheel (orbit with the left button) and the
+    // zoom button with its menu.
+    let area = Rect::from_min_size(area.min + vec2(4.0, 0.0), vec2(26.0, 62.0));
     let painter = ui.painter();
-    painter.rect_filled(area, 4.0, Color32::from_rgba_unmultiplied(240, 242, 246, 230));
-    painter.rect_stroke(area, 4.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
-    let items = [(crate::icons::Icon::ZoomFit, "Zoom to Fit", 0), (crate::icons::Icon::Orbit, "Orbit (left drag)", 1), (crate::icons::Icon::Pan, "Pan (left drag)", 2), (crate::icons::Icon::Modify, "Select (left drag = window)", 3)];
-    for (k, (icon, tip, code)) in items.into_iter().enumerate() {
-        let r = Rect::from_min_size(area.min + vec2(3.0, 4.0 + k as f32 * 28.0), vec2(24.0, 24.0));
-        let resp = ui.interact(r, egui::Id::new(("navbar", view_id, k)), Sense::click());
-        let on = matches!((code, mode), (1, NavMode::Orbit) | (2, NavMode::Pan) | (3, NavMode::Select));
-        if on {
-            ui.painter().rect_filled(r, 3.0, style::accent_light());
-        } else if resp.hovered() {
-            ui.painter().rect_filled(r, 3.0, style::hover());
-        }
-        crate::icons::paint(ui.painter(), r.shrink(3.0), icon, true);
+    painter.rect_filled(area, 3.0, Color32::from_rgba_unmultiplied(244, 246, 248, 235));
+    painter.rect_stroke(area, 3.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+    let r = Rect::from_min_size(area.min + vec2(2.0, 3.0), vec2(22.0, 22.0));
+    let resp = ui.interact(r, egui::Id::new(("navbar-wheel", view_id)), Sense::click());
+    let orbiting = mode == NavMode::Orbit;
+    if orbiting {
+        ui.painter().rect_filled(r, 2.0, style::accent_light());
+    } else if resp.hovered() {
+        ui.painter().rect_filled(r, 2.0, style::hover());
+    }
+    let c = r.center();
+    ui.painter().circle_stroke(c, 8.0, Stroke::new(2.2, Color32::from_rgb(120, 126, 136)));
+    ui.painter().circle_stroke(c, 8.0, Stroke::new(1.0, Color32::from_rgb(70, 76, 86)));
+    ui.painter().circle_filled(c, 2.5, Color32::from_rgb(40, 90, 170));
+    if resp.clicked() {
+        set_nav_mode(ui, view_id, if orbiting { NavMode::Select } else { NavMode::Orbit });
+    }
+    resp.on_hover_text("Navigation wheel: left-drag orbits while on (Shift+middle drag always orbits)");
+    let sep_y = area.top() + 30.0;
+    ui.painter().line_segment([pos2(area.left() + 4.0, sep_y), pos2(area.right() - 4.0, sep_y)], Stroke::new(1.0, style::border()));
+    let r = Rect::from_min_size(pos2(area.left() + 2.0, sep_y + 2.0), vec2(22.0, 28.0));
+    let resp = ui.interact(r, egui::Id::new(("navbar-zoom", view_id)), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 2.0, style::hover());
+    }
+    crate::icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(3.0, 1.0), vec2(16.0, 16.0)), crate::icons::Icon::ZoomRegion, true);
+    let a = pos2(r.center().x, r.bottom() - 6.0);
+    ui.painter().add(egui::Shape::convex_polygon(vec![a + vec2(-3.0, -1.5), a + vec2(3.0, -1.5), a + vec2(0.0, 1.5)], style::text(), Stroke::NONE));
+    let on_arrow = ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| p.y > r.bottom() - 11.0);
+    let toggle = if resp.clicked() && on_arrow {
+        Some(egui::SetOpenCommand::Toggle)
+    } else {
         if resp.clicked() {
-            match code {
-                0 => frame_all(app, view_id),
-                1 => set_nav_mode(ui, view_id, NavMode::Orbit),
-                2 => set_nav_mode(ui, view_id, NavMode::Pan),
-                _ => set_nav_mode(ui, view_id, NavMode::Select),
+            frame_all(app, view_id);
+        }
+        None
+    };
+    let resp = resp.on_hover_text("Zoom To Fit (arrow: navigation modes)");
+    egui::Popup::menu(&resp).open_memory(toggle).close_behavior(egui::PopupCloseBehavior::CloseOnClick).show(|ui| {
+        ui.set_min_width(160.0);
+        if ui.button("Zoom To Fit").clicked() {
+            frame_all(app, view_id);
+        }
+        ui.separator();
+        for (label, m) in [("Orbit (left drag)", NavMode::Orbit), ("Pan (left drag)", NavMode::Pan), ("Select (left drag = window)", NavMode::Select)] {
+            if ui.selectable_label(mode == m, label).clicked() {
+                set_nav_mode(ui, view_id, m);
             }
         }
-        resp.on_hover_text(tip);
-    }
+    });
 }
 
 /// Renders a 3D view off-screen at the given pixel size (sheets, PDF, image export).

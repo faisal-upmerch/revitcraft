@@ -78,6 +78,8 @@ fn shadow_factor(world: vec3<f32>, n: vec3<f32>) -> f32 {
 @fragment
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     if (clipped(i.world)) { discard; }
+    // Selection overlay: a translucent blue tint in every visual style.
+    if (i.extra.y > 0.5) { return vec4<f32>(0.25, 0.5, 1.0, 0.32); }
     let style = u.params.z;
     if (style < 1.5 && style > 0.5) {
         // Hidden line: plain white surfaces.
@@ -456,7 +458,7 @@ impl Renderer {
     }
 
     /// Rebuilds the blue selection overlay from the cached meshes.
-    pub fn set_selection(&self, scene: &mut Scene, selection: &HashSet<Id>, key: u64) {
+    pub fn set_selection(&self, scene: &mut Scene, selection: &HashSet<Id>, hover: Option<Id>, key: u64) {
         if scene.selection_key == key {
             return;
         }
@@ -465,16 +467,23 @@ impl Renderer {
         let mut lines: Vec<Vertex> = Vec::new();
         let fill = srgb_color([64, 140, 255], 1.0);
         let edge = srgb_color([20, 70, 200], 1.0);
+        let hover_edge = srgb_color([40, 120, 255], 1.0);
         for (id, set) in &scene.meshes {
-            if !selection.contains(id) {
+            let selected = selection.contains(id);
+            let hovered = hover == Some(*id) && !selected;
+            if !selected && !hovered {
                 continue;
             }
+            let edge = if hovered { hover_edge } else { edge };
             for mesh in set.by_material.values() {
                 for tri in mesh.indices.chunks(3) {
+                    if hovered {
+                        break;
+                    }
                     let (a, b, c) = (mesh.positions[tri[0] as usize], mesh.positions[tri[1] as usize], mesh.positions[tri[2] as usize]);
                     let n = (b - a).cross(c - a).normalize_or_zero().as_vec3().to_array();
                     for q in [a, b, c] {
-                        tris.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: n, color: fill, extra: [0.3, 0.0, 0.0, 0.0] });
+                        tris.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: n, color: fill, extra: [0.3, 1.0, 0.0, 0.0] });
                     }
                 }
                 for (a, b) in feature_edges(mesh) {
@@ -636,7 +645,7 @@ impl Renderer {
             // Selection overlay (same geometry, drawn on top with LessEqual depth).
             if let Some((vb, n)) = &scene.sel {
                 if !wire {
-                    pass.set_pipeline(&self.tri);
+                    pass.set_pipeline(&self.tri_blend);
                     pass.set_vertex_buffer(0, vb.slice(..));
                     pass.draw(0..*n, 0..1);
                 }
