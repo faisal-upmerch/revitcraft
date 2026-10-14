@@ -713,6 +713,23 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 row_label(ui, "Associated Level");
                 ui.label(p.level_name(v.plan_level().unwrap()));
                 ui.end_row();
+                row_label(ui, "Scope Box");
+                let boxes: Vec<(Id, String)> = p
+                    .elements
+                    .iter()
+                    .filter_map(|e| match &e.kind {
+                        ElementKind::ScopeBox(s) => Some((e.id, s.name.clone())),
+                        _ => None,
+                    })
+                    .collect();
+                let label = changed.scope_box.and_then(|id| boxes.iter().find(|b| b.0 == id)).map(|b| b.1.clone()).unwrap_or_else(|| "None".into());
+                egui::ComboBox::from_id_salt("vp-scope-box").selected_text(label).icon(chevron).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut changed.scope_box, None, "None");
+                    for (id, name) in &boxes {
+                        ui.selectable_value(&mut changed.scope_box, Some(*id), name);
+                    }
+                });
+                ui.end_row();
             }
             if let ViewKind::ThreeD { .. } = v.kind {
                 row_label(ui, "Section Box");

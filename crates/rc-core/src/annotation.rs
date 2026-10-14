@@ -88,9 +88,10 @@ pub fn tag_text(p: &Project, t: &Tag) -> String {
     let Some(host) = p.element(t.host) else { return "?".into() };
     let param = if t.parameter.is_empty() { default_tag_parameter(host.category()) } else { t.parameter.as_str() };
     let v = match params::get(p, host, param) {
-        Some(params::Value::Text(s)) => s,
+        Some(params::Value::Text(s)) if !s.is_empty() => s,
         Some(params::Value::Num(x)) => p.units.length(x),
-        None => String::new(),
+        _ if param == "Material" => element_material(p, host),
+        _ => String::new(),
     };
     if host.category() == Category::Rooms {
         let number = match params::get(p, host, "Number") {
@@ -100,6 +101,33 @@ pub fn tag_text(p: &Project, t: &Tag) -> String {
         return format!("{v}\n{number}");
     }
     if v.is_empty() { "?".into() } else { v }
+}
+
+/// The main material of an element, as a material tag shows it: the structural layer of
+/// layered types, else the first layer, else a family's material parameter.
+pub fn element_material(p: &Project, e: &Element) -> String {
+    if let Some(t) = p.type_of(e).and_then(|t| p.sys_type(t)) {
+        let layer = t.layers.iter().find(|l| l.function == LayerFunction::Structure).or(t.layers.first());
+        if let Some(l) = layer {
+            return l.material.clone();
+        }
+    }
+    if let ElementKind::Instance(i) = &e.kind {
+        if let Some(f) = p.family(i.family_id) {
+            for fp in f.params.iter().filter(|fp| fp.kind == ParamKind::Material) {
+                if let Some(params::Value::Text(s)) = params::get(p, e, &fp.name) {
+                    if !s.is_empty() {
+                        return s;
+                    }
+                }
+            }
+        }
+    }
+    match &e.kind {
+        ElementKind::Toposolid(t) if !t.material.is_empty() => t.material.clone(),
+        ElementKind::Toposolid(_) => "Site - Earth".into(),
+        _ => String::new(),
+    }
 }
 
 /// Where a tag points (the host's location in plan).

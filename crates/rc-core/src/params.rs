@@ -229,6 +229,13 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Perimeter", DIMENSIONS, v(Length), true, false));
         }
         ElementKind::ColorLegend(_) => {}
+        ElementKind::ScopeBox(_) => {
+            d.push(def("Name", IDENTITY, v(Text), false, false));
+            d.push(def("Views Visible", IDENTITY, v(Integer), true, false));
+            d.push(def("Width", DIMENSIONS, v(Length), false, false));
+            d.push(def("Depth", DIMENSIONS, v(Length), false, false));
+            d.push(def("Height", DIMENSIONS, v(Length), false, false));
+        }
         ElementKind::Shaft(s) => {
             d.push(def("Base Constraint", CONSTRAINTS, PKind::Level, false, false));
             d.push(def("Base Offset", CONSTRAINTS, v(Length), false, false));
@@ -663,6 +670,14 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             _ => None,
         },
         ElementKind::ColorLegend(_) => None,
+        ElementKind::ScopeBox(s) => match name {
+            "Name" => text(s.name.clone()),
+            "Views Visible" => num(p.views.iter().filter(|v| v.plan_level().is_some()).count() as f64),
+            "Width" => num(s.max.x - s.min.x),
+            "Depth" => num(s.max.y - s.min.y),
+            "Height" => num(s.height),
+            _ => None,
+        },
         ElementKind::Shaft(s) => match name {
             "Base Constraint" => text(p.level_name(s.base_level)),
             "Base Offset" => num(s.base_offset),
@@ -1043,6 +1058,13 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
             "Name" => l.name = t(),
             _ => return Err(format!("'{name}' cannot be set.")),
         },
+        ElementKind::ScopeBox(s) => match name {
+            "Name" => s.name = t(),
+            "Width" => s.max.x = s.min.x + positive(n(), "Width")?,
+            "Depth" => s.max.y = s.min.y + positive(n(), "Depth")?,
+            "Height" => s.height = positive(n(), "Height")?,
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
         ElementKind::Room(r) => match name {
             "Number" => r.number = t(),
             "Name" => r.name = t(),
@@ -1225,5 +1247,61 @@ mod tests {
         let line = edit::add_line(&mut p, Some(vid), None, vec![geom::DVec2::ZERO, geom::DVec2::new(1000.0, 0.0)], None, LineStyle::Thin).unwrap();
         set(&mut p, line, "Line Style", "Red Dashed").unwrap();
         assert_eq!(get(&p, p.element(line).unwrap(), "Line Style"), Some(Value::Text("Red Dashed".into())));
+    }
+
+    #[test]
+    fn scope_boxes_detail_items_and_material_tags() {
+        let mut p = defaults::new_project(units::UnitSystem::Metric);
+        let lvl = p.levels()[0].0;
+        let vid = p.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        // A scope box crops the plans assigned to it, and follows its edits.
+        let sb = edit::add_scope_box(&mut p, geom::DVec2::new(5000.0, 4000.0), geom::DVec2::new(-1000.0, -2000.0)).unwrap();
+        p.view_mut(vid).unwrap().scope_box = Some(sb);
+        edit::sync_scope_boxes(&mut p);
+        let v = p.view(vid).unwrap();
+        assert!(v.crop_active);
+        assert_eq!(v.crop, Some((geom::DVec2::new(-1000.0, -2000.0), geom::DVec2::new(5000.0, 4000.0))));
+        set(&mut p, sb, "Width", "10000").unwrap();
+        edit::sync_scope_boxes(&mut p);
+        assert_eq!(p.view(vid).unwrap().crop.unwrap().1.x, 9000.0);
+        assert_eq!(get(&p, p.element(sb).unwrap(), "Name"), Some(Value::Text("Scope Box 1".into())));
+        let fp = std::collections::HashMap::new();
+        let d = crate::plan::floor_plan(&p, p.view(vid).unwrap(), &fp);
+        assert!(d.prims.iter().any(|(id, _)| *id == Some(sb)));
+        // Deleting the box releases the view.
+        p.elements.retain(|e| e.id != sb);
+        edit::sync_scope_boxes(&mut p);
+        assert_eq!(p.view(vid).unwrap().scope_box, None);
+
+        // Insulation and detail components draw in their view.
+        let ins = edit::add_insulation(&mut p, vid, geom::DVec2::ZERO, geom::DVec2::new(2000.0, 0.0), 100.0).unwrap();
+        let dc = edit::add_symbol(&mut p, vid, SymbolKind::DetailComponent, geom::DVec2::new(0.0, 1000.0));
+        if let Some(ElementKind::Symbol(s)) = p.element_mut(dc).map(|e| &mut e.kind) {
+            s.value = DETAIL_COMPONENTS[0].into();
+        }
+        let d = crate::plan::floor_plan(&p, p.view(vid).unwrap(), &fp);
+        let lines = |id: Id| d.prims.iter().filter(|(i, pr)| *i == Some(id) && matches!(pr, crate::plan::Prim::Line { .. })).count();
+        assert_eq!(lines(ins), 1);
+        assert_eq!(lines(dc), 3);
+        // The insulation curve stays within its width.
+        for (i, pr) in &d.prims {
+            if let (Some(i), crate::plan::Prim::Line { pts, .. }) = (i, pr) {
+                if *i == ins {
+                    assert!(pts.iter().all(|q| q.y.abs() <= 50.0 + 1e-6 && q.x >= -1e-6 && q.x <= 2000.0 + 1e-6));
+                }
+            }
+        }
+
+        // A material tag shows the wall's structural layer material.
+        let ty = p.types_of(Category::Walls).find(|t| t.layers.len() > 1).unwrap().id;
+        let wall = edit::add_wall(&mut p, lvl, ty, geom::DVec2::ZERO, geom::DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let tag = edit::add_tag(&mut p, vid, wall, geom::DVec2::new(2000.0, 500.0), false).unwrap();
+        if let Some(ElementKind::Tag(t)) = p.element_mut(tag).map(|e| &mut e.kind) {
+            t.parameter = "Material".into();
+        }
+        let ElementKind::Tag(t) = &p.element(tag).unwrap().kind else { panic!() };
+        let st = p.sys_type(ty).unwrap();
+        let expect = st.layers.iter().find(|l| l.function == LayerFunction::Structure).unwrap_or(&st.layers[0]).material.clone();
+        assert_eq!(crate::annotation::tag_text(&p, t), expect);
     }
 }

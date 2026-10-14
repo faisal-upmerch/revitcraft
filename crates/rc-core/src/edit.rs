@@ -425,7 +425,59 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
 }
 
 pub fn add_symbol(p: &mut Project, view: Id, kind: SymbolKind, at: DVec2) -> Id {
-    push_in_view(p, view, ElementKind::Symbol(Symbol { kind, position: at, rotation_deg: 0.0, points: vec![], value: String::new() }))
+    push_in_view(p, view, ElementKind::Symbol(Symbol { kind, position: at, rotation_deg: 0.0, points: vec![], value: String::new(), size: 0.0 }))
+}
+
+/// Batt insulation between two points in a view.
+pub fn add_insulation(p: &mut Project, view: Id, a: DVec2, b: DVec2, width: f64) -> Result<Id, String> {
+    if a.distance(b) < 1.0 {
+        return Err("The insulation is too short.".into());
+    }
+    let id = add_symbol(p, view, SymbolKind::Insulation, (a + b) / 2.0);
+    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+        s.points = vec![a, b];
+        s.size = width.max(1.0);
+    }
+    Ok(id)
+}
+
+/// A scope box from two opposite corners.
+pub fn add_scope_box(p: &mut Project, a: DVec2, b: DVec2) -> Result<Id, String> {
+    if (a.x - b.x).abs() < 1.0 || (a.y - b.y).abs() < 1.0 {
+        return Err("The scope box must have an area.".into());
+    }
+    let names = p.elements.iter().filter_map(|e| match &e.kind {
+        ElementKind::ScopeBox(s) => Some(s.name.clone()),
+        _ => None,
+    });
+    let name = unique_name(names, "Scope Box 1");
+    let height = p.levels().iter().map(|(_, l)| l.elevation).fold(0.0, f64::max) + 4000.0;
+    Ok(push(p, ElementKind::ScopeBox(ScopeBox { name, min: a.min(b), max: a.max(b), height })))
+}
+
+/// Views assigned to a scope box take its extents as their crop region.
+pub fn sync_scope_boxes(p: &mut Project) {
+    if !p.views.iter().any(|v| v.scope_box.is_some()) {
+        return;
+    }
+    let boxes: Vec<(Id, DVec2, DVec2)> = p
+        .elements
+        .iter()
+        .filter_map(|e| match &e.kind {
+            ElementKind::ScopeBox(s) => Some((e.id, s.min, s.max)),
+            _ => None,
+        })
+        .collect();
+    for v in p.views.iter_mut() {
+        let Some(id) = v.scope_box else { continue };
+        match boxes.iter().find(|b| b.0 == id) {
+            Some((_, a, b)) => {
+                v.crop = Some((*a, *b));
+                v.crop_active = true;
+            }
+            None => v.scope_box = None,
+        }
+    }
 }
 
 pub fn add_dimension(p: &mut Project, view: Id, refs: Vec<DimRef>, direction: DVec2, line_point: DVec2) -> Result<Id, String> {
@@ -777,6 +829,12 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
         }
         ElementKind::PropertyLine(l) => poly(&mut l.boundary),
         ElementKind::ColorLegend(c) => c.position = f(c.position),
+        ElementKind::ScopeBox(s) => {
+            let (a, b) = (f(s.min), f(s.max));
+            let (c, d) = (f(DVec2::new(s.min.x, s.max.y)), f(DVec2::new(s.max.x, s.min.y)));
+            s.min = a.min(b).min(c).min(d);
+            s.max = a.max(b).max(c).max(d);
+        }
         ElementKind::Roof(r) => {
             poly(&mut r.footprint);
             if let RoofKind::Extrusion { start, end, .. } = &mut r.kind {

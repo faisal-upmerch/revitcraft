@@ -603,6 +603,12 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         }
         match &e.kind {
             ElementKind::Grid(g) => grid_graphics(e.id, g, c.scale, d),
+            ElementKind::ScopeBox(s) => {
+                // Thin dash-dot rectangle with its name at the top-left corner.
+                let pts = vec![s.min, DVec2::new(s.max.x, s.min.y), s.max, DVec2::new(s.min.x, s.max.y)];
+                d.line(Some(e.id), pts, true, Stroke::new(0.13, [100, 100, 100], Dash::DashDot));
+                d.text(Some(e.id), DVec2::new(s.min.x + 2.0 * c.scale, s.max.y - 3.0 * c.scale), s.name.clone(), 2.2, Anchor::Left);
+            }
             ElementKind::RefPlane(r) => {
                 d.line(Some(e.id), vec![r.start, r.end], false, REFPLANE);
                 if !r.name.is_empty() {
@@ -1274,6 +1280,18 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                         d.text(Some(e.id), DVec2::new(elbow.x + 0.6 * scale, y), l.to_string(), 2.2, Anchor::Left);
                     }
                 }
+                SymbolKind::Insulation if s.points.len() == 2 => {
+                    insulation_graphics(e.id, s.points[0], s.points[1], s.size, d);
+                }
+                SymbolKind::Insulation => {}
+                SymbolKind::DetailComponent => {
+                    for (pts, closed) in detail_component_lines(&s.value) {
+                        let a = s.rotation_deg.to_radians();
+                        let (ca, sa) = (a.cos(), a.sin());
+                        let pts: Vec<DVec2> = pts.iter().map(|q| s.position + DVec2::new(q.x * ca - q.y * sa, q.x * sa + q.y * ca)).collect();
+                        d.line(Some(e.id), pts, closed, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
+                    }
+                }
                 SymbolKind::SpotSlope => {
                     // A slope arrow centred on the point, pointing downhill, with the slope above.
                     let a = s.rotation_deg.to_radians();
@@ -1303,6 +1321,71 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
             }
             _ => {}
         }
+    }
+}
+
+/// Batt insulation: a looping curve (prolate cycloid) between the two faces of the batt,
+/// plus the centreline-free outline Revit-style detailers expect.
+fn insulation_graphics(id: Id, a: DVec2, b: DVec2, width: f64, d: &mut Drawing) {
+    let len = a.distance(b);
+    let dir = (b - a) / len;
+    let n = geom::perp(dir);
+    // One loop per half width along the run.
+    let pitch = width * 0.5;
+    let r = pitch / std::f64::consts::TAU;
+    let amp = width / 2.0;
+    let loops = (len / pitch).max(1.0);
+    let steps = (loops * 24.0).ceil() as usize;
+    let total = loops * std::f64::consts::TAU;
+    let pts: Vec<DVec2> = (0..=steps)
+        .map(|k| {
+            let t = total * k as f64 / steps as f64;
+            let x = (r * t - amp * 0.35 * t.sin()).clamp(0.0, len);
+            let y = -amp * t.cos();
+            a + dir * x + n * y
+        })
+        .collect();
+    d.line(Some(id), pts, false, Stroke::new(0.13, [0, 0, 0], Dash::Solid));
+}
+
+/// Line work of a built-in detail component, centred on the origin (model millimetres).
+pub fn detail_component_lines(name: &str) -> Vec<(Vec<DVec2>, bool)> {
+    let rect = |w: f64, h: f64| vec![DVec2::new(-w / 2.0, -h / 2.0), DVec2::new(w / 2.0, -h / 2.0), DVec2::new(w / 2.0, h / 2.0), DVec2::new(-w / 2.0, h / 2.0)];
+    let lumber = |w: f64, h: f64| {
+        // Section through a member: outline and the two diagonals.
+        vec![
+            (rect(w, h), true),
+            (vec![DVec2::new(-w / 2.0, -h / 2.0), DVec2::new(w / 2.0, h / 2.0)], false),
+            (vec![DVec2::new(-w / 2.0, h / 2.0), DVec2::new(w / 2.0, -h / 2.0)], false),
+        ]
+    };
+    match name {
+        n if n.ends_with("2x4") => lumber(38.0, 89.0),
+        n if n.ends_with("2x6") => lumber(38.0, 140.0),
+        n if n.ends_with("2x10") => lumber(38.0, 235.0),
+        n if n.starts_with("CMU") => {
+            let (w, h) = (194.0, 397.0);
+            let core = |cy: f64| {
+                let (cw, ch) = (w - 64.0, h / 2.0 - 48.0);
+                vec![DVec2::new(-cw / 2.0, cy - ch / 2.0), DVec2::new(cw / 2.0, cy - ch / 2.0), DVec2::new(cw / 2.0, cy + ch / 2.0), DVec2::new(-cw / 2.0, cy + ch / 2.0)]
+            };
+            vec![(rect(w, h), true), (core(h / 4.0), true), (core(-h / 4.0), true)]
+        }
+        n if n.starts_with("Plywood") => {
+            let (w, h) = (1200.0, 19.0);
+            let mut v = vec![(rect(w, h), true)];
+            let mut x = -w / 2.0 + 30.0;
+            while x < w / 2.0 {
+                v.push((vec![DVec2::new(x, -h / 2.0), DVec2::new(x + 12.0, h / 2.0)], false));
+                x += 60.0;
+            }
+            v
+        }
+        n if n.starts_with("Steel Angle") => {
+            let (l, t) = (102.0, 13.0);
+            vec![(vec![DVec2::ZERO, DVec2::new(l, 0.0), DVec2::new(l, t), DVec2::new(t, t), DVec2::new(t, l), DVec2::new(0.0, l)], true)]
+        }
+        _ => vec![(rect(100.0, 100.0), true)],
     }
 }
 
@@ -1468,6 +1551,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             }
             vec![v]
         }
+        ElementKind::ScopeBox(s) => vec![vec![s.min, DVec2::new(s.max.x, s.min.y), s.max, DVec2::new(s.min.x, s.max.y), s.min]],
         ElementKind::ColorLegend(c) => vec![vec![c.position, c.position + DVec2::new(4000.0, 0.0), c.position + DVec2::new(4000.0, -3000.0), c.position + DVec2::new(0.0, -3000.0)]],
         ElementKind::Roof(r) => {
             if r.footprint.len() < 3 {

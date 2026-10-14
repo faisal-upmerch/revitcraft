@@ -1715,7 +1715,7 @@ pub fn enter(app: &mut App) {
 /// Space: flips/rotates the element being placed or the selection.
 pub fn space(app: &mut App) {
     match app.tool.kind {
-        ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting | ToolKind::PlaceGroup | ToolKind::Text | ToolKind::Symbol => {
+        ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting | ToolKind::PlaceGroup | ToolKind::Text | ToolKind::Symbol | ToolKind::DetailComponent => {
             app.opts.rotation = (app.opts.rotation + 90.0) % 360.0;
         }
         ToolKind::Wall => {

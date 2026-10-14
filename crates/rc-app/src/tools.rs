@@ -83,6 +83,9 @@ pub enum ToolKind {
     Paste,
     TopoPoints,
     ColorLegend,
+    ScopeBox,
+    Insulation,
+    DetailComponent,
 }
 
 impl ToolKind {
@@ -154,6 +157,9 @@ impl ToolKind {
             ToolKind::Paste => "Paste",
             ToolKind::TopoPoints => "Modify Sub Elements",
             ToolKind::ColorLegend => "Color Fill Legend",
+            ToolKind::ScopeBox => "Scope Box",
+            ToolKind::Insulation => "Insulation",
+            ToolKind::DetailComponent => "Detail Component",
         }
     }
 
@@ -197,6 +203,7 @@ impl ToolKind {
                 | ToolKind::CeilingAuto
                 | ToolKind::TopoPoints
                 | ToolKind::ColorLegend
+                | ToolKind::ScopeBox
                 | ToolKind::Room
                 | ToolKind::Area
                 | ToolKind::RoomTag
@@ -556,6 +563,11 @@ pub struct ToolOptions {
     pub split_gap: f64,
     pub tag_leader: bool,
     pub tag_horizontal: bool,
+    /// Tag tool variant: 0 by category, 1 multi-category, 2 material.
+    pub tag_mode: u8,
+    pub insulation_width: f64,
+    /// Index into `DETAIL_COMPONENTS`.
+    pub detail_component: usize,
     pub dim_prefer: WallRefPref,
     pub text_size: f64,
     pub text_bold: bool,
@@ -640,6 +652,9 @@ impl ToolOptions {
             split_gap: if imperial { 25.4 } else { 25.0 },
             tag_leader: false,
             tag_horizontal: true,
+            tag_mode: 0,
+            insulation_width: if imperial { 76.2 } else { 75.0 },
+            detail_component: 0,
             dim_prefer: WallRefPref::Centers,
             text_size: 2.5,
             text_bold: false,

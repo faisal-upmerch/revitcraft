@@ -158,6 +158,9 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Paste => "Click to place the pasted elements.".into(),
         ToolKind::TopoPoints => "Click a point to set its elevation, click inside to add a point, Shift+click deletes a point. Esc to finish.".into(),
         ToolKind::ColorLegend => "Click to place the color fill legend.".into(),
+        ToolKind::ScopeBox => if n == 0 { "Click to enter the first corner of the scope box.".into() } else { "Click to enter the opposite corner.".into() },
+        ToolKind::Insulation => if n == 0 { "Click to enter the insulation start point.".into() } else { "Click to enter the insulation end point.".into() },
+        ToolKind::DetailComponent => "Click to place the detail component. Space rotates it.".into(),
         _ => String::new(),
     }
 }
@@ -176,6 +179,72 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
         ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto => room_tool(app, painter, xf, view, cursor, clicked),
         ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => tag_tool(app, painter, xf, view, d, cursor, clicked),
+        ToolKind::ScopeBox => {
+            let Some(pt) = point else { return };
+            if let Some(a) = app.tool.pts.first().copied() {
+                let r = egui::Rect::from_two_pos(xf.s(a), xf.s(pt));
+                painter.extend(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], Stroke::new(1.2, style::PREVIEW), 10.0, 4.0));
+            }
+            if clicked {
+                match app.tool.pts.first().copied() {
+                    None => app.tool.pts.push(pt),
+                    Some(a) => {
+                        app.tool.reset();
+                        if let Some(id) = app.run("Scope Box", |p| edit::add_scope_box(p, a, pt)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                }
+            }
+        }
+        ToolKind::Insulation => {
+            let Some(pt) = point else { return };
+            let w = app.opts.insulation_width;
+            if let Some(a) = app.tool.pts.first().copied() {
+                let n = geom::perp((pt - a).normalize_or_zero()) * (w / 2.0);
+                painter.line_segment([xf.s(a), xf.s(pt)], Stroke::new(1.0, style::PREVIEW));
+                for s in [n, -n] {
+                    painter.extend(egui::Shape::dashed_line(&[xf.s(a + s), xf.s(pt + s)], Stroke::new(1.0, style::PREVIEW), 6.0, 4.0));
+                }
+            }
+            if clicked {
+                match app.tool.pts.first().copied() {
+                    None => app.tool.pts.push(pt),
+                    Some(a) => {
+                        let vid = view.id;
+                        // Chain: the end becomes the next start, as with detail lines.
+                        app.tool.pts = vec![pt];
+                        app.run("Insulation", |p| edit::add_insulation(p, vid, a, pt, w));
+                    }
+                }
+            }
+        }
+        ToolKind::DetailComponent => {
+            let Some(pt) = point else { return };
+            let name = DETAIL_COMPONENTS[app.opts.detail_component.min(DETAIL_COMPONENTS.len() - 1)];
+            let rot = app.opts.rotation;
+            let (ca, sa) = (rot.to_radians().cos(), rot.to_radians().sin());
+            for (pts, closed) in rc_core::plan::detail_component_lines(name) {
+                let mut s: Vec<egui::Pos2> = pts.iter().map(|q| xf.s(pt + DVec2::new(q.x * ca - q.y * sa, q.x * sa + q.y * ca))).collect();
+                if closed {
+                    s.push(s[0]);
+                }
+                painter.add(egui::Shape::line(s, preview_stroke()));
+            }
+            if clicked {
+                let vid = view.id;
+                if let Some(id) = app.run("Detail Component", |p| {
+                    let id = edit::add_symbol(p, vid, SymbolKind::DetailComponent, pt);
+                    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        s.value = name.to_string();
+                        s.rotation_deg = rot;
+                    }
+                    Ok(id)
+                }) {
+                    app.select(vec![id]);
+                }
+            }
+        }
         ToolKind::Level => level_tool(app, painter, xf, view, point, clicked),
         ToolKind::Text => text_tool(app, ui, xf, view, point, clicked),
         ToolKind::Dimension(k) => dim_tool(app, painter, xf, view, d, k, cursor, point, clicked),
@@ -1009,8 +1078,18 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
     if clicked {
         let vid = view.id;
         let horizontal = app.opts.tag_horizontal;
+        let param = match (kind, app.opts.tag_mode) {
+            (ToolKind::Tag, 1) => "Family and Type",
+            (ToolKind::Tag, 2) => "Material",
+            _ => "",
+        };
         if let Some(id) = app.run("Tag", |p| {
             let id = edit::add_tag(p, vid, h, at, leader)?;
+            if !param.is_empty() {
+                if let Some(ElementKind::Tag(t)) = p.element_mut(id).map(|e| &mut e.kind) {
+                    t.parameter = param.to_string();
+                }
+            }
             if leader {
                 if let Some(ElementKind::Tag(t)) = p.element_mut(id).map(|e| &mut e.kind) {
                     t.leader_end = Some(hp);

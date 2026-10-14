@@ -147,10 +147,16 @@ fn annotate() -> Vec<Panel> {
         ),
         panel(
             "Detail",
-            vec![Labeled("Detail\nLine", C::DetailLine, vec![]), Labeled("Region", C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]), Labeled("Revision\nCloud", C::RevisionCloud, vec![])],
+            vec![
+                Labeled("Detail\nLine", C::DetailLine, vec![]),
+                Labeled("Region", C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]),
+                Labeled("Component", C::DetailComponent, vec![C::DetailComponent]),
+                Labeled("Revision\nCloud", C::RevisionCloud, vec![]),
+                Big(C::Insulation),
+            ],
         ),
         panel("Text", vec![Big(C::Text), Labeled("Find/\nReplace", C::FindReplace, vec![])]),
-        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::RoomTag, C::AreaTag])]),
+        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::MultiCategoryTag, C::MaterialTag]), Stack(vec![C::RoomTag, C::AreaTag])]),
         panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
         panel("Symbol", vec![Big(C::Symbol)]),
     ]
@@ -209,6 +215,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Duplicate\nView", C::DuplicateView, vec![C::DuplicateView, C::DuplicateWithDetailing]),
                 Labeled("Legends", C::Legend, vec![]),
                 Labeled("Schedules", C::Schedule, vec![C::Schedule, C::MaterialTakeoff, C::SheetList]),
+                Labeled("Scope\nBox", C::ScopeBox, vec![]),
             ],
         ),
         panel("Sheet Composition", vec![Labeled("Sheet", C::NewSheet, vec![]), Labeled("View", C::PlaceView, vec![]), Big(C::Revisions)]),

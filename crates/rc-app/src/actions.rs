@@ -32,6 +32,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine | FilledRegion | MaskingRegion | RevisionCloud
         | Text | TagByCategory | TagAll | Symbol | SpotCoordinate | SpotSlope => graphical_2d && !in_sketch,
         SaveSelection => sel,
+        Insulation | DetailComponent | MultiCategoryTag | MaterialTag => graphical_2d && !in_sketch,
+        ScopeBox => plan && !in_sketch,
         LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
         ExportCsv => view.is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
@@ -276,7 +278,21 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         SpotSlope => app.set_tool(ToolKind::Dimension(DimKind::SpotSlope)),
         FindReplace => app.dialogs.find_replace = Some(Default::default()),
         Text => app.set_tool(ToolKind::Text),
-        TagByCategory => app.set_tool(ToolKind::Tag),
+        TagByCategory => {
+            app.opts.tag_mode = 0;
+            app.set_tool(ToolKind::Tag);
+        }
+        MultiCategoryTag => {
+            app.opts.tag_mode = 1;
+            app.set_tool(ToolKind::Tag);
+        }
+        MaterialTag => {
+            app.opts.tag_mode = 2;
+            app.set_tool(ToolKind::Tag);
+        }
+        ScopeBox => app.set_tool(ToolKind::ScopeBox),
+        Insulation => app.set_tool(ToolKind::Insulation),
+        DetailComponent => app.set_tool(ToolKind::DetailComponent),
         TagAll => app.dialogs.tag_all = true,
         Symbol => app.set_tool(ToolKind::Symbol),
 
@@ -737,7 +753,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )

@@ -372,6 +372,7 @@ impl App {
         let result = self.doc.transact(name, |p| {
             let first_new = p.next_id;
             let v = f(p)?;
+            rc_core::edit::sync_scope_boxes(p);
             for e in p.elements.iter_mut().filter(|e| e.id >= first_new && e.view.is_none()) {
                 if option.is_some() && e.design_option.is_none() {
                     e.design_option = option;

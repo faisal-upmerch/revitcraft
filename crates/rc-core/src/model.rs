@@ -51,10 +51,11 @@ pub enum Category {
     Planting,
     PropertyLines,
     ColorFillLegends,
+    ScopeBoxes,
 }
 
 impl Category {
-    pub const ALL: [Category; 41] = [
+    pub const ALL: [Category; 42] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -96,6 +97,7 @@ impl Category {
         Category::Planting,
         Category::PropertyLines,
         Category::ColorFillLegends,
+        Category::ScopeBoxes,
     ];
 
     /// Model categories (shown in Visibility/Graphics' model tab).
@@ -134,7 +136,7 @@ impl Category {
     ];
 
     /// Annotation categories.
-    pub const ANNOTATION: [Category; 10] = [
+    pub const ANNOTATION: [Category; 11] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -145,6 +147,7 @@ impl Category {
         Category::Symbols,
         Category::ImportedCad,
         Category::ColorFillLegends,
+        Category::ScopeBoxes,
     ];
 
     /// Categories that can be scheduled.
@@ -217,6 +220,7 @@ impl Category {
             Category::Planting => "Planting",
             Category::PropertyLines => "Property Lines",
             Category::ColorFillLegends => "Color Fill Legends",
+            Category::ScopeBoxes => "Scope Boxes",
         }
     }
 
@@ -263,6 +267,7 @@ impl Category {
             Category::Planting => "Planting",
             Category::PropertyLines => "Property Line",
             Category::ColorFillLegends => "Color Fill Legend",
+            Category::ScopeBoxes => "Scope Box",
         }
     }
 
@@ -336,6 +341,7 @@ pub enum ElementKind {
     Toposolid(Toposolid),
     PropertyLine(PropertyLine),
     ColorLegend(ColorLegend),
+    ScopeBox(ScopeBox),
 }
 
 impl Element {
@@ -391,6 +397,7 @@ impl Element {
             ElementKind::Toposolid(_) => Category::Toposolid,
             ElementKind::PropertyLine(_) => Category::PropertyLines,
             ElementKind::ColorLegend(_) => Category::ColorFillLegends,
+            ElementKind::ScopeBox(_) => Category::ScopeBoxes,
         }
     }
 
@@ -829,6 +836,17 @@ pub struct PropertyLine {
     pub name: String,
 }
 
+/// A scope box: a named plan rectangle that sets the crop of the views assigned to it.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct ScopeBox {
+    pub name: String,
+    pub min: DVec2,
+    pub max: DVec2,
+    /// Height above the lowest level (shown in 3D only as a property).
+    #[serde(default)]
+    pub height: f64,
+}
+
 /// A room colour fill legend placed in a plan view (view-specific).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ColorLegend {
@@ -1090,7 +1108,21 @@ pub enum SymbolKind {
     SpotCoordinate,
     /// Slope arrow pointing downhill along `rotation_deg`; slope text in `value`.
     SpotSlope,
+    /// Batt insulation drawn along `points[0]`..`points[1]` with width `size`.
+    Insulation,
+    /// A 2D detail component; its name in `value`.
+    DetailComponent,
 }
+
+/// Built-in 2D detail components (Annotate > Component > Detail Component).
+pub const DETAIL_COMPONENTS: [&str; 6] = [
+    "Dimension Lumber-Section : 2x4",
+    "Dimension Lumber-Section : 2x6",
+    "Dimension Lumber-Section : 2x10",
+    "CMU-Section : 8\"",
+    "Plywood-Section : 3/4\"",
+    "Steel Angle-Section : L4x4x1/2",
+];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Symbol {
@@ -1103,6 +1135,9 @@ pub struct Symbol {
     pub points: Vec<DVec2>,
     #[serde(default)]
     pub value: String,
+    /// Insulation width (model millimetres).
+    #[serde(default)]
+    pub size: f64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2031,6 +2066,9 @@ pub struct View {
     /// Elevation views: far clip offset and an optional custom marker (origin, look direction).
     #[serde(default)]
     pub marker: Option<(DVec2, DVec2)>,
+    /// Plans cropped to a scope box.
+    #[serde(default)]
+    pub scope_box: Option<Id>,
 }
 
 impl View {
@@ -2065,6 +2103,7 @@ impl View {
             options: BTreeMap::new(),
             title_on_sheet: String::new(),
             marker: None,
+            scope_box: None,
         }
     }
 

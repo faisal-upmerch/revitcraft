@@ -220,6 +220,11 @@ pub enum Icon {
     SpotCoordinate,
     SpotSlope,
     FindReplace,
+    ScopeBox,
+    Insulation,
+    DetailComponent,
+    MultiTag,
+    MaterialTag,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1425,6 +1430,36 @@ fn draw(g: &Pen, icon: Icon) {
             g.line(&[(0.08, 0.86), (0.92, 0.42)], ink);
             g.arrow((0.2, 0.6), (0.72, 0.34), BLUE);
             g.text((0.36, 0.26), "%", 0.26, BLUE);
+        }
+        ScopeBox => {
+            g.cube(0.5, 0.56, 0.62, Color32::TRANSPARENT, Color32::TRANSPARENT, Color32::TRANSPARENT);
+            g.dashdot((0.12, 0.3), (0.88, 0.3), BLUE);
+            g.dashdot((0.12, 0.3), (0.12, 0.86), BLUE);
+            g.dashdot((0.88, 0.3), (0.88, 0.86), BLUE);
+            g.dashdot((0.12, 0.86), (0.88, 0.86), BLUE);
+        }
+        Insulation => {
+            g.line(&[(0.08, 0.22), (0.92, 0.22)], ink);
+            g.line(&[(0.08, 0.78), (0.92, 0.78)], ink);
+            for k in 0..3 {
+                let x = 0.2 + k as f32 * 0.28;
+                g.arc((x, 0.5), 0.14, -PI, PI, ORANGE);
+            }
+        }
+        DetailComponent => {
+            g.rect(0.28, 0.1, 0.72, 0.9, LBROWN, ink);
+            g.line(&[(0.28, 0.1), (0.72, 0.9)], ink);
+            g.line(&[(0.72, 0.1), (0.28, 0.9)], ink);
+        }
+        MultiTag => {
+            g.poly(&[(0.1, 0.36), (0.62, 0.36), (0.84, 0.56), (0.62, 0.76), (0.1, 0.76)], YELLOW, ink);
+            g.text_bold((0.38, 0.56), "M", 0.22, ink);
+            g.rect(0.56, 0.1, 0.9, 0.36, LBLUE, ink);
+        }
+        MaterialTag => {
+            g.poly(&[(0.1, 0.3), (0.62, 0.3), (0.84, 0.5), (0.62, 0.7), (0.1, 0.7)], Color32::WHITE, ink);
+            g.circle((0.36, 0.5), 0.12, LBROWN, ink);
+            g.circle((0.33, 0.47), 0.03, RED, Color32::TRANSPARENT);
         }
         FindReplace => {
             g.text_bold((0.3, 0.36), "A", 0.4, ink);

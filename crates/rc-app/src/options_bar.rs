@@ -219,6 +219,32 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     ui.checkbox(&mut app.opts.room_tag, "Tag on placement");
                 }
             }
+            ToolKind::Insulation => {
+                ui.label("Width:");
+                let imperial = app.doc.data.units.system == rc_core::units::UnitSystem::Imperial;
+                let presets: Vec<f64> = if imperial { vec![25.4, 50.8, 76.2, 101.6, 152.4] } else { vec![25.0, 50.0, 75.0, 100.0, 150.0] };
+                let mut w = app.opts.insulation_width;
+                let units = app.doc.data.units.clone();
+                egui::ComboBox::from_id_salt("ins-w").selected_text(units.length(w)).width(90.0).show_ui(ui, |ui| {
+                    for p in &presets {
+                        ui.selectable_value(&mut w, *p, units.length(*p));
+                    }
+                });
+                if length_field(ui, app, "ins-w-edit", &mut w, 70.0) {
+                    w = w.max(5.0);
+                }
+                app.opts.insulation_width = w;
+            }
+            ToolKind::DetailComponent => {
+                ui.label("Type:");
+                let mut k = app.opts.detail_component;
+                egui::ComboBox::from_id_salt("dc-type").selected_text(DETAIL_COMPONENTS[k.min(DETAIL_COMPONENTS.len() - 1)]).width(220.0).show_ui(ui, |ui| {
+                    for (i, n) in DETAIL_COMPONENTS.iter().enumerate() {
+                        ui.selectable_value(&mut k, i, *n);
+                    }
+                });
+                app.opts.detail_component = k;
+            }
             ToolKind::Text => {
                 ui.label("Size:");
                 number_field(ui, &mut app.opts.text_size, 0.1, 1.0..=20.0, " mm");
@@ -258,6 +284,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::BreakLine => "Break Line",
                     SymbolKind::SpotCoordinate => "Spot Coordinate",
                     SymbolKind::SpotSlope => "Spot Slope",
+                    SymbolKind::Insulation => "Insulation",
+                    SymbolKind::DetailComponent => "Detail Component",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {
                     for s in [SymbolKind::NorthArrow, SymbolKind::BreakLine, SymbolKind::SpotElevation] {
