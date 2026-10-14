@@ -268,6 +268,14 @@ pub enum Cmd {
     UserKeynote,
     KeynotingSettings,
     KeynoteLegend,
+    ActivateView,
+    DeactivateView,
+    GuideGrid,
+    TitleBlock,
+    Matchline,
+    ViewReference,
+    Paint,
+    RemovePaint,
 }
 
 pub struct CmdInfo {
@@ -504,6 +512,14 @@ impl Cmd {
             ElementKeynote => ci("Element Keynote", I::Keynote, "Tags an element with the keynote of its type.", ""),
             MaterialKeynote => ci("Material Keynote", I::Keynote, "Tags an element with the keynote of its material.", ""),
             UserKeynote => ci("User Keynote", I::Keynote, "Places a keynote whose key you choose for this tag.", ""),
+            ActivateView => ci("Activate View", I::ActivateView, "Activates the selected viewport so the view can be edited on the sheet.", ""),
+            DeactivateView => ci("Deactivate View", I::ActivateView, "Returns from the activated view to the sheet.", ""),
+            Matchline => ci("Matchline", I::Matchline, "Draws a matchline where a plan continues on another sheet.", ""),
+            ViewReference => ci("View Reference", I::ViewReference, "Places a reference to another view (detail and sheet number).", ""),
+            Paint => ci("Paint", I::Paint, "Paints a face of an element with a material.", "PT"),
+            RemovePaint => ci("Remove Paint", I::Paint, "Removes the paint from a face.", ""),
+            GuideGrid => ci("Guide Grid", I::GuideGrid, "Shows a guide grid on the sheet; viewports snap to it.", ""),
+            TitleBlock => ci("Title Block", I::TitleBlock, "Changes the title block of the sheet.", ""),
             KeynoteLegend => ci("Keynote Legend", I::Keynote, "Creates a legend listing the keynotes used in the project.", ""),
             KeynotingSettings => ci("Keynoting Settings", I::Keynote, "Chooses the keynote table and how keynote tags read.", ""),
             PlaceDetailGroup => ci("Place Detail Group", I::DetailGroup, "Places an instance of a detail group in the view.", ""),
@@ -580,6 +596,8 @@ impl Cmd {
         Cmd::ScopeBox, Cmd::Insulation, Cmd::DetailComponent, Cmd::MultiCategoryTag, Cmd::MaterialTag,
         Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows, Cmd::CanvasTheme, Cmd::ShowHiddenLines, Cmd::RemoveHiddenLines, Cmd::GlobalParameters, Cmd::PlaceDetailGroup,
         Cmd::ElementKeynote, Cmd::MaterialKeynote, Cmd::UserKeynote, Cmd::KeynotingSettings, Cmd::KeynoteLegend,
+        Cmd::ActivateView, Cmd::DeactivateView, Cmd::GuideGrid, Cmd::TitleBlock,
+        Cmd::Matchline, Cmd::ViewReference, Cmd::Paint, Cmd::RemovePaint,
     ];
 
     /// Stable name for saving custom shortcuts.

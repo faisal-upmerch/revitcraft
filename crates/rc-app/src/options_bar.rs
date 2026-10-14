@@ -248,6 +248,29 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
                 app.opts.insulation_width = w;
             }
+            ToolKind::ViewReference => {
+                ui.label("Target View:");
+                let views: Vec<(Id, String)> = app.doc.data.views.iter().filter(|v| v.is_graphical() && !v.is_template && !matches!(v.kind, ViewKind::Sheet(_))).map(|v| (v.id, v.name.clone())).collect();
+                let mut t = app.opts.view_ref_target;
+                let shown = views.iter().find(|x| x.0 == t).map(|x| x.1.clone()).unwrap_or_default();
+                egui::ComboBox::from_id_salt("vref-target").selected_text(shown).width(180.0).show_ui(ui, |ui| {
+                    for (id, n) in &views {
+                        ui.selectable_value(&mut t, *id, n);
+                    }
+                });
+                app.opts.view_ref_target = t;
+            }
+            ToolKind::Paint => {
+                ui.label("Material:");
+                let names: Vec<String> = app.doc.data.materials.iter().map(|m| m.name.clone()).collect();
+                let mut m = app.opts.paint_material.clone();
+                egui::ComboBox::from_id_salt("paint-mat").selected_text(m.clone()).width(200.0).height(400.0).show_ui(ui, |ui| {
+                    for n in &names {
+                        ui.selectable_value(&mut m, n.clone(), n);
+                    }
+                });
+                app.opts.paint_material = m;
+            }
             ToolKind::JoinGeometry => {
                 ui.checkbox(&mut app.opts.join_multiple, "Multiple Join");
             }
@@ -302,6 +325,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::SpotSlope => "Spot Slope",
                     SymbolKind::Insulation => "Insulation",
                     SymbolKind::DetailComponent => "Detail Component",
+                    SymbolKind::ViewReference => "View Reference",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {
                     for s in [SymbolKind::NorthArrow, SymbolKind::BreakLine, SymbolKind::SpotElevation] {

@@ -229,6 +229,7 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Perimeter", DIMENSIONS, v(Length), true, false));
         }
         ElementKind::ColorLegend(_) => {}
+        ElementKind::Matchline(_) => d.push(def("Length", DIMENSIONS, v(Length), true, false)),
         ElementKind::ScopeBox(_) => {
             d.push(def("Name", IDENTITY, v(Text), false, false));
             d.push(def("Views Visible", IDENTITY, v(Integer), true, false));
@@ -684,6 +685,10 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             _ => None,
         },
         ElementKind::ColorLegend(_) => None,
+        ElementKind::Matchline(m) => match name {
+            "Length" => num(m.start.distance(m.end)),
+            _ => None,
+        },
         ElementKind::ScopeBox(s) => match name {
             "Name" => text(s.name.clone()),
             "Views Visible" => num(p.views.iter().filter(|v| v.plan_level().is_some()).count() as f64),

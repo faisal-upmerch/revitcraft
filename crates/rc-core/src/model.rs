@@ -52,10 +52,11 @@ pub enum Category {
     PropertyLines,
     ColorFillLegends,
     ScopeBoxes,
+    Matchline,
 }
 
 impl Category {
-    pub const ALL: [Category; 42] = [
+    pub const ALL: [Category; 43] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -98,6 +99,7 @@ impl Category {
         Category::PropertyLines,
         Category::ColorFillLegends,
         Category::ScopeBoxes,
+        Category::Matchline,
     ];
 
     /// Model categories (shown in Visibility/Graphics' model tab).
@@ -136,7 +138,7 @@ impl Category {
     ];
 
     /// Annotation categories.
-    pub const ANNOTATION: [Category; 11] = [
+    pub const ANNOTATION: [Category; 12] = [
         Category::Levels,
         Category::Grids,
         Category::ReferencePlanes,
@@ -148,6 +150,7 @@ impl Category {
         Category::ImportedCad,
         Category::ColorFillLegends,
         Category::ScopeBoxes,
+        Category::Matchline,
     ];
 
     /// Categories that can be scheduled.
@@ -221,6 +224,7 @@ impl Category {
             Category::PropertyLines => "Property Lines",
             Category::ColorFillLegends => "Color Fill Legends",
             Category::ScopeBoxes => "Scope Boxes",
+            Category::Matchline => "Matchline",
         }
     }
 
@@ -268,6 +272,7 @@ impl Category {
             Category::PropertyLines => "Property Line",
             Category::ColorFillLegends => "Color Fill Legend",
             Category::ScopeBoxes => "Scope Box",
+            Category::Matchline => "Matchline",
         }
     }
 
@@ -311,6 +316,17 @@ pub struct Element {
     /// Instance parameters associated with global parameters: parameter -> global name.
     #[serde(default)]
     pub global_links: BTreeMap<String, String>,
+    /// Modify > Paint: faces painted with a material.
+    #[serde(default)]
+    pub painted: Vec<PaintedFace>,
+}
+
+/// A face painted with a material, identified by its plane (unit normal and offset).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct PaintedFace {
+    pub normal: [f64; 3],
+    pub offset: f64,
+    pub material: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -345,6 +361,7 @@ pub enum ElementKind {
     PropertyLine(PropertyLine),
     ColorLegend(ColorLegend),
     ScopeBox(ScopeBox),
+    Matchline(Matchline),
 }
 
 impl Element {
@@ -363,6 +380,7 @@ impl Element {
             view: None,
             params: BTreeMap::new(),
             global_links: BTreeMap::new(),
+            painted: Vec::new(),
         }
     }
 
@@ -402,6 +420,7 @@ impl Element {
             ElementKind::PropertyLine(_) => Category::PropertyLines,
             ElementKind::ColorLegend(_) => Category::ColorFillLegends,
             ElementKind::ScopeBox(_) => Category::ScopeBoxes,
+            ElementKind::Matchline(_) => Category::Matchline,
         }
     }
 
@@ -840,6 +859,13 @@ pub struct PropertyLine {
     pub name: String,
 }
 
+/// A matchline drawn in every plan, where a large floor plate is split across sheets.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct Matchline {
+    pub start: DVec2,
+    pub end: DVec2,
+}
+
 /// A scope box: a named plan rectangle that sets the crop of the views assigned to it.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ScopeBox {
@@ -1120,6 +1146,8 @@ pub enum SymbolKind {
     Insulation,
     /// A 2D detail component; its name in `value`.
     DetailComponent,
+    /// A view reference: the id of the target view in `value`.
+    ViewReference,
 }
 
 /// Built-in 2D detail components (Annotate > Component > Detail Component).
@@ -1722,6 +1750,9 @@ pub struct Sheet {
     pub designed_by: String,
     #[serde(default)]
     pub approved_by: String,
+    /// Guide grid spacing in paper millimetres (None = no guide grid).
+    #[serde(default)]
+    pub guide_grid: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

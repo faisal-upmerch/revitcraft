@@ -42,6 +42,11 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
         ExportCsv => view.is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
         PlaceView => view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_))),
+        GuideGrid | TitleBlock | ActivateView => app.active_tab().and_then(|s| app.doc.data.view(s)).is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_))) && app.sheet_activation.is_none(),
+        DeactivateView => app.sheet_activation.is_some(),
+        Matchline => plan && !in_sketch,
+        ViewReference => graphical_2d && !in_sketch,
+        Paint | RemovePaint => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
         TypeProperties => true,
         Paste | PasteSameLevel => app.clipboard.is_some(),
         Cut | CopyClip | Delete | MatchType | Pin | Unpin | Move | Copy | Rotate | MirrorPick | MirrorDraw | Array | Scale | HideElements | HideCategory
@@ -309,6 +314,36 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.set_tool(ToolKind::Tag);
         }
         KeynotingSettings => app.dialogs.keynoting = true,
+        ActivateView => {
+            let sheet = app.active_tab();
+            let vp = sheet.and_then(|s| match app.doc.data.view(s).map(|v| &v.kind) {
+                Some(ViewKind::Sheet(sh)) => app.selection.iter().copied().find(|id| sh.viewports.iter().any(|vp| vp.view == *id)),
+                _ => None,
+            });
+            match (sheet, vp) {
+                (Some(s), Some(v)) => app.activate_viewport(s, v),
+                _ => app.error("Select a viewport on the sheet first."),
+            }
+        }
+        DeactivateView => app.deactivate_viewport(),
+        Matchline => app.set_tool(ToolKind::Matchline),
+        ViewReference => {
+            if app.doc.data.view(app.opts.view_ref_target).is_none() {
+                app.opts.view_ref_target = app.doc.data.views.iter().find(|v| v.plan_level().is_some() && Some(v.id) != app.active).map(|v| v.id).unwrap_or(0);
+            }
+            app.set_tool(ToolKind::ViewReference);
+        }
+        Paint => app.set_tool(ToolKind::Paint),
+        RemovePaint => app.set_tool(ToolKind::RemovePaint),
+        GuideGrid | TitleBlock => {
+            if let Some(s) = app.active_tab().filter(|s| matches!(app.doc.data.view(*s).map(|v| &v.kind), Some(ViewKind::Sheet(_)))) {
+                if cmd == GuideGrid {
+                    app.dialogs.guide_grid = Some(s);
+                } else {
+                    app.dialogs.title_block = Some(s);
+                }
+            }
+        }
         ScopeBox => app.set_tool(ToolKind::ScopeBox),
         JoinGeometry => app.set_tool(ToolKind::JoinGeometry),
         UnjoinGeometry => app.set_tool(ToolKind::UnjoinGeometry),
@@ -787,7 +822,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | ElementKeynote | MaterialKeynote | UserKeynote
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )

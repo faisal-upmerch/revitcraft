@@ -109,6 +109,9 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
         ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => "Click to place the group origin.".into(),
+        ToolKind::Matchline => if n == 0 { "Click the start of the matchline.".into() } else { "Click the end of the matchline.".into() },
+        ToolKind::ViewReference => "Click to place the view reference.".into(),
+        ToolKind::Paint | ToolKind::RemovePaint => "Paint faces in a 3D view.".into(),
         ToolKind::Room => "Click to place room".into(),
         ToolKind::CeilingAuto => "Click inside a room bounded by walls to place a ceiling, or choose Sketch Ceiling.".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
@@ -180,6 +183,41 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::Door | ToolKind::Window => hosted_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::Matchline => {
+            let Some(pt) = point else { return };
+            if let Some(a) = app.tool.pts.first().copied() {
+                painter.extend(egui::Shape::dashed_line(&[xf.s(a), xf.s(pt)], Stroke::new(2.0, Color32::from_rgb(80, 0, 120)), 14.0, 5.0));
+            }
+            if clicked {
+                match app.tool.pts.first().copied() {
+                    None => app.tool.pts.push(pt),
+                    Some(a) => {
+                        app.tool.reset();
+                        if let Some(id) = app.run("Matchline", |p| edit::add_matchline(p, a, pt)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                }
+            }
+        }
+        ToolKind::ViewReference => {
+            let Some(pt) = point else { return };
+            let target = app.opts.view_ref_target;
+            let label = rc_core::plan::view_reference_label(&app.doc.data, target);
+            style::canvas_tooltip(painter, xf.s(pt) + vec2(10.0, 10.0), &label);
+            if clicked && app.doc.data.view(target).is_some() {
+                let vid = view.id;
+                if let Some(id) = app.run("View Reference", |p| {
+                    let id = edit::add_symbol(p, vid, SymbolKind::ViewReference, pt);
+                    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        s.value = target.to_string();
+                    }
+                    Ok(id)
+                }) {
+                    app.select(vec![id]);
+                }
+            }
+        }
         ToolKind::PlaceDetailGroup => {
             let Some(pt) = point else { return };
             let ty = app.opts.group_type;

@@ -91,6 +91,10 @@ pub enum ToolKind {
     ShowHiddenLines,
     RemoveHiddenLines,
     PlaceDetailGroup,
+    Matchline,
+    ViewReference,
+    Paint,
+    RemovePaint,
 }
 
 impl ToolKind {
@@ -170,6 +174,10 @@ impl ToolKind {
             ToolKind::ShowHiddenLines => "Show Hidden Lines",
             ToolKind::RemoveHiddenLines => "Remove Hidden Lines",
             ToolKind::PlaceDetailGroup => "Detail Group",
+            ToolKind::Matchline => "Matchline",
+            ToolKind::ViewReference => "View Reference",
+            ToolKind::Paint => "Paint",
+            ToolKind::RemovePaint => "Remove Paint",
         }
     }
 
@@ -214,6 +222,7 @@ impl ToolKind {
                 | ToolKind::TopoPoints
                 | ToolKind::ColorLegend
                 | ToolKind::ScopeBox
+                | ToolKind::Matchline
                 | ToolKind::Room
                 | ToolKind::Area
                 | ToolKind::RoomTag
@@ -576,6 +585,10 @@ pub struct ToolOptions {
     /// Tag tool variant: 0 by category, 1 multi-category, 2 material.
     pub tag_mode: u8,
     pub insulation_width: f64,
+    /// View Reference: the target view.
+    pub view_ref_target: Id,
+    /// Paint: the material.
+    pub paint_material: String,
     /// Join Geometry: join more elements to the first pick.
     pub join_multiple: bool,
     /// Index into `DETAIL_COMPONENTS`.
@@ -666,6 +679,8 @@ impl ToolOptions {
             tag_horizontal: true,
             tag_mode: 0,
             insulation_width: if imperial { 76.2 } else { 75.0 },
+            view_ref_target: 0,
+            paint_material: p.materials.iter().find(|m| m.class == "Paint").or(p.materials.first()).map(|m| m.name.clone()).unwrap_or_default(),
             join_multiple: false,
             detail_component: 0,
             dim_prefer: WallRefPref::Centers,

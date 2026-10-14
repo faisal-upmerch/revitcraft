@@ -13,6 +13,25 @@ pub use crate::family_geom::{InstanceFrame, instance_frame};
 
 /// Builds geometry for one element. `footprints` comes from [`analysis::wall_footprints`].
 pub fn element_mesh(p: &Project, e: &Element, footprints: &HashMap<Id, Footprint>) -> MeshSet {
+    let set = element_mesh_unpainted(p, e, footprints);
+    if e.painted.is_empty() { set } else { apply_paint(set, &e.painted) }
+}
+
+/// Moves the triangles of painted faces into the painted material.
+fn apply_paint(set: MeshSet, painted: &[PaintedFace]) -> MeshSet {
+    let mut out = MeshSet::default();
+    for (mat, m) in set.by_material {
+        for tri in m.indices.chunks(3) {
+            let (a, b, c) = (m.positions[tri[0] as usize], m.positions[tri[1] as usize], m.positions[tri[2] as usize]);
+            let n = (b - a).cross(c - a).normalize_or_zero();
+            let target = painted.iter().find(|f| crate::edit::same_face(f, n, n.dot(a))).map(|f| f.material.as_str()).unwrap_or(mat.as_str());
+            out.mesh(target).add_triangle(a, b, c);
+        }
+    }
+    out
+}
+
+fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Footprint>) -> MeshSet {
     if e.view.is_some() {
         return MeshSet::default();
     }

@@ -20,6 +20,96 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     global_new(app, ctx);
     keynote_pick(app, ctx);
     keynoting(app, ctx);
+    guide_grid(app, ctx);
+    title_block(app, ctx);
+}
+
+// ---------------------------------------------------------------- sheets
+
+fn guide_grid(app: &mut App, ctx: &egui::Context) {
+    let Some(sheet) = app.dialogs.guide_grid else { return };
+    let Some(ViewKind::Sheet(sh)) = app.doc.data.view(sheet).map(|v| v.kind.clone()) else {
+        app.dialogs.guide_grid = None;
+        return;
+    };
+    let mut open = true;
+    let mut done = false;
+    let key = egui::Id::new("guide-grid-spacing");
+    window("Assign Guide Grid").open(&mut open).resizable(false).show(ctx, |ui| {
+        let mut show = sh.guide_grid.is_some();
+        let mut spacing: f64 = ui.memory(|m| m.data.get_temp(key)).unwrap_or(sh.guide_grid.unwrap_or(25.0));
+        ui.checkbox(&mut show, "Show guide grid on this sheet");
+        ui.horizontal(|ui| {
+            ui.label("Guide Spacing:");
+            ui.add_enabled(show, egui::DragValue::new(&mut spacing).range(5.0..=200.0).speed(1.0).suffix(" mm"));
+        });
+        ui.memory_mut(|m| m.data.insert_temp(key, spacing));
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                done = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                let g = show.then_some(spacing);
+                app.run("Guide Grid", |p| {
+                    if let Some(ViewKind::Sheet(s)) = p.view_mut(sheet).map(|v| &mut v.kind) {
+                        s.guide_grid = g;
+                    }
+                    Ok(())
+                });
+                done = true;
+            }
+        });
+    });
+    if done || !open {
+        app.dialogs.guide_grid = None;
+    }
+}
+
+fn title_block(app: &mut App, ctx: &egui::Context) {
+    let Some(sheet) = app.dialogs.title_block else { return };
+    let Some(ViewKind::Sheet(sh)) = app.doc.data.view(sheet).map(|v| v.kind.clone()) else {
+        app.dialogs.title_block = None;
+        return;
+    };
+    let mut open = true;
+    let mut done = false;
+    let key = egui::Id::new("title-block-size");
+    window("Select Title Block").open(&mut open).resizable(false).show(ctx, |ui| {
+        let mut size: SheetSize = ui.memory(|m| m.data.get_temp(key)).unwrap_or(sh.size);
+        ui.label("Select a title block:");
+        list_box(ui, "tb-list", vec2(300.0, 220.0), |ui| {
+            for s in SheetSize::ALL {
+                let (w, h) = s.paper();
+                if list_row(ui, 292.0, size == s, format!("{}  ({w:.0} x {h:.0} mm)", s.label())).clicked() {
+                    size = s;
+                }
+            }
+        });
+        ui.memory_mut(|m| m.data.insert_temp(key, size));
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                done = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                app.run("Title Block", |p| {
+                    if let Some(ViewKind::Sheet(s)) = p.view_mut(sheet).map(|v| &mut v.kind) {
+                        s.size = size;
+                    }
+                    Ok(())
+                });
+                app.cams.remove(&sheet);
+                done = true;
+            }
+        });
+    });
+    if done || !open {
+        app.dialogs.title_block = None;
+        ctx.memory_mut(|m| m.data.remove::<SheetSize>(key));
+    }
 }
 
 // ---------------------------------------------------------------- keynotes

@@ -93,11 +93,52 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     }
     let _ = Prim::Text { pos: DVec2::ZERO, text: String::new(), size: 0.0, color: [0; 3], anchor: rc_core::plan::Anchor::Center, angle: 0.0 };
 
-    if app.active != Some(view_id) {
+    if app.active_tab() != Some(view_id) {
         return;
     }
-    // Viewport selection and moves.
     let boxes = layout.1.clone();
+    // Guide grid: light lines over the paper, not printed.
+    if let Some(g) = sh.guide_grid.filter(|g| *g >= 5.0) {
+        let gc = Color32::from_rgba_unmultiplied(70, 140, 230, 110);
+        let mut x = g;
+        while x < pw {
+            painter.line_segment([xf.s(DVec2::new(x, 0.0)), xf.s(DVec2::new(x, ph))], Stroke::new(1.0, gc));
+            x += g;
+        }
+        let mut y = g;
+        while y < ph {
+            painter.line_segment([xf.s(DVec2::new(0.0, y)), xf.s(DVec2::new(pw, y))], Stroke::new(1.0, gc));
+            y += g;
+        }
+    }
+    // A viewport activated in place: the sheet greys out and the view is edited through it.
+    if let Some((s, v)) = app.sheet_activation {
+        if s == view_id {
+            if let Some(b) = boxes.iter().find(|b| b.view == v).cloned() {
+                painter.rect_filled(paper, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 150));
+                let vr = Rect::from_two_pos(xf.s(b.min), xf.s(b.max)).intersect(rect);
+                let scale = app.doc.data.view(v).map(|x| x.scale).unwrap_or(100.0);
+                let d = app.drawing(v);
+                let wc = d.bounds().map(|(a, c)| (a + c) / 2.0).unwrap_or(DVec2::ZERO);
+                let mid = xf.w(vr.center());
+                let c = (b.min + b.max) / 2.0;
+                app.cams.insert(v, Cam2 { center: wc + (mid - c) * scale, zoom: xf.zoom / scale, fitted: true });
+                let mut child = ui.new_child(egui::UiBuilder::new().max_rect(vr).layout(egui::Layout::top_down(egui::Align::Min)));
+                canvas::show(app, &mut child, v);
+                painter.rect_stroke(Rect::from_two_pos(xf.s(b.min), xf.s(b.max)), 0.0, Stroke::new(2.0, style::ACCENT), egui::StrokeKind::Outside);
+                let outside = resp.hover_pos().is_some_and(|h| !vr.contains(h));
+                if resp.double_clicked() && outside {
+                    app.deactivate_viewport();
+                }
+                if app.sheet_activation.is_some() {
+                    app.interact.prompt = format!("{}   (double-click outside the viewport to deactivate the view)", app.interact.prompt);
+                }
+                return;
+            }
+            app.sheet_activation = None;
+        }
+    }
+    // Viewport selection and moves.
     let cursor = resp.hover_pos().map(|s| xf.w(s));
     let hover = cursor.and_then(|c| boxes.iter().find(|b| c.x >= b.min.x && c.x <= b.max.x && c.y >= b.min.y && c.y <= b.max.y)).map(|b| b.view);
     let sel_vp: Option<Id> = app.selection.iter().copied().find(|id| sh.viewports.iter().any(|vp| vp.view == *id));
@@ -110,7 +151,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         }
     }
     app.interact.prompt = match hover {
-        Some(v) => format!("Viewport: {}  â€” drag to move, double-click to open the view, Delete removes it from the sheet.", app.doc.data.view(v).map(|v| v.name.clone()).unwrap_or_default()),
+        Some(v) => format!("Viewport: {} - drag to move, double-click to activate the view, Delete removes it from the sheet.", app.doc.data.view(v).map(|v| v.name.clone()).unwrap_or_default()),
         None => "Drag views from the Project Browser onto the sheet to place them.".into(),
     };
     let drag_id = egui::Id::new(("vp-drag", view_id));
@@ -123,7 +164,30 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let dragging: Option<Id> = ui.memory(|m| m.data.get_temp(drag_id));
     if let Some(vid) = dragging {
         let total = ui.input(|i| i.pointer.total_drag_delta()).unwrap_or_default();
-        let d = DVec2::new(total.x as f64, -total.y as f64) / xf.zoom;
+        let mut d = DVec2::new(total.x as f64, -total.y as f64) / xf.zoom;
+        // Viewport edges and centre snap to the guide grid.
+        if let (Some(g), Some(b)) = (sh.guide_grid.filter(|g| *g >= 5.0), boxes.iter().find(|b| b.view == vid)) {
+            let tol = 8.0 / xf.zoom;
+            for axis in 0..2 {
+                let get = |q: DVec2| if axis == 0 { q.x } else { q.y };
+                let cands = [get(b.min), get((b.min + b.max) / 2.0), get(b.max)];
+                let shift = cands
+                    .iter()
+                    .map(|v| {
+                        let moved = v + get(d);
+                        (moved / g).round() * g - moved
+                    })
+                    .min_by(|a, c| a.abs().total_cmp(&c.abs()))
+                    .unwrap_or(0.0);
+                if shift.abs() < tol {
+                    if axis == 0 {
+                        d.x += shift;
+                    } else {
+                        d.y += shift;
+                    }
+                }
+            }
+        }
         if let Some(b) = boxes.iter().find(|b| b.view == vid) {
             let r = Rect::from_two_pos(xf.s(b.min + d), xf.s(b.max + d));
             painter.rect_stroke(r, 0.0, Stroke::new(1.5, style::PREVIEW), egui::StrokeKind::Middle);
@@ -148,7 +212,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     }
     if resp.double_clicked() {
         if let Some(v) = hover {
-            app.open_view(v);
+            // Schedules and 3D views open; plans, sections and details activate in place.
+            let in_place = app.doc.data.view(v).is_some_and(|x| x.is_graphical() && !matches!(x.kind, ViewKind::ThreeD { .. }));
+            if in_place {
+                app.activate_viewport(view_id, v);
+            } else {
+                app.open_view(v);
+            }
         }
     }
     // Drops from the browser.

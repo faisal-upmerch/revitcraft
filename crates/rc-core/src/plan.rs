@@ -603,6 +603,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         }
         match &e.kind {
             ElementKind::Grid(g) => grid_graphics(e.id, g, c.scale, d),
+            ElementKind::Matchline(m) => d.line(Some(e.id), vec![m.start, m.end], false, Stroke::new(0.5, [80, 0, 120], Dash::DashDot)),
             ElementKind::ScopeBox(s) => {
                 // Thin dash-dot rectangle with its name at the top-left corner.
                 let pts = vec![s.min, DVec2::new(s.max.x, s.min.y), s.max, DVec2::new(s.min.x, s.max.y)];
@@ -1078,10 +1079,13 @@ fn ceiling_plan_graphics(c: &Ctx, d: &mut Drawing) {
         style_element(c, e, d, start);
     }
     for e in &p.elements {
-        if let ElementKind::Grid(g) = &e.kind {
-            if analysis::visible_in(p, c.view, e) {
-                grid_graphics(e.id, g, c.scale, d);
-            }
+        if !analysis::visible_in(p, c.view, e) {
+            continue;
+        }
+        match &e.kind {
+            ElementKind::Grid(g) => grid_graphics(e.id, g, c.scale, d),
+            ElementKind::Matchline(m) => d.line(Some(e.id), vec![m.start, m.end], false, Stroke::new(0.5, [80, 0, 120], Dash::DashDot)),
+            _ => {}
         }
     }
 }
@@ -1284,6 +1288,16 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     insulation_graphics(e.id, s.points[0], s.points[1], s.size, d);
                 }
                 SymbolKind::Insulation => {}
+                SymbolKind::ViewReference => {
+                    // "detail / sheet" of the target view, or its name when it is not on a sheet.
+                    let target = s.value.parse::<Id>().ok();
+                    let label = target.map(|t| view_reference_label(p, t)).unwrap_or_else(|| "-".into());
+                    let h = 2.5 * scale;
+                    let w = label.chars().count().max(3) as f64 * h * 0.62 + h;
+                    let c = s.position;
+                    d.line(Some(e.id), vec![c + DVec2::new(-w / 2.0, -h * 0.8), c + DVec2::new(w / 2.0, -h * 0.8), c + DVec2::new(w / 2.0 + h * 0.6, 0.0), c + DVec2::new(w / 2.0, h * 0.8), c + DVec2::new(-w / 2.0, h * 0.8), c + DVec2::new(-w / 2.0 - h * 0.6, 0.0)], true, ANNO);
+                    d.text(Some(e.id), c, label, 2.2, Anchor::Center);
+                }
                 SymbolKind::DetailComponent => {
                     for (pts, closed) in detail_component_lines(&s.value) {
                         let a = s.rotation_deg.to_radians();
@@ -1322,6 +1336,19 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
             _ => {}
         }
     }
+}
+
+/// What a view reference shows: the detail number and sheet of the target view.
+pub fn view_reference_label(p: &Project, target: Id) -> String {
+    for v in &p.views {
+        if let ViewKind::Sheet(sh) = &v.kind {
+            if let Some(vp) = sh.viewports.iter().find(|vp| vp.view == target) {
+                let detail = if vp.detail_number.is_empty() { "1".to_string() } else { vp.detail_number.clone() };
+                return format!("{detail} / {}", sh.number);
+            }
+        }
+    }
+    p.view(target).map(|v| v.name.clone()).unwrap_or_else(|| "-".into())
 }
 
 /// Batt insulation: a looping curve (prolate cycloid) between the two faces of the batt,
@@ -1551,6 +1578,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             }
             vec![v]
         }
+        ElementKind::Matchline(m) => vec![vec![m.start, m.end]],
         ElementKind::ScopeBox(s) => vec![vec![s.min, DVec2::new(s.max.x, s.min.y), s.max, DVec2::new(s.min.x, s.max.y), s.min]],
         ElementKind::ColorLegend(c) => vec![vec![c.position, c.position + DVec2::new(4000.0, 0.0), c.position + DVec2::new(4000.0, -3000.0), c.position + DVec2::new(0.0, -3000.0)]],
         ElementKind::Roof(r) => {

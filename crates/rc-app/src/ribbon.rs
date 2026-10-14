@@ -221,7 +221,18 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Scope\nBox", C::ScopeBox, vec![]),
             ],
         ),
-        panel("Sheet Composition", vec![Labeled("Sheet", C::NewSheet, vec![]), Labeled("View", C::PlaceView, vec![]), Big(C::Revisions)]),
+        panel(
+            "Sheet Composition",
+            vec![
+                Labeled("Sheet", C::NewSheet, vec![]),
+                Labeled("View", C::PlaceView, vec![]),
+                Labeled("Title\nBlock", C::TitleBlock, vec![]),
+                Big(C::Revisions),
+                Labeled("Guide\nGrid", C::GuideGrid, vec![]),
+                Stack(vec![C::Matchline, C::ViewReference]),
+                Labeled("Viewports", C::ActivateView, vec![C::ActivateView, C::DeactivateView]),
+            ],
+        ),
         panel(
             "Windows",
             vec![
@@ -267,7 +278,7 @@ fn modify_panels() -> Vec<Panel> {
         panel("Select", vec![Big(C::Modify)]),
         panel("Properties", vec![Big(C::TypeProperties), Big(C::ToggleProperties)]),
         panel("Clipboard", vec![Split(C::Paste, vec![C::Paste, C::PasteSameLevel]), Stack(vec![C::Cut, C::CopyClip, C::MatchType])]),
-        panel("Geometry", vec![Labeled("Join", C::JoinGeometry, vec![C::JoinGeometry, C::UnjoinGeometry]), Stack(vec![C::Demolish, C::WallJoinToggle])]),
+        panel("Geometry", vec![Labeled("Join", C::JoinGeometry, vec![C::JoinGeometry, C::UnjoinGeometry]), Stack(vec![C::Demolish, C::WallJoinToggle]), Labeled("Paint", C::Paint, vec![C::Paint, C::RemovePaint])]),
         panel(
             "Modify",
             vec![Icons(vec![

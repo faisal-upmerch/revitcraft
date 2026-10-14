@@ -298,7 +298,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 ui.ctx().request_repaint();
             }
             app.interact.prompt = hit_id.map(|id| crate::canvas::describe(app, id)).unwrap_or_else(|| "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into());
-            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() {
+            // Paint: click faces to paint them (or remove their paint).
+            let painting = matches!(app.tool.kind, crate::tools::ToolKind::Paint | crate::tools::ToolKind::RemovePaint);
+            if painting {
+                let face = app.scenes.get(&view_id).and_then(|s| render3d::pick_face(s, o, d, view.section_box));
+                let remove = app.tool.kind == crate::tools::ToolKind::RemovePaint;
+                app.interact.prompt = if remove { "Click a painted face to remove its paint. Esc to finish.".into() } else { format!("Click a face to paint it with {}. Esc to finish.", app.opts.paint_material) };
+                if resp.clicked_by(egui::PointerButton::Primary) {
+                    if let Some((id, q, n)) = face {
+                        let mat = app.opts.paint_material.clone();
+                        app.run(if remove { "Remove Paint" } else { "Paint" }, |p| if remove { rc_core::edit::remove_paint(p, id, n, q) } else { rc_core::edit::paint_face(p, id, n, q, &mat) });
+                    }
+                }
+            }
+            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting {
                 match hit_id {
                     Some(id) if ctrl => {
                         let mut s = app.selection.clone();

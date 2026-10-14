@@ -106,6 +106,9 @@ pub struct Dialogs {
     /// Keynotes dialog for a keynote tag.
     pub keynote_pick: Option<Id>,
     pub keynoting: bool,
+    /// Sheet whose guide grid / title block is being edited.
+    pub guide_grid: Option<Id>,
+    pub title_block: Option<Id>,
     pub global_new: Option<GlobalParameter>,
     pub about: bool,
     pub save_reminder: bool,

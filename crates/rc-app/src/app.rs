@@ -143,6 +143,8 @@ pub struct App {
     pub renderer: Option<Renderer>,
     pub dock: Option<DockState<Id>>,
     pub active: Option<Id>,
+    /// A view activated in its viewport on a sheet: (sheet, view). `active` is the view.
+    pub sheet_activation: Option<(Id, Id)>,
     pub selection: Vec<Id>,
     pub prev_selection: Vec<Id>,
     pub tool: Tool,
@@ -200,6 +202,7 @@ impl App {
             renderer,
             dock: Some(DockState::new(vec![])),
             active: None,
+            sheet_activation: None,
             selection: Vec::new(),
             prev_selection: Vec::new(),
             tool: Tool::select(),
@@ -549,11 +552,38 @@ impl App {
         self.activate(id);
     }
 
+    /// The tab that holds the active view (the sheet while a viewport is activated).
+    pub fn active_tab(&self) -> Option<Id> {
+        match self.sheet_activation {
+            Some((sheet, view)) if self.active == Some(view) => Some(sheet),
+            _ => self.active,
+        }
+    }
+
+    /// Activates a view inside its viewport on a sheet (Viewports > Activate View).
+    pub fn activate_viewport(&mut self, sheet: Id, view: Id) {
+        self.tool = Tool::select();
+        self.interact = Interact::default();
+        self.selection.clear();
+        self.sheet_activation = Some((sheet, view));
+        self.active = Some(view);
+    }
+
+    pub fn deactivate_viewport(&mut self) {
+        if let Some((sheet, _)) = self.sheet_activation.take() {
+            self.tool = Tool::select();
+            self.interact = Interact::default();
+            self.selection.clear();
+            self.active = Some(sheet);
+        }
+    }
+
     /// Makes `id` the active view (tools that need another view type are cancelled).
     pub fn activate(&mut self, id: Id) {
         if self.active == Some(id) {
             return;
         }
+        self.sheet_activation = None;
         self.active = Some(id);
         if !self.tool.is_select() && self.sketch.is_none() {
             let ok = self.active_view().is_some_and(|v| !self.tool.kind.needs_plan() || v.plan_level().is_some());
@@ -626,7 +656,8 @@ impl App {
             self.error(format!("{}: select elements first, then start the tool.", kind.name()));
             return;
         }
-        if self.active_view().is_some_and(|v| !v.is_graphical() || matches!(v.kind, ViewKind::ThreeD { .. })) && kind != ToolKind::Select {
+        let three_d_tool = matches!(kind, ToolKind::Paint | ToolKind::RemovePaint);
+        if self.active_view().is_some_and(|v| !v.is_graphical() || (matches!(v.kind, ViewKind::ThreeD { .. }) && !three_d_tool)) && kind != ToolKind::Select {
             self.error(format!("{} cannot be used in this view. Open a plan, section or elevation.", kind.name()));
             return;
         }
@@ -1125,11 +1156,11 @@ impl App {
         }
         if let Some((_, tab)) = dock.find_active_focused() {
             let t = *tab;
-            if self.active != Some(t) {
+            if self.active_tab() != Some(t) {
                 self.activate(t);
             }
         }
-        if self.active.is_some_and(|a| dock.find_tab(&a).is_none()) {
+        if self.active_tab().is_some_and(|a| dock.find_tab(&a).is_none()) {
             self.active = dock.iter_all_tabs().map(|(_, t)| *t).last();
         }
         self.dock = Some(dock);
@@ -1191,7 +1222,7 @@ impl TabViewer for Viewer<'_> {
         let app = &mut *self.app;
         let Some(kind) = app.doc.data.view(id).map(|v| v.kind.clone()) else { return };
         // Clicking anywhere in a tab makes it the active view.
-        if ui.rect_contains_pointer(ui.max_rect()) && ui.input(|i| i.pointer.any_pressed()) && app.active != Some(id) {
+        if ui.rect_contains_pointer(ui.max_rect()) && ui.input(|i| i.pointer.any_pressed()) && app.active_tab() != Some(id) {
             self.focused = Some(id);
             app.activate(id);
         }

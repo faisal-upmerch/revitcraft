@@ -232,6 +232,12 @@ pub enum Icon {
     GlobalParams,
     DetailGroup,
     Keynote,
+    ActivateView,
+    GuideGrid,
+    TitleBlock,
+    Matchline,
+    ViewReference,
+    Paint,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1457,6 +1463,39 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.28, 0.1, 0.72, 0.9, LBROWN, ink);
             g.line(&[(0.28, 0.1), (0.72, 0.9)], ink);
             g.line(&[(0.72, 0.1), (0.28, 0.9)], ink);
+        }
+        Matchline => {
+            g.rect(0.08, 0.12, 0.92, 0.88, Color32::WHITE, GREY);
+            g.dashdot((0.5, 0.06), (0.5, 0.94), PURPLE);
+            g.line_w(&[(0.5, 0.06), (0.5, 0.94)], Color32::TRANSPARENT, g.w);
+        }
+        ViewReference => {
+            g.poly(&[(0.1, 0.36), (0.78, 0.36), (0.92, 0.5), (0.78, 0.64), (0.1, 0.64)], Color32::WHITE, ink);
+            g.text((0.46, 0.5), "1/A", 0.22, BLUE);
+        }
+        Paint => {
+            g.rect(0.22, 0.1, 0.78, 0.36, ORANGE, ink);
+            g.line_w(&[(0.5, 0.36), (0.5, 0.5)], ink, g.w * 1.6);
+            g.line_w(&[(0.5, 0.5), (0.5, 0.9)], BROWN, g.w * 2.6);
+        }
+        ActivateView => {
+            g.rect(0.08, 0.12, 0.92, 0.88, Color32::WHITE, ink);
+            g.rect(0.2, 0.24, 0.62, 0.62, LBLUE, BLUE);
+            g.poly(&[(0.5, 0.48), (0.5, 0.86), (0.6, 0.76), (0.68, 0.92), (0.74, 0.89), (0.66, 0.73), (0.79, 0.73)], Color32::WHITE, ink);
+        }
+        GuideGrid => {
+            g.rect(0.08, 0.12, 0.92, 0.88, Color32::WHITE, ink);
+            for t in [0.3, 0.5, 0.7] {
+                g.dashed((t, 0.12), (t, 0.88), BLUE);
+                g.dashed((0.08, t), (0.92, t), BLUE);
+            }
+        }
+        TitleBlock => {
+            g.rect(0.08, 0.12, 0.92, 0.88, Color32::WHITE, ink);
+            g.rect(0.62, 0.12, 0.92, 0.88, LGREY, ink);
+            for y in [0.3, 0.48, 0.66] {
+                g.line(&[(0.62, y), (0.92, y)], ink);
+            }
         }
         Keynote => {
             g.line(&[(0.1, 0.9), (0.42, 0.56)], ink);

@@ -455,6 +455,50 @@ pub fn add_scope_box(p: &mut Project, a: DVec2, b: DVec2) -> Result<Id, String> 
     Ok(push(p, ElementKind::ScopeBox(ScopeBox { name, min: a.min(b), max: a.max(b), height })))
 }
 
+/// A matchline between two points (shown in every plan).
+pub fn add_matchline(p: &mut Project, a: DVec2, b: DVec2) -> Result<Id, String> {
+    if a.distance(b) < 1.0 {
+        return Err("The matchline is too short.".into());
+    }
+    Ok(push(p, ElementKind::Matchline(Matchline { start: a, end: b })))
+}
+
+/// Paints the face of an element lying on the plane (normal, point) with a material.
+pub fn paint_face(p: &mut Project, id: Id, normal: DVec3, point: DVec3, material: &str) -> Result<(), String> {
+    if p.material(material).is_none() {
+        return Err("Pick a material to paint with.".into());
+    }
+    let n = normal.normalize_or_zero();
+    if n == DVec3::ZERO {
+        return Err("No face here.".into());
+    }
+    let offset = n.dot(point);
+    let e = p.element_mut(id).ok_or("Element not found.")?;
+    e.painted.retain(|f| !same_face(f, n, offset));
+    e.painted.push(PaintedFace { normal: n.to_array(), offset, material: material.to_string() });
+    Ok(())
+}
+
+/// Removes the paint from a face.
+pub fn remove_paint(p: &mut Project, id: Id, normal: DVec3, point: DVec3) -> Result<(), String> {
+    let n = normal.normalize_or_zero();
+    let offset = n.dot(point);
+    let e = p.element_mut(id).ok_or("Element not found.")?;
+    let before = e.painted.len();
+    e.painted.retain(|f| !same_face(f, n, offset));
+    if e.painted.len() == before {
+        return Err("This face is not painted.".into());
+    }
+    Ok(())
+}
+
+/// Does a painted face lie on the plane with this normal (either direction) and offset?
+pub fn same_face(f: &PaintedFace, n: DVec3, offset: f64) -> bool {
+    let fnm = DVec3::from_array(f.normal);
+    let dot = fnm.dot(n);
+    (dot > 0.999 && (f.offset - offset).abs() < 1.0) || (dot < -0.999 && (f.offset + offset).abs() < 1.0)
+}
+
 /// Joins the geometry of two model elements (Modify > Join Geometry).
 pub fn join_geometry(p: &mut Project, a: Id, b: Id) -> Result<(), String> {
     if a == b {
@@ -866,6 +910,10 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
         }
         ElementKind::PropertyLine(l) => poly(&mut l.boundary),
         ElementKind::ColorLegend(c) => c.position = f(c.position),
+        ElementKind::Matchline(m) => {
+            m.start = f(m.start);
+            m.end = f(m.end);
+        }
         ElementKind::ScopeBox(s) => {
             let (a, b) = (f(s.min), f(s.max));
             let (c, d) = (f(DVec2::new(s.min.x, s.max.y)), f(DVec2::new(s.max.x, s.min.y)));
@@ -2301,6 +2349,42 @@ mod tests {
         })
         .unwrap();
         assert!((doc.data.wall(b).unwrap().start.x - 3500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn paint_matchline_and_view_reference() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        let before = build3d::element_mesh(&p, p.element(w).unwrap(), &fp);
+        // Paint the face on the y = -half plane (outward normal -Y) with brick.
+        let half = p.sys_type(wt).unwrap().thickness() / 2.0;
+        let mat = p.materials.iter().find(|m| !before.by_material.contains_key(&m.name)).unwrap().name.clone();
+        paint_face(&mut p, w, DVec3::new(0.0, -1.0, 0.0), DVec3::new(1000.0, -half, 1000.0), &mat).unwrap();
+        let after = build3d::element_mesh(&p, p.element(w).unwrap(), &fp);
+        let painted = after.by_material.get(&mat).map(|m| m.triangle_count()).unwrap_or(0);
+        assert!(painted >= 2, "painted triangles: {painted}");
+        let total = |s: &crate::mesh::MeshSet| s.by_material.values().map(|m| m.triangle_count()).sum::<usize>();
+        assert_eq!(total(&before), total(&after));
+        // Painting the same face again replaces it; remove clears it.
+        paint_face(&mut p, w, DVec3::new(0.0, 1.0, 0.0), DVec3::new(500.0, -half, 200.0), &mat).unwrap();
+        assert_eq!(p.element(w).unwrap().painted.len(), 1);
+        remove_paint(&mut p, w, DVec3::new(0.0, -1.0, 0.0), DVec3::new(0.0, -half, 0.0)).unwrap();
+        assert!(p.element(w).unwrap().painted.is_empty());
+        assert!(paint_face(&mut p, w, DVec3::Y, DVec3::ZERO, "No Such Material").is_err());
+
+        // Matchlines show in every plan; view references read detail / sheet.
+        let ml = add_matchline(&mut p, DVec2::new(2000.0, -3000.0), DVec2::new(2000.0, 3000.0)).unwrap();
+        for v in p.views.iter().filter(|v| v.plan_level().is_some()) {
+            let d = crate::plan::floor_plan(&p, v, &fp);
+            assert!(d.prims.iter().any(|(id, _)| *id == Some(ml)), "{} {:?} hidden={:?}", v.name, v.kind, v.hidden);
+        }
+        let plan = p.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        assert_eq!(crate::plan::view_reference_label(&p, plan), p.view(plan).unwrap().name);
+        let sheet = new_sheet(&mut p, SheetSize::A1);
+        place_on_sheet(&mut p, sheet, plan, 200.0, 200.0).unwrap();
+        let ViewKind::Sheet(sh) = &p.view(sheet).unwrap().kind else { panic!() };
+        assert!(crate::plan::view_reference_label(&p, plan).ends_with(&sh.number));
     }
 
     #[test]

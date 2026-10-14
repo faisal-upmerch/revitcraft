@@ -798,7 +798,12 @@ fn feature_edges(mesh: &rc_core::mesh::Mesh) -> Vec<(DVec3, DVec3)> {
 
 /// Ray cast against element meshes; returns the nearest hit inside the section box.
 pub fn pick(scene: &Scene, origin: DVec3, dir: DVec3, clip: Option<(DVec3, DVec3)>) -> Option<(Id, DVec3)> {
-    let mut best: Option<(f64, Id)> = None;
+    pick_face(scene, origin, dir, clip).map(|(id, q, _)| (id, q))
+}
+
+/// Like `pick`, also returning the normal of the face that was hit.
+pub fn pick_face(scene: &Scene, origin: DVec3, dir: DVec3, clip: Option<(DVec3, DVec3)>) -> Option<(Id, DVec3, DVec3)> {
+    let mut best: Option<(f64, Id, DVec3)> = None;
     let inside = |q: DVec3| clip.is_none_or(|(mn, mx)| q.cmpge(mn).all() && q.cmple(mx).all());
     for (id, set) in &scene.meshes {
         if let Some((mn, mx)) = set.bounds() {
@@ -810,14 +815,14 @@ pub fn pick(scene: &Scene, origin: DVec3, dir: DVec3, clip: Option<(DVec3, DVec3
             for tri in mesh.indices.chunks(3) {
                 let (a, b, c) = (mesh.positions[tri[0] as usize], mesh.positions[tri[1] as usize], mesh.positions[tri[2] as usize]);
                 if let Some(t) = ray_triangle(origin, dir, a, b, c) {
-                    if best.is_none_or(|(bt, _)| t < bt) && inside(origin + dir * t) {
-                        best = Some((t, *id));
+                    if best.is_none_or(|(bt, _, _)| t < bt) && inside(origin + dir * t) {
+                        best = Some((t, *id, (b - a).cross(c - a).normalize_or_zero()));
                     }
                 }
             }
         }
     }
-    best.map(|b| (b.1, origin + dir * b.0))
+    best.map(|b| (b.1, origin + dir * b.0, b.2))
 }
 
 fn ray_box(o: DVec3, d: DVec3, mn: DVec3, mx: DVec3) -> bool {
