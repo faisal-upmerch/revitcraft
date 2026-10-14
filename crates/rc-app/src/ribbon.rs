@@ -129,39 +129,63 @@ fn annotate() -> Vec<Panel> {
         panel("Select", vec![Big(C::Modify)]),
         panel(
             "Dimension",
-            vec![Big(C::DimAligned), Big(C::DimLinear), Big(C::DimAngular), Big(C::DimRadial), Big(C::DimDiameter), Big(C::DimArcLength), Big(C::SpotElevation)],
+            vec![
+                Big(C::DimAligned),
+                Big(C::DimLinear),
+                Big(C::DimAngular),
+                Big(C::DimRadial),
+                Big(C::DimDiameter),
+                Labeled("Arc\nLength", C::DimArcLength, vec![]),
+                Labeled("Spot\nElevation", C::SpotElevation, vec![]),
+            ],
         ),
-        panel("Detail", vec![Big(C::DetailLine), Split(C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]), Big(C::RevisionCloud)]),
+        panel(
+            "Detail",
+            vec![Labeled("Detail\nLine", C::DetailLine, vec![]), Labeled("Region", C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]), Labeled("Revision\nCloud", C::RevisionCloud, vec![])],
+        ),
         panel("Text", vec![Big(C::Text)]),
-        panel("Tag", vec![Big(C::TagByCategory), Big(C::TagAll), Stack(vec![C::RoomTag, C::AreaTag])]),
+        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::RoomTag, C::AreaTag])]),
         panel("Symbol", vec![Big(C::Symbol)]),
     ]
 }
 
-fn view_tab(app: &App) -> Vec<Panel> {
+fn view_tab(_app: &App) -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
-        panel("Graphics", vec![Split(C::ViewTemplates, vec![C::ViewTemplates, C::TemplateFromView]), Big(C::VisibilityGraphics), Toggle(C::ThinLines, app.thin_lines)]),
+        panel(
+            "Graphics",
+            vec![
+                Labeled("View\nTemplates", C::ViewTemplates, vec![C::ViewTemplates, C::TemplateFromView]),
+                Labeled("Visibility/\nGraphics", C::VisibilityGraphics, vec![]),
+                Labeled("Thin\nLines", C::ThinLines, vec![]),
+            ],
+        ),
         panel(
             "Create",
             vec![
-                Big(C::Default3D),
+                Labeled("3D\nView", C::Default3D, vec![]),
                 Big(C::Section),
                 Big(C::Callout),
-                Split(C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
-                Big(C::ElevationView),
-                Big(C::DraftingView),
-                Split(C::DuplicateView, vec![C::DuplicateView, C::DuplicateWithDetailing]),
-                Big(C::Legend),
-                Split(C::Schedule, vec![C::Schedule, C::MaterialTakeoff, C::SheetList]),
+                Labeled("Plan\nViews", C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
+                Labeled("Elevation", C::ElevationView, vec![]),
+                Labeled("Drafting\nView", C::DraftingView, vec![]),
+                Labeled("Duplicate\nView", C::DuplicateView, vec![C::DuplicateView, C::DuplicateWithDetailing]),
+                Labeled("Legends", C::Legend, vec![]),
+                Labeled("Schedules", C::Schedule, vec![C::Schedule, C::MaterialTakeoff, C::SheetList]),
             ],
         ),
-        panel("Sheet Composition", vec![Big(C::NewSheet), Big(C::PlaceView), Big(C::Revisions)]),
+        panel("Sheet Composition", vec![Labeled("Sheet", C::NewSheet, vec![]), Labeled("View", C::PlaceView, vec![]), Big(C::Revisions)]),
         panel(
             "Windows",
             vec![
-                Stack(vec![C::CloseInactive, C::TabViews, C::TileViews]),
-                Split(C::ToggleProperties, vec![C::ToggleProperties, C::ToggleBrowser, C::ToggleStatusBar, C::ToggleOptionsBar, C::ToggleViewCube, C::ToggleNavBar]),
+                Labeled("Close\nInactive", C::CloseInactive, vec![]),
+                Labeled("Tab\nViews", C::TabViews, vec![]),
+                Labeled("Tile\nViews", C::TileViews, vec![]),
+                Labeled(
+                    "User\nInterface",
+                    C::ToggleProperties,
+                    vec![C::ToggleProperties, C::ToggleBrowser, C::ToggleStatusBar, C::ToggleOptionsBar, C::ToggleViewCube, C::ToggleNavBar, C::KeyboardShortcuts],
+                ),
             ],
         ),
     ]
@@ -170,13 +194,12 @@ fn view_tab(app: &App) -> Vec<Panel> {
 fn manage() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
-        panel("Settings", vec![Big(C::Materials), Big(C::ObjectStyles), Big(C::Snaps), Big(C::ProjectInfo), Big(C::ProjectUnits), Big(C::Purge)]),
-        panel("Project Location", vec![Big(C::Sun)]),
-        panel("Design Options", vec![Big(C::DesignOptions)]),
-        panel("Manage Project", vec![Big(C::ManageLinks)]),
+        panel("Settings", vec![Big(C::Materials), Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]), Stack(vec![C::ProjectUnits, C::Purge])]),
+        panel("Project Location", vec![Labeled("Sun\nSettings", C::Sun, vec![])]),
+        panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![])]),
+        panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),
         panel("Inquiry", vec![Stack(vec![C::IdsOfSelection, C::SelectById, C::Warnings])]),
-        panel("Customize", vec![Big(C::KeyboardShortcuts), Big(C::Options)]),
     ]
 }
 
@@ -404,6 +427,7 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::ModelLine => k == T::ModelLine,
         C::Section => k == T::Section,
         C::ToggleProperties => app.settings.show_properties,
+        C::ThinLines => app.thin_lines,
         _ => false,
     }
 }
@@ -544,7 +568,8 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                                 Big(c) => big_button(ui, app, *c, None, None, None),
                                 Toggle(c, on) => big_button(ui, app, *c, None, None, Some(*on)),
                                 Split(c, alts) => big_button(ui, app, *c, None, Some(alts), None),
-                                Labeled(label, c, alts) => big_button(ui, app, *c, Some(label), if alts.is_empty() { None } else { Some(alts) }, None),
+                                // "User Interface" is a menu, not a toggle.
+                                Labeled(label, c, alts) => big_button(ui, app, *c, Some(label), if alts.is_empty() { None } else { Some(alts) }, label.starts_with("User").then_some(false)),
                                 Stack(cs) => {
                                     let w = cs
                                         .iter()
