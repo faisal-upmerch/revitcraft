@@ -254,7 +254,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
             ToolKind::Rotate => {
-                if ui.button("Center of rotation: Place").clicked() {
+                // Copy | Angle | Center of rotation: Place / Default, as in the reference options bar.
+                ui.checkbox(&mut app.opts.rotate_copy, "Copy");
+                ui.label("Angle:");
+                let key = egui::Id::new("rotate-angle");
+                let mut s: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_default();
+                let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(60.0));
+                if r.has_focus() {
+                    ui.memory_mut(|m| m.data.insert_temp(key, s.clone()));
+                }
+                if r.lost_focus() {
+                    ui.memory_mut(|m| m.data.remove::<String>(key));
+                    if let Some(a) = app.doc.data.units.parse(s.trim(), ParamKind::Angle) {
+                        let center = app.tool.pts.first().copied().unwrap_or_else(|| crate::canvas_tools::selection_center(app));
+                        crate::canvas_tools::rotate_now(app, center, a);
+                    }
+                }
+                ui.label("Center of rotation:");
+                if ui.button("Place").clicked() {
                     app.tool.pts.clear();
                     app.tool.picked = vec![u32::MAX];
                 }
@@ -262,8 +279,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     app.tool.pts.clear();
                     app.tool.picked.clear();
                 }
-                ui.checkbox(&mut app.opts.rotate_copy, "Copy");
-                ui.label(egui::RichText::new("Type an angle and press Enter.").color(style::text_dim()));
             }
             ToolKind::MirrorPick | ToolKind::MirrorDraw => {
                 ui.checkbox(&mut app.opts.mirror_copy, "Copy");
@@ -288,6 +303,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 number_field(ui, &mut app.opts.scale_factor, 0.01, 0.01..=100.0, "");
             }
             ToolKind::Offset => {
+                ui.radio_value(&mut app.opts.offset_graphical, true, "Graphical");
+                ui.radio_value(&mut app.opts.offset_graphical, false, "Numerical");
                 ui.label("Offset:");
                 let mut d = app.opts.offset_dist;
                 if length_field(ui, app, "off-d", &mut d, 80.0) {

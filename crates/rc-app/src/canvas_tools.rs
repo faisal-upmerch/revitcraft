@@ -129,23 +129,23 @@ pub fn prompt(app: &App) -> String {
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
         ToolKind::WallOpening => if n == 0 { "Click a wall at one side of the opening.".into() } else { "Click the other side of the opening.".into() },
         ToolKind::WallFoundation => "Pick a wall to add a wall foundation under it.".into(),
-        ToolKind::Align => if n == 0 { "Pick the reference line or point to align to.".into() } else { "Pick the entity to align.".into() },
-        ToolKind::Offset => "Hover a wall or line; click to offset to the cursor side.".into(),
+        ToolKind::Align => if n == 0 { "Please select line or point reference for alignment.".into() } else { "Select the entity to align.".into() },
+        ToolKind::Offset => "Select a Wall or a Line to offset. Press TAB to select a chain of elements.".into(),
         ToolKind::MirrorPick => "Pick a line, wall or grid as the mirror axis.".into(),
         ToolKind::MirrorDraw => if n == 0 { "Click the start of the mirror axis.".into() } else { "Click the end of the mirror axis.".into() },
-        ToolKind::Move | ToolKind::Copy => if n == 0 { "Click the start point (move from).".into() } else { "Click the end point (move to), or type a distance.".into() },
+        ToolKind::Move | ToolKind::Copy => if n == 0 { "Click to enter move start point.".into() } else { "Click to enter move end point.".into() },
         ToolKind::Rotate => {
             if t.picked.first() == Some(&u32::MAX) {
                 "Click to place the center of rotation.".into()
             } else if n <= 1 {
-                "Click to set the start ray (or type an angle and press Enter).".into()
+                "Click to enter rotate start ray or drag or click the rotation center control".into()
             } else {
-                "Click to set the end ray.".into()
+                "Click to enter rotate end ray.".into()
             }
         }
-        ToolKind::TrimCorner => if t.picked.is_empty() { "Pick the first element (the part to keep).".into() } else { "Pick the second element (the part to keep).".into() },
+        ToolKind::TrimCorner => if t.picked.is_empty() { "Select the first line or wall to trim/extend.  (Click on the part you want to keep)".into() } else { "Select the second line or wall to trim/extend.  (Click on the part you want to keep)".into() },
         ToolKind::TrimSingle | ToolKind::TrimMulti => if t.picked.is_empty() { "Pick the boundary.".into() } else { "Pick the element to trim/extend (click the part to keep).".into() },
-        ToolKind::Split | ToolKind::SplitGap => "Click a wall or line where it should be split.".into(),
+        ToolKind::Split | ToolKind::SplitGap => "Select an element to split".into(),
         ToolKind::Array => if n == 0 { "Click the start point of the array.".into() } else { "Click the end point (second item, or last with 'Move to: Last').".into() },
         ToolKind::Scale => "Click the origin; elements scale by the factor in the Options Bar.".into(),
         ToolKind::MatchType => if t.picked.is_empty() { "Pick the element whose type to copy.".into() } else { "Pick elements to change to that type.".into() },
@@ -1492,7 +1492,7 @@ fn wall_pick_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
 
 // ---------------------------------------------------------------- modify tools
 
-fn selection_center(app: &App) -> DVec2 {
+pub(crate) fn selection_center(app: &App) -> DVec2 {
     let p = &app.doc.data;
     let fp = app.footprints();
     let pts: Vec<DVec2> = app
@@ -1651,6 +1651,45 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                         app.tool.reset();
                     }
                 }
+            }
+        }
+        ToolKind::Offset if app.opts.offset_graphical => {
+            // Pick the element, then two points: their distance across the element is the offset.
+            let picked = app.tool.picked.first().copied();
+            let Some(id) = picked else {
+                let target = hover_of(app, view, d, c, xf, &linear);
+                if let Some(s) = target.and_then(|id| app.el(id).and_then(element_curve)) {
+                    draw_segs(painter, xf, &[s], Stroke::new(2.5, style::PRESELECT));
+                }
+                if clicked {
+                    if let Some(id) = target {
+                        app.tool.picked.push(id);
+                    }
+                }
+                return;
+            };
+            let Some(Seg::Line(a, b)) = app.el(id).and_then(element_curve) else {
+                app.tool.reset();
+                return;
+            };
+            draw_segs(painter, xf, &[Seg::Line(a, b)], Stroke::new(2.5, style::SELECT));
+            let Some(pt) = point else { return };
+            let n = geom::perp((b - a).normalize_or_zero());
+            if app.tool.pts.is_empty() {
+                if clicked {
+                    app.tool.pts.push(pt);
+                }
+                return;
+            }
+            let s0 = app.tool.pts[0];
+            let dist = (pt - s0).dot(n);
+            draw_segs(painter, xf, &[Seg::Line(a, b).offset(dist)], Stroke::new(1.5, style::PREVIEW));
+            temp_dim(painter, xf, s0, s0 + n * dist, &app.doc.data.units.length(dist.abs()), 16.0);
+            if clicked && dist.abs() > 1.0 {
+                let copy = app.opts.offset_copy;
+                let side = (a + b) / 2.0 + n * dist;
+                app.run("Offset", |p| edit::offset_elements(p, &[id], dist.abs(), side, copy).map(|_| ()));
+                app.tool.reset();
             }
         }
         ToolKind::Offset => {
@@ -1874,7 +1913,7 @@ fn constrain_ortho(a: DVec2, pt: DVec2) -> DVec2 {
     if d.x.abs() >= d.y.abs() { DVec2::new(pt.x, a.y) } else { DVec2::new(a.x, pt.y) }
 }
 
-fn rotate_now(app: &mut App, center: DVec2, ang: f64) {
+pub(crate) fn rotate_now(app: &mut App, center: DVec2, ang: f64) {
     let ids = app.tool.ids.clone();
     let copy = app.opts.rotate_copy;
     app.run("Rotate", |p| {

@@ -535,6 +535,8 @@ pub struct ToolOptions {
     pub scale_factor: f64,
     pub offset_dist: f64,
     pub offset_copy: bool,
+    /// Offset by two clicked points instead of a typed distance.
+    pub offset_graphical: bool,
     pub align_multiple: bool,
     pub align_prefer: WallRefPref,
     pub split_gap: f64,
@@ -613,6 +615,7 @@ impl ToolOptions {
             scale_factor: 2.0,
             offset_dist: if imperial { 304.8 } else { 1000.0 },
             offset_copy: true,
+            offset_graphical: false,
             align_multiple: false,
             align_prefer: WallRefPref::Faces,
             split_gap: if imperial { 25.4 } else { 25.0 },
