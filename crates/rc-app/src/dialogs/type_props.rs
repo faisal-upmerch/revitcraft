@@ -21,12 +21,14 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     let mut duplicate = false;
     let mut rename = false;
     let mut load = false;
-    window("Type Properties").open(&mut open).default_size(vec2(560.0, 560.0)).show(ctx, |ui| {
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "type-props");
+    window("Type Properties").open(&mut open).default_size(vec2(440.0, 560.0)).show(ctx, |ui| {
         let list = types_for(&p, cat);
         let (fam, ty) = list.iter().find(|x| x.0 == tid).map(|x| (x.1.clone(), x.2.clone())).unwrap_or_default();
-        egui::Grid::new("tp-head").num_columns(3).spacing(vec2(8.0, 4.0)).show(ui, |ui| {
+        egui::Grid::new("tp-head").num_columns(3).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
             ui.label("Family:");
-            egui::ComboBox::from_id_salt("tp-fam").selected_text(&fam).width(300.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("tp-fam").selected_text(&fam).width(230.0).show_ui(ui, |ui| {
                 let mut fams: Vec<&String> = list.iter().map(|x| &x.1).collect();
                 fams.dedup();
                 for f in fams {
@@ -35,38 +37,57 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                     }
                 }
             });
-            if ui.button("Load...").clicked() {
+            if super::dlg_button(ui, "Load...", false, true) {
                 load = true;
             }
             ui.end_row();
             ui.label("Type:");
-            egui::ComboBox::from_id_salt("tp-type").selected_text(&ty).width(300.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("tp-type").selected_text(&ty).width(230.0).show_ui(ui, |ui| {
                 for (id, f, t) in &list {
                     if *f == fam && ui.selectable_label(*id == tid, t).clicked() {
                         switch_to = Some(*id);
                     }
                 }
             });
-            ui.horizontal(|ui| {
-                if ui.button("Duplicate...").clicked() {
-                    duplicate = true;
-                }
-                if ui.button("Rename...").clicked() {
-                    rename = true;
-                }
-            });
+            if super::dlg_button(ui, "Duplicate...", false, true) {
+                duplicate = true;
+            }
+            ui.end_row();
+            ui.label("");
+            ui.label("");
+            if super::dlg_button(ui, "Rename...", false, true) {
+                rename = true;
+            }
             ui.end_row();
         });
-        ui.separator();
-        ui.label(egui::RichText::new("Type Parameters").strong());
-        egui::ScrollArea::vertical().max_height(420.0).id_salt("tp-scroll").show(ui, |ui| {
-            if p.sys_type(tid).is_some() {
-                system_type(app, ui, tid);
-            } else {
-                family_type(app, ui, tid);
+        ui.add_space(6.0);
+        ui.label("Type Parameters");
+        // Parameter | Value table on a white field with grid lines, like the reference dialog.
+        egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(170))).show(ui, |ui| {
+            if !ui.is_sizing_pass() {
+                ui.set_width(ui.available_width());
             }
+            super::table_header(ui, &["Parameter", "Value"]);
+            egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.55).id_salt("tp-scroll").auto_shrink([false, true]).show(ui, |ui| {
+                let v = ui.visuals_mut();
+                v.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+                v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+                v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+                if p.sys_type(tid).is_some() {
+                    system_type(app, ui, tid);
+                } else {
+                    family_type(app, ui, tid);
+                }
+            });
         });
+        footer = super::footer(ui, app, "type-props", "Type Properties");
     });
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        // The close cross cancels, like Cancel.
+        super::session_cancel(app, "type-props");
+    }
     if load {
         crate::actions::exec(app, crate::commands::Cmd::LoadFamily);
     }
@@ -94,7 +115,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
 }
 
 fn label(ui: &mut egui::Ui, s: &str) {
-    ui.label(egui::RichText::new(s).size(12.0));
+    crate::properties::prop_label(ui, s, false);
 }
 
 fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
@@ -103,10 +124,10 @@ fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
     let units = app.doc.data.units.clone();
     let has_layers = matches!(t.category, Category::Walls | Category::Floors | Category::Roofs | Category::Ceilings) && t.wall_kind != WallKind::Curtain && t.wall_kind != WallKind::Stacked;
     style::header(ui, "Construction");
-    egui::Grid::new("tp-construction").num_columns(2).striped(true).min_col_width(200.0).show(ui, |ui| {
+    crate::properties::prop_grid(ui, "tp-construction").show(ui, |ui| {
         if has_layers {
             label(ui, "Structure");
-            if ui.button("Edit...").clicked() {
+            if crate::properties::edit_button(ui).clicked() {
                 app.dialogs.type_props_assembly = true;
             }
             ui.end_row();
@@ -116,7 +137,7 @@ fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
         }
         if t.category == Category::Walls {
             label(ui, "Function");
-            egui::ComboBox::from_id_salt("tp-func").selected_text(nt.function.label()).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("tp-func").selected_text(nt.function.label()).icon(crate::properties::chevron).show_ui(ui, |ui| {
                 for f in WallFunction::ALL {
                     ui.selectable_value(&mut nt.function, f, f.label());
                 }
@@ -129,7 +150,7 @@ fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
                 for (k, (wt, h)) in nt.stack.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
                         let name = app.doc.data.sys_type(*wt).map(|x| x.name.clone()).unwrap_or_default();
-                        egui::ComboBox::from_id_salt(("stack", k)).selected_text(name).width(170.0).show_ui(ui, |ui| {
+                        egui::ComboBox::from_id_salt(("stack", k)).selected_text(name).width(170.0).icon(crate::properties::chevron).show_ui(ui, |ui| {
                             for b in app.doc.data.types_of(Category::Walls).filter(|b| b.wall_kind == WallKind::Basic) {
                                 ui.selectable_value(wt, b.id, &b.name);
                             }
@@ -165,7 +186,7 @@ fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
         for (k, v) in nt.texts.iter_mut() {
             label(ui, k);
             if k.contains("Material") {
-                egui::ComboBox::from_id_salt(("tp-text", k.clone())).selected_text(v.clone()).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt(("tp-text", k.clone())).selected_text(v.clone()).icon(crate::properties::chevron).show_ui(ui, |ui| {
                     for m in &app.doc.data.materials {
                         ui.selectable_value(v, m.name.clone(), &m.name);
                     }
@@ -177,7 +198,7 @@ fn system_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
         }
     });
     style::header(ui, "Identity Data");
-    egui::Grid::new("tp-identity").num_columns(2).striped(true).min_col_width(200.0).show(ui, |ui| {
+    crate::properties::prop_grid(ui, "tp-identity").show(ui, |ui| {
         label(ui, "Type Mark");
         ui.text_edit_singleline(&mut nt.type_mark);
         ui.end_row();
@@ -211,7 +232,7 @@ fn family_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
     let mut edits: Vec<(String, String)> = Vec::new();
     for (g, prms) in groups {
         style::header(ui, &g);
-        egui::Grid::new(("tp-fam", &g)).num_columns(3).striped(true).min_col_width(150.0).show(ui, |ui| {
+        crate::properties::prop_grid(ui, ("tp-fam", &g)).num_columns(3).show(ui, |ui| {
             for prm in prms {
                 label(ui, &prm.name);
                 let shown = r.display(&prm);
@@ -227,7 +248,7 @@ fn family_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
                 } else if prm.kind == ParamKind::Material {
                     let cur = r.text(&prm.name, "");
                     let mut v = cur.clone();
-                    egui::ComboBox::from_id_salt(("tp-mat", &prm.name)).selected_text(&v).show_ui(ui, |ui| {
+                    egui::ComboBox::from_id_salt(("tp-mat", &prm.name)).selected_text(&v).icon(crate::properties::chevron).show_ui(ui, |ui| {
                         for m in &app.doc.data.materials {
                             ui.selectable_value(&mut v, m.name.clone(), &m.name);
                         }
@@ -308,12 +329,12 @@ fn assembly(app: &mut App, ctx: &egui::Context) {
                         if ui.selectable_label(sel == k, format!("{}", k + 1)).clicked() {
                             sel = k;
                         }
-                        egui::ComboBox::from_id_salt(("asm-f", k)).selected_text(l.function.label()).width(140.0).show_ui(ui, |ui| {
+                        egui::ComboBox::from_id_salt(("asm-f", k)).selected_text(l.function.label()).width(140.0).icon(crate::properties::chevron).show_ui(ui, |ui| {
                             for f in LayerFunction::ALL {
                                 ui.selectable_value(&mut l.function, f, f.label());
                             }
                         });
-                        egui::ComboBox::from_id_salt(("asm-m", k)).selected_text(&l.material).width(170.0).show_ui(ui, |ui| {
+                        egui::ComboBox::from_id_salt(("asm-m", k)).selected_text(&l.material).width(170.0).icon(crate::properties::chevron).show_ui(ui, |ui| {
                             for (m, _) in &mats {
                                 ui.selectable_value(&mut l.material, m.clone(), m);
                             }

@@ -79,12 +79,25 @@ pub fn sample_house() -> Project {
     edit::place_free(&mut p, table, l1, v(3500.0, 4500.0), 0.0).unwrap();
     edit::place_free(&mut p, table, l1, v(9500.0, 2000.0), 90.0).unwrap();
 
+    // The sample's plans show the room colour fill.
+    for v in p.views.iter_mut() {
+        if let ViewKind::FloorPlan { room_colors, .. } = &mut v.kind {
+            *room_colors = true;
+        }
+    }
+
     // Grids.
     for (a, b) in [(v(0.0, -2500.0), v(0.0, 10500.0)), (v(7000.0, -2500.0), v(7000.0, 10500.0)), (v(12000.0, -2500.0), v(12000.0, 10500.0))] {
-        edit::add_grid(&mut p, a, b).unwrap();
+        let g = edit::add_grid(&mut p, a, b).unwrap();
+        if let Some(ElementKind::Grid(g)) = p.element_mut(g).map(|e| &mut e.kind) {
+            g.bubble_start = true;
+        }
     }
     for (a, b) in [(v(-2500.0, 0.0), v(14500.0, 0.0)), (v(-2500.0, 8000.0), v(14500.0, 8000.0))] {
-        edit::add_grid(&mut p, a, b).unwrap();
+        let g = edit::add_grid(&mut p, a, b).unwrap();
+        if let Some(ElementKind::Grid(g)) = p.element_mut(g).map(|e| &mut e.kind) {
+            g.bubble_start = true;
+        }
     }
 
     // Ceiling in the living room, attach exterior walls to the roof, and add footings.

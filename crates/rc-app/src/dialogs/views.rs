@@ -45,6 +45,64 @@ fn color_override(ui: &mut egui::Ui, c: &mut Option<[u8; 3]>) {
     });
 }
 
+/// One table cell of fixed width with right and bottom grid lines.
+fn cell<R>(ui: &mut egui::Ui, w: f32, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    let (r, _) = ui.allocate_exact_size(vec2(w, 19.0), egui::Sense::hover());
+    let line = egui::Stroke::new(1.0, egui::Color32::from_gray(210));
+    ui.painter().line_segment([r.right_top(), r.right_bottom()], line);
+    ui.painter().line_segment([r.left_bottom(), r.right_bottom()], line);
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(3.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
+    add(&mut child)
+}
+
+/// A colour swatch cell: blank when not overridden, the colour when set; click to edit,
+/// right-click to clear.
+fn swatch(ui: &mut egui::Ui, c: &mut Option<[u8; 3]>) {
+    match c {
+        Some(col) => {
+            ui.color_edit_button_srgb(col).context_menu(|ui| {
+                if ui.button("Clear Override").clicked() {
+                    *c = None;
+                    ui.close();
+                }
+            });
+        }
+        None => {
+            // Blank until the cell is hovered, like the reference table.
+            let hot = ui.rect_contains_pointer(ui.max_rect());
+            let text = if hot { "Override..." } else { "" };
+            if ui.add_sized(ui.available_size(), egui::Button::new(egui::RichText::new(text).size(11.5)).frame(false)).clicked() {
+                *c = Some([200, 0, 0]);
+            }
+        }
+    }
+}
+
+/// Windows-style tab strip.
+fn tabs(ui: &mut egui::Ui, tab: &mut u8, names: &[&str]) {
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (k, n) in names.iter().enumerate() {
+            let w = ui.painter().layout_no_wrap(n.to_string(), style::font(12.0), egui::Color32::BLACK).size().x + 16.0;
+            let (r, resp) = ui.allocate_exact_size(vec2(w, 22.0), egui::Sense::click());
+            let on = *tab == k as u8;
+            let p = ui.painter();
+            p.rect_filled(r, 0.0, if on { style::field() } else if resp.hovered() { style::hover() } else { egui::Color32::from_rgb(236, 236, 236) });
+            let st = egui::Stroke::new(1.0, egui::Color32::from_gray(190));
+            p.line_segment([r.left_bottom(), r.left_top()], st);
+            p.line_segment([r.left_top(), r.right_top()], st);
+            p.line_segment([r.right_top(), r.right_bottom()], st);
+            if !on {
+                p.line_segment([r.left_bottom(), r.right_bottom()], st);
+            }
+            p.text(r.center(), egui::Align2::CENTER_CENTER, *n, style::font(12.0), style::text());
+            if resp.clicked() {
+                *tab = k as u8;
+            }
+        }
+    });
+}
+
 fn vg(app: &mut App, ctx: &egui::Context) {
     let Some(vid) = app.dialogs.vg else { return };
     let Some(mut v) = app.doc.data.view(vid).cloned() else {
@@ -52,74 +110,155 @@ fn vg(app: &mut App, ctx: &egui::Context) {
         return;
     };
     let mut open = true;
-    window(&format!("Visibility/Graphic Overrides for {}: {}", v.type_label(), v.name)).open(&mut open).default_size(vec2(720.0, 520.0)).show(ctx, |ui| {
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "vg");
+    window(&format!("Visibility/Graphic Overrides for {}: {}", v.type_label(), v.name)).open(&mut open).default_size(vec2(720.0, 560.0)).show(ctx, |ui| {
         let tab_id = egui::Id::new("vg-tab");
         let mut tab: u8 = ui.memory(|m| m.data.get_temp(tab_id)).unwrap_or(0);
-        ui.horizontal(|ui| {
-            ui.selectable_value(&mut tab, 0, "Model Categories");
-            ui.selectable_value(&mut tab, 1, "Annotation Categories");
-            ui.selectable_value(&mut tab, 2, "Imported Categories");
-        });
+        tabs(ui, &mut tab, &["Model Categories", "Annotation Categories", "Imported Categories"]);
         ui.memory_mut(|m| m.data.insert_temp(tab_id, tab));
         let cats: Vec<Category> = match tab {
             0 => Category::MODEL.to_vec(),
             1 => Category::ANNOTATION.iter().copied().filter(|c| *c != Category::ImportedCad).collect(),
             _ => vec![Category::ImportedCad],
         };
+        ui.add_space(6.0);
+        let what = match tab {
+            0 => "model",
+            1 => "annotation",
+            _ => "import",
+        };
+        let mut show_all = !cats.iter().all(|c| v.hidden.contains(c));
         ui.horizontal(|ui| {
-            if ui.button("All").clicked() {
+            if ui.checkbox(&mut show_all, format!("Show {what} categories in this view")).changed() {
+                for c in &cats {
+                    v.hidden.retain(|x| x != c);
+                    if !show_all {
+                        v.hidden.push(*c);
+                    }
+                }
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(egui::RichText::new("If a category is unchecked, it will not be visible.").size(11.5));
+            });
+        });
+        ui.add_space(4.0);
+        // Two-tier header: Visibility | Projection/Surface (Lines, Patterns, Transparency) | Halftone.
+        let widths = [210.0, 110.0, 110.0, 100.0, 70.0];
+        egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(170))).show(ui, |ui| {
+            let total: f32 = widths.iter().sum();
+            let (hr, _) = ui.allocate_exact_size(vec2(total, 36.0), egui::Sense::hover());
+            let p = ui.painter();
+            p.rect_filled(hr, 0.0, egui::Color32::from_rgb(246, 246, 246));
+            let line = egui::Stroke::new(1.0, egui::Color32::from_gray(200));
+            let mut x = hr.left();
+            let xs: Vec<f32> = widths.iter().map(|w| {
+                let x0 = x;
+                x += w;
+                x0
+            }).collect();
+            let mid = hr.top() + 17.0;
+            p.text(egui::pos2(xs[0] + widths[0] / 2.0, hr.center().y), egui::Align2::CENTER_CENTER, "Visibility", style::font(12.0), style::text());
+            p.text(egui::pos2(xs[1] + (widths[1] + widths[2] + widths[3]) / 2.0, hr.top() + 9.0), egui::Align2::CENTER_CENTER, "Projection/Surface", style::font(12.0), style::text());
+            p.line_segment([egui::pos2(xs[1], mid), egui::pos2(xs[4], mid)], line);
+            for (k, label) in [(1, "Lines"), (2, "Patterns"), (3, "Transparency")] {
+                p.text(egui::pos2(xs[k] + widths[k] / 2.0, mid + 9.0), egui::Align2::CENTER_CENTER, label, style::font(12.0), style::text());
+            }
+            p.text(egui::pos2(xs[4] + widths[4] / 2.0, hr.center().y), egui::Align2::CENTER_CENTER, "Halftone", style::font(12.0), style::text());
+            for (k, x) in xs.iter().enumerate().skip(1) {
+                let top = if k == 2 || k == 3 { mid } else { hr.top() };
+                p.line_segment([egui::pos2(*x, top), egui::pos2(*x, hr.bottom())], line);
+            }
+            p.line_segment([hr.left_bottom(), hr.right_bottom()], line);
+            egui::ScrollArea::vertical().max_height(ui.ctx().content_rect().height() * 0.5).auto_shrink([true, true]).show(ui, |ui| {
+                ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                for c in cats {
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+                        let mut vis = !v.hidden.contains(&c);
+                        let changed = cell(ui, widths[0], |ui| ui.checkbox(&mut vis, c.label()).changed());
+                        if changed {
+                            if vis {
+                                v.hidden.retain(|x| *x != c);
+                            } else {
+                                v.hidden.push(c);
+                            }
+                        }
+                        let idx = v.overrides.iter().position(|o| o.element.is_none() && o.category == Some(c));
+                        let mut o = idx.map(|i| v.overrides[i].clone()).unwrap_or(GraphicOverride { category: Some(c), ..Default::default() });
+                        cell(ui, widths[1], |ui| {
+                            swatch(ui, &mut o.line_color);
+                            if o.line_color.is_some() || o.line_weight.is_some() {
+                                let mut w = o.line_weight.unwrap_or(0.0);
+                                ui.add(egui::DragValue::new(&mut w).range(0.0..=2.0).speed(0.01).max_decimals(2));
+                                o.line_weight = (w > 0.0).then_some(w);
+                            }
+                        });
+                        cell(ui, widths[2], |ui| swatch(ui, &mut o.fill_color));
+                        cell(ui, widths[3], |ui| {
+                            if o.transparency > 0 || ui.rect_contains_pointer(ui.max_rect()) {
+                                let mut t = o.transparency as f64;
+                                ui.add(egui::DragValue::new(&mut t).range(0.0..=100.0).suffix(" %"));
+                                o.transparency = t as u8;
+                            }
+                        });
+                        cell(ui, widths[4], |ui| {
+                            ui.checkbox(&mut o.halftone, "");
+                        });
+                        let empty = o.line_color.is_none() && o.line_weight.is_none() && o.fill_color.is_none() && o.transparency == 0 && !o.halftone;
+                        match (idx, empty) {
+                            (Some(i), true) => {
+                                v.overrides.remove(i);
+                            }
+                            (Some(i), false) => v.overrides[i] = o,
+                            (None, false) => v.overrides.push(o),
+                            _ => {}
+                        }
+                    });
+                }
+            });
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            let cats: Vec<Category> = match tab {
+                0 => Category::MODEL.to_vec(),
+                1 => Category::ANNOTATION.iter().copied().filter(|c| *c != Category::ImportedCad).collect(),
+                _ => vec![Category::ImportedCad],
+            };
+            if super::dlg_button(ui, "All", false, true) {
                 v.hidden.retain(|c| !cats.contains(c));
             }
-            if ui.button("None").clicked() {
+            if super::dlg_button(ui, "None", false, true) {
                 for c in &cats {
                     if !v.hidden.contains(c) {
                         v.hidden.push(*c);
                     }
                 }
             }
-        });
-        egui::ScrollArea::vertical().max_height(400.0).show(ui, |ui| {
-            egui::Grid::new("vg-grid").num_columns(6).striped(true).spacing(vec2(10.0, 3.0)).show(ui, |ui| {
-                for h in ["Visibility", "Lines (color)", "Line weight", "Surface (color)", "Transparency", "Halftone"] {
-                    ui.label(egui::RichText::new(h).strong());
-                }
-                ui.end_row();
-                for c in cats {
-                    let mut vis = !v.hidden.contains(&c);
-                    if ui.checkbox(&mut vis, c.label()).changed() {
-                        if vis {
-                            v.hidden.retain(|x| *x != c);
-                        } else {
-                            v.hidden.push(c);
-                        }
-                    }
-                    let idx = v.overrides.iter().position(|o| o.element.is_none() && o.category == Some(c));
-                    let mut o = idx.map(|i| v.overrides[i].clone()).unwrap_or(GraphicOverride { category: Some(c), ..Default::default() });
-                    color_override(ui, &mut o.line_color);
-                    let mut w = o.line_weight.unwrap_or(0.0);
-                    ui.add(egui::DragValue::new(&mut w).range(0.0..=2.0).speed(0.01).suffix(" mm"));
-                    o.line_weight = (w > 0.0).then_some(w);
-                    color_override(ui, &mut o.fill_color);
-                    let mut t = o.transparency as f64;
-                    ui.add(egui::DragValue::new(&mut t).range(0.0..=100.0).suffix(" %"));
-                    o.transparency = t as u8;
-                    ui.checkbox(&mut o.halftone, "");
-                    ui.end_row();
-                    let empty = o.line_color.is_none() && o.line_weight.is_none() && o.fill_color.is_none() && o.transparency == 0 && !o.halftone;
-                    match (idx, empty) {
-                        (Some(i), true) => {
-                            v.overrides.remove(i);
-                        }
-                        (Some(i), false) => v.overrides[i] = o,
-                        (None, false) => v.overrides.push(o),
-                        _ => {}
+            if super::dlg_button(ui, "Invert", false, true) {
+                for c in &cats {
+                    if v.hidden.contains(c) {
+                        v.hidden.retain(|x| x != c);
+                    } else {
+                        v.hidden.push(*c);
                     }
                 }
-            });
+            }
+            ui.add_space(16.0);
+            if super::dlg_button(ui, "Object Styles...", false, true) {
+                app.dialogs.object_styles = true;
+            }
         });
-        ui.label(egui::RichText::new("Changes apply immediately (one undo step per change).").color(style::text_dim()));
+        footer = super::footer(ui, app, "vg", "Visibility/Graphics");
     });
-    update_view(app, vid, "Visibility/Graphics", v);
+    if footer == super::Footer::None && open {
+        update_view(app, vid, "Visibility/Graphics", v);
+    }
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        super::session_cancel(app, "vg");
+    }
     if !open {
         app.dialogs.vg = None;
     }
@@ -133,6 +272,8 @@ fn view_range(app: &mut App, ctx: &egui::Context) {
     };
     let mut open = true;
     let units = app.doc.data.units.clone();
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "view-range");
     window("View Range").open(&mut open).resizable(false).show(ctx, |ui| {
         let level = v.plan_level().map(|l| app.doc.data.level_name(l)).unwrap_or_default();
         ui.label(egui::RichText::new("Primary Range").strong());
@@ -163,9 +304,17 @@ fn view_range(app: &mut App, ctx: &egui::Context) {
         if v.view_range.cut > v.view_range.top || v.view_range.bottom > v.view_range.cut {
             ui.colored_label(style::ERROR, "The cut plane must lie between the bottom and the top.");
         }
+        footer = super::footer(ui, app, "view-range", "View Range");
     });
-    if v.view_range.bottom <= v.view_range.cut && v.view_range.cut <= v.view_range.top {
-        update_view(app, vid, "View Range", v);
+    if footer == super::Footer::None && open {
+        if v.view_range.bottom <= v.view_range.cut && v.view_range.cut <= v.view_range.top {
+            update_view(app, vid, "View Range", v);
+        }
+    }
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        super::session_cancel(app, "view-range");
     }
     if !open {
         app.dialogs.view_range = None;

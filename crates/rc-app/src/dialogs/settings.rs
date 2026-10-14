@@ -256,6 +256,8 @@ fn object_styles(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut styles = app.doc.data.object_styles.clone();
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "object-styles");
     window("Object Styles").open(&mut open).default_size(vec2(620.0, 480.0)).show(ctx, |ui| {
         let tab_id = egui::Id::new("os-tab");
         let mut tab: u8 = ui.memory(|m| m.data.get_temp(tab_id)).unwrap_or(0);
@@ -308,12 +310,20 @@ fn object_styles(app: &mut App, ctx: &egui::Context) {
                 }
             });
         });
+        footer = super::footer(ui, app, "object-styles", "Object Styles");
     });
-    if styles != app.doc.data.object_styles {
-        app.run("Object Styles", |p| {
-            p.object_styles = styles;
-            Ok(())
-        });
+    if footer == super::Footer::None && open {
+        if styles != app.doc.data.object_styles {
+            app.run("Object Styles", |p| {
+                p.object_styles = styles;
+                Ok(())
+            });
+        }
+    }
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        super::session_cancel(app, "object-styles");
     }
     if !open {
         app.dialogs.object_styles = false;
@@ -384,6 +394,8 @@ fn project_info(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut info = app.doc.data.info.clone();
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "project-info");
     window("Project Information").open(&mut open).default_width(420.0).show(ctx, |ui| {
         egui::Grid::new("pi").num_columns(2).striped(true).spacing(vec2(8.0, 4.0)).show(ui, |ui| {
             for (label, f) in [
@@ -401,12 +413,20 @@ fn project_info(app: &mut App, ctx: &egui::Context) {
                 ui.end_row();
             }
         });
+        footer = super::footer(ui, app, "project-info", "Project Information");
     });
-    if format!("{info:?}") != format!("{:?}", app.doc.data.info) {
-        app.run("Project Information", |p| {
-            p.info = info;
-            Ok(())
-        });
+    if footer == super::Footer::None && open {
+        if format!("{info:?}") != format!("{:?}", app.doc.data.info) {
+            app.run("Project Information", |p| {
+                p.info = info;
+                Ok(())
+            });
+        }
+    }
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        super::session_cancel(app, "project-info");
     }
     if !open {
         app.dialogs.project_info = false;
@@ -419,6 +439,8 @@ fn units(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut u = app.doc.data.units.clone();
+    let mut footer = super::Footer::None;
+    super::session_begin(app, "units");
     window("Project Units").open(&mut open).default_width(440.0).show(ctx, |ui| {
         ui.horizontal(|ui| {
             ui.label("System:");
@@ -500,12 +522,20 @@ fn units(app: &mut App, ctx: &egui::Context) {
             ui.label(u.format(1234.5, ParamKind::Currency));
             ui.end_row();
         });
+        footer = super::footer(ui, app, "units", "Project Units");
     });
-    if format!("{u:?}") != format!("{:?}", app.doc.data.units) {
-        app.run("Project Units", |p| {
-            p.units = u;
-            Ok(())
-        });
+    if footer == super::Footer::None && open {
+        if format!("{u:?}") != format!("{:?}", app.doc.data.units) {
+            app.run("Project Units", |p| {
+                p.units = u;
+                Ok(())
+            });
+        }
+    }
+    if footer != super::Footer::None {
+        open = false;
+    } else if !open {
+        super::session_cancel(app, "units");
     }
     if !open {
         app.dialogs.units = false;

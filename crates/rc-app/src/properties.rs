@@ -421,7 +421,7 @@ fn row_label(ui: &mut egui::Ui, s: &str) {
 }
 
 /// The thin drop-down chevron of property cells (instead of a heavy triangle).
-fn chevron(ui: &egui::Ui, rect: Rect, _visuals: &egui::style::WidgetVisuals, open: bool) {
+pub fn chevron(ui: &egui::Ui, rect: Rect, _visuals: &egui::style::WidgetVisuals, open: bool) {
     let c = rect.center();
     let st = egui::Stroke::new(1.0, if open { style::text() } else { style::text_dim() });
     ui.painter().line_segment([c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0)], st);
@@ -429,16 +429,16 @@ fn chevron(ui: &egui::Ui, rect: Rect, _visuals: &egui::style::WidgetVisuals, ope
 }
 
 /// A two-column property grid with thin grid lines (drawn by `prop_label`).
-fn prop_grid(ui: &egui::Ui, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Grid {
+pub fn prop_grid(ui: &egui::Ui, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Grid {
     egui::Grid::new(id).num_columns(2).striped(false).spacing(vec2(0.0, 0.0)).min_col_width(label_width(ui)).min_row_height(20.0)
 }
 
 fn label_width(ui: &egui::Ui) -> f32 {
-    (ui.clip_rect().width() * 0.46).floor().max(80.0)
+    (ui.clip_rect().width() * 0.46).floor().clamp(80.0, 200.0)
 }
 
 /// The label cell of a property row; also draws the row's grid lines.
-fn prop_label(ui: &mut egui::Ui, s: &str, dim: bool) {
+pub fn prop_label(ui: &mut egui::Ui, s: &str, dim: bool) {
     let w = label_width(ui);
     let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
     let clip = ui.clip_rect();
@@ -455,7 +455,7 @@ fn prop_label(ui: &mut egui::Ui, s: &str, dim: bool) {
 }
 
 /// The grey "Edit..." button that fills a value cell.
-fn edit_button(ui: &mut egui::Ui) -> egui::Response {
+pub fn edit_button(ui: &mut egui::Ui) -> egui::Response {
     let w = ui.available_width().max(60.0) - 2.0;
     let (r, resp) = ui.allocate_exact_size(vec2(w, 19.0), Sense::click());
     let fill = if resp.hovered() { style::hover() } else { egui::Color32::from_rgb(236, 237, 238) };

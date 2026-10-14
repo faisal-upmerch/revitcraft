@@ -1229,6 +1229,10 @@ impl eframe::App for App {
         }
     }
 
+    fn persist_egui_memory(&self) -> bool {
+        self.screenshot.is_none()
+    }
+
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         if let Some(s) = self.input_script.as_mut() {
             s.feed(raw_input);

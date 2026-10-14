@@ -598,10 +598,14 @@ pub fn snap_geom(app: &mut App, view_id: Id) -> Rc<SnapGeom> {
                     continue;
                 }
                 match &e.kind {
-                    ElementKind::Wall(w) if w.base_level == level => match w.arc() {
-                        Some(a) => g.arcs.push((a, Some(e.id))),
-                        None => g.segs.push((w.start, w.end, Some(e.id))),
-                    },
+                    ElementKind::Wall(w) if w.base_level == level => {
+                        match w.arc() {
+                            Some(a) => g.arcs.push((a, Some(e.id))),
+                            None => g.segs.push((w.start, w.end, Some(e.id))),
+                        }
+                        g.ends.push((w.start, Some(e.id)));
+                        g.ends.push((w.end, Some(e.id)));
+                    }
                     ElementKind::Grid(gr) => {
                         if let Some(a) = gr.arc_mid.and_then(|m| geom::Arc2::through(gr.start, m, gr.end)) {
                             g.arcs.push((a, Some(e.id)));
@@ -747,6 +751,19 @@ fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
     if let Some(label) = label {
         style::canvas_tooltip(painter, p + vec2(8.0, 12.0), label);
     }
+}
+
+/// A room's boundary with the two diagonal reference lines across its extents.
+pub fn paint_room_reference(painter: &egui::Painter, xf: &Xf, poly: &[DVec2], color: Color32) {
+    if poly.len() < 3 {
+        return;
+    }
+    let st = Stroke::new(1.5, color);
+    painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), st));
+    let (mn, mx) = rc_core::geom::bounds(poly.iter().copied());
+    let thin = Stroke::new(1.0, color);
+    painter.line_segment([xf.s(mn), xf.s(mx)], thin);
+    painter.line_segment([xf.s(DVec2::new(mn.x, mx.y)), xf.s(DVec2::new(mx.x, mn.y))], thin);
 }
 
 /// The small dimension glyph that turns a temporary dimension into a permanent one.
@@ -911,8 +928,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             if let Some(e) = app.el(*id) {
                 if matches!(e.kind, ElementKind::Room(_) | ElementKind::Area(_)) {
                     for o in cached_outlines(app, view_id, *id) {
-                        let pts: Vec<Pos2> = o.iter().map(|q| xf.s(*q + move_offset)).collect();
-                        paint_polyline(&painter, &pts, true, Stroke::new(2.0, style::SELECT), Dash::Solid, &xf);
+                        let moved: Vec<DVec2> = o.iter().map(|q| *q + move_offset).collect();
+                        paint_room_reference(&painter, &xf, &moved, style::SELECT);
                     }
                 }
                 // Selected floors and ceilings show a translucent blue fill.
@@ -947,8 +964,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 if let Some(e) = app.el(h) {
                     if matches!(e.kind, ElementKind::Room(_) | ElementKind::Area(_)) {
                         for o in cached_outlines(app, view_id, h) {
-                            let pts: Vec<Pos2> = o.iter().map(|q| xf.s(*q)).collect();
-                            paint_polyline(&painter, &pts, true, Stroke::new(1.5, style::PRESELECT), Dash::Dashed, &xf);
+                            paint_room_reference(&painter, &xf, &o, style::PRESELECT);
                         }
                     }
                 }

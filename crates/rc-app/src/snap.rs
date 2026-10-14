@@ -91,6 +91,9 @@ pub struct SnapGeom {
     pub arcs: Vec<(Arc2, Option<Id>)>,
     /// Extra key points (insertion points, room points, sketch vertices).
     pub points: Vec<(DVec2, Option<Id>)>,
+    /// Location-line ends of walls: they beat face corners and intersections nearby, so
+    /// chains of walls close exactly.
+    pub ends: Vec<(DVec2, Option<Id>)>,
 }
 
 impl SnapGeom {
@@ -260,17 +263,21 @@ pub fn snap(inp: &SnapInput) -> SnapResult {
         }
     };
     for (a, b, id) in &near_segs {
-        consider(*a, SnapKind::Endpoint, 0.0, *id, &mut best);
-        consider(*b, SnapKind::Endpoint, 0.0, *id, &mut best);
+        // Endpoints win over nearby intersections, so closing a chain lands on its start.
+        consider(*a, SnapKind::Endpoint, -0.5, *id, &mut best);
+        consider(*b, SnapKind::Endpoint, -0.5, *id, &mut best);
         consider((*a + *b) / 2.0, SnapKind::Midpoint, 1.0, *id, &mut best);
     }
     for (q, id) in &inp.geom.points {
         consider(*q, SnapKind::Endpoint, 0.2, *id, &mut best);
     }
+    for (q, id) in &inp.geom.ends {
+        consider(*q, SnapKind::Endpoint, -2.0, *id, &mut best);
+    }
     for (arc, id) in &near_arcs {
         consider(arc.center, SnapKind::Center, 0.5, *id, &mut best);
-        consider(arc.point(0.0), SnapKind::Endpoint, 0.0, *id, &mut best);
-        consider(arc.point(1.0), SnapKind::Endpoint, 0.0, *id, &mut best);
+        consider(arc.point(0.0), SnapKind::Endpoint, -0.5, *id, &mut best);
+        consider(arc.point(1.0), SnapKind::Endpoint, -0.5, *id, &mut best);
         consider(arc.mid(), SnapKind::Midpoint, 1.0, *id, &mut best);
         for k in 0..4 {
             let ang = k as f64 * std::f64::consts::FRAC_PI_2;
@@ -286,13 +293,13 @@ pub fn snap(inp: &SnapInput) -> SnapResult {
             let (a, b, ia) = near_segs[i];
             let (cc, d, _) = near_segs[j];
             if let Some(q) = line_line(*a, *b, *cc, *d) {
-                consider(q, SnapKind::Intersection, 0.3, *ia, &mut best);
+                consider(q, SnapKind::Intersection, 0.6, *ia, &mut best);
             }
         }
         for (arc, _) in &near_arcs {
             let (a, b, ia) = near_segs[i];
             for q in seg_arc(*a, *b, arc) {
-                consider(q, SnapKind::Intersection, 0.3, *ia, &mut best);
+                consider(q, SnapKind::Intersection, 0.6, *ia, &mut best);
             }
         }
     }

@@ -92,6 +92,8 @@ pub struct Dialogs {
     pub filter: bool,
     pub schedule_props: Option<(Id, usize)>,
     pub about: bool,
+    /// OK/Cancel sessions: dialog key -> (undo depth when opened, last time shown).
+    pub sessions: std::collections::HashMap<&'static str, (usize, f64)>,
 }
 
 /// Opens a dialog by name (command line `--dialog NAME`, used by screenshot checks).
@@ -139,10 +141,199 @@ thread_local! {
     static CENTER: std::cell::Cell<egui::Pos2> = const { std::cell::Cell::new(egui::pos2(700.0, 420.0)) };
 }
 
-/// A dialog window opening centred on the application window.
-fn window(title: &str) -> egui::Window<'_> {
+/// Dialog body colour (the standard Windows dialog grey).
+pub fn dialog_fill() -> egui::Color32 {
+    if style::is_dark() { egui::Color32::from_rgb(50, 53, 58) } else { egui::Color32::from_rgb(243, 243, 243) }
+}
+
+/// A dialog window: a small left-aligned title with the close cross, a grey body, opening
+/// centred on the application window.
+pub struct Dlg<'a> {
+    title: String,
+    win: egui::Window<'static>,
+    open: Option<&'a mut bool>,
+    resizable: bool,
+}
+
+fn window(title: &str) -> Dlg<'static> {
     let c = CENTER.with(|c| c.get());
-    egui::Window::new(title).collapsible(false).resizable(true).pivot(egui::Align2::CENTER_CENTER).default_pos(c).constrain(true)
+    let win = egui::Window::new(title.to_string())
+        .id(egui::Id::new(("dialog", title)))
+        .collapsible(false)
+        .resizable(true)
+        .title_bar(false)
+        .pivot(egui::Align2::CENTER_CENTER)
+        .default_pos(c)
+        .constrain(true)
+        .frame(egui::Frame::new().fill(dialog_fill()).stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(150))).shadow(egui::Shadow { offset: [3, 4], blur: 14, spread: 0, color: egui::Color32::from_black_alpha(50) }));
+    Dlg { title: title.to_string(), win, open: None, resizable: true }
+}
+
+impl<'a> Dlg<'a> {
+    pub fn open<'b>(self, open: &'b mut bool) -> Dlg<'b> {
+        Dlg { title: self.title, win: self.win, open: Some(open), resizable: self.resizable }
+    }
+    pub fn default_width(mut self, w: f32) -> Self {
+        self.win = self.win.default_width(w);
+        self
+    }
+    pub fn default_size(mut self, s: impl Into<egui::Vec2>) -> Self {
+        self.win = self.win.default_size(s);
+        self
+    }
+    pub fn resizable(mut self, r: bool) -> Self {
+        self.win = self.win.resizable(r);
+        self.resizable = r;
+        self
+    }
+    pub fn default_pos(mut self, p: impl Into<egui::Pos2>) -> Self {
+        self.win = self.win.default_pos(p);
+        self
+    }
+
+    pub fn show<R>(self, ctx: &egui::Context, add_contents: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
+        if self.open.as_ref().is_some_and(|o| !**o) {
+            return None;
+        }
+        let title = self.title.clone();
+        let mut close = false;
+        const BAR: f32 = 30.0;
+        let resizable = self.resizable;
+        let r = self.win.show(ctx, |ui| {
+            if resizable && !ui.is_sizing_pass() {
+                ui.set_min_width(ui.available_width());
+            }
+            let top = ui.min_rect().top();
+            ui.add_space(BAR);
+            let inner = egui::Frame::new().inner_margin(egui::Margin { left: 12, right: 12, top: 4, bottom: 12 }).show(ui, add_contents).inner;
+            // Title bar across the final width.
+            let w = ui.min_rect().width();
+            let bar = egui::Rect::from_min_size(egui::pos2(ui.min_rect().left(), top), vec2(w, BAR));
+            let p = ui.painter();
+            p.rect_filled(bar, 0.0, if style::is_dark() { egui::Color32::from_rgb(44, 47, 52) } else { egui::Color32::WHITE });
+            p.text(bar.left_center() + vec2(10.0, 0.0), egui::Align2::LEFT_CENTER, &title, style::font(12.0), style::text());
+            let x = egui::Rect::from_center_size(bar.right_center() - vec2(22.0, 0.0), vec2(44.0, BAR));
+            let resp = ui.interact(x, ui.id().with("dlg-close"), Sense::click());
+            if resp.hovered() {
+                ui.painter().rect_filled(x, 0.0, egui::Color32::from_rgb(232, 17, 35));
+            }
+            let c = x.center();
+            let ink = egui::Stroke::new(1.1, if resp.hovered() { egui::Color32::WHITE } else { style::text() });
+            ui.painter().line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], ink);
+            ui.painter().line_segment([c + vec2(5.0, -5.0), c + vec2(-5.0, 5.0)], ink);
+            if resp.clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                close = true;
+            }
+            inner
+        });
+        if close {
+            if let Some(o) = self.open {
+                *o = false;
+            }
+        }
+        r.and_then(|r| r.inner)
+    }
+}
+
+/// Discards a dialog's changes when it is closed with the cross (same as Cancel).
+pub fn session_cancel(app: &mut App, key: &'static str) {
+    if let Some((depth, _)) = app.dialogs.sessions.remove(key) {
+        app.doc.rollback_to(depth);
+    }
+}
+
+/// The column header row of a dialog table.
+pub fn table_header(ui: &mut egui::Ui, cols: &[&str]) {
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 21.0), Sense::hover());
+    let p = ui.painter();
+    p.rect_filled(r, 0.0, if style::is_dark() { egui::Color32::from_rgb(60, 63, 68) } else { egui::Color32::from_rgb(246, 246, 246) });
+    p.line_segment([r.left_bottom(), r.right_bottom()], egui::Stroke::new(1.0, egui::Color32::from_gray(190)));
+    let first = (r.width() * 0.46).floor().clamp(80.0, 200.0) + 1.0;
+    let widths: Vec<f32> = if cols.len() == 2 { vec![first, r.width() - first] } else { vec![r.width() / cols.len() as f32; cols.len()] };
+    let mut x = r.left();
+    for (k, c) in cols.iter().enumerate() {
+        let cell = egui::Rect::from_min_size(egui::pos2(x, r.top()), vec2(widths[k], r.height()));
+        p.text(cell.center(), egui::Align2::CENTER_CENTER, *c, style::font(12.0), style::text());
+        if k + 1 < cols.len() {
+            p.line_segment([cell.right_top(), cell.right_bottom()], egui::Stroke::new(1.0, egui::Color32::from_gray(200)));
+        }
+        x += widths[k];
+    }
+}
+
+/// A dialog push button (white face, grey border; the default button has a blue border).
+pub fn dlg_button(ui: &mut egui::Ui, label: &str, default: bool, enabled: bool) -> bool {
+    let (r, resp) = ui.allocate_exact_size(vec2(78.0, 24.0), if enabled { Sense::click() } else { Sense::hover() });
+    let fill = if !enabled {
+        egui::Color32::from_rgb(245, 245, 245)
+    } else if resp.is_pointer_button_down_on() {
+        egui::Color32::from_rgb(204, 228, 247)
+    } else if resp.hovered() {
+        egui::Color32::from_rgb(229, 241, 251)
+    } else {
+        egui::Color32::from_rgb(253, 253, 253)
+    };
+    ui.painter().rect_filled(r, 3.0, fill);
+    let border = if default && enabled { egui::Color32::from_rgb(0, 120, 215) } else { egui::Color32::from_gray(190) };
+    ui.painter().rect_stroke(r, 3.0, egui::Stroke::new(if default && enabled { 1.5 } else { 1.0 }, border), egui::StrokeKind::Inside);
+    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, label, style::font(12.0), if enabled { style::text() } else { style::text_dim() });
+    enabled && resp.clicked()
+}
+
+/// Starts (or continues) an OK/Cancel session for a dialog: remembers the undo depth when the
+/// dialog first appears so Cancel can discard and OK can group its changes.
+pub fn session_begin(app: &mut App, key: &'static str) -> usize {
+    let now = app.now;
+    let depth = app.doc.undo_depth();
+    let e = app.dialogs.sessions.entry(key).or_insert((depth, now));
+    if now - e.1 > 0.75 {
+        *e = (depth, now);
+    } else {
+        e.1 = now;
+    }
+    e.0
+}
+
+/// What the footer asked for.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Footer {
+    None,
+    Ok,
+    Cancel,
+}
+
+/// The OK / Cancel / Apply row. Edits take effect as they are made (so the views update
+/// live); OK keeps them as one undo step, Cancel discards them, Apply keeps them and stays open.
+pub fn footer(ui: &mut egui::Ui, app: &mut App, key: &'static str, title: &str) -> Footer {
+    let depth = session_begin(app, key);
+    let changed = app.doc.undo_depth() != depth;
+    let mut out = Footer::None;
+    ui.add_space(8.0);
+    ui.horizontal(|ui| {
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Apply", false, changed) {
+                app.doc.squash_since(depth, title);
+                let d = app.doc.undo_depth();
+                app.dialogs.sessions.insert(key, (d, app.now));
+            }
+            if dlg_button(ui, "Cancel", false, true) {
+                out = Footer::Cancel;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                out = Footer::Ok;
+            }
+        });
+    });
+    match out {
+        Footer::Ok => app.doc.squash_since(depth, title),
+        Footer::Cancel => app.doc.rollback_to(depth),
+        Footer::None => {}
+    }
+    if out != Footer::None {
+        app.dialogs.sessions.remove(key);
+    }
+    out
 }
 
 pub fn show(app: &mut App, ctx: &egui::Context) {

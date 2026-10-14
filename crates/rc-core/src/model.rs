@@ -2306,6 +2306,30 @@ impl Document {
         }
     }
 
+    /// Number of undo steps (dialogs use it to group or discard their changes).
+    pub fn undo_depth(&self) -> usize {
+        self.undo.len()
+    }
+
+    /// Discards every change made after `depth` (a dialog's Cancel); nothing is left to redo.
+    pub fn rollback_to(&mut self, depth: usize) {
+        while self.undo.len() > depth {
+            self.undo();
+        }
+        self.redo.clear();
+    }
+
+    /// Merges the changes made after `depth` into one undo step named `name` (a dialog's OK).
+    pub fn squash_since(&mut self, depth: usize, name: &str) {
+        if self.undo.len() > depth + 1 {
+            let first = self.undo[depth].1.clone();
+            self.undo.truncate(depth);
+            self.undo.push((name.to_string(), first));
+        } else if self.undo.len() == depth + 1 {
+            self.undo[depth].0 = name.to_string();
+        }
+    }
+
     /// Records a change that should not be undoable (e.g. camera moves).
     pub fn touch(&mut self) {
         self.revision += 1;

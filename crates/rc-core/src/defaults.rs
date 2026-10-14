@@ -101,7 +101,7 @@ pub fn add_level(p: &mut Project, name: &str, elevation: f64, with_plan: bool) -
     p.elements.push(Element::new(id, ElementKind::Level(Level { name: name.into(), elevation, building_story: true })));
     if with_plan {
         let vid = p.new_id();
-        let mut v = View::new(vid, name, 100.0, ViewKind::FloorPlan { level: id, cut_height: 1200.0, room_colors: true });
+        let mut v = View::new(vid, name, 100.0, ViewKind::FloorPlan { level: id, cut_height: 1200.0, room_colors: false });
         v.phase = p.phases.last().map(|ph| ph.id);
         p.views.push(v);
         let cid = p.new_id();
@@ -280,7 +280,7 @@ pub fn new_project(system: UnitSystem) -> Project {
     }
     // Site plan view template.
     let tid = p.new_id();
-    let mut tmpl = View::new(tid, "Architectural Plan", 100.0, ViewKind::FloorPlan { level: 0, cut_height: 1200.0, room_colors: true });
+    let mut tmpl = View::new(tid, "Architectural Plan", 100.0, ViewKind::FloorPlan { level: 0, cut_height: 1200.0, room_colors: false });
     tmpl.is_template = true;
     tmpl.detail = DetailLevel::Medium;
     p.views.push(tmpl);

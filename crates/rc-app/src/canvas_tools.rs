@@ -109,7 +109,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
         ToolKind::PlaceGroup => "Click to place the group origin.".into(),
-        ToolKind::Room => "Click inside an enclosed area to place a room.".into(),
+        ToolKind::Room => "Click to place room".into(),
         ToolKind::CeilingAuto => "Click inside a room bounded by walls to place a ceiling, or choose Sketch Ceiling.".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
         ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => "Click an element to tag it.".into(),
@@ -828,19 +828,33 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
         analysis::find_enclosure(&app.doc.data, level, c).map(|b| b.interior)
     };
     if let Some(poly) = &region {
-        let tris = geom::triangulate(poly);
-        let mut mesh = egui::Mesh::default();
-        for [a, b, cc] in tris {
-            let i = mesh.vertices.len() as u32;
-            for q in [poly[a], poly[b], poly[cc]] {
-                mesh.colored_vertex(xf.s(q), Color32::from_rgba_unmultiplied(40, 120, 255, 40));
+        if app.tool.kind == ToolKind::Room {
+            canvas::paint_room_reference(painter, xf, poly, Color32::from_rgb(80, 170, 220));
+            // The room tag follows the cursor.
+            if app.opts.room_tag {
+                // Same size as the placed tag (paper-scaled text).
+                let p0 = xf.s(c);
+                let (hn, hb) = (xf.text_px(3.0).max(6.0), xf.text_px(2.5).max(5.0));
+                let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, "Room", style::font(hn), Color32::from_gray(60));
+                let num = painter.layout_no_wrap(rc_core::edit::next_room_number(&app.doc.data), style::font(hb), Color32::from_gray(60));
+                let bx = egui::Rect::from_center_size(p0 + vec2(0.0, hb * 0.75), vec2(num.size().x.max(name.width() * 0.5) + hb, hb * 1.3));
+                painter.rect_stroke(bx, 0.0, Stroke::new(1.0, Color32::from_gray(90)), egui::StrokeKind::Inside);
+                painter.galley(bx.center() - num.size() / 2.0, num, Color32::from_gray(60));
             }
-            mesh.add_triangle(i, i + 1, i + 2);
+            style::canvas_tooltip(painter, xf.s(c) + vec2(4.0, 22.0), "Click to place room");
+        } else {
+            let tris = geom::triangulate(poly);
+            let mut mesh = egui::Mesh::default();
+            for [a, b, cc] in tris {
+                let i = mesh.vertices.len() as u32;
+                for q in [poly[a], poly[b], poly[cc]] {
+                    mesh.colored_vertex(xf.s(q), Color32::from_rgba_unmultiplied(40, 120, 255, 40));
+                }
+                mesh.add_triangle(i, i + 1, i + 2);
+            }
+            painter.add(egui::Shape::mesh(mesh));
+            painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), Stroke::new(1.5, style::PREVIEW)));
         }
-        painter.add(egui::Shape::mesh(mesh));
-        painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), Stroke::new(1.5, style::PREVIEW)));
-        let area = app.doc.data.units.area(geom::area(poly));
-        painter.text(xf.s(c) + vec2(14.0, -14.0), egui::Align2::LEFT_BOTTOM, area, egui::FontId::proportional(12.0), style::TEMP_DIM);
     }
     if clicked {
         let tag = app.opts.room_tag;

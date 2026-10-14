@@ -203,7 +203,8 @@ pub fn add_grid_ex(p: &mut Project, start: DVec2, end: DVec2, arc_mid: Option<DV
             .find(|n| !names.contains(n))
             .unwrap()
     };
-    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: true, bubble_end: true })))
+    // Like the reference app, a new grid shows its bubble at the end point only.
+    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: false, bubble_end: true })))
 }
 
 pub fn add_ref_plane(p: &mut Project, start: DVec2, end: DVec2) -> Result<Id, String> {
@@ -1692,7 +1693,7 @@ pub fn new_area_plan(p: &mut Project, level: Id, scheme: Id) -> Result<Id, Strin
 pub fn new_floor_plan(p: &mut Project, level: Id) -> Result<Id, String> {
     let lname = p.level(level).ok_or("Level not found.")?.name.clone();
     let id = p.new_id();
-    let mut v = View::new(id, unique_name(p.views.iter().map(|v| v.name.clone()), &lname), 100.0, ViewKind::FloorPlan { level, cut_height: 1200.0, room_colors: true });
+    let mut v = View::new(id, unique_name(p.views.iter().map(|v| v.name.clone()), &lname), 100.0, ViewKind::FloorPlan { level, cut_height: 1200.0, room_colors: false });
     v.phase = p.phases.last().map(|ph| ph.id);
     p.views.push(v);
     Ok(id)

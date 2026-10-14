@@ -258,11 +258,12 @@ pub fn group_header_ui(ui: &mut egui::Ui, label: &str, open: bool) -> egui::Resp
     resp
 }
 
+/// A parameter group band in dialogs (steel blue, bold label), as in Type Properties.
 pub fn header(ui: &mut egui::Ui, text: &str) {
-    egui::Frame::new().fill(group_header()).inner_margin(Margin::symmetric(6, 3)).show(ui, |ui| {
-        ui.set_width(ui.available_width());
-        ui.label(egui::RichText::new(text).font(bold(12.0)));
-    });
+    let (r, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 19.0), egui::Sense::hover());
+    let fill = pick(Color32::from_rgb(157, 184, 217), Color32::from_rgb(60, 80, 110));
+    ui.painter().rect_filled(r, 0.0, fill);
+    ui.painter().text(r.left_center() + egui::vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, text, bold(12.0), pick(Color32::from_rgb(16, 24, 40), Color32::WHITE));
 }
 
 /// A small light-yellow-free Windows tooltip box (white with a grey border) at `pos`.

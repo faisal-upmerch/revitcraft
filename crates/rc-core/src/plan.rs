@@ -43,7 +43,7 @@ pub const HEAVY: Stroke = Stroke::new(0.5, [0, 0, 0], Dash::Solid);
 pub const MEDIUM: Stroke = Stroke::new(0.25, [0, 0, 0], Dash::Solid);
 pub const THIN: Stroke = Stroke::new(0.13, [60, 60, 60], Dash::Solid);
 pub const HIDDEN: Stroke = Stroke::new(0.18, [90, 90, 90], Dash::Dashed);
-pub const GRID: Stroke = Stroke::new(0.13, [40, 40, 140], Dash::DashDot);
+pub const GRID: Stroke = Stroke::new(0.13, [0, 0, 0], Dash::DashDot);
 pub const REFPLANE: Stroke = Stroke::new(0.13, [30, 140, 60], Dash::DashDot);
 pub const ANNO: Stroke = Stroke::new(0.18, [0, 0, 0], Dash::Solid);
 pub const HALFTONE: [u8; 3] = [165, 165, 165];
@@ -377,7 +377,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 if let (Some(b), true) = (&b, room_colors) {
                     d.fill(Some(e.id), &b.interior, room_color(e.id));
                 }
-                tags.push((e.id, r.name.clone(), r.number.clone(), b.map(|b| b.area()), r.location));
+                let _ = b;
             }
             ElementKind::Area(a) if a.level == c.level && area_plan == Some(a.scheme) => {
                 let b = analysis::area_boundary(p, a);
@@ -613,14 +613,15 @@ fn grid_graphics(id: Id, g: &Grid, scale: f64, d: &mut Drawing) {
         }
     };
     d.line(Some(id), pts, false, GRID);
-    let r = 4.0 * scale;
+    // 1/2" bubble with the grid name.
+    let r = 6.0 * scale;
     for (pt, dir, show) in [(g.start, d0, g.bubble_start), (g.end, d1, g.bubble_end)] {
         if !show {
             continue;
         }
         let c = pt + dir * r;
         d.line(Some(id), circle(c, r, 32), true, Stroke { dash: Dash::Solid, ..GRID });
-        d.text(Some(id), c, g.name.clone(), 3.5, Anchor::Center);
+        d.text(Some(id), c, g.name.clone(), 4.5, Anchor::Center);
     }
 }
 
@@ -1075,6 +1076,21 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 let w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(1) as f64 * h * 0.6 + h;
                 let boxh = h * 1.4 * lines.len() as f64;
                 let room = p.element(t.host).is_some_and(|h| h.category() == Category::Rooms);
+                if room {
+                    let name = lines.first().copied().unwrap_or("");
+                    let number = lines.get(1).copied().unwrap_or("");
+                    d.text(Some(e.id), t.position + DVec2::new(0.0, h * 0.85), name.to_string(), 3.0, Anchor::Center);
+                    let nw = (number.chars().count().max(3) as f64 * h * 0.6 + h * 1.2) / 2.0;
+                    let (y0, y1) = (-h * 1.15, h * 0.05);
+                    let c = t.position;
+                    d.line(Some(e.id), vec![c + DVec2::new(-nw, y0), c + DVec2::new(nw, y0), c + DVec2::new(nw, y1), c + DVec2::new(-nw, y1)], true, ANNO);
+                    d.text(Some(e.id), c + DVec2::new(0.0, (y0 + y1) / 2.0), number.to_string(), 2.5, Anchor::Center);
+                    if t.leader {
+                        let host = p.element(t.host).map(|hh| annotation::host_point(p, hh)).unwrap_or(t.position);
+                        d.line(Some(e.id), vec![t.position, t.leader_end.unwrap_or(host)], false, ANNO);
+                    }
+                    continue;
+                }
                 if !room {
                     let pts = vec![
                         t.position + DVec2::new(-w / 2.0, -boxh / 2.0),
