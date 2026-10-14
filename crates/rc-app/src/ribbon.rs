@@ -583,54 +583,134 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
 
 // ---------------------------------------------------------------- file menu and QAT
 
+/// One big entry of the File menu's left column (icon, label, ▸ when it has a submenu).
+fn file_entry(ui: &mut egui::Ui, icon: icons::Icon, label: &str, sub: bool, hot: bool) -> egui::Response {
+    let (r, resp) = ui.allocate_exact_size(vec2(112.0, 46.0), Sense::click());
+    let p = ui.painter();
+    if hot || resp.hovered() {
+        p.rect_filled(r, 0.0, style::hover());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
+    }
+    icons::paint(p, Rect::from_min_size(r.min + vec2(8.0, 7.0), vec2(30.0, 30.0)), icon, true);
+    p.text(r.left_center() + vec2(46.0, 0.0), egui::Align2::LEFT_CENTER, label, style::font(12.0), style::text());
+    if sub {
+        let c = r.right_center() - vec2(10.0, 0.0);
+        p.add(egui::Shape::convex_polygon(vec![c + vec2(-2.0, -4.0), c + vec2(2.5, 0.0), c + vec2(-2.0, 4.0)], style::text(), Stroke::NONE));
+    }
+    resp
+}
+
+/// The File (application) menu: big commands on the left, Recent Documents or the hovered
+/// submenu on the right, Options and Exit at the bottom.
 fn file_menu(ui: &mut egui::Ui, app: &mut App) {
     let mut close = false;
+    let sub_id = egui::Id::new("file-menu-sub");
+    let mut sub: u8 = ui.memory(|m| m.data.get_temp(sub_id)).unwrap_or(0);
     ui.horizontal_top(|ui| {
         ui.vertical(|ui| {
-            ui.set_width(210.0);
-            for c in [C::New, C::Open, C::Save, C::SaveAs, C::OpenSample, C::ImportIfc] {
-                if menu_item(ui, app, c) {
-                    close = true;
-                    actions::exec(app, c);
+            ui.spacing_mut().item_spacing.y = 2.0;
+            let entries: [(icons::Icon, &str, u8, Option<Cmd>); 7] = [
+                (icons::Icon::New, "New", 1, None),
+                (icons::Icon::Open, "Open", 2, None),
+                (icons::Icon::Save, "Save", 0, Some(C::Save)),
+                (icons::Icon::Save, "Save As", 3, None),
+                (C::ExportPdf.info().icon, "Export", 4, None),
+                (icons::Icon::Sheet, "Print", 5, None),
+                (icons::Icon::CloseInactive, "Close", 0, None),
+            ];
+            for (k, (icon, label, s, cmd)) in entries.into_iter().enumerate() {
+                if k == 2 || k == 4 || k == 6 {
+                    let (r, _) = ui.allocate_exact_size(vec2(112.0, 5.0), Sense::hover());
+                    ui.painter().line_segment([r.left_center() + vec2(6.0, 0.0), r.right_center() - vec2(6.0, 0.0)], Stroke::new(1.0, style::border()));
                 }
-            }
-            ui.separator();
-            ui.label(egui::RichText::new("Export").strong().color(style::text_dim()));
-            for c in [C::ExportIfc, C::ExportDxf, C::ExportPdf, C::ExportImage, C::ExportCsv] {
-                if menu_item(ui, app, c) {
-                    close = true;
-                    actions::exec(app, c);
+                let resp = file_entry(ui, icon, label, s != 0, s != 0 && sub == s);
+                if resp.hovered() {
+                    sub = s;
                 }
-            }
-            ui.separator();
-            for c in [C::Options, C::Exit] {
-                if menu_item(ui, app, c) {
-                    close = true;
-                    actions::exec(app, c);
-                }
-            }
-        });
-        ui.separator();
-        ui.vertical(|ui| {
-            ui.set_width(300.0);
-            ui.label(egui::RichText::new("Recent Documents").strong());
-            ui.add_space(4.0);
-            if app.settings.recent.is_empty() {
-                ui.label(egui::RichText::new("No recent documents.").color(style::text_dim()));
-            }
-            for r in app.settings.recent.clone() {
-                let name = std::path::Path::new(&r).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(r.clone());
-                if ui.add(egui::Button::new(egui::RichText::new(name)).frame(false)).on_hover_text(&r).clicked() {
-                    close = true;
-                    if app.confirm_discard(crate::dialogs::Pending::OpenPath(r.clone())) {
-                        app.open_path(std::path::Path::new(&r));
+                if resp.clicked() {
+                    match (cmd, label) {
+                        (Some(c), _) => {
+                            close = true;
+                            actions::exec(app, c);
+                        }
+                        (None, "Close") => {
+                            close = true;
+                            if app.confirm_discard(crate::dialogs::Pending::New) {
+                                app.dialogs.home = true;
+                            }
+                        }
+                        _ => sub = s,
                     }
                 }
             }
         });
+        let (sep, _) = ui.allocate_exact_size(vec2(1.0, 380.0), Sense::hover());
+        ui.painter().line_segment([sep.center_top(), sep.center_bottom()], Stroke::new(1.0, style::border()));
+        ui.vertical(|ui| {
+            ui.set_width(300.0);
+            ui.set_min_height(340.0);
+            let items: &[Cmd] = match sub {
+                1 => &[C::New, C::NewFamily],
+                2 => &[C::Open, C::ImportIfc, C::OpenSample, C::LoadFamily],
+                3 => &[C::SaveAs],
+                4 => &[C::ExportIfc, C::ExportDxf, C::ExportPdf, C::ExportImage, C::ExportCsv],
+                5 => &[C::ExportPdf],
+                _ => &[],
+            };
+            if items.is_empty() {
+                ui.label(egui::RichText::new("Recent Documents").font(style::bold(12.5)));
+                ui.label(egui::RichText::new("By Ordered List").color(style::text_dim()).size(11.5));
+                ui.add_space(6.0);
+                if app.settings.recent.is_empty() {
+                    ui.label(egui::RichText::new("No recent documents.").color(style::text_dim()));
+                }
+                for r in app.settings.recent.clone() {
+                    let name = std::path::Path::new(&r).file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or(r.clone());
+                    if ui.add(egui::Button::new(egui::RichText::new(name)).frame(false)).on_hover_text(&r).clicked() {
+                        close = true;
+                        if app.confirm_discard(crate::dialogs::Pending::OpenPath(r.clone())) {
+                            app.open_path(std::path::Path::new(&r));
+                        }
+                    }
+                }
+            } else {
+                let title = ["", "Create a new project or family", "Open a project or family", "Save the current project", "Export the current project or view", "Print to PDF"][sub as usize];
+                ui.label(egui::RichText::new(title).font(style::bold(12.5)));
+                ui.add_space(6.0);
+                for c in items {
+                    let info = c.info();
+                    let (r, resp) = ui.allocate_exact_size(vec2(300.0, 40.0), Sense::click());
+                    if resp.hovered() {
+                        ui.painter().rect_filled(r, 0.0, style::hover());
+                    }
+                    icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(28.0, 28.0)), info.icon, actions::enabled(app, *c));
+                    ui.painter().text(r.min + vec2(42.0, 5.0), egui::Align2::LEFT_TOP, info.label.replace('\n', " "), style::bold(12.0), style::text());
+                    let tip: String = info.tip.chars().take(52).collect();
+                    ui.painter().text(r.min + vec2(42.0, 22.0), egui::Align2::LEFT_TOP, tip, style::font(11.0), style::text_dim());
+                    if resp.clicked() {
+                        close = true;
+                        actions::exec(app, *c);
+                    }
+                }
+            }
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
+                ui.horizontal(|ui| {
+                    if ui.add(egui::Button::new("Exit RevitCraft").min_size(vec2(96.0, 24.0))).clicked() {
+                        close = true;
+                        actions::exec(app, C::Exit);
+                    }
+                    if ui.add(egui::Button::new("Options").min_size(vec2(70.0, 24.0))).clicked() {
+                        close = true;
+                        actions::exec(app, C::Options);
+                    }
+                });
+            });
+        });
     });
+    ui.memory_mut(|m| m.data.insert_temp(sub_id, sub));
     if close {
         app.file_menu = false;
+        ui.memory_mut(|m| m.data.insert_temp(sub_id, 0u8));
     }
 }
 
@@ -708,7 +788,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         .inner;
     if app.file_menu {
         let area = egui::Area::new(egui::Id::new("file-menu")).order(egui::Order::Foreground).fixed_pos(file_resp.rect.left_bottom() + vec2(0.0, 1.0)).show(ui.ctx(), |ui| {
-            egui::Frame::popup(ui.style()).inner_margin(10).show(ui, |ui| file_menu(ui, app));
+            egui::Frame::popup(ui.style()).inner_margin(6).show(ui, |ui| file_menu(ui, app));
         });
         let clicked_outside = ui.input(|i| i.pointer.any_click()) && !area.response.rect.contains(ui.input(|i| i.pointer.interact_pos()).unwrap_or_default()) && !file_resp.clicked();
         if clicked_outside || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
