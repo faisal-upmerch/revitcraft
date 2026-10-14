@@ -52,6 +52,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         ViewRange => plan,
         DuplicateView | DuplicateWithDetailing | TemplateFromView | VisibilityGraphics | ZoomFit | ZoomRegion | ZoomOut => view.is_some(),
         PrevPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, true)),
+        ScheduleFields | ScheduleFilter | ScheduleSorting => app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
+        HighlightInModel => !app.selection.is_empty(),
         NextPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, false)),
         _ => true,
     }
@@ -552,6 +554,23 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ZoomOut => {
             if let Some(c) = app.active.and_then(|a| app.cams.get_mut(&a)) {
                 c.zoom /= 2.0;
+            }
+        }
+        ScheduleFields | ScheduleFilter | ScheduleSorting => {
+            if let Some(v) = app.active {
+                let tab = match cmd {
+                    ScheduleFields => 0,
+                    ScheduleFilter => 1,
+                    _ => 2,
+                };
+                app.dialogs.schedule_props = Some((v, tab));
+            }
+        }
+        HighlightInModel => {
+            let sel = app.selection.clone();
+            if let Some(plan) = app.doc.data.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. }) && !v.is_template).map(|v| v.id) {
+                app.open_view(plan);
+                app.select(sel);
             }
         }
         PrevPanZoom | NextPanZoom => {

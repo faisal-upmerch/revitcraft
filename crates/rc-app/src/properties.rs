@@ -847,6 +847,23 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
             }
         });
     }
+    if let ViewKind::Schedule(_) = v.kind {
+        let mut which: Option<usize> = None;
+        if section(ui, "Other") {
+            prop_grid(ui, "view-sched").show(ui, |ui| {
+                for (k, label) in ["Fields", "Filter", "Sorting/Grouping"].iter().enumerate() {
+                    row_label(ui, label);
+                    if edit_button(ui).clicked() {
+                        which = Some(k);
+                    }
+                    ui.end_row();
+                }
+            });
+        }
+        if let Some(k) = which {
+            app.dialogs.schedule_props = Some((vid, k));
+        }
+    }
     if open_vg {
         app.dialogs.vg = Some(vid);
     }

@@ -1,92 +1,121 @@
-//! Schedule views: a live table of elements; instance values can be edited in place.
+//! Schedule views: a live table of elements laid out like the reference schedule view
+//! (column letters, title row, headers, gridded cells); instance values edit in place.
 
 use crate::app::App;
 use crate::style;
-use eframe::egui::{self, Sense, Stroke, vec2};
-use egui_extras::{Column, TableBuilder};
+use eframe::egui::{self, Color32, Rect, Sense, Stroke, pos2, vec2};
 use rc_core::model::*;
 use rc_core::schedule::RowKind;
+
+const ROW_H: f32 = 21.0;
+
+fn letters(k: usize) -> String {
+    let mut k = k;
+    let mut s = String::new();
+    loop {
+        s.insert(0, (b'A' + (k % 26) as u8) as char);
+        if k < 26 {
+            break;
+        }
+        k = k / 26 - 1;
+    }
+    s
+}
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let Some(view) = app.doc.data.view(view_id).cloned() else { return };
     let ViewKind::Schedule(def) = &view.kind else { return };
     let Some(table) = app.table(view_id) else { return };
-    egui::Frame::new().fill(style::chrome()).inner_margin(egui::Margin::symmetric(8, 4)).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(format!("<{}>", view.name)).strong().size(14.0));
-            ui.separator();
-            if ui.button("Fields...").clicked() {
-                app.dialogs.schedule_props = Some((view_id, 0));
-            }
-            if ui.button("Filter...").clicked() {
-                app.dialogs.schedule_props = Some((view_id, 1));
-            }
-            if ui.button("Sorting/Grouping...").clicked() {
-                app.dialogs.schedule_props = Some((view_id, 2));
-            }
-            ui.separator();
-            if ui.button("Export CSV").clicked() {
-                app.activate(view_id);
-                crate::actions::exec(app, crate::commands::Cmd::ExportCsv);
-            }
-            if ui.button("Highlight in Model").on_hover_text("Selects the elements of the chosen rows").clicked() && !app.selection.is_empty() {
-                if let Some(plan) = app.doc.data.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. }) && !v.is_template).map(|v| v.id) {
-                    let sel = app.selection.clone();
-                    app.open_view(plan);
-                    app.select(sel);
+    let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.material_takeoff).collect();
+    let font = style::font(12.0);
+    // Column widths from the content.
+    let widths: Vec<f32> = (0..table.columns.len())
+        .map(|ci| {
+            let mut w = ui.painter().layout_no_wrap(table.columns[ci].def.name.clone(), font.clone(), Color32::BLACK).size().x;
+            for r in &table.rows {
+                if let Some(c) = r.cells.get(ci) {
+                    w = w.max(ui.painter().layout_no_wrap(c.clone(), font.clone(), Color32::BLACK).size().x);
                 }
             }
-            ui.label(egui::RichText::new(format!("{} rows", table.rows.iter().filter(|r| r.kind == RowKind::Item).count())).color(style::text_dim()));
-        });
-    });
-    let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.material_takeoff).collect();
-    let n = table.columns.len().max(1);
+            (w + 14.0).clamp(70.0, 360.0)
+        })
+        .collect();
+    let total_w: f32 = widths.iter().sum::<f32>().max(200.0);
     let mut edits: Vec<(Id, String, String)> = Vec::new();
     let mut select_rows: Option<Vec<Id>> = None;
-    egui::Frame::new().fill(style::field()).inner_margin(egui::Margin::same(6)).show(ui, |ui| {
-        let tb = TableBuilder::new(ui).striped(true).resizable(true).cell_layout(egui::Layout::left_to_right(egui::Align::Center)).columns(Column::auto().at_least(90.0).clip(true), n).min_scrolled_height(0.0);
-        tb.header(24.0, |mut header| {
-            for c in &table.columns {
-                header.col(|ui| {
-                    ui.label(egui::RichText::new(&c.def.name).strong());
-                });
+    let grid = Stroke::new(1.0, Color32::from_gray(200));
+    egui::Frame::new().fill(style::canvas(app.settings.black_canvas)).show(ui, |ui| {
+        ui.set_min_size(ui.available_size());
+        egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
+            let origin = ui.cursor().min + vec2(10.0, 10.0);
+            let rows_n = table.rows.len();
+            let height = ROW_H * (3 + rows_n) as f32 + 20.0;
+            ui.allocate_exact_size(vec2(total_w + 20.0, height), Sense::hover());
+            let p = ui.painter().clone();
+            let xs: Vec<f32> = widths
+                .iter()
+                .scan(origin.x, |x, w| {
+                    let x0 = *x;
+                    *x += w;
+                    Some(x0)
+                })
+                .collect();
+            // Column letters.
+            let lr = Rect::from_min_size(origin, vec2(total_w, ROW_H));
+            p.rect_filled(lr, 0.0, Color32::from_rgb(236, 236, 236));
+            for (k, x) in xs.iter().enumerate() {
+                let cell = Rect::from_min_size(pos2(*x, origin.y), vec2(widths[k], ROW_H));
+                p.text(cell.center(), egui::Align2::CENTER_CENTER, letters(k), style::font(11.5), Color32::from_gray(90));
+                p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
             }
-        })
-        .body(|mut body| {
+            // Title row.
+            let tr = Rect::from_min_size(origin + vec2(0.0, ROW_H), vec2(total_w, ROW_H));
+            p.rect_stroke(tr, 0.0, grid, egui::StrokeKind::Inside);
+            p.text(tr.center(), egui::Align2::CENTER_CENTER, format!("<{}>", view.name), style::font(12.5), style::text());
+            // Headers.
+            for (k, x) in xs.iter().enumerate() {
+                let cell = Rect::from_min_size(pos2(*x, origin.y + ROW_H * 2.0), vec2(widths[k], ROW_H));
+                p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
+                p.text(cell.center(), egui::Align2::CENTER_CENTER, &table.columns[k].def.name, font.clone(), style::text());
+            }
+            // Body.
             for (ri, row) in table.rows.iter().enumerate() {
+                let y = origin.y + ROW_H * (3 + ri) as f32;
+                let rr = Rect::from_min_size(pos2(origin.x, y), vec2(total_w, ROW_H));
                 let selected = !row.ids.is_empty() && row.ids.iter().all(|id| app.selection.contains(id));
-                body.row(22.0, |mut tr| {
-                    tr.set_selected(selected);
-                    for (ci, cell) in row.cells.iter().enumerate() {
-                        tr.col(|ui| {
-                            let strong = matches!(row.kind, RowKind::Total | RowKind::Header | RowKind::Group);
-                            if row.kind == RowKind::Item && row.ids.len() == 1 && editable.get(ci).copied().unwrap_or(false) {
-                                let key = egui::Id::new(("sched-cell", view_id, row.ids[0], ci));
-                                let mut text: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| cell.clone());
-                                let r = ui.add(egui::TextEdit::singleline(&mut text).frame(egui::Frame::NONE).desired_width(f32::INFINITY));
-                                if r.has_focus() {
-                                    ui.memory_mut(|m| m.data.insert_temp(key, text.clone()));
-                                }
-                                if r.gained_focus() {
-                                    select_rows = Some(row.ids.clone());
-                                }
-                                if r.lost_focus() {
-                                    ui.memory_mut(|m| m.data.remove::<String>(key));
-                                    if text != *cell {
-                                        edits.push((row.ids[0], table.columns[ci].def.name.clone(), text));
-                                    }
-                                }
-                            } else {
-                                let rt = egui::RichText::new(cell);
-                                let resp = ui.add(egui::Label::new(if strong { rt.strong() } else { rt }).sense(Sense::click()));
-                                if resp.clicked() {
-                                    select_rows = Some(row.ids.clone());
-                                }
+                if selected {
+                    p.rect_filled(rr, 0.0, Color32::from_rgb(204, 228, 247));
+                }
+                let strong = matches!(row.kind, RowKind::Total | RowKind::Header | RowKind::Group);
+                for (ci, cell) in row.cells.iter().enumerate() {
+                    let Some(x) = xs.get(ci) else { continue };
+                    let cr = Rect::from_min_size(pos2(*x, y), vec2(widths[ci], ROW_H));
+                    p.rect_stroke(cr, 0.0, grid, egui::StrokeKind::Inside);
+                    if row.kind == RowKind::Item && row.ids.len() == 1 && editable.get(ci).copied().unwrap_or(false) {
+                        let key = egui::Id::new(("sched-cell", view_id, row.ids[0], ci));
+                        let mut text: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| cell.clone());
+                        let r = ui.put(cr.shrink2(vec2(4.0, 2.0)), egui::TextEdit::singleline(&mut text).frame(egui::Frame::NONE).font(font.clone()));
+                        if r.has_focus() {
+                            ui.memory_mut(|m| m.data.insert_temp(key, text.clone()));
+                        }
+                        if r.gained_focus() {
+                            select_rows = Some(row.ids.clone());
+                        }
+                        if r.lost_focus() {
+                            ui.memory_mut(|m| m.data.remove::<String>(key));
+                            if text != *cell {
+                                edits.push((row.ids[0], table.columns[ci].def.name.clone(), text));
                             }
-                        });
+                        }
+                    } else {
+                        let f = if strong { style::bold(12.0) } else { font.clone() };
+                        p.text(cr.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, cell, f, style::text());
+                        let resp = ui.interact(cr, egui::Id::new(("sched-sel", view_id, ri, ci)), Sense::click());
+                        if resp.clicked() {
+                            select_rows = Some(row.ids.clone());
+                        }
                     }
-                    let _ = ri;
-                });
+                }
             }
         });
     });
@@ -101,5 +130,4 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             Ok(())
         });
     }
-    let _ = (vec2(0.0, 0.0), Stroke::NONE);
 }

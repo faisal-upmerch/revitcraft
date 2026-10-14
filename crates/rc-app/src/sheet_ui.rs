@@ -1,11 +1,11 @@
-//! Sheet views: title block, viewports (drag to move, Delete removes, double-click opens),
+﻿//! Sheet views: title block, viewports (drag to move, Delete removes, double-click opens),
 //! views dropped from the Project Browser are placed where they are released.
 
 use crate::app::App;
 use crate::browser::DragView;
 use crate::canvas::{self, Cam2, Xf};
 use crate::style;
-use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, pos2, vec2};
+use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, pos2};
 use rc_core::geom::DVec2;
 use rc_core::model::*;
 use rc_core::plan::{Dash, Prim};
@@ -40,9 +40,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     app.cams.insert(view_id, cam);
     let xf = Xf { rect, center: cam.center, zoom: cam.zoom, scale: 1.0, thin: app.thin_lines };
     let painter = ui.painter_at(rect);
-    painter.rect_filled(rect, 0.0, Color32::from_rgb(150, 154, 160));
+    painter.rect_filled(rect, 0.0, style::canvas(app.settings.black_canvas));
     let paper = Rect::from_two_pos(xf.s(DVec2::ZERO), xf.s(DVec2::new(pw, ph)));
-    painter.rect_filled(paper.translate(vec2(4.0, 4.0)), 0.0, Color32::from_rgba_unmultiplied(0, 0, 0, 60));
+    // Like the reference app, the sheet sits on the plain view background (no paper shadow).
     painter.rect_filled(paper, 0.0, Color32::WHITE);
 
     let _fp = app.footprints();
@@ -51,7 +51,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         match prim {
             SheetPrim::Line { pts, closed, width, color, dashed } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
-                canvas::paint_polyline(&painter, &v, *closed, Stroke::new((*width as f64 * xf.zoom * 0.9).clamp(0.6, 4.0) as f32, Color32::from_rgb(color[0], color[1], color[2])), if *dashed { Dash::Dashed } else { Dash::Solid }, &xf);
+                canvas::paint_polyline(&painter, &v, *closed, Stroke::new((*width * 4.5).clamp(1.0, 3.0), Color32::from_rgb(color[0], color[1], color[2])), if *dashed { Dash::Dashed } else { Dash::Solid }, &xf);
             }
             SheetPrim::Fill { tris, color } => {
                 let mut mesh = egui::Mesh::default();
@@ -110,7 +110,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         }
     }
     app.interact.prompt = match hover {
-        Some(v) => format!("Viewport: {}  — drag to move, double-click to open the view, Delete removes it from the sheet.", app.doc.data.view(v).map(|v| v.name.clone()).unwrap_or_default()),
+        Some(v) => format!("Viewport: {}  â€” drag to move, double-click to open the view, Delete removes it from the sheet.", app.doc.data.view(v).map(|v| v.name.clone()).unwrap_or_default()),
         None => "Drag views from the Project Browser onto the sheet to place them.".into(),
     };
     let drag_id = egui::Id::new(("vp-drag", view_id));

@@ -282,6 +282,12 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         };
         return Some((title, v));
     }
+    if app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))) {
+        return Some((
+            "Schedule/Quantities".into(),
+            vec![panel("Parameters", vec![Big(C::ScheduleFields), Big(C::ScheduleFilter), Big(C::ScheduleSorting)]), panel("Element", vec![Big(C::HighlightInModel)])],
+        ));
+    }
     if app.selection.is_empty() {
         return None;
     }
