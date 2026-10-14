@@ -791,7 +791,8 @@ fn walls_graphics(c: &Ctx, d: &mut Drawing) {
         let (fill, stroke) = match key {
             1 => ([200, 200, 200, 255], Stroke::new(0.35, [110, 110, 110], Dash::Solid)),
             2 => ([255, 255, 255, 0], Stroke::new(0.35, [110, 110, 110], Dash::Dotted)),
-            _ => (if view.detail == DetailLevel::Coarse { [190, 190, 190, 255] } else { [255, 255, 255, 0] }, HEAVY),
+            // Coarse walls are hollow (no coarse fill pattern), as in the reference template.
+            _ => ([255, 255, 255, 0], HEAVY),
         };
         if fill[3] > 0 {
             d.prims.insert(0, (None, Prim::Fill { tris: fill_tris(&union), color: fill }));

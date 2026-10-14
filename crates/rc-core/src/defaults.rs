@@ -293,6 +293,10 @@ pub fn new_project(system: UnitSystem) -> Project {
     schedule(&mut p, "Door Schedule", Category::Doors, &["Mark", "Family and Type", "Width", "Height", "Level", "Fire Rating", "Cost", "Comments"], &["Mark"], &["Cost"]);
     schedule(&mut p, "Window Schedule", Category::Windows, &["Mark", "Family and Type", "Width", "Height", "Sill Height", "Level", "Cost"], &["Mark"], &["Cost"]);
     schedule(&mut p, "Room Schedule", Category::Rooms, &["Number", "Name", "Level", "Area", "Perimeter", "Floor Finish"], &["Number"], &["Area"]);
+    // Views open at Coarse detail like the reference template (view templates keep theirs).
+    for v in p.views.iter_mut().filter(|v| !v.is_template) {
+        v.detail = DetailLevel::Coarse;
+    }
     if imp {
         // Imperial views start at 1/8" = 1'-0".
         for v in p.views.iter_mut().filter(|v| v.scale == 100.0) {

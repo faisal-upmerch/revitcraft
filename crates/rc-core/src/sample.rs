@@ -79,8 +79,9 @@ pub fn sample_house() -> Project {
     edit::place_free(&mut p, table, l1, v(3500.0, 4500.0), 0.0).unwrap();
     edit::place_free(&mut p, table, l1, v(9500.0, 2000.0), 90.0).unwrap();
 
-    // The sample's plans show the room colour fill.
+    // The sample's plans show the room colour fill and wall layers.
     for v in p.views.iter_mut() {
+        v.detail = DetailLevel::Medium;
         if let ViewKind::FloorPlan { room_colors, .. } = &mut v.kind {
             *room_colors = true;
         }
