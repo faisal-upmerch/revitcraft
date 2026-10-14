@@ -387,12 +387,21 @@ fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVe
     if view.shows(Category::Levels) {
         for (id, l) in p.levels() {
             let y = l.elevation;
-            d.line(Some(id), vec![DVec2::new(u0, y), DVec2::new(u1, y)], false, Stroke::new(0.13, [40, 40, 140], Dash::DashDot));
-            let head = DVec2::new(u1, y);
+            d.line(Some(id), vec![DVec2::new(u0, y), DVec2::new(u1, y)], false, Stroke::new(0.13, [0, 0, 0], Dash::DashDot));
+            // Target head: a circle with two filled quadrants, name above and elevation below.
             let r = 1.6 * scale;
-            d.fill(Some(id), &[head, head + DVec2::new(r, r), head + DVec2::new(r * 2.0, 0.0)], [40, 40, 140, 255]);
-            d.prims.push((Some(id), Prim::Text { pos: head + DVec2::new(r * 2.6, r * 0.9), text: l.name.clone(), size: 2.5, color: [40, 40, 140], anchor: Anchor::Left, angle: 0.0 }));
-            d.prims.push((Some(id), Prim::Text { pos: head + DVec2::new(r * 2.6, -r * 1.3), text: p.units.length(l.elevation), size: 2.0, color: [40, 40, 140], anchor: Anchor::Left, angle: 0.0 }));
+            let c = DVec2::new(u1 + r, y);
+            d.line(Some(id), plan::circle(c, r, 32), true, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
+            for q in [0.0f64, 2.0] {
+                let mut pts = vec![c];
+                for k in 0..=8 {
+                    let a = (q + k as f64 / 8.0) * std::f64::consts::FRAC_PI_2;
+                    pts.push(c + DVec2::new(a.cos(), a.sin()) * r);
+                }
+                d.fill(Some(id), &pts, [0, 0, 0, 255]);
+            }
+            d.prims.push((Some(id), Prim::Text { pos: c + DVec2::new(-r, r * 1.6), text: l.name.clone(), size: 2.4, color: [0, 0, 0], anchor: Anchor::Left, angle: 0.0 }));
+            d.prims.push((Some(id), Prim::Text { pos: c + DVec2::new(r * 1.6, -r * 0.1), text: p.units.length(l.elevation), size: 2.4, color: [0, 0, 0], anchor: Anchor::Left, angle: 0.0 }));
         }
     }
     if view.shows(Category::Grids) {
@@ -419,10 +428,10 @@ fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVe
                 continue;
             };
             d.line(Some(e.id), vec![DVec2::new(u, z0), DVec2::new(u, z1)], false, plan::GRID);
-            let r = 4.0 * scale;
+            let r = 6.0 * scale;
             let c = DVec2::new(u, z1 + r);
             d.line(Some(e.id), plan::circle(c, r, 32), true, Stroke { dash: Dash::Solid, ..plan::GRID });
-            d.text(Some(e.id), c, g.name.clone(), 3.5, Anchor::Center);
+            d.text(Some(e.id), c, g.name.clone(), 4.5, Anchor::Center);
         }
     }
     plan::annotation_graphics(p, view, &HashMap::new(), d);

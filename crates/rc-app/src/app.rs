@@ -43,6 +43,8 @@ pub struct Settings {
     pub select_links: bool,
     pub select_by_face: bool,
     pub palette_width: f32,
+    /// Minutes between "Project Not Saved Recently" reminders (0 = never).
+    pub save_reminder_minutes: u32,
 }
 
 impl Default for Settings {
@@ -67,6 +69,7 @@ impl Default for Settings {
             select_links: true,
             select_by_face: false,
             palette_width: 290.0,
+            save_reminder_minutes: 30,
         }
     }
 }
@@ -175,6 +178,8 @@ pub struct App {
     pub input_script: Option<crate::script::InputScript>,
     pub family_editor: Option<crate::family_editor::FamilyEditor>,
     pub settings_dirty: bool,
+    /// When the project was last saved or the save reminder last answered.
+    pub save_reminder_at: f64,
 }
 
 impl App {
@@ -222,6 +227,7 @@ impl App {
             input_script: crate::script::InputScript::from_env(),
             family_editor: None,
             settings_dirty: false,
+            save_reminder_at: 0.0,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
@@ -1022,6 +1028,13 @@ impl App {
         }
         egui::CentralPanel::default().frame(style::canvas_frame()).show(ui, |ui| self.dock_area(ui));
 
+        // Save reminder, like the reference app's "Project Not Saved Recently".
+        if !self.doc.dirty {
+            self.save_reminder_at = self.now;
+        } else if self.settings.save_reminder_minutes > 0 && self.screenshot.is_none() && self.now - self.save_reminder_at > self.settings.save_reminder_minutes as f64 * 60.0 {
+            self.dialogs.save_reminder = true;
+            self.save_reminder_at = self.now;
+        }
         crate::dialogs::show(self, &ctx);
         self.show_toast(&ctx);
         self.screenshot_step(&ctx);

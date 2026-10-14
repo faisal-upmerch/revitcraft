@@ -159,12 +159,13 @@ impl Xf {
     pub fn w(&self, s: Pos2) -> DVec2 {
         DVec2::new(self.center.x + (s.x - self.rect.center().x) as f64 / self.zoom, self.center.y - (s.y - self.rect.center().y) as f64 / self.zoom)
     }
-    /// Pixel width for a line weight in paper millimetres.
+    /// Pixel width for a line weight in paper millimetres. Like the reference app, weights
+    /// map to fixed screen widths that do not change with zoom (0.13 mm draws 1 px).
     pub fn px(&self, paper_mm: f32) -> f32 {
         if self.thin {
             return 1.0;
         }
-        (paper_mm as f64 * self.scale * self.zoom * 1.4).clamp(0.8, 6.0) as f32
+        (paper_mm * 7.5).clamp(1.0, 5.0)
     }
     pub fn text_px(&self, paper_mm: f32) -> f32 {
         (paper_mm as f64 * self.scale * self.zoom) as f32

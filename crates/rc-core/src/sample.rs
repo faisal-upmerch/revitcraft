@@ -114,7 +114,7 @@ pub fn sample_house() -> Project {
 
     // Plan annotation: door tags, an overall dimension and a north arrow.
     let plan_view = p.views.iter().find(|x| matches!(x.kind, ViewKind::FloorPlan { level, .. } if level == l1)).unwrap().id;
-    edit::tag_all(&mut p, plan_view, &[Category::Doors, Category::Windows]).unwrap();
+    edit::tag_all(&mut p, plan_view, &[Category::Doors, Category::Windows, Category::Rooms]).unwrap();
     edit::add_dimension(
         &mut p,
         plan_view,

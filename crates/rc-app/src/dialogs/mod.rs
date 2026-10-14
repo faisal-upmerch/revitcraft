@@ -92,6 +92,7 @@ pub struct Dialogs {
     pub filter: bool,
     pub schedule_props: Option<(Id, usize)>,
     pub about: bool,
+    pub save_reminder: bool,
     /// OK/Cancel sessions: dialog key -> (undo depth when opened, last time shown).
     pub sessions: std::collections::HashMap<&'static str, (usize, f64)>,
 }
@@ -378,6 +379,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     select_by_id(app, ctx);
     warnings(app, ctx);
     about(app, ctx);
+    save_reminder(app, ctx);
     settings::show(app, ctx);
     views::show(app, ctx);
     type_props::show(app, ctx);
@@ -1187,6 +1189,42 @@ fn warnings(app: &mut App, ctx: &egui::Context) {
     });
     if !open {
         app.dialogs.warnings = false;
+    }
+}
+
+/// "You have not saved your project recently. What do you want to do?"
+fn save_reminder(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.save_reminder {
+        return;
+    }
+    let mut open = true;
+    let mut choice = 0;
+    window("Project Not Saved Recently").open(&mut open).resizable(false).show(ctx, |ui| {
+        ui.set_width(270.0);
+        ui.label(egui::RichText::new("You have not saved your project recently.\nWhat do you want to do?").size(14.0).color(egui::Color32::from_rgb(0, 51, 153)));
+        ui.add_space(10.0);
+        for (k, label) in [(1, "Save the project"), (2, "Save the project and set reminder intervals"), (3, "Do not save and set reminder intervals")] {
+            let r = ui.add(egui::Button::new(egui::RichText::new(format!("\u{2192}  {label}")).color(egui::Color32::from_rgb(0, 102, 204))).frame(false).wrap());
+            if r.clicked() {
+                choice = k;
+            }
+        }
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if dlg_button(ui, "Cancel", false, true) {
+                choice = 4;
+            }
+        });
+    });
+    if choice == 1 || choice == 2 {
+        app.save();
+    }
+    if choice == 2 || choice == 3 {
+        app.dialogs.options = true;
+    }
+    if choice != 0 || !open {
+        app.dialogs.save_reminder = false;
+        app.save_reminder_at = app.now;
     }
 }
 

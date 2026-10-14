@@ -31,6 +31,15 @@ fn options(app: &mut App, ctx: &egui::Context) {
     window("Options").open(&mut open).default_width(420.0).show(ctx, |ui| {
         ui.heading("General");
         ui.horizontal(|ui| {
+            ui.label("Save reminder interval:");
+            let label = |m: u32| if m == 0 { "No reminders".to_string() } else if m < 60 { format!("{m} minutes") } else { format!("{} hours", m / 60) };
+            egui::ComboBox::from_id_salt("opt-reminder").selected_text(label(app.settings.save_reminder_minutes)).show_ui(ui, |ui| {
+                for m in [15, 30, 60, 120, 240, 0] {
+                    ui.selectable_value(&mut app.settings.save_reminder_minutes, m, label(m));
+                }
+            });
+        });
+        ui.horizontal(|ui| {
             ui.label("Username:");
             ui.text_edit_singleline(&mut app.settings.user);
         });

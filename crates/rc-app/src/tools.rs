@@ -579,7 +579,8 @@ impl ToolOptions {
             poly_sides: 6,
             wall_top: None,
             wall_depth: false,
-            wall_height: if imperial { 3048.0 } else { 3000.0 },
+            // The Wall tool starts Unconnected at 20'-0" (8000 mm in metric), as in the reference app.
+            wall_height: if imperial { 6096.0 } else { 8000.0 },
             location_line: LocationLine::WallCenterline,
             chain: true,
             offset: 0.0,
