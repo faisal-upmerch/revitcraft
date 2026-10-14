@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::canvas::{self, Drag, Xf, temp_dim};
 use crate::style;
 use crate::tools::{self, DrawMode, Seg, ToolKind};
-use eframe::egui::{self, Color32, Pos2, Stroke, vec2};
+use eframe::egui::{self, Color32, Pos2, Rect, Stroke, vec2};
 use rc_core::analysis;
 use rc_core::edit;
 use rc_core::geom::{self, DVec2};
@@ -94,14 +94,19 @@ pub fn prompt(app: &App) -> String {
             DrawMode::ArcCenter => ["Click the arc center.", "Click the arc start (radius).", "Click the arc end."][n.min(2)].into(),
             DrawMode::ArcTangent => "Click the end point of the tangent arc.".into(),
             DrawMode::Line => {
+                let what = if k == ToolKind::Wall { "wall" } else { "line" };
                 if n == 0 {
-                    format!("Click to enter the {} start point.", if k == ToolKind::Wall { "wall" } else { "line" })
+                    format!("Click to enter {what} start point.")
                 } else {
-                    format!("Click to enter the {} end point, or type a length and press Enter. Shift: orthogonal. Esc ends the chain.", if k == ToolKind::Wall { "wall" } else { "line" })
+                    match app.interact.snap.as_ref().and_then(canvas::axis_label) {
+                        Some(axis) => format!("{}. Space flips orientation.", axis.to_uppercase()),
+                        None => format!("Enter {what} end point. Space flips orientation."),
+                    }
                 }
             }
         },
-        ToolKind::Door | ToolKind::Window => "Click on a wall to place. The swing/facing follows the cursor side; Space flips it.".into(),
+        ToolKind::Door => "Click on Wall to place Door (Space Bar to flip the instance left/right)".into(),
+        ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
         ToolKind::PlaceGroup => "Click to place the group origin.".into(),
         ToolKind::Room => "Click inside an enclosed area to place a room.".into(),
@@ -240,16 +245,16 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
             draw_segs(painter, xf, &[s], Stroke::new(1.0, style::PREVIEW.gamma_multiply(0.6)));
         }
     } else {
-        let color = if app.sketch.is_some() { Color32::from_rgb(220, 0, 160) } else { style::PREVIEW };
+        let color = if app.sketch.is_some() { style::SKETCH } else { style::PREVIEW };
         draw_segs(painter, xf, &segs, Stroke::new(1.6, color));
     }
     // Temporary dimensions: length and angle of the rubber band.
     if let (Some(a), DrawMode::Line) = (app.tool.pts.first().copied(), mode) {
         let units = app.doc.data.units.clone();
-        temp_dim(painter, xf, a, pt, &units.length(a.distance(pt)), -22.0);
-        let ang = (pt - a).y.atan2((pt - a).x).to_degrees();
-        let ang = if ang < 0.0 { ang + 360.0 } else { ang };
-        painter.text(xf.s(a) + vec2(14.0, 14.0), egui::Align2::LEFT_TOP, units.format(ang, ParamKind::Angle), egui::FontId::proportional(11.5), style::TEMP_DIM);
+        canvas::temp_dim_ex(painter, xf, a, pt, &units.length(a.distance(pt)), -24.0, true);
+        // Angle from the previous segment (or the horizontal) with its arc.
+        let reference = app.tool.tangent.map(|t| t.1).unwrap_or(DVec2::X).normalize_or_zero();
+        angle_arc(painter, xf, a, reference, pt, &units);
     }
     if let (Some(a), DrawMode::Rect) = (app.tool.pts.first().copied(), mode) {
         let units = app.doc.data.units.clone();
@@ -277,6 +282,44 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
             app.tool.reset();
         }
     }
+}
+
+/// The angle between `reference` and the rubber band `a`→`pt`: a grey reference line, a
+/// light-blue arc and the value, skipped when the band runs along the reference.
+fn angle_arc(painter: &egui::Painter, xf: &Xf, a: DVec2, reference: DVec2, pt: DVec2, units: &rc_core::units::Units) {
+    let v = pt - a;
+    let len = v.length();
+    if len < 1e-6 || reference == DVec2::ZERO {
+        return;
+    }
+    let t0 = reference.y.atan2(reference.x);
+    let mut sweep = v.y.atan2(v.x) - t0;
+    while sweep > std::f64::consts::PI {
+        sweep -= std::f64::consts::TAU;
+    }
+    while sweep < -std::f64::consts::PI {
+        sweep += std::f64::consts::TAU;
+    }
+    let deg = sweep.abs().to_degrees();
+    if deg < 0.5 || (180.0 - deg) < 0.5 {
+        return;
+    }
+    let r_px = ((len * xf.zoom) as f32 * 0.5).clamp(24.0, 140.0);
+    let r = xf.len(r_px);
+    painter.line_segment([xf.s(a), xf.s(a + reference * (r * 1.35))], Stroke::new(1.0, Color32::from_gray(120)));
+    let n = 32;
+    let pts: Vec<Pos2> = (0..=n).map(|k| {
+        let t = t0 + sweep * k as f64 / n as f64;
+        xf.s(a + DVec2::new(t.cos(), t.sin()) * r)
+    }).collect();
+    painter.add(egui::Shape::line(pts, Stroke::new(1.0, style::TEMP_DIM_LINE)));
+    let tm = t0 + sweep / 2.0;
+    let q = xf.s(a + DVec2::new(tm.cos(), tm.sin()) * (r + xf.len(12.0)));
+    let text = units.format(deg, ParamKind::Angle);
+    let galley = painter.layout_no_wrap(text, style::font(12.0), style::TEMP_DIM);
+    let rect = Rect::from_center_size(q, galley.size());
+    painter.rect_filled(rect.expand(1.0), 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
+    painter.galley(rect.min, galley, style::TEMP_DIM);
 }
 
 /// Offsets of the wall faces relative to the drawn line for the current location line:
@@ -446,6 +489,49 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
         return;
     }
     let Some(id) = hover else { return };
+    // Tab over a wall picks the whole chain of joined walls, like the reference app.
+    let chain_key = egui::Id::new("pick-chain");
+    let mut chain: Option<Id> = painter.ctx().memory(|m| m.data.get_temp(chain_key)).flatten();
+    if std::mem::take(&mut app.interact.tab_pressed) && mode == DrawMode::PickWalls {
+        chain = if chain == Some(id) { None } else { Some(id) };
+    }
+    let walls = if chain.is_some() { wall_chain(&app.doc.data, chain.unwrap()) } else { vec![] };
+    if chain.is_some() && !walls.contains(&id) {
+        chain = None;
+    }
+    painter.ctx().memory_mut(|m| m.data.insert_temp(chain_key, chain));
+    if chain.is_some() && walls.len() > 1 {
+        app.interact.prompt = "Chain of walls or lines".into();
+        let p = &app.doc.data;
+        let mids: Vec<DVec2> = walls.iter().filter_map(|w| p.wall(*w)).map(|w| (w.start + w.end) / 2.0).collect();
+        let centroid = mids.iter().fold(DVec2::ZERO, |a, b| a + *b) / mids.len().max(1) as f64;
+        let w0 = p.wall(id).cloned();
+        let inside = w0.is_some_and(|w0| (c - w0.start).dot(w0.normal()) * (centroid - w0.start).dot(w0.normal()) > 0.0);
+        let roof = app.sketch.as_ref().is_some_and(|s| s.kind.is_roof());
+        let segs: Vec<Seg> = walls
+            .iter()
+            .filter_map(|wid| {
+                let w = p.wall(*wid)?;
+                let e = p.element(*wid)?;
+                let seg = element_curve(e)?;
+                let t = analysis::wall_thickness(p, w);
+                let toward = if (centroid - w.start).dot(w.normal()) >= 0.0 { 1.0 } else { -1.0 };
+                let side = if inside { toward } else { -toward };
+                Some(seg.offset(side * (t / 2.0 + if roof { app.opts.overhang } else { 0.0 })))
+            })
+            .collect();
+        draw_segs(painter, xf, &segs, Stroke::new(2.5, style::PRESELECT));
+        if clicked && kind == ToolKind::SketchLine {
+            if let Some(sk) = app.sketch.as_mut() {
+                for s in segs {
+                    sk.push(s, app.opts.defines_slope);
+                }
+                join_sketch_corners(sk);
+            }
+            painter.ctx().memory_mut(|m| m.data.insert_temp::<Option<Id>>(chain_key, None));
+        }
+        return;
+    }
     let Some(e) = app.el(id).cloned() else { return };
     let Some(mut seg) = element_curve(&e) else { return };
     let mut extra = app.opts.offset;
@@ -472,6 +558,26 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
             app.opts.offset = saved;
         }
     }
+}
+
+/// Walls joined end to end with `start` (same base level), in no particular order.
+fn wall_chain(p: &Project, start: Id) -> Vec<Id> {
+    let Some(level) = p.wall(start).map(|w| w.base_level) else { return vec![] };
+    let mut out = vec![start];
+    let mut k = 0;
+    while k < out.len() {
+        if let Some(w) = p.wall(out[k]).cloned() {
+            for pt in [w.start, w.end] {
+                for (other, _) in crate::grips::walls_joined_at(p, pt, out[k]) {
+                    if !out.contains(&other) && p.wall(other).is_some_and(|o| o.base_level == level) {
+                        out.push(other);
+                    }
+                }
+            }
+        }
+        k += 1;
+    }
+    out
 }
 
 /// Trims/extends sketch lines whose ends nearly meet so picked walls form closed loops.

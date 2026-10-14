@@ -253,11 +253,10 @@ pub fn paint(painter: &egui::Painter, xf: &Xf, grips: &[Grip], hover: Option<&Gr
                     painter.line_segment([p + vec2(-9.0, 6.0), p + vec2(9.0, -6.0)], Stroke::new(1.2, c));
                 }
             }
-            GripKind::CropEdge(_) | GripKind::LevelElevation => {
-                painter.circle(p, 4.5, fill, st);
-            }
             _ => {
-                painter.rect(Rect::from_center_size(p, vec2(8.0, 8.0)), 1.0, fill, st, egui::StrokeKind::Middle);
+                // Solid blue dots, like the reference app.
+                let dot = if hot { Color32::from_rgb(110, 165, 250) } else { Color32::from_rgb(64, 112, 210) };
+                painter.circle(p, 4.0, dot, Stroke::new(1.0, Color32::from_rgb(20, 60, 160)));
             }
         }
     }

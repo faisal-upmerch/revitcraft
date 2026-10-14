@@ -96,9 +96,16 @@ fn fs_main(i: VOut) -> @location(0) vec4<f32> {
         return vec4<f32>(pow(base * k, vec3<f32>(1.0 / 2.2)), i.color.a);
     }
     let key = max(dot(n, l), 0.0) * sh;
-    let fill = max(dot(n, normalize(vec3<f32>(-0.5, -0.7, 0.4))), 0.0);
-    let sky = 0.5 + 0.5 * n.z;
-    var c = base * (0.28 + 0.6 * key + 0.12 * fill + 0.16 * sky);
+    var c: vec3<f32>;
+    if (style < 2.5) {
+        // Shaded: one light from the viewer's top right plus ambient, so faces turned away
+        // from it read dark and the others light, as in the reference app.
+        c = min(base * (0.16 + 1.65 * key), vec3<f32>(1.0));
+    } else {
+        let fill = max(dot(n, normalize(vec3<f32>(-0.5, -0.7, 0.4))), 0.0);
+        let sky = 0.5 + 0.5 * n.z;
+        c = base * (0.28 + 0.6 * key + 0.12 * fill + 0.16 * sky);
+    }
     if (style > 3.5) {
         // Realistic: specular highlight by material shininess (extra.x).
         let v = normalize(to_eye);
@@ -523,7 +530,13 @@ impl Renderer {
 
     fn draw(&self, target: &Target, scene: &Scene, cam: &Camera, set: &DrawSettings) {
         let aspect = target.size[0] as f32 / target.size[1].max(1) as f32;
-        let light = set.sun.normalize_or(DVec3::new(0.4, -0.6, 0.9)).as_vec3();
+        // Shaded views without shadows light from the viewer's top right; otherwise the sun.
+        let view_light = {
+            let fwd = (cam.target - cam.eye).normalize_or(DVec3::new(0.0, 1.0, 0.0));
+            let right = fwd.cross(DVec3::Z).normalize_or(DVec3::X);
+            (right + DVec3::Z - fwd * 0.4).normalize()
+        };
+        let light = if matches!(set.style, VisualStyle::Shaded) && !set.shadows { view_light } else { set.sun.normalize_or(DVec3::new(0.4, -0.6, 0.9)) }.as_vec3();
         let style_code = match set.style {
             VisualStyle::Wireframe => 0.0,
             VisualStyle::HiddenLine => 1.0,
@@ -821,7 +834,7 @@ pub fn frame_bounds(bounds: Option<(DVec3, DVec3)>, dir: DVec3, perspective: boo
     let c = (mn + mx) / 2.0;
     let r = (mx - mn).length().max(3000.0);
     let dir = dir.normalize_or(DVec3::new(-0.6, -0.9, 0.55));
-    Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 1.05 }
+    Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 0.8 }
 }
 
 /// Sun direction (towards the sun) from azimuth (clockwise from north) and altitude in degrees.

@@ -171,6 +171,7 @@ pub struct App {
     pub now: f64,
     pub quit_requested: bool,
     pub screenshot: Option<(PathBuf, u32)>,
+    pub input_script: Option<crate::script::InputScript>,
     pub family_editor: Option<crate::family_editor::FamilyEditor>,
     pub settings_dirty: bool,
 }
@@ -216,6 +217,7 @@ impl App {
             now: 0.0,
             quit_requested: false,
             screenshot: std::env::var("RC_SCREENSHOT").ok().map(|p| (PathBuf::from(p), 0)),
+            input_script: crate::script::InputScript::from_env(),
             family_editor: None,
             settings_dirty: false,
         };
@@ -300,7 +302,7 @@ impl App {
         let Some((path, frames)) = self.screenshot.as_mut() else { return };
         *frames += 1;
         ctx.request_repaint();
-        if *frames == 14 {
+        if *frames == crate::script::shot_frame() {
             ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot(Default::default()));
         }
         let path = path.clone();
@@ -610,9 +612,6 @@ impl App {
         t.ids = self.selection.clone();
         self.tool = t;
         self.interact.drag = None;
-        if kind != ToolKind::Select {
-            self.ribbon_tab = ribbon::Tab::Modify;
-        }
     }
 
     pub fn cancel(&mut self) {
@@ -987,10 +986,12 @@ impl App {
 
         egui::Panel::top("ribbon").frame(style::ribbon_frame()).show(ui, |ui| ribbon::show(self, ui));
         if self.settings.show_options_bar {
-            egui::Panel::top("options_bar").frame(style::bar_frame()).exact_size(30.0).show(ui, |ui| options_bar::show(self, ui));
+            let contextual = !self.tool.is_select() || !self.selection.is_empty() || self.sketch.is_some();
+            let fill = if contextual { style::ribbon_tint(self.sketch.is_some()) } else { style::ribbon() };
+            egui::Panel::top("options_bar").frame(style::bar_frame().fill(fill)).exact_size(23.0).show(ui, |ui| options_bar::show(self, ui));
         }
         if self.settings.show_status {
-            egui::Panel::bottom("status").frame(style::bar_frame()).exact_size(26.0).show(ui, |ui| statusbar::show(self, ui));
+            egui::Panel::bottom("status").frame(style::bar_frame()).exact_size(22.0).show(ui, |ui| statusbar::show(self, ui));
         }
         if self.settings.show_properties || self.settings.show_browser {
             let resp = egui::Panel::left("palettes")
@@ -1038,15 +1039,29 @@ impl App {
             return;
         }
         let mut dstyle = egui_dock::Style::from_egui(ui.style());
-        dstyle.tab_bar.bg_fill = style::chrome();
-        dstyle.tab_bar.height = 26.0;
+        dstyle.tab_bar.bg_fill = style::tab_idle();
+        dstyle.tab_bar.height = 21.0;
+        dstyle.tab_bar.hline_color = style::border();
+        dstyle.tab.tab_body.stroke = egui::Stroke::new(1.0, style::border());
+        dstyle.tab.active.outline_color = style::border();
+        dstyle.tab.focused.outline_color = style::border();
+        dstyle.tab.inactive.outline_color = style::tab_idle();
+        dstyle.tab.hovered.bg_fill = egui::Color32::from_rgb(222, 222, 222);
+        dstyle.tab.hovered.text_color = style::text();
+        dstyle.tab.minimum_width = Some(90.0);
+        dstyle.buttons.close_tab_color = style::text();
+        dstyle.buttons.close_tab_active_color = style::text();
         dstyle.tab.tab_body.bg_fill = style::canvas(self.settings.black_canvas);
         dstyle.tab.active.bg_fill = style::field();
         dstyle.tab.focused.bg_fill = style::field();
         dstyle.tab.inactive.bg_fill = style::tab_idle();
-        dstyle.tab.focused.text_color = style::ACCENT;
+        dstyle.tab.focused.text_color = style::text();
         dstyle.tab.active.text_color = style::text();
-        dstyle.tab.inactive.text_color = style::text_dim();
+        dstyle.tab.inactive.text_color = style::text();
+        dstyle.tab.active.corner_radius = egui::CornerRadius::ZERO;
+        dstyle.tab.focused.corner_radius = egui::CornerRadius::ZERO;
+        dstyle.tab.inactive.corner_radius = egui::CornerRadius::ZERO;
+        dstyle.tab.hovered.corner_radius = egui::CornerRadius::ZERO;
         dstyle.separator.color_idle = style::border();
         dstyle.main_surface_border_stroke = egui::Stroke::new(1.0, style::border());
         {
@@ -1121,7 +1136,14 @@ impl TabViewer for Viewer<'_> {
     }
 
     fn title(&mut self, tab: &mut Id) -> egui::WidgetText {
-        self.app.view_title(*tab).into()
+        // View tabs show just the view name, like the reference app.
+        match self.app.doc.data.view(*tab) {
+            Some(v) => match &v.kind {
+                ViewKind::Sheet(s) => format!("{} - {}", s.number, v.name).into(),
+                _ => v.name.clone().into(),
+            },
+            None => "View".into(),
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, tab: &mut Id) {
@@ -1199,6 +1221,14 @@ impl eframe::App for App {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        eframe::set_value(storage, "settings", &self.settings);
+        if self.screenshot.is_none() {
+            eframe::set_value(storage, "settings", &self.settings);
+        }
+    }
+
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        if let Some(s) = self.input_script.as_mut() {
+            s.feed(raw_input);
+        }
     }
 }

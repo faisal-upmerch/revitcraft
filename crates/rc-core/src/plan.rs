@@ -626,8 +626,47 @@ fn grid_graphics(id: Id, g: &Grid, scale: f64, d: &mut Drawing) {
 
 /// Section lines, elevation markers and callout boxes shown in a plan.
 fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
-    let r = 5.0 * scale;
-    let heavy = Stroke::new(0.35, [0, 0, 0], Dash::Solid);
+    // A 1/2" circle with a dark arrow wedge outside it, like the standard elevation mark.
+    let r = 6.0 * scale;
+    let heavy = Stroke::new(0.25, [0, 0, 0], Dash::Solid);
+    let mark = |d: &mut Drawing, id: Id, c: DVec2, look: DVec2| {
+        let side = geom::perp(look);
+        // The wedge between the circle and the arrow triangle, as quads along rays from the
+        // centre (the region is concave, so it is built directly).
+        let (top, tip, bottom) = (c + side * (r * 1.22) + look * (r * 0.12), c + look * (r * 1.62), c - side * (r * 1.22) + look * (r * 0.12));
+        let edge_hit = |u: DVec2, p: DVec2, q: DVec2| -> DVec2 {
+            let e = q - p;
+            let den = u.x * e.y - u.y * e.x;
+            if den.abs() < 1e-12 {
+                return p;
+            }
+            let t = ((p.x - c.x) * e.y - (p.y - c.y) * e.x) / den;
+            c + u * t
+        };
+        let n = 24;
+        let mut tris = Vec::new();
+        let ring: Vec<(DVec2, DVec2)> = (0..=n)
+            .map(|k| {
+                let a = -std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * k as f64 / n as f64;
+                let u = look * a.cos() + side * a.sin();
+                let outer = if a >= 0.0 { edge_hit(u, tip, top) } else { edge_hit(u, bottom, tip) };
+                (c + u * r, outer)
+            })
+            .collect();
+        for w in ring.windows(2) {
+            let ((i0, o0), (i1, o1)) = (w[0], w[1]);
+            tris.push([i0, o0, o1]);
+            tris.push([i0, o1, i1]);
+        }
+        d.prims.push((Some(id), Prim::Fill { tris, color: [20, 30, 50, 255] }));
+        d.line(Some(id), circle(c, r, 32), true, heavy);
+    };
+    let sheet_ref = |id: Id| -> Option<(String, String)> {
+        let sheet = p.sheet_containing(id)?;
+        let ViewKind::Sheet(sh) = &sheet.kind else { return None };
+        let vp = sh.viewports.iter().find(|vp| vp.view == id)?;
+        Some((vp.detail_number.clone(), sh.number.clone()))
+    };
     for v in &p.views {
         if v.is_template {
             continue;
@@ -639,14 +678,14 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
                 d.line(Some(v.id), vec![*start, *end], false, Stroke::new(0.35, [0, 0, 0], Dash::DashDot));
                 for (pt, out) in [(*start, -dir), (*end, dir)] {
                     let c = pt + out * r;
-                    d.line(Some(v.id), circle(c, r, 24), true, heavy);
-                    d.fill(Some(v.id), &[c + look * (r * 1.8), c + geom::perp(look) * r, c - geom::perp(look) * r], [0, 0, 0, 255]);
+                    mark(d, v.id, c, look);
                 }
                 d.text(Some(v.id), *start - dir * r, v.name.chars().take(4).collect::<String>(), 2.2, Anchor::Center);
             }
             ViewKind::Elevation { dir } if view.plan_level().is_some() && view.shows(Category::Symbols) => {
                 // Elevation markers sit outside the model on each side.
-                let Some((mn, mx)) = model_extent(p) else { continue };
+                // An empty project still shows the four markers around the origin.
+                let (mn, mx) = model_extent(p).unwrap_or((DVec2::new(-9000.0, -6000.0), DVec2::new(9000.0, 6000.0)));
                 let c = (mn + mx) / 2.0;
                 let off = 4000.0;
                 let look = dir.look().truncate();
@@ -654,10 +693,12 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
                     Some((o, _)) => o,
                     None => DVec2::new(c.x - look.x * ((mx.x - mn.x) / 2.0 + off), c.y - look.y * ((mx.y - mn.y) / 2.0 + off)),
                 };
-                d.line(Some(v.id), circle(pos, r, 24), true, heavy);
-                let tip = pos + look * (r * 1.7);
-                d.fill(Some(v.id), &[tip, pos + geom::perp(look) * r, pos - geom::perp(look) * r], [0, 0, 0, 255]);
-                d.text(Some(v.id), pos, v.name.chars().next().map(|c| c.to_string()).unwrap_or_default(), 2.5, Anchor::Center);
+                mark(d, v.id, pos, look);
+                d.line(Some(v.id), vec![pos - DVec2::X * (r * 0.92), pos + DVec2::X * (r * 0.92)], false, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
+                if let Some((num, sheet)) = sheet_ref(v.id) {
+                    d.text(Some(v.id), pos + DVec2::Y * (r * 0.42), num, 2.0, Anchor::Center);
+                    d.text(Some(v.id), pos - DVec2::Y * (r * 0.45), sheet, 2.0, Anchor::Center);
+                }
             }
             _ => {}
         }

@@ -9,7 +9,9 @@ use glam::{DVec3, Vec3};
 use rc_core::model::*;
 use std::collections::HashSet;
 
-const DEFAULT_EYE: DVec3 = DVec3::new(-12000.0, -16000.0, 12000.0);
+/// Template eyes of never-navigated {3D} views (older and current templates): such views
+/// zoom to fit the model from their direction when first opened.
+const DEFAULT_EYES: [DVec3; 2] = [DVec3::new(-12000.0, -16000.0, 12000.0), DVec3::new(15000.0, -15000.0, 16500.0)];
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum NavMode {
@@ -105,10 +107,10 @@ pub fn camera_of(app: &mut App, view_id: Id) -> Camera {
     }
     let kind = app.doc.data.view(view_id).map(|v| v.kind.clone());
     let cam = match kind {
-        Some(ViewKind::ThreeD { eye, target, perspective }) if eye != DEFAULT_EYE => Camera { eye, target, perspective, ortho_height: (target - eye).length() * 0.8 },
-        Some(ViewKind::ThreeD { perspective, .. }) => {
+        Some(ViewKind::ThreeD { eye, target, perspective }) if !DEFAULT_EYES.contains(&eye) => Camera { eye, target, perspective, ortho_height: (target - eye).length() * 0.8 },
+        Some(ViewKind::ThreeD { eye, target, perspective }) => {
             let b = app.model_bounds();
-            render3d::frame_bounds(b, DVec3::new(-0.6, -0.9, 0.55), perspective)
+            render3d::frame_bounds(b, eye - target, perspective)
         }
         _ => render3d::frame_bounds(None, DVec3::new(-0.6, -0.9, 0.55), false),
     };
@@ -232,7 +234,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let ppp = ui.ctx().pixels_per_point();
     let size = [(rect.width() * ppp).round().max(8.0) as u32, (rect.height() * ppp).round().max(8.0) as u32];
     let sun = render3d::sun_direction(app.doc.data.sun.azimuth + app.doc.data.true_north, app.doc.data.sun.altitude);
-    let bg = if app.settings.black_canvas { [0.13, 0.15, 0.18] } else if matches!(view.style, VisualStyle::Realistic) { [0.84, 0.89, 0.95] } else { [0.96, 0.97, 0.99] };
+    let bg = if app.settings.black_canvas { [0.13, 0.15, 0.18] } else if matches!(view.style, VisualStyle::Realistic) { [0.84, 0.89, 0.95] } else { [1.0, 1.0, 1.0] };
     let settings = DrawSettings { style: view.style, shadows: view.shadows, sun, section_box: view.section_box, background: bg };
     let tex = {
         let (Some(scene), Some(renderer)) = (app.scenes.get(&view_id), app.renderer.as_mut()) else { return };
@@ -261,7 +263,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             let (o, d) = cam.ray(nx, ny, aspect);
             let hit = app.scenes.get(&view_id).and_then(|s| render3d::pick(s, o, d, view.section_box));
             let hit_id = hit.map(|h| h.0).and_then(|id| crate::canvas::selectable_id(app, &view, id));
-            app.interact.prompt = hit_id.map(|id| crate::canvas::describe(app, id)).unwrap_or_else(|| "Click to select. Drag for window selection. Shift+drag or middle-drag orbits (Shift+middle), wheel zooms.".into());
+            app.interact.prompt = hit_id.map(|id| crate::canvas::describe(app, id)).unwrap_or_else(|| "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into());
             if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() {
                 match hit_id {
                     Some(id) if ctrl => {
@@ -337,7 +339,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     if app.settings.show_navbar {
         nav_bar(app, ui, nav_rect, view_id, mode);
     }
-    painter.text(rect.left_bottom() + vec2(10.0, -8.0), egui::Align2::LEFT_BOTTOM, format!("{} — {}", view.name, view.style.label()), egui::FontId::proportional(11.0), style::text_dim());
     resp.context_menu(|ui| {
         if ui.button("Zoom To Fit").clicked() {
             frame_all(app, view_id);

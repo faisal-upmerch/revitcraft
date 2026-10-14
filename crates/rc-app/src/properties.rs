@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::icons::{self, Icon};
 use crate::style;
 use crate::tools::{SketchKind, ToolKind};
-use eframe::egui::{self, Rect, Sense, vec2};
+use eframe::egui::{self, Rect, Sense, pos2, vec2};
 use rc_core::model::*;
 use rc_core::params::{self, PKind, ParamDef};
 use std::collections::BTreeMap;
@@ -96,13 +96,20 @@ fn type_selector(app: &mut App, ui: &mut egui::Ui) {
             c.dedup();
             if c.len() == 1 { c[0].label().to_string() } else { "Multiple Categories Selected".into() }
         };
-        egui::Frame::new().inner_margin(egui::Margin::symmetric(8, 8)).show(ui, |ui| {
-            ui.horizontal(|ui| {
-                let (r, _) = ui.allocate_exact_size(vec2(36.0, 36.0), Sense::hover());
-                icons::paint(ui.painter(), r, if app.selection.is_empty() { Icon::FloorPlan } else { Icon::Properties }, true);
-                ui.label(egui::RichText::new(label).size(13.0).strong());
-            });
-        });
+        let icon = if app.selection.is_empty() {
+            match app.active_view().map(|v| &v.kind) {
+                Some(ViewKind::ThreeD { .. }) => Icon::View3D,
+                Some(ViewKind::Elevation { .. }) => Icon::Elevation,
+                Some(ViewKind::Section { .. }) => Icon::Section,
+                Some(ViewKind::CeilingPlan { .. }) => Icon::CeilingPlan,
+                Some(ViewKind::Sheet(_)) => Icon::Sheet,
+                Some(ViewKind::Schedule(_)) => Icon::Schedule,
+                _ => Icon::FloorPlan,
+            }
+        } else {
+            Icon::Properties
+        };
+        selector_box(ui, icon, &label, "", false);
         return;
     };
     let p = &app.doc.data;
@@ -127,15 +134,8 @@ fn type_selector(app: &mut App, ui: &mut egui::Ui) {
         Category::Groups => Icon::PlaceGroup,
         _ => Icon::Component,
     };
-    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 52.0), Sense::click());
-    let painter = ui.painter();
-    painter.rect_filled(rect.shrink(4.0), 2.0, if resp.hovered() { style::hover() } else { style::field() });
-    painter.rect_stroke(rect.shrink(4.0), 2.0, egui::Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
-    icons::paint(painter, Rect::from_min_size(rect.min + vec2(10.0, 9.0), vec2(34.0, 34.0)), icon, true);
-    painter.text(rect.min + vec2(52.0, 12.0), egui::Align2::LEFT_TOP, &fam, egui::FontId::proportional(12.5), style::text());
-    painter.text(rect.min + vec2(52.0, 28.0), egui::Align2::LEFT_TOP, &ty, egui::FontId::proportional(12.0), style::text_dim());
-    let c = rect.right_center() - vec2(16.0, 0.0);
-    painter.add(egui::Shape::convex_polygon(vec![c + vec2(-4.0, -2.0), c + vec2(4.0, -2.0), c + vec2(0.0, 3.0)], style::text_dim(), egui::Stroke::NONE));
+    let resp = selector_box(ui, icon, &fam, &ty, true);
+    let rect = resp.rect;
     let search_id = egui::Id::new("type-selector-search");
     let mut chosen: Option<Id> = None;
     egui::Popup::menu(&resp).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
@@ -171,28 +171,82 @@ fn type_selector(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
+/// The Type Selector box: a thumbnail on the left, family and type on two lines and the
+/// drop-down arrow on the right.
+fn selector_box(ui: &mut egui::Ui, icon: Icon, line1: &str, line2: &str, dropdown: bool) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 58.0), if dropdown { Sense::click() } else { Sense::hover() });
+    let painter = ui.painter();
+    if dropdown && resp.hovered() {
+        painter.rect_filled(rect.shrink(1.0), 0.0, style::hover());
+    }
+    let thumb = Rect::from_min_size(rect.min + vec2(3.0, 3.0), vec2(54.0, 52.0));
+    painter.rect_filled(thumb, 0.0, style::field());
+    painter.rect_stroke(thumb, 0.0, egui::Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+    icons::paint(painter, Rect::from_center_size(thumb.center(), vec2(32.0, 32.0)), icon, true);
+    let tx = thumb.right() + 6.0;
+    if line2.is_empty() {
+        painter.text(pos2(tx, rect.center().y), egui::Align2::LEFT_CENTER, line1, style::font(12.0), style::text());
+    } else {
+        painter.text(pos2(tx, rect.center().y - 1.0), egui::Align2::LEFT_BOTTOM, line1, style::font(12.0), style::text());
+        painter.text(pos2(tx, rect.center().y + 1.0), egui::Align2::LEFT_TOP, line2, style::font(12.0), style::text());
+    }
+    if dropdown {
+        let c = rect.right_center() - vec2(10.0, 0.0);
+        painter.add(egui::Shape::convex_polygon(vec![c + vec2(-3.5, -1.5), c + vec2(3.5, -1.5), c + vec2(0.0, 2.0)], style::text_dim(), egui::Stroke::NONE));
+    }
+    resp
+}
+
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
-    style::palette_title(ui, "Properties");
+    if style::palette_title(ui, "Properties") {
+        app.settings.show_properties = false;
+    }
     type_selector(app, ui);
-    ui.add_space(2.0);
     // Instance filter row + Edit Type.
-    ui.horizontal(|ui| {
-        ui.add_space(6.0);
+    let (row, _) = ui.allocate_exact_size(vec2(ui.available_width(), 20.0), Sense::hover());
+    {
         let label = filter_label(app);
-        ui.label(egui::RichText::new(label).strong());
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.add_space(6.0);
-            let t = selector_target(app).and_then(|(_, t)| t);
-            if ui.add_enabled(t.is_some(), egui::Button::new("Edit Type")).clicked() {
-                app.dialogs.type_props = t;
-            }
-        });
-    });
-    ui.separator();
-    egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt("props-scroll").show(ui, |ui| {
+        let p = ui.painter();
+        p.text(row.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, label, style::font(12.0), style::text());
+        p.line_segment([row.left_bottom(), row.right_bottom()], egui::Stroke::new(1.0, style::border()));
+    }
+    let t = selector_target(app).and_then(|(_, t)| t);
+    let edit = Rect::from_min_max(pos2(row.right() - 72.0, row.top() + 1.0), pos2(row.right() - 2.0, row.bottom() - 1.0));
+    let resp = ui.interact(edit, egui::Id::new("props-edit-type"), if t.is_some() { Sense::click() } else { Sense::hover() });
+    if t.is_some() && resp.hovered() {
+        ui.painter().rect_filled(edit, 0.0, style::hover());
+        ui.painter().rect_stroke(edit, 0.0, egui::Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
+    }
+    icons::paint(ui.painter(), Rect::from_min_size(edit.min + vec2(3.0, 3.0), vec2(13.0, 13.0)), Icon::TypeProperties, t.is_some());
+    ui.painter().text(edit.left_center() + vec2(19.0, 0.0), egui::Align2::LEFT_CENTER, "Edit Type", style::font(12.0), if t.is_some() { style::text() } else { style::text_dim() });
+    if resp.clicked() {
+        app.dialogs.type_props = t;
+    }
+    // Parameters, then the Apply footer.
+    let footer_h = 26.0;
+    let body_h = (ui.available_height() - footer_h).max(40.0);
+    egui::ScrollArea::vertical().auto_shrink([false, false]).max_height(body_h).id_salt("props-scroll").show(ui, |ui| {
         ui.spacing_mut().indent = 6.0;
-        egui::Frame::new().inner_margin(egui::Margin { left: 6, right: 4, top: 0, bottom: 0 }).show(ui, |ui| props_body(app, ui));
+        ui.spacing_mut().interact_size.y = 18.0;
+        let v = ui.visuals_mut();
+        v.widgets.inactive.bg_stroke = egui::Stroke::NONE;
+        v.widgets.inactive.weak_bg_fill = egui::Color32::TRANSPARENT;
+        v.widgets.inactive.bg_fill = egui::Color32::TRANSPARENT;
+        props_body(app, ui);
     });
+    let (foot, _) = ui.allocate_exact_size(vec2(ui.available_width(), footer_h), Sense::hover());
+    ui.painter().line_segment([foot.left_top(), foot.right_top()], egui::Stroke::new(1.0, style::border()));
+    ui.painter().text(foot.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, "Properties help", style::font(12.0), style::ACCENT);
+    let apply = Rect::from_min_max(pos2(foot.right() - 66.0, foot.top() + 3.0), pos2(foot.right() - 4.0, foot.bottom() - 3.0));
+    let editing = ui.ctx().memory(|m| m.focused().is_some());
+    let resp = ui.interact(apply, egui::Id::new("props-apply"), Sense::click());
+    ui.painter().rect_filled(apply, 0.0, if editing && resp.hovered() { style::hover() } else { egui::Color32::from_rgb(236, 237, 238) });
+    ui.painter().rect_stroke(apply, 0.0, egui::Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+    ui.painter().text(apply.center(), egui::Align2::CENTER_CENTER, "Apply", style::font(12.0), if editing { style::text() } else { style::text_dim() });
+    if resp.clicked() {
+        // Values commit when the edited field loses focus.
+        ui.ctx().memory_mut(|m| m.stop_text_input());
+    }
 }
 
 fn props_body(app: &mut App, ui: &mut egui::Ui) {
@@ -269,12 +323,12 @@ fn element_properties(app: &mut App, ui: &mut egui::Ui, sel: &[Id]) {
         if !open {
             continue;
         }
-        egui::Grid::new(("props", &g)).num_columns(2).striped(true).min_col_width(ui.available_width() * 0.45).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, ("props", &g)).show(ui, |ui| {
             for d in defs {
                 let values: Vec<String> = elems.iter().map(|e| params::display(&p, e, &d)).collect();
                 let same = values.iter().all(|v| *v == values[0]);
                 let shown = if same { values[0].clone() } else { String::new() };
-                ui.label(egui::RichText::new(&d.name).size(12.0));
+                prop_label(ui, &d.name, d.read_only);
                 if let Some(v) = value_editor(ui, app, &d, &shown, ("elem", sel.first().copied().unwrap_or(0), d.name.clone())) {
                     edits.push((d.name.clone(), v));
                 }
@@ -363,7 +417,44 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
 }
 
 fn row_label(ui: &mut egui::Ui, s: &str) {
-    ui.label(egui::RichText::new(s).size(12.0));
+    prop_label(ui, s, false);
+}
+
+/// A two-column property grid with thin grid lines (drawn by `prop_label`).
+fn prop_grid(ui: &egui::Ui, id: impl std::hash::Hash + std::fmt::Debug) -> egui::Grid {
+    egui::Grid::new(id).num_columns(2).striped(false).spacing(vec2(0.0, 0.0)).min_col_width(label_width(ui)).min_row_height(20.0)
+}
+
+fn label_width(ui: &egui::Ui) -> f32 {
+    (ui.clip_rect().width() * 0.46).floor().max(80.0)
+}
+
+/// The label cell of a property row; also draws the row's grid lines.
+fn prop_label(ui: &mut egui::Ui, s: &str, dim: bool) {
+    let w = label_width(ui);
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 20.0), Sense::hover());
+    let clip = ui.clip_rect();
+    let p = ui.painter();
+    let line = egui::Stroke::new(1.0, style::grid_line());
+    p.line_segment([egui::pos2(clip.left(), r.bottom() - 0.5), egui::pos2(clip.right(), r.bottom() - 0.5)], line);
+    p.line_segment([egui::pos2(r.right() - 0.5, r.top()), egui::pos2(r.right() - 0.5, r.bottom())], line);
+    let galley = p.layout_no_wrap(s.to_string(), style::font(12.0), if dim { style::text_dim() } else { style::text() });
+    let truncated = galley.size().x > w - 10.0;
+    p.with_clip_rect(r.shrink2(vec2(1.0, 0.0))).galley(egui::pos2(r.left() + 6.0, r.center().y - galley.size().y / 2.0), galley, style::text());
+    if truncated {
+        resp.on_hover_text(s);
+    }
+}
+
+/// The grey "Edit..." button that fills a value cell.
+fn edit_button(ui: &mut egui::Ui) -> egui::Response {
+    let w = ui.available_width().max(60.0) - 2.0;
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 19.0), Sense::click());
+    let fill = if resp.hovered() { style::hover() } else { egui::Color32::from_rgb(236, 237, 238) };
+    ui.painter().rect_filled(r.shrink(1.0), 0.0, fill);
+    ui.painter().rect_stroke(r.shrink(1.0), 0.0, egui::Stroke::new(1.0, style::grid_line()), egui::StrokeKind::Inside);
+    ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "Edit...", style::font(12.0), style::text());
+    resp
 }
 
 fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
@@ -380,12 +471,24 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         open
     };
     if section(ui, "Graphics") {
-        egui::Grid::new("view-graphics").num_columns(2).striped(true).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, "view-graphics").show(ui, |ui| {
             if v.is_graphical() {
                 row_label(ui, "View Scale");
-                let mut s = changed.scale;
-                ui.add(egui::DragValue::new(&mut s).range(1.0..=10000.0).prefix("1 : ").speed(1.0));
-                changed.scale = s;
+                let imperial = app.doc.data.units.system == rc_core::units::UnitSystem::Imperial;
+                let list: Vec<(f64, String)> = if imperial {
+                    crate::viewbar::IMPERIAL_SCALES.iter().map(|(v, l)| (*v, l.to_string())).collect()
+                } else {
+                    crate::viewbar::METRIC_SCALES.iter().map(|v| (*v, format!("1 : {v}"))).collect()
+                };
+                let w = ui.available_width() - 4.0;
+                egui::ComboBox::from_id_salt("vp-scale").selected_text(crate::viewbar::scale_label(app, changed.scale)).width(w).show_ui(ui, |ui| {
+                    for (v, l) in list {
+                        ui.selectable_value(&mut changed.scale, v, l);
+                    }
+                });
+                ui.end_row();
+                prop_label(ui, "Scale Value    1:", true);
+                ui.label(egui::RichText::new(format!("{}", changed.scale.round())).color(style::text_dim()));
                 ui.end_row();
                 row_label(ui, "Detail Level");
                 egui::ComboBox::from_id_salt("vp-detail").selected_text(changed.detail.label()).show_ui(ui, |ui| {
@@ -395,7 +498,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 });
                 ui.end_row();
                 row_label(ui, "Visibility/Graphics Overrides");
-                if ui.button("Edit...").clicked() {
+                if edit_button(ui).clicked() {
                     open_vg = true;
                 }
                 ui.end_row();
@@ -429,7 +532,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         });
     }
     if v.is_graphical() && section(ui, "Extents") {
-        egui::Grid::new("view-extents").num_columns(2).striped(true).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, "view-extents").show(ui, |ui| {
             if !matches!(v.kind, ViewKind::ThreeD { .. }) {
                 row_label(ui, "Crop View");
                 ui.checkbox(&mut changed.crop_active, "");
@@ -440,7 +543,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
             }
             if v.plan_level().is_some() {
                 row_label(ui, "View Range");
-                if ui.button("Edit...").clicked() {
+                if edit_button(ui).clicked() {
                     open_range = true;
                 }
                 ui.end_row();
@@ -468,7 +571,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         });
     }
     if section(ui, "Identity Data") {
-        egui::Grid::new("view-identity").num_columns(2).striped(true).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, "view-identity").show(ui, |ui| {
             row_label(ui, "View Template");
             let tname = changed.template.and_then(|t| p.view(t)).map(|t| t.name.clone()).unwrap_or_else(|| "<None>".into());
             egui::ComboBox::from_id_salt("vp-template").selected_text(tname).show_ui(ui, |ui| {
@@ -536,7 +639,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         });
     }
     if v.is_graphical() && section(ui, "Phasing") {
-        egui::Grid::new("view-phasing").num_columns(2).striped(true).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, "view-phasing").show(ui, |ui| {
             row_label(ui, "Phase Filter");
             egui::ComboBox::from_id_salt("vp-pf").selected_text(changed.phase_filter.label()).show_ui(ui, |ui| {
                 for f in PhaseFilter::ALL {
@@ -555,7 +658,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         });
     }
     if v.is_graphical() && !p.option_sets.is_empty() && section(ui, "Design Options") {
-        egui::Grid::new("view-options").num_columns(2).striped(true).spacing(vec2(6.0, 2.0)).show(ui, |ui| {
+        prop_grid(ui, "view-options").show(ui, |ui| {
             for set in &p.option_sets {
                 row_label(ui, &set.name);
                 let cur = changed.options.get(&set.id).copied();

@@ -584,7 +584,7 @@ impl ToolOptions {
             chain: true,
             offset: 0.0,
             radius: if imperial { 1828.8 } else { 2000.0 },
-            tag_on_placement: true,
+            tag_on_placement: false,
             rotation: 0.0,
             column_top: None,
             column_height: if imperial { 3048.0 } else { 3000.0 },

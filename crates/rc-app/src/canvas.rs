@@ -540,15 +540,44 @@ pub fn snap_point(app: &mut App, view: Id, cursor: DVec2, xf: &Xf, reference: Op
     snap::snap(&inp)
 }
 
+/// A light-blue dash-dot tracking line.
+pub fn track_line(painter: &egui::Painter, a: Pos2, b: Pos2) {
+    painter.extend(egui::Shape::dashed_line_with_offset(&[a, b], Stroke::new(1.0, style::TRACK), &[12.0, 2.0], &[3.0, 3.0], 0.0));
+}
+
+/// Is the angle-snap guide horizontal or vertical? Returns the label for the snap tooltip.
+pub fn axis_label(s: &SnapResult) -> Option<&'static str> {
+    if s.kind != SnapKind::Angle {
+        return None;
+    }
+    let (a, b) = s.guides.first()?;
+    let d = (*b - *a).normalize_or_zero();
+    if d.y.abs() < 1e-6 && d.x.abs() > 0.5 {
+        Some("Horizontal")
+    } else if d.x.abs() < 1e-6 && d.y.abs() > 0.5 {
+        Some("Vertical")
+    } else {
+        None
+    }
+}
+
 fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
     let c = style::SNAP;
-    let st = Stroke::new(1.8, c);
+    let st = Stroke::new(1.6, c);
+    let axis = axis_label(s);
     for (a, b) in &s.guides {
         let (pa, pb) = (xf.s(*a), xf.s(*b));
-        painter.extend(egui::Shape::dashed_line(&[pa, pb], Stroke::new(1.0, style::TRACK), 6.0, 4.0));
+        if axis.is_some() {
+            // Axis tracking runs across the whole view, like the reference app.
+            let d = (pb - pa).normalized();
+            let span = xf.rect.width().max(xf.rect.height()) * 2.0;
+            track_line(painter, pa - d * span, pa + d * span);
+        } else {
+            track_line(painter, pa, pb);
+        }
     }
     let p = xf.s(s.point);
-    let r = 6.0;
+    let r = 5.0;
     match s.kind {
         SnapKind::Endpoint => {
             painter.rect_stroke(Rect::from_center_size(p, vec2(r * 2.0, r * 2.0)), 0.0, st, egui::StrokeKind::Middle);
@@ -579,43 +608,84 @@ fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
         SnapKind::Nearest => {
             painter.add(egui::Shape::closed_line(vec![p + vec2(-r, -r), p + vec2(r, -r), p + vec2(-r, r), p + vec2(r, r)], st));
         }
-        SnapKind::Alignment | SnapKind::Extension | SnapKind::Angle => {
-            painter.line_segment([p + vec2(-4.0, -4.0), p + vec2(4.0, 4.0)], Stroke::new(1.4, style::TRACK));
-            painter.line_segment([p + vec2(4.0, -4.0), p + vec2(-4.0, 4.0)], Stroke::new(1.4, style::TRACK));
+        SnapKind::Angle if axis.is_some() => {
+            // Double arrow along the axis.
+            let d = if axis == Some("Horizontal") { vec2(1.0, 0.0) } else { vec2(0.0, 1.0) };
+            let n = vec2(-d.y, d.x);
+            painter.line_segment([p - d * 7.0, p + d * 7.0], Stroke::new(1.6, c));
+            for sgn in [1.0f32, -1.0] {
+                let tip = p + d * 8.0 * sgn;
+                painter.add(egui::Shape::convex_polygon(vec![tip, tip - d * 4.5 * sgn + n * 3.5, tip - d * 4.5 * sgn - n * 3.5], c, Stroke::NONE));
+            }
         }
-        SnapKind::Free => {}
+        SnapKind::Alignment | SnapKind::Extension => {
+            painter.line_segment([p + vec2(-4.0, -4.0), p + vec2(4.0, 4.0)], st);
+            painter.line_segment([p + vec2(4.0, -4.0), p + vec2(-4.0, 4.0)], st);
+        }
+        SnapKind::Angle | SnapKind::Free => {}
     }
-    if !matches!(s.kind, SnapKind::Free | SnapKind::Angle) {
-        let label = s.kind.label();
-        let pos = p + vec2(12.0, 12.0);
-        let galley = painter.layout_no_wrap(label.to_string(), egui::FontId::proportional(11.0), Color32::from_gray(30));
-        let bg = Rect::from_min_size(pos, galley.size()).expand(3.0);
-        painter.rect_filled(bg, 2.0, Color32::from_rgb(255, 255, 225));
-        painter.rect_stroke(bg, 2.0, Stroke::new(1.0, Color32::from_gray(140)), egui::StrokeKind::Inside);
-        painter.galley(pos, galley, Color32::from_gray(30));
+    let label = match s.kind {
+        SnapKind::Free => None,
+        SnapKind::Angle => axis,
+        k => Some(k.label()),
+    };
+    if let Some(label) = label {
+        style::canvas_tooltip(painter, p + vec2(8.0, 12.0), label);
     }
 }
 
 /// Draws a temporary (listening) dimension between two points with its value.
 pub fn temp_dim(painter: &egui::Painter, xf: &Xf, a: DVec2, b: DVec2, text: &str, offset_px: f32) -> Rect {
+    temp_dim_ex(painter, xf, a, b, text, offset_px, false)
+}
+
+/// Temporary dimension: thin light-blue witness and dimension lines, blue text along the line
+/// (bold for the listening dimension of the element being drawn).
+pub fn temp_dim_ex(painter: &egui::Painter, xf: &Xf, a: DVec2, b: DVec2, text: &str, offset_px: f32, bold: bool) -> Rect {
     let (sa, sb) = (xf.s(a), xf.s(b));
+    if sa.distance(sb) < 1.0 {
+        return Rect::NOTHING;
+    }
     let d = (sb - sa).normalized();
     let n = vec2(-d.y, d.x);
     let off = n * offset_px;
     let (la, lb) = (sa + off, sb + off);
-    let st = Stroke::new(1.0, style::TEMP_DIM);
-    painter.line_segment([sa + n * 4.0, la + n * 4.0], st);
-    painter.line_segment([sb + n * 4.0, lb + n * 4.0], st);
+    let st = Stroke::new(1.0, style::TEMP_DIM_LINE);
+    let gap = if offset_px.abs() > 4.0 { n * offset_px.signum() * 3.0 } else { vec2(0.0, 0.0) };
+    let ext = n * offset_px.signum() * 3.0;
+    painter.line_segment([sa + gap, la + ext], st);
+    painter.line_segment([sb + gap, lb + ext], st);
     painter.line_segment([la, lb], st);
     for q in [la, lb] {
-        painter.line_segment([q - (d + n) * 3.5, q + (d + n) * 3.5], Stroke::new(1.4, style::TEMP_DIM));
+        painter.line_segment([q - (d + n) * 3.0, q + (d + n) * 3.0], st);
     }
-    let mid = la + (lb - la) / 2.0 + n * 9.0;
-    let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(12.0), style::TEMP_DIM);
-    let r = Rect::from_center_size(mid, galley.size() + vec2(6.0, 2.0));
-    painter.rect_filled(r, 2.0, Color32::from_rgba_unmultiplied(255, 255, 255, 230));
-    painter.galley(r.min + vec2(3.0, 1.0), galley, style::TEMP_DIM);
-    r
+    // Text reads along the dimension, from the bottom or the right.
+    let mut ang = d.y.atan2(d.x);
+    if ang > std::f32::consts::FRAC_PI_2 + 0.01 {
+        ang -= std::f32::consts::PI;
+    } else if ang < -std::f32::consts::FRAC_PI_2 + 0.01 {
+        ang += std::f32::consts::PI;
+    }
+    let font = if bold { style::bold(12.0) } else { style::font(12.0) };
+    let galley = painter.layout_no_wrap(text.to_string(), font, style::TEMP_DIM);
+    let size = galley.size();
+    let along = vec2(ang.cos(), ang.sin());
+    let down = vec2(-along.y, along.x);
+    let outward = if offset_px.abs() > 0.1 { n * offset_px.signum() } else { -down };
+    let mid = la + (lb - la) / 2.0 + outward * (size.y / 2.0 + 1.0);
+    let origin = mid - along * (size.x / 2.0) - down * (size.y / 2.0);
+    let corners = [origin, origin + along * size.x, origin + along * size.x + down * size.y, origin + down * size.y];
+    let mut bb = Rect::NOTHING;
+    for c in corners {
+        bb.extend_with(c);
+    }
+    painter.add(egui::Shape::convex_polygon(
+        vec![corners[0] - along * 2.0 - down * 1.0, corners[1] + along * 2.0 - down * 1.0, corners[2] + along * 2.0 + down * 1.0, corners[3] - along * 2.0 + down * 1.0],
+        Color32::from_rgba_unmultiplied(255, 255, 255, 200),
+        Stroke::NONE,
+    ));
+    painter.add(egui::epaint::TextShape::new(origin, galley, style::TEMP_DIM).with_angle(ang));
+    bb.expand(2.0)
 }
 
 // ---------------------------------------------------------------- the view
@@ -715,6 +785,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                         paint_polyline(&painter, &pts, true, Stroke::new(2.0, style::SELECT), Dash::Solid, &xf);
                     }
                 }
+                // Selected floors and ceilings show a translucent blue fill.
+                let boundary = match &e.kind {
+                    ElementKind::Floor(f) => Some(f.boundary.clone()),
+                    ElementKind::Ceiling(c) => Some(c.boundary.clone()),
+                    _ => None,
+                };
+                if let Some(b) = boundary {
+                    let mut mesh = egui::Mesh::default();
+                    let fill = Color32::from_rgba_unmultiplied(70, 120, 220, 70);
+                    for [i, j, k] in rc_core::geom::triangulate(&b) {
+                        let n = mesh.vertices.len() as u32;
+                        for q in [b[i], b[j], b[k]] {
+                            mesh.colored_vertex(xf.s(q + move_offset), fill);
+                        }
+                        mesh.add_triangle(n, n + 1, n + 2);
+                    }
+                    painter.add(egui::Shape::mesh(mesh));
+                }
             }
         }
     }
@@ -744,14 +832,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             let pts: Vec<Pos2> = s.points().iter().map(|q| xf.s(*q)).collect();
             let selected = sk.selected.contains(&k);
             let hovered = is_active && app.interact.hover_seg == Some(k);
-            let color = if selected { style::SELECT } else if hovered { style::PRESELECT } else { Color32::from_rgb(220, 0, 160) };
+            let color = if selected { style::SELECT } else if hovered { style::PRESELECT } else { style::SKETCH };
             paint_polyline(&painter, &pts, false, Stroke::new(2.0, color), Dash::Solid, &xf);
             if sk.kind.is_roof() && sk.slopes.get(k).copied().unwrap_or(true) {
                 // Slope-defining edge: a small triangle marker.
                 let mid = xf.s((s.start() + s.end()) / 2.0);
                 let d = (xf.s(s.end()) - xf.s(s.start())).normalized();
                 let n = vec2(-d.y, d.x);
-                painter.add(egui::Shape::convex_polygon(vec![mid + n * 4.0 - d * 6.0, mid + n * 4.0 + d * 6.0, mid + n * 12.0], Color32::from_rgb(220, 0, 160), Stroke::NONE));
+                painter.add(egui::Shape::convex_polygon(vec![mid + n * 4.0 - d * 6.0, mid + n * 4.0 + d * 6.0, mid + n * 12.0], style::SKETCH, Stroke::NONE));
             }
         }
     }
@@ -774,7 +862,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let shift = ui.input(|i| i.modifiers.shift);
     let ctrl = ui.input(|i| i.modifiers.command || i.modifiers.ctrl);
     let tool_kind = app.tool.kind;
-    let wants_snap = !app.tool.is_select() || matches!(app.interact.drag, Some(Drag::Move { .. }) | Some(Drag::Grip { .. }) | Some(Drag::SketchVertex { .. }));
+    // Hosted and click-inside tools work from the raw cursor and show no snaps.
+    let cursor_tool = matches!(tool_kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto | ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag)
+        || (tool_kind.uses_draw_modes() && app.opts.draw_mode.is_pick() && canvas_tools::modes_for(tool_kind).contains(&app.opts.draw_mode));
+    let wants_snap = (!app.tool.is_select() && !cursor_tool) || matches!(app.interact.drag, Some(Drag::Move { .. }) | Some(Drag::Grip { .. }) | Some(Drag::SketchVertex { .. }));
     let reference = canvas_tools::reference_point(app);
     let mut snapped: Option<SnapResult> = None;
     if let (Some(c), true) = (cursor, wants_snap) {
@@ -816,10 +907,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     // Typed value box.
     if !app.typed.is_empty() {
         if let Some(c) = resp.hover_pos() {
-            let r = Rect::from_min_size(c + vec2(16.0, -30.0), vec2(90.0, 20.0));
-            painter.rect_filled(r, 2.0, Color32::WHITE);
-            painter.rect_stroke(r, 2.0, Stroke::new(1.0, style::ACCENT), egui::StrokeKind::Inside);
-            painter.text(r.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, &app.typed, egui::FontId::proportional(12.0), Color32::BLACK);
+            let r = Rect::from_min_size(c + vec2(16.0, -34.0), vec2(96.0, 19.0));
+            painter.rect_filled(r, 0.0, Color32::WHITE);
+            painter.rect_stroke(r, 0.0, Stroke::new(1.0, Color32::from_gray(170)), egui::StrokeKind::Inside);
+            painter.line_segment([r.left_bottom(), r.right_bottom()], Stroke::new(1.5, style::TEMP_DIM));
+            let t = painter.text(r.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, &app.typed, style::bold(12.0), Color32::BLACK);
+            painter.line_segment([pos2(t.right() + 1.0, r.top() + 3.0), pos2(t.right() + 1.0, r.bottom() - 3.0)], Stroke::new(1.0, Color32::BLACK));
+            style::canvas_tooltip(&painter, r.left_bottom() + vec2(0.0, 6.0), "Please enter a length");
         }
     }
     // Snap override indicator.
@@ -899,11 +993,17 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
         if !cands.is_empty() {
             let h = app.interact.hover;
             app.interact.prompt = h.map(|h| describe(app, h)).unwrap_or_default();
-            if cands.len() > 1 {
-                app.interact.prompt.push_str("  (Tab to cycle)");
+            // The element name follows the cursor after a short pause, like a tooltip.
+            if let (Some(h), Some(pos)) = (h, resp.hover_pos()) {
+                let still = ui.input(|i| i.pointer.time_since_last_movement());
+                if still > 0.35 && app.interact.drag.is_none() {
+                    style::canvas_tooltip(painter, pos + vec2(12.0, 16.0), &describe(app, h));
+                } else {
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(400));
+                }
             }
         } else {
-            app.interact.prompt = "Click to select, Tab for alternates, Ctrl adds, Shift removes. Drag right for window, left for crossing selection.".into();
+            app.interact.prompt = "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into();
         }
     }
 
@@ -1173,9 +1273,12 @@ fn window_select(app: &App, view: &View, d: &Drawing, a: DVec2, b: DVec2, crossi
 
 pub fn describe(app: &App, id: Id) -> String {
     if let Some(e) = app.el(id) {
-        let name = app.doc.data.display_name(e);
+        let p = &app.doc.data;
         let cat = e.category().label();
-        return format!("{cat} : {name}");
+        if p.type_of(e).is_some() {
+            return format!("{cat} : {} : {}", p.family_name_of(e), p.type_name_of(e));
+        }
+        return format!("{cat} : {}", p.display_name(e));
     }
     if let Some(v) = app.doc.data.view(id) {
         return format!("Views : {} : {}", v.type_label(), v.name);
@@ -1216,11 +1319,9 @@ fn context_menu(app: &mut App, resp: &egui::Response, view: &View) {
                 ui.close();
             }
         };
-        if !app.tool.is_select() || app.sketch.is_some() {
-            if ui.button("Cancel").clicked() {
-                app.cancel();
-                ui.close();
-            }
+        if ui.button("Cancel").clicked() {
+            app.cancel();
+            ui.close();
         }
         if let Some(last) = app.last_cmd {
             let label = format!("Repeat [{}]", last.info().label);
@@ -1270,7 +1371,10 @@ fn context_menu(app: &mut App, resp: &egui::Response, view: &View) {
         item(ui, "Zoom Out (2x)", Cmd::ZoomOut, &mut run);
         item(ui, "Zoom To Fit", Cmd::ZoomFit, &mut run);
         ui.separator();
-        item(ui, "Properties", Cmd::ToggleProperties, &mut run);
+        ui.menu_button("Browsers", |ui| {
+            item(ui, if app.settings.show_browser { "✓ Project Browser" } else { "Project Browser" }, Cmd::ToggleBrowser, &mut run);
+        });
+        item(ui, if app.settings.show_properties { "✓ Properties" } else { "Properties" }, Cmd::ToggleProperties, &mut run);
         if view.is_graphical() {
             item(ui, "View Range...", Cmd::ViewRange, &mut run);
         }

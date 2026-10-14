@@ -19,6 +19,7 @@ mod properties;
 mod render3d;
 mod ribbon;
 mod schedule_ui;
+mod script;
 mod sheet_ui;
 mod snap;
 mod statusbar;

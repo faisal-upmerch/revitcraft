@@ -158,7 +158,7 @@ pub fn new_project(system: UnitSystem) -> Project {
     // Wall types (exterior → interior).
     let t = |mm: f64, ins: f64| if imp { ins * inch } else { mm };
     let n_gen = if imp { "Generic - 8\"" } else { "Generic - 200mm" };
-    sys(&mut p, Category::Walls, n_gen, WallFunction::Exterior, 120.0, vec![layer(Structure, "Concrete Masonry Units", t(200.0, 8.0), true)], &[], &[]);
+    sys(&mut p, Category::Walls, n_gen, WallFunction::Exterior, 120.0, vec![layer(Structure, "Default", t(200.0, 8.0), true)], &[], &[]);
     let brick = sys(
         &mut p,
         Category::Walls,
@@ -266,7 +266,10 @@ pub fn new_project(system: UnitSystem) -> Project {
     }
 
     let id = p.new_id();
-    let mut v3 = View::new(id, "{3D}", 100.0, ViewKind::ThreeD { eye: DVec3::new(-12000.0, -16000.0, 12000.0), target: DVec3::new(5000.0, 4000.0, 1500.0), perspective: true });
+    // The default 3D view: orthographic, looking from the front-right-top corner, hidden line.
+    let target = DVec3::new(0.0, 0.0, 1500.0);
+    let mut v3 = View::new(id, "{3D}", 100.0, ViewKind::ThreeD { eye: target + DVec3::new(15000.0, -15000.0, 15000.0), target, perspective: false });
+    v3.style = VisualStyle::HiddenLine;
     v3.phase = p.phases.last().map(|ph| ph.id);
     p.views.push(v3);
     for dir in ElevationDir::ALL {
@@ -290,6 +293,12 @@ pub fn new_project(system: UnitSystem) -> Project {
     schedule(&mut p, "Door Schedule", Category::Doors, &["Mark", "Family and Type", "Width", "Height", "Level", "Fire Rating", "Cost", "Comments"], &["Mark"], &["Cost"]);
     schedule(&mut p, "Window Schedule", Category::Windows, &["Mark", "Family and Type", "Width", "Height", "Sill Height", "Level", "Cost"], &["Mark"], &["Cost"]);
     schedule(&mut p, "Room Schedule", Category::Rooms, &["Number", "Name", "Level", "Area", "Perimeter", "Floor Finish"], &["Number"], &["Area"]);
+    if imp {
+        // Imperial views start at 1/8" = 1'-0".
+        for v in p.views.iter_mut().filter(|v| v.scale == 100.0) {
+            v.scale = 96.0;
+        }
+    }
     schedule(&mut p, "Wall Schedule", Category::Walls, &["Family and Type", "Base Constraint", "Length", "Area", "Volume"], &["Family and Type"], &["Length", "Area", "Volume"]);
     p
 }

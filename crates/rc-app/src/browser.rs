@@ -35,18 +35,112 @@ fn view_icon(v: &View) -> Icon {
 
 /// One clickable row: icon + text. Returns the response.
 fn row(ui: &mut egui::Ui, icon: Icon, text: &str, selected: bool, bold: bool) -> egui::Response {
-    let h = 20.0;
+    let h = ROW_H;
     let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), h), Sense::click_and_drag());
+    tree_register(ui, r, r.left() + 1.0);
+    let font = if bold { style::bold(12.0) } else { style::font(12.0) };
+    let tw = ui.painter().layout_no_wrap(text.to_string(), font.clone(), style::text()).size().x;
+    let hi = Rect::from_min_size(r.min + vec2(19.0, 0.0), vec2((tw + 6.0).min(r.width() - 19.0), h));
     if selected {
-        ui.painter().rect_filled(r, 0.0, style::accent_light());
+        ui.painter().rect_filled(hi, 0.0, style::accent_light());
+        ui.painter().rect_stroke(hi, 0.0, egui::Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 0.0, style::hover());
+        ui.painter().rect_filled(hi, 0.0, style::hover());
     }
-    icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(2.0, 2.0), vec2(16.0, 16.0)), icon, true);
-    let rt = egui::RichText::new(text).size(12.0);
-    let rt = if bold { rt.strong() } else { rt };
-    let galley = egui::WidgetText::from(rt).into_galley(ui, Some(egui::TextWrapMode::Truncate), r.width() - 24.0, egui::TextStyle::Body);
+    icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(2.0, 1.0), vec2(15.0, 15.0)), icon, true);
+    let galley = egui::WidgetText::from(egui::RichText::new(text).font(font)).into_galley(ui, Some(egui::TextWrapMode::Truncate), r.width() - 24.0, egui::TextStyle::Body);
     ui.painter().galley(r.min + vec2(22.0, (h - galley.size().y) / 2.0), galley, style::text());
+    resp
+}
+
+// ---------------------------------------------------------------- tree with dotted connectors
+
+const ROW_H: f32 = 17.0;
+const INDENT: f32 = 13.0;
+
+thread_local! {
+    /// For each open tree node: the centre y of its last child row so far.
+    static TREE: std::cell::RefCell<Vec<Option<f32>>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn dotted(painter: &egui::Painter, a: egui::Pos2, b: egui::Pos2) {
+    let len = a.distance(b);
+    if len < 1.0 {
+        return;
+    }
+    let d = (b - a) / len;
+    let c = egui::Color32::from_gray(160);
+    let mut t = 0.0;
+    while t <= len {
+        let q = a + d * t;
+        painter.rect_filled(Rect::from_min_size(egui::pos2(q.x.round(), q.y.round()), vec2(1.0, 1.0)), 0.0, c);
+        t += 2.0;
+    }
+}
+
+/// Records a row in the enclosing node and draws its horizontal stub from the parent's line.
+fn tree_register(ui: &egui::Ui, r: Rect, stub_end: f32) {
+    let depth = TREE.with(|t| {
+        let mut t = t.borrow_mut();
+        let n = t.len();
+        if let Some(last) = t.last_mut() {
+            *last = Some(r.center().y);
+        }
+        n
+    });
+    if depth > 0 {
+        let x = r.left() - INDENT + 4.5;
+        dotted(ui.painter(), egui::pos2(x, r.center().y.round() + 0.5), egui::pos2(stub_end, r.center().y.round() + 0.5));
+    }
+}
+
+/// A plain label row inside the tree.
+fn tree_text(ui: &mut egui::Ui, text: &str) {
+    let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::hover());
+    tree_register(ui, r, r.left() + 1.0);
+    ui.painter().text(r.left_center() + vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, text, style::font(12.0), style::text_dim());
+}
+
+/// A collapsible tree node with a "-"/"+" expander and dotted lines to its children.
+fn tree_node(ui: &mut egui::Ui, salt: impl std::hash::Hash + std::fmt::Debug, label: &str, icon: Option<Icon>, default_open: bool, force_open: bool, body: impl FnOnce(&mut egui::Ui)) -> egui::Response {
+    let id = ui.make_persistent_id(salt);
+    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(ui.ctx(), id, default_open);
+    let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width(), ROW_H), Sense::click());
+    tree_register(ui, r, r.left() + 1.0);
+    let open = state.is_open() || force_open;
+    let p = ui.painter();
+    let c = egui::pos2(r.left() + 4.5, r.center().y.round() + 0.5);
+    let ink = egui::Stroke::new(1.0, style::text());
+    p.line_segment([c - vec2(3.5, 0.0), c + vec2(3.5, 0.0)], ink);
+    if !open {
+        p.line_segment([c - vec2(0.0, 3.5), c + vec2(0.0, 3.5)], ink);
+    }
+    let mut x = r.left() + 13.0;
+    if let Some(icon) = icon {
+        icons::paint(p, Rect::from_min_size(egui::pos2(x, r.top() + 1.0), vec2(15.0, 15.0)), icon, true);
+        x += 19.0;
+    }
+    let tw = p.layout_no_wrap(label.to_string(), style::font(12.0), style::text()).size().x;
+    if resp.hovered() {
+        p.rect_filled(Rect::from_min_size(egui::pos2(x - 2.0, r.top()), vec2(tw + 5.0, ROW_H)), 0.0, style::hover());
+    }
+    p.text(egui::pos2(x, r.center().y), egui::Align2::LEFT_CENTER, label, style::font(12.0), style::text());
+    if resp.clicked() && !force_open {
+        state.toggle(ui);
+    }
+    let open = state.is_open() || force_open;
+    state.store(ui.ctx());
+    if open {
+        TREE.with(|t| t.borrow_mut().push(None));
+        ui.indent(id.with("body"), |ui| {
+            ui.spacing_mut().indent = INDENT;
+            body(ui)
+        });
+        let last = TREE.with(|t| t.borrow_mut().pop()).flatten();
+        if let Some(y) = last {
+            dotted(ui.painter(), egui::pos2(c.x, r.bottom() + 1.0), egui::pos2(c.x, y.round() + 0.5));
+        }
+    }
     resp
 }
 
@@ -135,7 +229,9 @@ fn view_row(app: &mut App, ui: &mut egui::Ui, v: &View) {
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let name = app.doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Project1".into());
-    style::palette_title(ui, &format!("Project Browser - {name}"));
+    if style::palette_title(ui, &format!("Project Browser - {name}")) {
+        app.settings.show_browser = false;
+    }
     let filter_id = egui::Id::new("browser-filter");
     let mut filter: String = ui.memory(|m| m.data.get_temp(filter_id)).unwrap_or_default();
     egui::Frame::new().inner_margin(egui::Margin::symmetric(6, 4)).show(ui, |ui| {
@@ -149,10 +245,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
     let f = filter.trim().to_string();
     egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt("browser-scroll").show(ui, |ui| {
         ui.spacing_mut().item_spacing.y = 0.0;
-        ui.spacing_mut().indent = 14.0;
+        ui.spacing_mut().indent = INDENT;
         let p = app.snapshot();
         let open_default = !f.is_empty();
-        egui::CollapsingHeader::new(egui::RichText::new("Views (all)").strong()).default_open(true).open(open_default.then_some(true)).show(ui, |ui| {
+        tree_node(ui, "Views (all)", "Views (all)", Some(Icon::FloorPlan), true, open_default, |ui| {
             let groups: [(&str, fn(&View) -> bool); 9] = [
                 ("Floor Plans", |v| matches!(v.kind, ViewKind::FloorPlan { .. })),
                 ("Ceiling Plans", |v| matches!(v.kind, ViewKind::CeilingPlan { .. })),
@@ -174,7 +270,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     let eb = b.plan_level().map(|l| p.level_elevation(l)).unwrap_or(0.0);
                     ea.total_cmp(&eb).then_with(|| a.name.cmp(&b.name))
                 });
-                egui::CollapsingHeader::new(title).id_salt(title).default_open(title == "Floor Plans" || title == "3D Views" || title == "Elevations (Building Elevation)").open(open_default.then_some(true)).show(ui, |ui| {
+                tree_node(ui, title, title, None, title == "Floor Plans" || title == "3D Views" || title == "Elevations (Building Elevation)", open_default, |ui| {
                     for v in views {
                         view_row(app, ui, v);
                     }
@@ -186,7 +282,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ViewKind::Sheet(s) => s.number.clone(),
             _ => String::new(),
         });
-        let sheets_resp = egui::CollapsingHeader::new(egui::RichText::new("Sheets (all)").strong()).default_open(true).open(open_default.then_some(true)).show(ui, |ui| {
+        let sheets_resp = tree_node(ui, "Sheets (all)", "Sheets (all)", Some(Icon::Sheet), true, open_default, |ui| {
             for s in sheets {
                 view_row(app, ui, s);
                 if let ViewKind::Sheet(sh) = &s.kind {
@@ -200,21 +296,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
         });
-        sheets_resp.header_response.context_menu(|ui| {
+        sheets_resp.context_menu(|ui| {
             if ui.button("New Sheet...").clicked() {
                 app.dialogs.new_sheet = true;
                 ui.close();
             }
         });
         // Families by category.
-        egui::CollapsingHeader::new(egui::RichText::new("Families").strong()).default_open(false).open(open_default.then_some(true)).show(ui, |ui| {
+        tree_node(ui, "Families", "Families", Some(Icon::LoadFamily), false, open_default, |ui| {
             // System families first.
             let mut cats: Vec<Category> = p.types.iter().map(|t| t.category).collect();
             cats.extend(p.families.iter().map(|f| f.category));
             cats.sort();
             cats.dedup();
             for cat in cats {
-                egui::CollapsingHeader::new(cat.label()).id_salt(("fam-cat", cat)).default_open(false).open(open_default.then_some(true)).show(ui, |ui| {
+                tree_node(ui, ("fam-cat", cat), cat.label(), None, false, open_default, |ui| {
                     // System types grouped by system family name.
                     let mut sys: Vec<&SystemType> = p.types.iter().filter(|t| t.category == cat && matches(&f, &t.name)).collect();
                     sys.sort_by(|a, b| a.family_name().cmp(b.family_name()).then(a.name.cmp(&b.name)));
@@ -222,7 +318,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     for t in sys {
                         if t.family_name() != last {
                             last = t.family_name();
-                            ui.label(egui::RichText::new(last).color(style::text_dim()).size(11.5));
+                            tree_text(ui, last);
                         }
                         type_row(app, ui, t.id, &t.name);
                     }
@@ -231,12 +327,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                             continue;
                         }
                         let fid = fam.id;
-                        let r = egui::CollapsingHeader::new(&fam.name).id_salt(("fam", fam.id)).default_open(false).open(open_default.then_some(true)).show(ui, |ui| {
+                        let r = tree_node(ui, ("fam", fam.id), &fam.name, None, false, open_default, |ui| {
                             for t in &fam.types {
                                 type_row(app, ui, t.id, &t.name);
                             }
                         });
-                        r.header_response.context_menu(|ui| {
+                        r.context_menu(|ui| {
                             if ui.button("Edit...").clicked() {
                                 crate::family_editor::open(app, fid);
                                 ui.close();
@@ -260,8 +356,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             }
         });
         if !p.group_types.is_empty() {
-            egui::CollapsingHeader::new(egui::RichText::new("Groups").strong()).default_open(false).open(open_default.then_some(true)).show(ui, |ui| {
-                egui::CollapsingHeader::new("Model").default_open(true).show(ui, |ui| {
+            tree_node(ui, "Groups", "Groups", Some(Icon::PlaceGroup), false, open_default, |ui| {
+                tree_node(ui, "Groups-Model", "Model", None, true, false, |ui| {
                     for g in p.group_types.iter().filter(|g| matches(&f, &g.name)) {
                         let resp = row(ui, Icon::PlaceGroup, &g.name, false, false);
                         let gid = g.id;
@@ -290,7 +386,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             _ => None,
         }).collect();
         if !cads.is_empty() {
-            egui::CollapsingHeader::new(egui::RichText::new("CAD Links").strong()).default_open(false).show(ui, |ui| {
+            tree_node(ui, "CAD Links", "CAD Links", Some(Icon::LinkCad), false, false, |ui| {
                 for (id, name) in cads {
                     if row(ui, Icon::LinkCad, &name, app.selection.contains(&id), false).clicked() {
                         app.select(vec![id]);

@@ -5,7 +5,7 @@ use crate::commands::Cmd;
 use crate::dialogs::{self, Pending};
 use crate::snap::{Override, SnapKind};
 use crate::tools::{DrawMode, Seg, Sketch, SketchKind, Tool, ToolKind};
-use crate::{canvas, canvas_tools, ribbon};
+use crate::{canvas, canvas_tools};
 use rc_core::geom::{self, DVec2};
 use rc_core::model::*;
 use rc_core::{edit, io};
@@ -435,7 +435,6 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             let id = app.selection[0];
             app.group_edit = Some((id, app.doc.data.clone()));
             app.select(vec![]);
-            app.ribbon_tab = ribbon::Tab::Modify;
         }
         Ungroup => {
             let id = app.selection[0];
@@ -692,7 +691,6 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     app.opts.draw_mode = mode;
     app.tool = Tool::new(ToolKind::SketchLine);
     app.select(vec![]);
-    app.ribbon_tab = ribbon::Tab::Modify;
 }
 
 fn edit_boundary(app: &mut App) {
@@ -718,7 +716,6 @@ fn edit_boundary(app: &mut App) {
     app.opts.draw_mode = DrawMode::Line;
     app.tool = Tool::select();
     app.select(vec![]);
-    app.ribbon_tab = ribbon::Tab::Modify;
 }
 
 /// Closes the current chain of sketch lines back to its first point (SZ).

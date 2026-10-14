@@ -75,9 +75,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui.label(egui::RichText::new("Design Option:").color(style::text_dim()));
                 ui.separator();
             }
-            if let Some(c) = app.interact.cursor.filter(|_| app.interact.view == app.active) {
-                let u = &app.doc.data.units;
-                ui.label(egui::RichText::new(format!("X {}  Y {}", u.length(c.x), u.length(c.y))).color(style::text_dim()).monospace().size(11.0));
+            if p.option_sets.is_empty() {
+                ui.add_space(8.0);
+                ui.label(egui::RichText::new("Main Model").color(style::text_dim()));
+                let (r, _) = ui.allocate_exact_size(vec2(18.0, 18.0), Sense::hover());
+                icons::paint(ui.painter(), r.shrink(1.0), Icon::DesignOptions, true);
             }
         });
     });

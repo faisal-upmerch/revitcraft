@@ -41,12 +41,13 @@ pub fn scale_label(app: &App, s: f64) -> String {
 }
 
 fn icon_btn(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str) -> egui::Response {
-    let (r, resp) = ui.allocate_exact_size(vec2(22.0, 20.0), Sense::click());
+    let (r, resp) = ui.allocate_exact_size(vec2(20.0, 19.0), Sense::click());
     if on {
-        ui.painter().rect_filled(r, 2.0, style::accent_light());
-        ui.painter().rect_stroke(r, 2.0, Stroke::new(1.0, style::ACCENT), egui::StrokeKind::Inside);
+        ui.painter().rect_filled(r, 0.0, style::accent_light());
+        ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
     } else if resp.hovered() {
-        ui.painter().rect_filled(r, 2.0, style::hover());
+        ui.painter().rect_filled(r, 0.0, style::hover());
+        ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
     }
     icons::paint(ui.painter(), r.shrink(2.5), icon, true);
     resp.on_hover_text(tip)
@@ -55,8 +56,8 @@ fn icon_btn(ui: &mut egui::Ui, icon: Icon, on: bool, tip: &str) -> egui::Respons
 pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let Some(view) = app.doc.data.view(view_id).cloned() else { return };
     egui::Panel::bottom(egui::Id::new(("viewbar", view_id)))
-        .exact_size(24.0)
-        .frame(egui::Frame::new().fill(style::chrome()).inner_margin(egui::Margin::symmetric(4, 1)).stroke(Stroke::new(1.0, style::border())))
+        .exact_size(21.0)
+        .frame(egui::Frame::new().fill(style::view_bar()).inner_margin(egui::Margin::symmetric(4, 0)).stroke(Stroke::new(1.0, style::border())))
         .show(ui, |ui| {
             ui.horizontal_centered(|ui| {
                 ui.spacing_mut().item_spacing.x = 2.0;
@@ -69,7 +70,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 };
                 // Scale.
                 if !is3d || !matches!(view.kind, ViewKind::ThreeD { perspective: true, .. }) {
-                    let resp = ui.add(egui::Button::new(egui::RichText::new(scale_label(app, view.scale)).size(11.0)).frame(false));
+                    let resp = ui.add(egui::Button::new(egui::RichText::new(scale_label(app, view.scale)).size(11.5)).frame(false).min_size(vec2(64.0, 0.0)));
                     egui::Popup::menu(&resp).show(|ui| {
                         let imperial = app.doc.data.units.system == UnitSystem::Imperial;
                         let list: Vec<(f64, String)> = if imperial {
@@ -90,7 +91,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                         }
                     });
                     resp.on_hover_text("View scale");
-                    ui.separator();
                 }
                 // Detail level.
                 let resp = icon_btn(ui, Icon::DetailLevel, false, &format!("Detail Level: {}", view.detail.label()));
@@ -156,7 +156,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                         actions::exec(app, Cmd::ToggleCropShow);
                     }
                 }
-                ui.separator();
                 let temp_on = app.temp_hide.get(&view_id).is_some_and(|t| t.is_active());
                 let resp = icon_btn(ui, Icon::TempHide, temp_on, "Temporary Hide/Isolate");
                 egui::Popup::menu(&resp).show(|ui| {
@@ -172,10 +171,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 if icon_btn(ui, Icon::RevealHidden, rev, "Reveal Hidden Elements").clicked() {
                     activate(app);
                     actions::exec(app, Cmd::RevealHidden);
-                }
-                if !is3d {
-                    ui.separator();
-                    ui.label(egui::RichText::new(format!("{} — {}", view.type_label(), view.name)).size(11.0).color(style::text_dim()));
                 }
             });
         });

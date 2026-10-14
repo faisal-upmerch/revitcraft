@@ -44,21 +44,25 @@ fn level_combo(ui: &mut egui::Ui, app: &App, id: &str, value: &mut Option<Id>, n
 }
 
 fn sep(ui: &mut egui::Ui) {
-    ui.add(egui::Separator::default().vertical().spacing(10.0));
+    ui.add_space(12.0);
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
-        let title = if let Some(sk) = &app.sketch {
-            format!("Modify | {}", sk.kind.title())
+        // Like the reference layout: the bar names the tool or selection, and stays empty when idle
+        // (sketch mode shows only the draw options).
+        let title = if app.sketch.is_some() {
+            None
         } else if app.tool.is_select() {
-            if app.selection.is_empty() { "Modify".to_string() } else { format!("Modify | {}", selection_label(app)) }
+            if app.selection.is_empty() { None } else { Some(format!("Modify | {}", selection_label(app))) }
         } else {
-            format!("Modify | Place {}", app.tool.kind.name())
+            Some(format!("Modify | Place {}", app.tool.kind.name()))
         };
-        ui.label(egui::RichText::new(title).strong().color(style::text()));
-        sep(ui);
+        if let Some(title) = title {
+            ui.label(egui::RichText::new(title).color(style::text()));
+            ui.add_space(14.0);
+        }
         let kind = app.tool.kind;
         let mode = app.opts.draw_mode;
         match kind {
@@ -143,8 +147,6 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::Door | ToolKind::Window => {
                 ui.checkbox(&mut app.opts.tag_on_placement, "Tag on Placement");
                 ui.checkbox(&mut app.opts.tag_leader, "Leader");
-                sep(ui);
-                ui.label(egui::RichText::new("Space flips the facing while placing.").color(style::text_dim()));
             }
             ToolKind::Component | ToolKind::IsolatedFooting | ToolKind::PlaceGroup => {
                 ui.label("Rotation:");
@@ -365,37 +367,4 @@ fn selection_label(app: &App) -> String {
     }
 }
 
-fn select_options(app: &mut App, ui: &mut egui::Ui) {
-    if app.sketch.is_some() {
-        ui.label(egui::RichText::new("Select boundary lines to edit, or pick a Draw tool on the ribbon.").color(style::text_dim()));
-        return;
-    }
-    if app.selection.is_empty() {
-        ui.label(egui::RichText::new("Select elements in the view or the Project Browser.").color(style::text_dim()));
-        return;
-    }
-    if ui.button(format!("Filter ({})", app.selection.len())).clicked() {
-        app.dialogs.filter = true;
-    }
-    // Walls: top constraint shortcut like the Options Bar shows for wall selections.
-    let walls: Vec<Id> = app.selection.iter().copied().filter(|id| app.doc.data.wall(*id).is_some()).collect();
-    if !walls.is_empty() && walls.len() == app.selection.len() {
-        sep(ui);
-        let first = app.doc.data.wall(walls[0]).cloned().unwrap();
-        ui.label("Location Line:");
-        let mut ll = first.location_line;
-        egui::ComboBox::from_id_salt("sel-ll").selected_text(ll.label()).width(150.0).show_ui(ui, |ui| {
-            for l in LocationLine::ALL {
-                ui.selectable_value(&mut ll, l, l.label());
-            }
-        });
-        if ll != first.location_line {
-            app.run("Location Line", |p| {
-                for w in &walls {
-                    rc_core::params::set(p, *w, "Location Line", ll.label())?;
-                }
-                Ok(())
-            });
-        }
-    }
-}
+fn select_options(_app: &mut App, _ui: &mut egui::Ui) {}
