@@ -367,7 +367,7 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
         }
         PKind::Level => {
             let mut out = None;
-            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).icon(chevron).show_ui(ui, |ui| {
                 for (_, l) in p.levels() {
                     if ui.selectable_label(l.name == shown, &l.name).clicked() {
                         out = Some(l.name.clone());
@@ -378,7 +378,7 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
         }
         PKind::Choice(options) => {
             let mut out = None;
-            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).icon(chevron).show_ui(ui, |ui| {
                 for o in options {
                     if ui.selectable_label(o == shown, o).clicked() {
                         out = Some(o.clone());
@@ -389,7 +389,7 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
         }
         PKind::Value(ParamKind::Material) => {
             let mut out = None;
-            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt(egui::Id::new(&key)).selected_text(shown).width(width - 8.0).icon(chevron).show_ui(ui, |ui| {
                 for m in &p.materials {
                     if ui.selectable_label(m.name == shown, &m.name).clicked() {
                         out = Some(m.name.clone());
@@ -418,6 +418,14 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
 
 fn row_label(ui: &mut egui::Ui, s: &str) {
     prop_label(ui, s, false);
+}
+
+/// The thin drop-down chevron of property cells (instead of a heavy triangle).
+fn chevron(ui: &egui::Ui, rect: Rect, _visuals: &egui::style::WidgetVisuals, open: bool) {
+    let c = rect.center();
+    let st = egui::Stroke::new(1.0, if open { style::text() } else { style::text_dim() });
+    ui.painter().line_segment([c + vec2(-3.5, -1.5), c + vec2(0.0, 2.0)], st);
+    ui.painter().line_segment([c + vec2(0.0, 2.0), c + vec2(3.5, -1.5)], st);
 }
 
 /// A two-column property grid with thin grid lines (drawn by `prop_label`).
@@ -481,7 +489,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                     crate::viewbar::METRIC_SCALES.iter().map(|v| (*v, format!("1 : {v}"))).collect()
                 };
                 let w = ui.available_width() - 4.0;
-                egui::ComboBox::from_id_salt("vp-scale").selected_text(crate::viewbar::scale_label(app, changed.scale)).width(w).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("vp-scale").selected_text(crate::viewbar::scale_label(app, changed.scale)).width(w).icon(chevron).show_ui(ui, |ui| {
                     for (v, l) in list {
                         ui.selectable_value(&mut changed.scale, v, l);
                     }
@@ -491,7 +499,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 ui.label(egui::RichText::new(format!("{}", changed.scale.round())).color(style::text_dim()));
                 ui.end_row();
                 row_label(ui, "Detail Level");
-                egui::ComboBox::from_id_salt("vp-detail").selected_text(changed.detail.label()).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("vp-detail").selected_text(changed.detail.label()).icon(chevron).show_ui(ui, |ui| {
                     for d in DetailLevel::ALL {
                         ui.selectable_value(&mut changed.detail, d, d.label());
                     }
@@ -503,7 +511,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 }
                 ui.end_row();
                 row_label(ui, "Visual Style");
-                egui::ComboBox::from_id_salt("vp-style").selected_text(changed.style.label()).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("vp-style").selected_text(changed.style.label()).icon(chevron).show_ui(ui, |ui| {
                     for s in VisualStyle::ALL {
                         ui.selectable_value(&mut changed.style, s, s.label());
                     }
@@ -521,7 +529,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
             if v.plan_level().is_some() {
                 row_label(ui, "Underlay");
                 let label = changed.underlay.map(|l| p.level_name(l)).unwrap_or_else(|| "None".into());
-                egui::ComboBox::from_id_salt("vp-underlay").selected_text(label).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("vp-underlay").selected_text(label).icon(chevron).show_ui(ui, |ui| {
                     ui.selectable_value(&mut changed.underlay, None, "None");
                     for (id, l) in p.levels() {
                         ui.selectable_value(&mut changed.underlay, Some(id), &l.name);
@@ -574,7 +582,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         prop_grid(ui, "view-identity").show(ui, |ui| {
             row_label(ui, "View Template");
             let tname = changed.template.and_then(|t| p.view(t)).map(|t| t.name.clone()).unwrap_or_else(|| "<None>".into());
-            egui::ComboBox::from_id_salt("vp-template").selected_text(tname).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("vp-template").selected_text(tname).icon(chevron).show_ui(ui, |ui| {
                 ui.selectable_value(&mut changed.template, None, "<None>");
                 for t in p.views.iter().filter(|t| t.is_template) {
                     ui.selectable_value(&mut changed.template, Some(t.id), &t.name);
@@ -609,7 +617,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                     ui.end_row();
                 }
                 row_label(ui, "Sheet Size");
-                egui::ComboBox::from_id_salt("sheet-size").selected_text(s.size.label()).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt("sheet-size").selected_text(s.size.label()).icon(chevron).show_ui(ui, |ui| {
                     for sz in SheetSize::ALL {
                         ui.selectable_value(&mut s.size, sz, sz.label());
                     }
@@ -641,7 +649,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
     if v.is_graphical() && section(ui, "Phasing") {
         prop_grid(ui, "view-phasing").show(ui, |ui| {
             row_label(ui, "Phase Filter");
-            egui::ComboBox::from_id_salt("vp-pf").selected_text(changed.phase_filter.label()).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("vp-pf").selected_text(changed.phase_filter.label()).icon(chevron).show_ui(ui, |ui| {
                 for f in PhaseFilter::ALL {
                     ui.selectable_value(&mut changed.phase_filter, f, f.label());
                 }
@@ -649,7 +657,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
             ui.end_row();
             row_label(ui, "Phase");
             let pname = changed.phase.and_then(|ph| p.phases.iter().find(|x| x.id == ph)).map(|x| x.name.clone()).unwrap_or_else(|| p.phases.last().map(|x| x.name.clone()).unwrap_or_default());
-            egui::ComboBox::from_id_salt("vp-phase").selected_text(pname).show_ui(ui, |ui| {
+            egui::ComboBox::from_id_salt("vp-phase").selected_text(pname).icon(chevron).show_ui(ui, |ui| {
                 for ph in &p.phases {
                     ui.selectable_value(&mut changed.phase, Some(ph.id), &ph.name);
                 }
@@ -664,7 +672,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 let cur = changed.options.get(&set.id).copied();
                 let label = cur.and_then(|o| set.options.iter().find(|x| x.id == o)).map(|x| x.name.clone()).unwrap_or_else(|| "Automatic (primary)".into());
                 let mut sel = cur;
-                egui::ComboBox::from_id_salt(("vp-opt", set.id)).selected_text(label).show_ui(ui, |ui| {
+                egui::ComboBox::from_id_salt(("vp-opt", set.id)).selected_text(label).icon(chevron).show_ui(ui, |ui| {
                     ui.selectable_value(&mut sel, None, "Automatic (primary)");
                     for o in &set.options {
                         ui.selectable_value(&mut sel, Some(o.id), &o.name);

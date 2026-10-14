@@ -22,6 +22,120 @@ pub struct Cam2 {
     pub fitted: bool,
 }
 
+/// Pan/zoom history of one 2D view (Previous/Next Pan/Zoom).
+#[derive(Clone, Debug, Default)]
+pub struct NavHistory {
+    pub back: Vec<Cam2>,
+    pub fwd: Vec<Cam2>,
+    /// The last camera that stayed still long enough to count as a step.
+    pub settled: Option<Cam2>,
+    /// When the camera last moved away from `settled`.
+    pub moving_since: Option<f64>,
+}
+
+fn same_cam(a: &Cam2, b: &Cam2) -> bool {
+    a.center.distance(b.center) < 1e-6 && (a.zoom - b.zoom).abs() < 1e-12
+}
+
+/// Records settled cameras so Previous/Next Pan/Zoom can step through them.
+fn track_history(app: &mut App, ctx: &egui::Context, view: Id) {
+    let Some(cam) = app.cams.get(&view).copied() else { return };
+    let now = app.now;
+    let h = app.nav_history.entry(view).or_default();
+    let Some(settled) = h.settled else {
+        h.settled = Some(cam);
+        return;
+    };
+    if same_cam(&settled, &cam) {
+        h.moving_since = None;
+        return;
+    }
+    let since = *h.moving_since.get_or_insert(now);
+    if now - since > 0.5 {
+        h.back.push(settled);
+        h.fwd.clear();
+        h.settled = Some(cam);
+        h.moving_since = None;
+    } else {
+        ctx.request_repaint_after(std::time::Duration::from_millis(550));
+    }
+}
+
+/// Steps back (or forward) through a view's pan/zoom history.
+pub fn history_step(app: &mut App, view: Id, back: bool) {
+    let Some(cam) = app.cams.get(&view).copied() else { return };
+    let h = app.nav_history.entry(view).or_default();
+    let target = if back { h.back.pop() } else { h.fwd.pop() };
+    if let Some(t) = target {
+        if back { h.fwd.push(cam) } else { h.back.push(cam) }
+        h.settled = Some(t);
+        h.moving_since = None;
+        app.cams.insert(view, Cam2 { fitted: true, ..t });
+    }
+}
+
+pub fn can_step(app: &App, view: Id, back: bool) -> bool {
+    app.nav_history.get(&view).is_some_and(|h| if back { !h.back.is_empty() } else { !h.fwd.is_empty() })
+}
+
+fn pan_mode(ui: &egui::Ui, view: Id) -> bool {
+    ui.memory(|m| m.data.get_temp(egui::Id::new(("nav2d-pan", view)))).unwrap_or(false)
+}
+
+/// The navigation bar at the top right of 2D views: the 2D wheel (pan) and the zoom tools.
+fn nav_bar_2d(app: &mut App, ui: &mut egui::Ui, rect: Rect, view: Id) {
+    let area = Rect::from_min_size(rect.right_top() + vec2(-34.0, 8.0), vec2(26.0, 62.0));
+    let p = ui.painter();
+    p.rect_filled(area, 3.0, Color32::from_rgba_unmultiplied(244, 246, 248, 235));
+    p.rect_stroke(area, 3.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+    let pan_on = pan_mode(ui, view);
+    // 2D wheel.
+    let r = Rect::from_min_size(area.min + vec2(2.0, 3.0), vec2(22.0, 22.0));
+    let resp = ui.interact(r, egui::Id::new(("nav2d-wheel", view)), Sense::click());
+    if pan_on {
+        ui.painter().rect_filled(r, 2.0, style::accent_light());
+    } else if resp.hovered() {
+        ui.painter().rect_filled(r, 2.0, style::hover());
+    }
+    let c = r.center();
+    ui.painter().circle_stroke(c, 8.0, Stroke::new(2.2, Color32::from_rgb(120, 126, 136)));
+    ui.painter().circle_stroke(c, 8.0, Stroke::new(1.0, Color32::from_rgb(70, 76, 86)));
+    ui.painter().text(c, egui::Align2::CENTER_CENTER, "2D", style::font(7.5), Color32::from_rgb(40, 90, 170));
+    if resp.clicked() {
+        ui.memory_mut(|m| m.data.insert_temp(egui::Id::new(("nav2d-pan", view)), !pan_on));
+    }
+    resp.on_hover_text("2D Wheel: drag to pan (click again or Esc to end); the wheel zooms");
+    let sep_y = area.top() + 30.0;
+    ui.painter().line_segment([pos2(area.left() + 4.0, sep_y), pos2(area.right() - 4.0, sep_y)], Stroke::new(1.0, style::border()));
+    // Zoom: click = Zoom In Region, arrow = menu.
+    let r = Rect::from_min_size(pos2(area.left() + 2.0, sep_y + 2.0), vec2(22.0, 28.0));
+    let resp = ui.interact(r, egui::Id::new(("nav2d-zoom", view)), Sense::click());
+    if resp.hovered() {
+        ui.painter().rect_filled(r, 2.0, style::hover());
+    }
+    crate::icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(3.0, 1.0), vec2(16.0, 16.0)), crate::icons::Icon::ZoomRegion, true);
+    let a = pos2(r.center().x, r.bottom() - 6.0);
+    ui.painter().add(egui::Shape::convex_polygon(vec![a + vec2(-3.0, -1.5), a + vec2(3.0, -1.5), a + vec2(0.0, 1.5)], style::text(), Stroke::NONE));
+    let on_arrow = ui.input(|i| i.pointer.interact_pos()).is_some_and(|p| p.y > r.bottom() - 11.0);
+    let toggle = if resp.clicked() && on_arrow {
+        Some(egui::SetOpenCommand::Toggle)
+    } else {
+        if resp.clicked() {
+            actions::exec(app, Cmd::ZoomRegion);
+        }
+        None
+    };
+    let resp = resp.on_hover_text("Zoom In Region (arrow: more zoom tools)");
+    egui::Popup::menu(&resp).open_memory(toggle).close_behavior(egui::PopupCloseBehavior::CloseOnClick).show(|ui| {
+        ui.set_min_width(170.0);
+        for (label, cmd) in [("Zoom In Region", Cmd::ZoomRegion), ("Zoom Out (2x)", Cmd::ZoomOut), ("Zoom To Fit", Cmd::ZoomFit), ("Previous Pan/Zoom", Cmd::PrevPanZoom), ("Next Pan/Zoom", Cmd::NextPanZoom)] {
+            if ui.add_enabled(actions::enabled(app, cmd), egui::Button::new(label).frame(false)).clicked() {
+                actions::exec(app, cmd);
+            }
+        }
+    });
+}
+
 impl Default for Cam2 {
     fn default() -> Self {
         Cam2 { center: DVec2::new(5000.0, 4000.0), zoom: 0.05, fitted: false }
@@ -256,6 +370,7 @@ pub fn fit(app: &mut App, view: Id, rect: Rect) {
 }
 
 fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, view: Id, scale: f64) {
+    let pan = pan_mode(ui, view);
     let mut cam = app.cams.get(&view).copied().unwrap_or_default();
     if let Some(hover) = resp.hover_pos() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y);
@@ -269,7 +384,7 @@ fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, vie
             cam.center += before - xf2.w(hover);
         }
     }
-    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) {
+    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) || (pan && resp.dragged_by(egui::PointerButton::Primary)) {
         let d = resp.drag_delta();
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
     }
@@ -634,6 +749,20 @@ fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
     }
 }
 
+/// The small dimension glyph that turns a temporary dimension into a permanent one.
+fn paint_make_permanent(painter: &egui::Painter, r: Rect, hot: bool) {
+    if hot {
+        painter.rect_filled(r.expand(1.0), 0.0, style::hover());
+        painter.rect_stroke(r.expand(1.0), 0.0, Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
+    }
+    let c = style::TEMP_DIM;
+    let st = Stroke::new(1.2, c);
+    let (l, rr, y) = (r.left() + 2.0, r.right() - 2.0, r.center().y);
+    painter.line_segment([pos2(l, r.top() + 2.0), pos2(l, r.bottom() - 2.0)], st);
+    painter.line_segment([pos2(rr, r.top() + 2.0), pos2(rr, r.bottom() - 2.0)], st);
+    painter.line_segment([pos2(l, y), pos2(rr, y)], st);
+}
+
 /// Draws a temporary (listening) dimension between two points with its value.
 pub fn temp_dim(painter: &egui::Painter, xf: &Xf, a: DVec2, b: DVec2, text: &str, offset_px: f32) -> Rect {
     temp_dim_ex(painter, xf, a, b, text, offset_px, false)
@@ -698,6 +827,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         fit(app, view_id, rect);
     }
     navigate(app, ui, &resp, rect, view_id, view.scale);
+    track_history(app, ui.ctx(), view_id);
     let cam = app.cams[&view_id];
     let xf = Xf { rect, center: cam.center, zoom: cam.zoom, scale: view.scale, thin: app.thin_lines };
     let painter = ui.painter_at(rect);
@@ -850,11 +980,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         temp_dim(&painter, &xf, a, b, &txt, 14.0);
     }
 
+    if app.settings.show_navbar {
+        nav_bar_2d(app, ui, rect, view_id);
+    }
     if !is_active {
         return;
     }
     app.interact.view = Some(view_id);
     app.interact.xf = Some(xf);
+    if pan_mode(ui, view_id) {
+        app.interact.prompt = "Drag to pan; the wheel zooms. Click the 2D Wheel again or press Esc to end.".into();
+        if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+            ui.memory_mut(|m| m.data.insert_temp(egui::Id::new(("nav2d-pan", view_id)), false));
+        }
+        return;
+    }
 
     // ---- cursor and snapping
     let cursor = resp.hover_pos().map(|s| xf.w(s));
@@ -953,11 +1093,23 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
     // Temporary dimensions (editable).
     let temp_dims = if app.interact.drag.is_none() { crate::tempdims::compute(app, view, xf) } else { vec![] };
     let mut tdim_hit: Option<usize> = None;
+    let mut perm_hit: Option<usize> = None;
     for (k, td) in temp_dims.iter().enumerate() {
         let txt = app.doc.data.units.length(td.value);
         let r = temp_dim(painter, xf, td.a, td.b, &txt, td.offset_px);
+        // "Make this temporary dimension permanent" control beside the value.
+        let (sa, sb) = (xf.s(td.a), xf.s(td.b));
+        let d = (sb - sa).normalized();
+        let n = vec2(-d.y, d.x) * if td.offset_px < 0.0 { -1.0 } else { 1.0 };
+        let mid = sa + (sb - sa) / 2.0 + vec2(-d.y, d.x) * td.offset_px;
+        let icon = Rect::from_center_size(mid + n * (r.height().min(r.width()) / 2.0 + 14.0) + d * 0.0, vec2(16.0, 12.0));
+        let hot = cursor.is_some_and(|c| icon.contains(xf.s(c)));
+        paint_make_permanent(painter, icon, hot);
         if let Some(c) = cursor {
-            if r.contains(xf.s(c)) {
+            if hot {
+                perm_hit = Some(k);
+                style::canvas_tooltip(painter, icon.right_bottom() + vec2(4.0, 4.0), "Make this temporary dimension permanent");
+            } else if r.contains(xf.s(c)) {
                 tdim_hit = Some(k);
                 painter.rect_stroke(r, 2.0, Stroke::new(1.0, style::ACCENT), egui::StrokeKind::Outside);
             }
@@ -989,7 +1141,7 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
             }
         }
         app.interact.tab_pressed = false;
-        app.interact.hover = if grip_hover.is_some() || tdim_hit.is_some() { None } else { cands.get(app.interact.tab_index.min(cands.len().saturating_sub(1))).copied() };
+        app.interact.hover = if grip_hover.is_some() || tdim_hit.is_some() || perm_hit.is_some() { None } else { cands.get(app.interact.tab_index.min(cands.len().saturating_sub(1))).copied() };
         if !cands.is_empty() {
             let h = app.interact.hover;
             app.interact.prompt = h.map(|h| describe(app, h)).unwrap_or_default();
@@ -1007,8 +1159,27 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
         }
     }
 
-    // Temp dim text click starts editing.
+    // Temp dim text click starts editing; the icon makes the dimension permanent.
     if resp.clicked_by(egui::PointerButton::Primary) {
+        if let Some(k) = perm_hit {
+            let td = temp_dims[k].clone();
+            let id = app.selection.first().copied();
+            let part = match id.and_then(|i| app.el(i)).map(|e| &e.kind) {
+                Some(ElementKind::Wall(_)) => RefPart::WallCenter,
+                Some(ElementKind::Grid(_)) => RefPart::GridLine,
+                Some(ElementKind::RefPlane(_)) => RefPart::RefPlane,
+                Some(ElementKind::Instance(_)) => RefPart::InstanceCenter,
+                _ => RefPart::Point,
+            };
+            let element = if part == RefPart::Point { None } else { id };
+            let refs = vec![DimRef { element: None, part: RefPart::Point, point: td.a }, DimRef { element, part, point: td.b }];
+            let (sa, sb) = (xf.s(td.a), xf.s(td.b));
+            let d = (sb - sa).normalized();
+            let line_point = xf.w(sa + (sb - sa) / 2.0 + vec2(-d.y, d.x) * td.offset_px);
+            let vid = view.id;
+            app.run("Make Dimension Permanent", |p| rc_core::edit::add_dimension(p, vid, refs, td.b - td.a, line_point));
+            return;
+        }
         if let Some(k) = tdim_hit {
             let id = app.selection.first().copied().unwrap_or(0);
             let v = temp_dims[k].value;
@@ -1370,6 +1541,15 @@ fn context_menu(app: &mut App, resp: &egui::Response, view: &View) {
         item(ui, "Zoom In Region", Cmd::ZoomRegion, &mut run);
         item(ui, "Zoom Out (2x)", Cmd::ZoomOut, &mut run);
         item(ui, "Zoom To Fit", Cmd::ZoomFit, &mut run);
+        ui.separator();
+        if ui.add_enabled(can_step(app, view.id, true), egui::Button::new("Previous Pan/Zoom")).clicked() {
+            run = Some(Cmd::PrevPanZoom);
+            ui.close();
+        }
+        if ui.add_enabled(can_step(app, view.id, false), egui::Button::new("Next Pan/Zoom")).clicked() {
+            run = Some(Cmd::NextPanZoom);
+            ui.close();
+        }
         ui.separator();
         ui.menu_button("Browsers", |ui| {
             item(ui, if app.settings.show_browser { "✓ Project Browser" } else { "Project Browser" }, Cmd::ToggleBrowser, &mut run);

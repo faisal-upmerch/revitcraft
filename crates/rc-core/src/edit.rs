@@ -338,7 +338,21 @@ pub fn place_hosted(p: &mut Project, type_id: Id, wall_id: Id, along: f64, flip_
         0.0
     };
     check_opening_fits(p, &wall, wall_id, None, along, ow, sill, oh)?;
-    Ok(push(p, ElementKind::Instance(FamilyInstance { elevation: sill, ..probe })))
+    let id = push(p, ElementKind::Instance(FamilyInstance { elevation: sill, ..probe }));
+    if category == Category::Doors {
+        let mark = next_mark(p, Category::Doors);
+        if let Some(e) = p.element_mut(id) {
+            e.mark = mark;
+        }
+    }
+    Ok(id)
+}
+
+/// The next door Mark: one more than the highest numeric Mark in the category, like the
+/// automatic numbering of placed doors in the reference app.
+pub fn next_mark(p: &Project, cat: Category) -> String {
+    let max = p.elements.iter().filter(|e| e.category() == cat).filter_map(|e| e.mark.trim().parse::<u64>().ok()).max().unwrap_or(0);
+    (max + 1).to_string()
 }
 
 /// Rejects openings that leave the wall or overlap other openings.
@@ -788,6 +802,13 @@ pub fn copy_elements(p: &mut Project, ids: &[Id], delta: DVec2) -> Vec<Id> {
         created.push(map[&e.id]);
     }
     for id in &created {
+        // Copied doors with numeric Marks get the next free number.
+        if p.element(*id).is_some_and(|e| e.category() == Category::Doors && e.mark.trim().parse::<u64>().is_ok()) {
+            let mark = next_mark(p, Category::Doors);
+            if let Some(e) = p.element_mut(*id) {
+                e.mark = mark;
+            }
+        }
         let number = next_room_number(p);
         if let Some(Element { kind: ElementKind::Room(r), .. }) = p.element_mut(*id) {
             if delta.length() > 1.0 {
@@ -1829,6 +1850,21 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn doors_number_their_marks() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(10000.0, 0.0), 3000.0).unwrap();
+        let door = p.families.iter().find(|f| f.name == "Single-Flush").unwrap().types[0].id;
+        let a = place_hosted(&mut p, door, w, 2000.0, false).unwrap();
+        let b = place_hosted(&mut p, door, w, 5000.0, false).unwrap();
+        assert_eq!(p.element(a).unwrap().mark, "1");
+        assert_eq!(p.element(b).unwrap().mark, "2");
+        let c = copy_elements(&mut p, &[w, a, b], DVec2::new(0.0, 4000.0));
+        let marks: Vec<String> = c.iter().filter_map(|id| p.element(*id)).filter(|e| e.category() == Category::Doors).map(|e| e.mark.clone()).collect();
+        assert_eq!(marks.len(), 2);
+        assert!(marks.contains(&"3".to_string()) && marks.contains(&"4".to_string()), "{marks:?}");
     }
 
     #[test]

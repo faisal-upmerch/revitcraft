@@ -146,6 +146,7 @@ pub struct App {
     pub sketch: Option<Sketch>,
     pub opts: ToolOptions,
     pub cams: HashMap<Id, Cam2>,
+    pub nav_history: HashMap<Id, canvas::NavHistory>,
     pub cams3d: HashMap<Id, Camera>,
     pub cache: Cache,
     pub scenes: HashMap<Id, Scene>,
@@ -193,6 +194,7 @@ impl App {
             tool: Tool::select(),
             sketch: None,
             cams: HashMap::new(),
+            nav_history: HashMap::new(),
             cams3d: HashMap::new(),
             cache: Cache::default(),
             scenes: HashMap::new(),
@@ -667,6 +669,7 @@ impl App {
         self.tool = Tool::select();
         self.sketch = None;
         self.cams.clear();
+        self.nav_history.clear();
         self.cams3d.clear();
         self.scenes.clear();
         self.cache = Cache::default();

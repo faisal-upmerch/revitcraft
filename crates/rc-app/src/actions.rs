@@ -51,6 +51,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         ToggleSectionBox => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })),
         ViewRange => plan,
         DuplicateView | DuplicateWithDetailing | TemplateFromView | VisibilityGraphics | ZoomFit | ZoomRegion | ZoomOut => view.is_some(),
+        PrevPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, true)),
+        NextPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, false)),
         _ => true,
     }
 }
@@ -549,6 +551,11 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ZoomOut => {
             if let Some(c) = app.active.and_then(|a| app.cams.get_mut(&a)) {
                 c.zoom /= 2.0;
+            }
+        }
+        PrevPanZoom | NextPanZoom => {
+            if let Some(v) = app.active {
+                canvas::history_step(app, v, cmd == PrevPanZoom);
             }
         }
         TempHideElement | TempIsolateElement | TempHideCategory | TempIsolateCategory => {
