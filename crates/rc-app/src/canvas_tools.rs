@@ -359,14 +359,17 @@ fn commit_segs(app: &mut App, view: &View, segs: &[Seg]) -> bool {
                     let id = edit::add_wall_ex(p, level, o.wall_type, a, b, m, o.wall_height, o.location_line, false)?;
                     let w = p.element_mut(id).and_then(Element::as_wall_mut).unwrap();
                     w.structural = o.wall_structural;
+                    w.room_bounding = o.wall_room_bounding;
                     if o.wall_depth {
                         w.base_offset = -o.wall_height;
                         w.top_level = Some(level);
                         w.top_offset = 0.0;
                     } else if let Some(t) = o.wall_top {
+                        w.base_offset = o.wall_base_offset;
                         w.top_level = Some(t);
-                        w.top_offset = 0.0;
+                        w.top_offset = o.wall_top_offset;
                     } else {
+                        w.base_offset = o.wall_base_offset;
                         w.top_level = None;
                         w.unconnected_height = o.wall_height;
                     }
@@ -731,15 +734,20 @@ fn hosted_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: 
         let vid = view.id;
         let name = if is_door { "Place Door" } else { "Place Window" };
         let offset = n * (t + 600.0 * view.scale / 100.0) * if flip { 1.0 } else { -1.0 };
-        if let Some(id) = app.run(name, |p| {
+        let sill = if is_door { None } else { app.opts.window_sill };
+        // Like the reference app, the tool stays active and nothing gets selected.
+        app.run(name, |p| {
             let id = edit::place_hosted(p, type_id, wall_id, along, flip)?;
+            if let Some(s) = sill {
+                if let Some(i) = p.element_mut(id).and_then(|e| e.as_instance_mut()) {
+                    i.elevation = s;
+                }
+            }
             if tag {
                 edit::add_tag(p, vid, id, center + offset, false)?;
             }
             Ok(id)
-        }) {
-            app.select(vec![id]);
-        }
+        });
     }
 }
 

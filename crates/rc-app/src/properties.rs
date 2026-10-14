@@ -252,6 +252,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
 fn props_body(app: &mut App, ui: &mut egui::Ui) {
     {
         let sel = app.selection.clone();
+        if sel.is_empty() && new_element_properties(app, ui) {
+            return;
+        }
         if sel.is_empty() {
             match app.active {
                 Some(v) => view_properties(app, ui, v),
@@ -269,7 +272,159 @@ fn props_body(app: &mut App, ui: &mut egui::Ui) {
     }
 }
 
+/// "New Walls" etc. while a placement tool runs, like the reference palette.
+fn new_label(app: &App) -> Option<&'static str> {
+    if !app.selection.is_empty() {
+        return None;
+    }
+    Some(match app.tool.kind {
+        ToolKind::Wall => "New Walls",
+        ToolKind::Door => "New Doors",
+        ToolKind::Window => "New Windows",
+        ToolKind::Column => "New Columns",
+        ToolKind::StructColumn => "New Structural Columns",
+        ToolKind::Component => "New Components",
+        ToolKind::Beam => "New Structural Framing",
+        ToolKind::Room => "New Rooms",
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => "Floors",
+        _ => return None,
+    })
+}
+
+/// Instance parameters of the element about to be placed (edits go to the tool options).
+fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
+    if new_label(app).is_none() {
+        return false;
+    }
+    let units = app.doc.data.units.clone();
+    let level = app.active_level();
+    let level_name = level.map(|l| app.doc.data.level_name(l)).unwrap_or_default();
+    let len_row = |ui: &mut egui::Ui, key: &str, v: &mut f64| {
+        let id = egui::Id::new(("new-prop", key.to_string()));
+        let mut s: String = ui.memory(|m| m.data.get_temp(id)).unwrap_or_else(|| units.length(*v));
+        let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(ui.available_width() - 4.0));
+        if r.has_focus() {
+            ui.memory_mut(|m| m.data.insert_temp(id, s.clone()));
+        }
+        if r.lost_focus() {
+            ui.memory_mut(|m| m.data.remove::<String>(id));
+            if let Some(x) = units.parse(&s, ParamKind::Length) {
+                *v = x;
+            }
+        }
+    };
+    let ro = |ui: &mut egui::Ui, s: &str| {
+        ui.label(egui::RichText::new(s).color(style::text_dim()));
+    };
+    let mut o = app.opts.clone();
+    match app.tool.kind {
+        ToolKind::Wall => {
+            let open = group_open(ui, "Constraints");
+            if style::group_header_ui(ui, "Constraints", open).clicked() {
+                set_group_open(ui, "Constraints", !open);
+            }
+            if open {
+                prop_grid(ui, "new-wall").show(ui, |ui| {
+                    prop_label(ui, "Location Line", false);
+                    egui::ComboBox::from_id_salt("nw-ll").selected_text(o.location_line.label()).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                        for l in LocationLine::ALL {
+                            ui.selectable_value(&mut o.location_line, l, l.label());
+                        }
+                    });
+                    ui.end_row();
+                    prop_label(ui, "Base Constraint", true);
+                    ro(ui, &level_name);
+                    ui.end_row();
+                    prop_label(ui, "Base Offset", false);
+                    len_row(ui, "base", &mut o.wall_base_offset);
+                    ui.end_row();
+                    prop_label(ui, "Base is Attached", true);
+                    ro(ui, "");
+                    ui.end_row();
+                    prop_label(ui, "Top Constraint", false);
+                    let top_label = |t: Option<Id>| t.map(|t| format!("Up to level: {}", app.doc.data.level_name(t))).unwrap_or_else(|| "Unconnected".into());
+                    egui::ComboBox::from_id_salt("nw-top").selected_text(top_label(o.wall_top)).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut o.wall_top, None, "Unconnected");
+                        for (lid, _) in app.doc.data.levels() {
+                            ui.selectable_value(&mut o.wall_top, Some(lid), top_label(Some(lid)));
+                        }
+                    });
+                    ui.end_row();
+                    prop_label(ui, "Unconnected Height", o.wall_top.is_some());
+                    if o.wall_top.is_none() {
+                        len_row(ui, "height", &mut o.wall_height);
+                    } else {
+                        ro(ui, &units.length(o.wall_height));
+                    }
+                    ui.end_row();
+                    prop_label(ui, "Top Offset", o.wall_top.is_none());
+                    if o.wall_top.is_some() {
+                        len_row(ui, "top", &mut o.wall_top_offset);
+                    } else {
+                        ro(ui, &units.length(0.0));
+                    }
+                    ui.end_row();
+                    prop_label(ui, "Room Bounding", false);
+                    ui.checkbox(&mut o.wall_room_bounding, "");
+                    ui.end_row();
+                });
+            }
+            let open = group_open(ui, "Structural");
+            if style::group_header_ui(ui, "Structural", open).clicked() {
+                set_group_open(ui, "Structural", !open);
+            }
+            if open {
+                prop_grid(ui, "new-wall-s").show(ui, |ui| {
+                    prop_label(ui, "Structural", false);
+                    ui.checkbox(&mut o.wall_structural, "");
+                    ui.end_row();
+                });
+            }
+        }
+        ToolKind::Door | ToolKind::Window => {
+            let is_window = app.tool.kind == ToolKind::Window;
+            let t = if is_window { o.window_type } else { o.door_type };
+            let default_sill = app
+                .doc
+                .data
+                .family_type(t)
+                .map(|(f, ft)| rc_core::family_params::Resolver::for_type(f, ft).num("Default Sill Height", if is_window { 900.0 } else { 0.0 }))
+                .unwrap_or(0.0);
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-opening").show(ui, |ui| {
+                prop_label(ui, "Level", true);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Sill Height", !is_window);
+                if is_window {
+                    let mut s = o.window_sill.unwrap_or(default_sill);
+                    len_row(ui, "sill", &mut s);
+                    if (s - default_sill).abs() > 1e-6 || o.window_sill.is_some() {
+                        o.window_sill = Some(s);
+                    }
+                } else {
+                    ro(ui, &units.length(0.0));
+                }
+                ui.end_row();
+            });
+        }
+        _ => {
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-other").show(ui, |ui| {
+                prop_label(ui, "Level", true);
+                ro(ui, &level_name);
+                ui.end_row();
+            });
+        }
+    }
+    app.opts = o;
+    true
+}
+
 fn filter_label(app: &App) -> String {
+    if let Some(l) = new_label(app) {
+        return l.to_string();
+    }
     if app.selection.is_empty() {
         return app.active_view().map(|v| format!("{}: {}", v.type_label(), v.name)).unwrap_or_default();
     }

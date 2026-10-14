@@ -507,6 +507,12 @@ pub struct ToolOptions {
     pub wall_top: Option<Id>,
     pub wall_depth: bool,
     pub wall_height: f64,
+    /// New walls: base and top offsets, room bounding (Properties palette while placing).
+    pub wall_base_offset: f64,
+    pub wall_top_offset: f64,
+    pub wall_room_bounding: bool,
+    /// New windows: sill height override (None = the type's default).
+    pub window_sill: Option<f64>,
     pub location_line: LocationLine,
     pub chain: bool,
     pub offset: f64,
@@ -581,6 +587,10 @@ impl ToolOptions {
             wall_depth: false,
             // The Wall tool starts Unconnected at 20'-0" (8000 mm in metric), as in the reference app.
             wall_height: if imperial { 6096.0 } else { 8000.0 },
+            wall_base_offset: 0.0,
+            wall_top_offset: 0.0,
+            wall_room_bounding: true,
+            window_sill: None,
             location_line: LocationLine::WallCenterline,
             chain: true,
             offset: 0.0,
