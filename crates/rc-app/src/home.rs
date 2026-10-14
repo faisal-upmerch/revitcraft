@@ -152,7 +152,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ui.label("Date modified");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 egui::Frame::new().stroke(Stroke::new(1.0, Color32::from_gray(170))).inner_margin(egui::Margin::symmetric(4, 2)).show(ui, |ui| {
-                    ui.add(egui::TextEdit::singleline(&mut search).hint_text("Search for recent files").desired_width(260.0).frame(false));
+                    ui.add(egui::TextEdit::singleline(&mut search).hint_text("Search for recent files").desired_width(260.0).frame(egui::Frame::NONE));
                 });
             });
         });
