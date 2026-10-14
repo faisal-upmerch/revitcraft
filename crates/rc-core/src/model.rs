@@ -2307,6 +2307,9 @@ pub struct Project {
     /// Manage > Selection: saved selections.
     #[serde(default)]
     pub selection_sets: Vec<SelectionSet>,
+    /// Modify > Join Geometry: pairs of joined elements (their cuts merge in sections).
+    #[serde(default)]
+    pub joins: Vec<(Id, Id)>,
 }
 
 /// Line graphics of a category (Object Styles). None keeps the built-in default.
@@ -2352,6 +2355,7 @@ impl Project {
             line_styles: Vec::new(),
             builtin_line_styles: BTreeMap::new(),
             selection_sets: Vec::new(),
+            joins: Vec::new(),
         }
     }
 

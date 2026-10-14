@@ -161,6 +161,8 @@ pub fn prompt(app: &App) -> String {
         ToolKind::ScopeBox => if n == 0 { "Click to enter the first corner of the scope box.".into() } else { "Click to enter the opposite corner.".into() },
         ToolKind::Insulation => if n == 0 { "Click to enter the insulation start point.".into() } else { "Click to enter the insulation end point.".into() },
         ToolKind::DetailComponent => "Click to place the detail component. Space rotates it.".into(),
+        ToolKind::JoinGeometry => if t.picked.is_empty() { "Select first geometry to join.".into() } else { "Select second geometry to join to the first.".into() },
+        ToolKind::UnjoinGeometry => if t.picked.is_empty() { "Select geometry to unjoin.".into() } else { "Select the element to unjoin it from.".into() },
         _ => String::new(),
     }
 }
@@ -2057,6 +2059,28 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                 let f = app.opts.scale_factor;
                 app.run("Scale", |p| edit::scale_elements(p, &ids, pt, f));
                 app.set_tool(ToolKind::Select);
+            }
+        }
+        ToolKind::JoinGeometry | ToolKind::UnjoinGeometry => {
+            let target = canvas::pick_candidates(app, view, d, c, tol).into_iter().find(|id| app.el(*id).is_some_and(|e| e.view.is_none() && !e.category().is_annotation()));
+            if clicked {
+                if let Some(id) = target {
+                    if app.tool.picked.is_empty() {
+                        app.tool.picked.push(id);
+                        app.select(vec![id]);
+                    } else {
+                        let first = app.tool.picked[0];
+                        let join = app.tool.kind == ToolKind::JoinGeometry;
+                        let ok = app
+                            .run(if join { "Join Geometry" } else { "Unjoin Geometry" }, |p| if join { edit::join_geometry(p, first, id) } else { edit::unjoin_geometry(p, first, id) })
+                            .is_some();
+                        // Multiple join: keep the first pick and join more to it.
+                        if !(ok && join && app.opts.join_multiple) {
+                            app.tool.picked.clear();
+                            app.select(vec![]);
+                        }
+                    }
+                }
             }
         }
         ToolKind::MatchType => {

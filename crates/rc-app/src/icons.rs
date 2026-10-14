@@ -225,6 +225,7 @@ pub enum Icon {
     DetailComponent,
     MultiTag,
     MaterialTag,
+    UnjoinGeometry,
 }
 
 const BLUE: Color32 = Color32::from_rgb(40, 112, 205);
@@ -1450,6 +1451,11 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.28, 0.1, 0.72, 0.9, LBROWN, ink);
             g.line(&[(0.28, 0.1), (0.72, 0.9)], ink);
             g.line(&[(0.72, 0.1), (0.28, 0.9)], ink);
+        }
+        UnjoinGeometry => {
+            draw(g, JoinGeometry);
+            g.line_w(&[(0.62, 0.62), (0.92, 0.92)], RED, g.w * 1.4);
+            g.line_w(&[(0.92, 0.62), (0.62, 0.92)], RED, g.w * 1.4);
         }
         MultiTag => {
             g.poly(&[(0.1, 0.36), (0.62, 0.36), (0.84, 0.56), (0.62, 0.76), (0.1, 0.76)], YELLOW, ink);

@@ -255,6 +255,9 @@ pub enum Cmd {
     DetailComponent,
     MultiCategoryTag,
     MaterialTag,
+    JoinGeometry,
+    UnjoinGeometry,
+    SwitchWindows,
 }
 
 pub struct CmdInfo {
@@ -484,6 +487,9 @@ impl Cmd {
             DetailComponent => ci("Detail Component", I::DetailComponent, "Places a 2D detail component.", ""),
             MultiCategoryTag => ci("Multi-Category", I::MultiTag, "Tags elements of any category with their family and type.", ""),
             MaterialTag => ci("Material Tag", I::MaterialTag, "Tags the material of an element.", ""),
+            JoinGeometry => ci("Join Geometry", I::JoinGeometry, "Joins two elements so their cut geometry cleans up in sections.", "JG"),
+            UnjoinGeometry => ci("Unjoin Geometry", I::UnjoinGeometry, "Removes the join between two elements.", ""),
+            SwitchWindows => ci("Switch Windows", I::SwitchWindows, "Switches to another open view.", ""),
             SelectJoined => ci("Select Joined Elements", I::Modify, "Adds the elements joined to the selection.", ""),
             ColorFillLegend => ci("Color Fill Legend", I::ColorLegend, "Places a legend of the room colors in the active plan.", ""),
             ScheduleFields => ci("Fields", I::Schedule, "Chooses the fields (columns) of the schedule.", ""),
@@ -552,6 +558,7 @@ impl Cmd {
         Cmd::SnapQuadrant, Cmd::SnapOff, Cmd::SnapClose, Cmd::ProjectParameters, Cmd::ViewFilters, Cmd::LineStyles, Cmd::SaveSelection,
         Cmd::LoadSelection, Cmd::EditSelection, Cmd::SpotCoordinate, Cmd::SpotSlope, Cmd::FindReplace, Cmd::SelectJoined,
         Cmd::ScopeBox, Cmd::Insulation, Cmd::DetailComponent, Cmd::MultiCategoryTag, Cmd::MaterialTag,
+        Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows,
     ];
 
     /// Stable name for saving custom shortcuts.

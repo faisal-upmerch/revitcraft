@@ -34,6 +34,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         SaveSelection => sel,
         Insulation | DetailComponent | MultiCategoryTag | MaterialTag => graphical_2d && !in_sketch,
         ScopeBox => plan && !in_sketch,
+        JoinGeometry | UnjoinGeometry => !in_sketch && view.is_some_and(|v| v.is_graphical()),
+        SwitchWindows => !app.open_tabs().is_empty(),
         LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
         ExportCsv => view.is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
@@ -291,6 +293,9 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.set_tool(ToolKind::Tag);
         }
         ScopeBox => app.set_tool(ToolKind::ScopeBox),
+        JoinGeometry => app.set_tool(ToolKind::JoinGeometry),
+        UnjoinGeometry => app.set_tool(ToolKind::UnjoinGeometry),
+        SwitchWindows => app.cycle_views(),
         Insulation => app.set_tool(ToolKind::Insulation),
         DetailComponent => app.set_tool(ToolKind::DetailComponent),
         TagAll => app.dialogs.tag_all = true,
@@ -753,7 +758,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )

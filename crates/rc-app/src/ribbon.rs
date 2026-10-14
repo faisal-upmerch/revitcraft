@@ -222,6 +222,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
         panel(
             "Windows",
             vec![
+                Labeled("Switch\nWindows", C::SwitchWindows, vec![]),
                 Labeled("Close\nInactive", C::CloseInactive, vec![]),
                 Labeled("Tab\nViews", C::TabViews, vec![]),
                 Labeled("Tile\nViews", C::TileViews, vec![]),
@@ -261,7 +262,7 @@ fn modify_panels() -> Vec<Panel> {
         panel("Select", vec![Big(C::Modify)]),
         panel("Properties", vec![Big(C::TypeProperties), Big(C::ToggleProperties)]),
         panel("Clipboard", vec![Split(C::Paste, vec![C::Paste, C::PasteSameLevel]), Stack(vec![C::Cut, C::CopyClip, C::MatchType])]),
-        panel("Geometry", vec![Stack(vec![C::Demolish, C::WallJoinToggle])]),
+        panel("Geometry", vec![Labeled("Join", C::JoinGeometry, vec![C::JoinGeometry, C::UnjoinGeometry]), Stack(vec![C::Demolish, C::WallJoinToggle])]),
         panel(
             "Modify",
             vec![Icons(vec![
@@ -536,6 +537,18 @@ fn big_button(ui: &mut egui::Ui, app: &mut App, cmd: Cmd, label: Option<&str>, d
             for a in alts {
                 if menu_item(ui, app, *a) {
                     actions::exec(app, *a);
+                }
+            }
+        });
+    } else if cmd == Cmd::SwitchWindows {
+        // A list of the open views; the active one is checked.
+        let toggle = resp.clicked().then_some(egui::SetOpenCommand::Toggle);
+        egui::Popup::menu(&resp).open_memory(toggle).close_behavior(egui::PopupCloseBehavior::CloseOnClick).show(|ui| {
+            ui.set_min_width(220.0);
+            for (k, id) in app.open_tabs().into_iter().enumerate() {
+                let mark = if app.active == Some(id) { "✓ " } else { "   " };
+                if ui.button(format!("{mark}{}  {}", k + 1, app.view_title(id))).clicked() {
+                    app.activate(id);
                 }
             }
         });

@@ -235,6 +235,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
                 app.opts.insulation_width = w;
             }
+            ToolKind::JoinGeometry => {
+                ui.checkbox(&mut app.opts.join_multiple, "Multiple Join");
+            }
             ToolKind::DetailComponent => {
                 ui.label("Type:");
                 let mut k = app.opts.detail_component;

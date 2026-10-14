@@ -86,6 +86,8 @@ pub enum ToolKind {
     ScopeBox,
     Insulation,
     DetailComponent,
+    JoinGeometry,
+    UnjoinGeometry,
 }
 
 impl ToolKind {
@@ -160,6 +162,8 @@ impl ToolKind {
             ToolKind::ScopeBox => "Scope Box",
             ToolKind::Insulation => "Insulation",
             ToolKind::DetailComponent => "Detail Component",
+            ToolKind::JoinGeometry => "Join Geometry",
+            ToolKind::UnjoinGeometry => "Unjoin Geometry",
         }
     }
 
@@ -566,6 +570,8 @@ pub struct ToolOptions {
     /// Tag tool variant: 0 by category, 1 multi-category, 2 material.
     pub tag_mode: u8,
     pub insulation_width: f64,
+    /// Join Geometry: join more elements to the first pick.
+    pub join_multiple: bool,
     /// Index into `DETAIL_COMPONENTS`.
     pub detail_component: usize,
     pub dim_prefer: WallRefPref,
@@ -654,6 +660,7 @@ impl ToolOptions {
             tag_horizontal: true,
             tag_mode: 0,
             insulation_width: if imperial { 76.2 } else { 75.0 },
+            join_multiple: false,
             detail_component: 0,
             dim_prefer: WallRefPref::Centers,
             text_size: 2.5,

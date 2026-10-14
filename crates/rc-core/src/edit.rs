@@ -455,6 +455,43 @@ pub fn add_scope_box(p: &mut Project, a: DVec2, b: DVec2) -> Result<Id, String> 
     Ok(push(p, ElementKind::ScopeBox(ScopeBox { name, min: a.min(b), max: a.max(b), height })))
 }
 
+/// Joins the geometry of two model elements (Modify > Join Geometry).
+pub fn join_geometry(p: &mut Project, a: Id, b: Id) -> Result<(), String> {
+    if a == b {
+        return Err("Pick two different elements.".into());
+    }
+    for id in [a, b] {
+        let e = p.element(id).ok_or("Element not found.")?;
+        if e.view.is_some() || e.category().is_annotation() {
+            return Err("Only model elements can be joined.".into());
+        }
+    }
+    if p.joins.iter().any(|j| (j.0 == a && j.1 == b) || (j.0 == b && j.1 == a)) {
+        return Err("These elements are already joined.".into());
+    }
+    p.joins.push((a, b));
+    Ok(())
+}
+
+/// Removes the join between two elements.
+pub fn unjoin_geometry(p: &mut Project, a: Id, b: Id) -> Result<(), String> {
+    let n = p.joins.len();
+    p.joins.retain(|j| !((j.0 == a && j.1 == b) || (j.0 == b && j.1 == a)));
+    if p.joins.len() == n {
+        return Err("These elements are not joined.".into());
+    }
+    Ok(())
+}
+
+/// Housekeeping after every edit: scope box crops, joins of deleted elements.
+pub fn tidy(p: &mut Project) {
+    sync_scope_boxes(p);
+    if !p.joins.is_empty() {
+        let ids: std::collections::HashSet<Id> = p.elements.iter().map(|e| e.id).collect();
+        p.joins.retain(|j| ids.contains(&j.0) && ids.contains(&j.1));
+    }
+}
+
 /// Views assigned to a scope box take its extents as their crop region.
 pub fn sync_scope_boxes(p: &mut Project) {
     if !p.views.iter().any(|v| v.scope_box.is_some()) {

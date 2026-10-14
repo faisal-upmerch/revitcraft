@@ -359,18 +359,71 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
         }
     }
 
-    // Cut poché and heavy outlines at the section plane.
+    // Cut poché and heavy outlines at the section plane. Joined elements share one outline.
     if f.cuts {
-        for it in &items {
-            let loops = chain(cut_segments(&it.set, &f));
-            for lp in loops {
-                let cat = p.element(it.id).map(|e| e.category());
-                let fill = match cat {
-                    Some(Category::Walls | Category::Floors | Category::Roofs | Category::Stairs | Category::StructuralFraming | Category::StructuralColumns | Category::Columns | Category::StructuralFoundations) => [60, 60, 60, 255],
-                    _ => [140, 140, 140, 255],
-                };
-                d.fill(Some(it.id), &lp, fill);
-                d.line(Some(it.id), lp, true, plan::HEAVY);
+        let fill_of = |id: Id| match p.element(id).map(|e| e.category()) {
+            Some(Category::Walls | Category::Floors | Category::Roofs | Category::Stairs | Category::StructuralFraming | Category::StructuralColumns | Category::Columns | Category::StructuralFoundations) => [60, 60, 60, 255],
+            _ => [140, 140, 140, 255],
+        };
+        let cuts: Vec<(Id, Vec<Vec<DVec2>>)> = items.iter().map(|it| (it.id, chain(cut_segments(&it.set, &f)))).filter(|c| !c.1.is_empty()).collect();
+        // Groups of joined elements (union-find over the join pairs).
+        let mut group: Vec<usize> = (0..cuts.len()).collect();
+        fn root(g: &mut Vec<usize>, k: usize) -> usize {
+            let mut r = k;
+            while g[r] != r {
+                r = g[r];
+            }
+            g[k] = r;
+            r
+        }
+        for (a, b) in &p.joins {
+            if let (Some(i), Some(j)) = (cuts.iter().position(|c| c.0 == *a), cuts.iter().position(|c| c.0 == *b)) {
+                let (ri, rj) = (root(&mut group, i), root(&mut group, j));
+                group[ri] = rj;
+            }
+        }
+        let mut done = vec![false; cuts.len()];
+        for k in 0..cuts.len() {
+            let r = root(&mut group, k);
+            if done[k] {
+                continue;
+            }
+            let members: Vec<usize> = (0..cuts.len()).filter(|m| root(&mut group, *m) == r).collect();
+            for m in &members {
+                done[*m] = true;
+            }
+            if members.len() == 1 {
+                let (id, loops) = &cuts[k];
+                for lp in loops {
+                    d.fill(Some(*id), lp, fill_of(*id));
+                    d.line(Some(*id), lp.clone(), true, plan::HEAVY);
+                }
+                continue;
+            }
+            // Fill each member, then outline the union so no line runs between them.
+            let mut union: Option<geo::MultiPolygon<f64>> = None;
+            for m in &members {
+                let (id, loops) = &cuts[*m];
+                for lp in loops {
+                    d.fill(Some(*id), lp, fill_of(*id));
+                    let poly = geo::MultiPolygon::new(vec![geo::Polygon::new(geo::LineString::from(lp.iter().map(|q| geo::Coord { x: q.x, y: q.y }).collect::<Vec<_>>()), vec![])]);
+                    union = Some(match union {
+                        None => poly,
+                        Some(u) => geo::BooleanOps::union(&u, &poly),
+                    });
+                }
+            }
+            let owner = cuts[members[0]].0;
+            for poly in union.iter().flatten() {
+                for ring in std::iter::once(poly.exterior()).chain(poly.interiors()) {
+                    let mut pts: Vec<DVec2> = ring.coords().map(|c| DVec2::new(c.x, c.y)).collect();
+                    if pts.len() > 1 && pts[0] == pts[pts.len() - 1] {
+                        pts.pop();
+                    }
+                    if pts.len() >= 3 {
+                        d.line(Some(owner), pts, true, plan::HEAVY);
+                    }
+                }
             }
         }
     }
@@ -484,5 +537,34 @@ mod tests {
         let e = View::new(0, "N", 100.0, ViewKind::Elevation { dir: ElevationDir::North });
         let d = drawing(&p, &e, &fp);
         assert!(d.prims.len() > 50);
+    }
+
+    #[test]
+    fn joined_wall_and_floor_share_one_cut_outline() {
+        let mut p = crate::defaults::new_project(crate::units::UnitSystem::Metric);
+        let lvl = p.levels()[0].0;
+        let wt = p.types_of(Category::Walls).next().unwrap().id;
+        let ft = p.types_of(Category::Floors).next().unwrap().id;
+        let wall = crate::edit::add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(0.0, 6000.0), 3000.0).unwrap();
+        // The slab runs under the wall, so their cuts touch along the wall base.
+        let floor = crate::edit::add_floor(&mut p, lvl, ft, vec![DVec2::new(-1000.0, -1000.0), DVec2::new(4000.0, -1000.0), DVec2::new(4000.0, 7000.0), DVec2::new(-1000.0, 7000.0)]).unwrap();
+        let v = View::new(0, "S", 100.0, ViewKind::Section { start: DVec2::new(-3000.0, 3000.0), end: DVec2::new(6000.0, 3000.0), depth: 10000.0, z_min: -2000.0, z_max: 5000.0 });
+        let heavy = |p: &Project| {
+            let fp = analysis::wall_footprints(p);
+            drawing(p, &v, &fp).prims.iter().filter(|(_, pr)| matches!(pr, Prim::Line { stroke, closed: true, .. } if stroke.width >= 0.45)).count()
+        };
+        let before = heavy(&p);
+        assert!(before >= 2, "{before}");
+        crate::edit::join_geometry(&mut p, wall, floor).unwrap();
+        assert!(crate::edit::join_geometry(&mut p, floor, wall).is_err());
+        let after = heavy(&p);
+        assert!(after < before, "joined cuts should merge: {before} -> {after}");
+        crate::edit::unjoin_geometry(&mut p, floor, wall).unwrap();
+        assert_eq!(heavy(&p), before);
+        // Deleting an element drops its joins.
+        crate::edit::join_geometry(&mut p, wall, floor).unwrap();
+        p.elements.retain(|e| e.id != floor);
+        crate::edit::tidy(&mut p);
+        assert!(p.joins.is_empty());
     }
 }
