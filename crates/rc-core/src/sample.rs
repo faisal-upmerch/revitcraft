@@ -9,6 +9,33 @@ fn v(x: f64, y: f64) -> DVec2 {
     DVec2::new(x, y)
 }
 
+/// The sample house on a site: a sloping toposolid, a property line, trees and parking.
+pub fn sample_site() -> Project {
+    let mut p = sample_house();
+    p.info.name = "Sample Site".into();
+    let l1 = p.levels()[0].0;
+    let ground = vec![v(-12000.0, -14000.0), v(26000.0, -14000.0), v(26000.0, 18000.0), v(-12000.0, 18000.0)];
+    if let Ok(t) = edit::add_toposolid(&mut p, l1, ground, -200.0, 2000.0) {
+        // The site falls towards the street (south-west corner lowest).
+        for (k, h) in [-2700.0, -1600.0, -200.0, -900.0].into_iter().enumerate() {
+            let _ = edit::set_topo_point(&mut p, t, k, h);
+        }
+    }
+    let _ = edit::add_property_line(&mut p, l1, vec![v(-10000.0, -12000.0), v(24000.0, -12000.0), v(24000.0, 16000.0), v(-10000.0, 16000.0)]);
+    let fam = |p: &Project, cat: Category| p.families.iter().find(|f| f.category == cat).and_then(|f| f.types.first()).map(|t| t.id);
+    if let Some(tree) = fam(&p, Category::Planting) {
+        for at in [v(-6000.0, 12000.0), v(-7000.0, 2000.0), v(19000.0, 12500.0), v(20000.0, 3000.0), v(3000.0, 14000.0)] {
+            let _ = edit::place_free(&mut p, tree, l1, at, 0.0);
+        }
+    }
+    if let Some(park) = fam(&p, Category::Parking) {
+        for k in 0..4 {
+            let _ = edit::place_free(&mut p, park, l1, v(15500.0 + k as f64 * 2500.0, -6000.0), 0.0);
+        }
+    }
+    p
+}
+
 pub fn sample_house() -> Project {
     let mut p = defaults::new_project(crate::units::UnitSystem::Metric);
     p.info.name = "Sample House".into();

@@ -122,9 +122,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             crate::family_editor::new_custom(app, "Custom Family");
         }
         ui.add_space(24.0);
-        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width() + 12.0, 30.0), Sense::hover());
-        ui.painter().rect_filled(r.translate(vec2(-24.0, 0.0)).expand2(vec2(12.0, 0.0)), 0.0, Color32::WHITE);
-        ui.painter().text(r.left_center() + vec2(0.0, 0.0), egui::Align2::LEFT_CENTER, "Recent", style::font(13.0), style::text());
+        // Sections: Recent and Samples (the selected one sits on a white band).
+        let sec_id = egui::Id::new("home-section");
+        let mut section: u8 = ui.memory(|m| m.data.get_temp(sec_id)).unwrap_or(0);
+        for (k, label) in ["Recent", "Samples"].into_iter().enumerate() {
+            let (r, resp) = ui.allocate_exact_size(vec2(ui.available_width() + 12.0, 30.0), Sense::click());
+            let band = r.translate(vec2(-24.0, 0.0)).expand2(vec2(12.0, 0.0));
+            if section == k as u8 {
+                ui.painter().rect_filled(band, 0.0, Color32::WHITE);
+            } else if resp.hovered() {
+                ui.painter().rect_filled(band, 0.0, Color32::from_rgb(229, 229, 229));
+            }
+            ui.painter().text(r.left_center(), egui::Align2::LEFT_CENTER, label, style::font(13.0), style::text());
+            if resp.clicked() {
+                section = k as u8;
+            }
+        }
+        ui.memory_mut(|m| m.data.insert_temp(sec_id, section));
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
             ui.add_space(4.0);
             for (label, which) in [("Keyboard shortcuts", 2), ("Sample project", 1)] {
@@ -143,7 +157,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         });
     });
     egui::CentralPanel::default().frame(egui::Frame::new().fill(Color32::WHITE).inner_margin(egui::Margin { left: 28, right: 28, top: 22, bottom: 16 })).show(ui, |ui| {
-        ui.label(egui::RichText::new("Recent").size(20.0));
+        let section: u8 = ui.memory(|m| m.data.get_temp(egui::Id::new("home-section"))).unwrap_or(0);
+        ui.label(egui::RichText::new(if section == 0 { "Recent" } else { "Samples" }).size(20.0));
         ui.add_space(10.0);
         let search_id = egui::Id::new("home-search");
         let mut search: String = ui.memory(|m| m.data.get_temp(search_id)).unwrap_or_default();
@@ -158,18 +173,51 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         });
         ui.memory_mut(|m| m.data.insert_temp(search_id, search.clone()));
         ui.add_space(12.0);
-        let mut recent: Vec<String> = app.settings.recent.iter().filter(|r| search.is_empty() || r.to_lowercase().contains(&search.to_lowercase())).cloned().collect();
+        let mut recent: Vec<String> = if section == 0 { app.settings.recent.clone() } else { vec![] };
+        recent.retain(|r| search.is_empty() || r.to_lowercase().contains(&search.to_lowercase()));
         recent.sort_by_key(|r| std::cmp::Reverse(std::fs::metadata(r).and_then(|m| m.modified()).ok()));
-        if recent.is_empty() {
+        if recent.is_empty() && section == 0 {
             ui.label(egui::RichText::new("Projects you open or save appear here.").color(style::text_dim()));
         }
+        // Sample projects follow the recent files, as in the reference Home.
+        let samples: Vec<(&str, Icon)> = [("Sample House", Icon::Home), ("Sample Site", Icon::Toposolid)]
+            .into_iter()
+            .filter(|(n, _)| search.is_empty() || n.to_lowercase().contains(&search.to_lowercase()))
+            .collect();
+        let mut cards: Vec<Result<String, (&str, Icon)>> = recent.iter().cloned().map(Ok).collect();
+        cards.extend(samples.into_iter().map(Err));
         egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
             let (cw, ch, gap) = (160.0, 206.0, 14.0);
             let cols = ((ui.available_width() + gap) / (cw + gap)).floor().max(1.0) as usize;
-            for row in recent.chunks(cols) {
+            for row in cards.chunks(cols) {
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = gap;
-                    for r in row {
+                    for card in row {
+                        let r = match card {
+                            Ok(r) => r,
+                            Err((name, icon)) => {
+                                let (rect, resp) = ui.allocate_exact_size(vec2(cw, ch), Sense::click());
+                                let p = ui.painter();
+                                p.rect_filled(rect, 2.0, if resp.hovered() { Color32::from_rgb(229, 241, 251) } else { Color32::from_rgb(236, 236, 236) });
+                                let thumb = Rect::from_min_size(rect.min + vec2(8.0, 8.0), vec2(cw - 16.0, 110.0));
+                                p.rect_filled(thumb, 0.0, Color32::WHITE);
+                                icons::paint(p, Rect::from_center_size(thumb.center(), vec2(56.0, 56.0)), *icon, true);
+                                icons::paint(p, Rect::from_min_size(pos2(rect.left() + 8.0, thumb.bottom() + 8.0), vec2(14.0, 14.0)), Icon::Save, true);
+                                p.text(pos2(rect.left() + 10.0, thumb.bottom() + 26.0), egui::Align2::LEFT_TOP, *name, style::font(12.5), style::text());
+                                p.text(pos2(rect.left() + 10.0, rect.bottom() - 12.0), egui::Align2::LEFT_CENTER, "Sample project", style::font(11.0), style::text_dim());
+                                if resp.clicked() {
+                                    close = true;
+                                    if app.confirm_discard(crate::dialogs::Pending::Sample) {
+                                        if *name == "Sample Site" {
+                                            app.replace_document(rc_core::sample::sample_site(), None);
+                                        } else {
+                                            app.open_sample();
+                                        }
+                                    }
+                                }
+                                continue;
+                            }
+                        };
                         let path = PathBuf::from(r);
                         let (rect, resp) = ui.allocate_exact_size(vec2(cw, ch), Sense::click());
                         let p = ui.painter();

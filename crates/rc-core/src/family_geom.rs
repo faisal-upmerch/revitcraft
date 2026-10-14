@@ -300,12 +300,12 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
             b.prism(&trunk, &circle(DVec2::ZERO, td / 2.0, 12), 0.0, h * 0.45);
             // A rounded canopy from stacked discs.
             let (c0, c1) = (h * 0.3, h);
-            let n = 8;
+            let n = 14;
             for k in 0..n {
                 let (t0, t1) = (k as f64 / n as f64, (k + 1) as f64 / n as f64);
                 let tm = (t0 + t1) / 2.0;
                 let r = (w / 2.0) * (1.0 - (2.0 * tm - 1.0).powi(2)).max(0.05).sqrt();
-                b.prism(&canopy, &circle(DVec2::ZERO, r, 16), c0 + (c1 - c0) * t0, c0 + (c1 - c0) * t1);
+                b.prism(&canopy, &circle(DVec2::ZERO, r, 20), c0 + (c1 - c0) * t0, c0 + (c1 - c0) * t1);
             }
         }
         ParkingSpace => {

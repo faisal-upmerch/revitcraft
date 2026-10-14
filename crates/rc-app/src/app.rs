@@ -256,6 +256,7 @@ impl App {
             };
             match args[k].as_str() {
                 "--sample" => self.open_sample(),
+                "--sample-site" => self.replace_document(rc_core::sample::sample_site(), None),
                 "--imperial" => self.replace_document(defaults::new_project(UnitSystem::Imperial), None),
                 "--view" => {
                     if let Some(name) = next(&mut k) {
