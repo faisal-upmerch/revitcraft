@@ -45,6 +45,53 @@ pub fn model_bounds(p: &Project, footprints: &HashMap<Id, Footprint>) -> Option<
 }
 
 /// The frame for a section or elevation view.
+/// The 3D ray behind a point of a plan, section or elevation (into the view).
+pub fn view_ray(p: &Project, view: &View, q: DVec2, footprints: &HashMap<Id, Footprint>) -> Option<(DVec3, DVec3)> {
+    if let Some(level) = view.plan_level() {
+        let z = p.level_elevation(level) + view.view_range.cut;
+        let up = matches!(view.kind, ViewKind::CeilingPlan { .. });
+        return Some((DVec3::new(q.x, q.y, z), if up { DVec3::Z } else { -DVec3::Z }));
+    }
+    let f = view_frame(p, view, footprints)?;
+    let start = if f.cuts { 0.0 } else { -1.0e7 };
+    Some((f.to_world(q, start), f.look))
+}
+
+/// The nearest model face under a point of a 2D view: element, hit point and face normal.
+pub fn pick_face(p: &Project, view: &View, q: DVec2, footprints: &HashMap<Id, Footprint>) -> Option<(Id, DVec3, DVec3)> {
+    let (o, d) = view_ray(p, view, q, footprints)?;
+    let mut best: Option<(f64, Id, DVec3)> = None;
+    for e in p.elements.iter().filter(|e| e.view.is_none() && analysis::visible_in(p, view, e)) {
+        let set = build3d::element_mesh(p, e, footprints);
+        for m in set.by_material.values() {
+            for tri in m.indices.chunks(3) {
+                let (a, b, c) = (m.positions[tri[0] as usize], m.positions[tri[1] as usize], m.positions[tri[2] as usize]);
+                let (e1, e2) = (b - a, c - a);
+                let h = d.cross(e2);
+                let det = e1.dot(h);
+                if det.abs() < 1e-12 {
+                    continue;
+                }
+                let s = o - a;
+                let u = s.dot(h) / det;
+                if !(0.0..=1.0).contains(&u) {
+                    continue;
+                }
+                let qv = s.cross(e1);
+                let v = d.dot(qv) / det;
+                if v < 0.0 || u + v > 1.0 {
+                    continue;
+                }
+                let t = e2.dot(qv) / det;
+                if t > 1e-6 && best.is_none_or(|bb| t < bb.0) {
+                    best = Some((t, e.id, e1.cross(e2).normalize_or_zero()));
+                }
+            }
+        }
+    }
+    best.map(|(t, id, n)| (id, o + d * t, n))
+}
+
 pub fn view_frame(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Option<ViewFrame> {
     match &view.kind {
         ViewKind::Section { start, end, depth, z_min, z_max } => {
@@ -325,7 +372,7 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
 
     // Visible edges beyond the cut; obscured edges dashed for Show Hidden Lines elements.
     for it in &items {
-        let reveal = view.show_hidden.contains(&it.id);
+        let reveal = view.hidden_lines.iter().any(|h| h.1 == it.id);
         let stroke = match it.status {
             analysis::PhaseStatus::Existing => Stroke::new(0.13, [120, 120, 120], Dash::Solid),
             analysis::PhaseStatus::Demolished => Stroke::new(0.13, [120, 120, 120], Dash::Dotted),
@@ -551,6 +598,51 @@ mod tests {
         let e = View::new(0, "N", 100.0, ViewKind::Elevation { dir: ElevationDir::North });
         let d = drawing(&p, &e, &fp);
         assert!(d.prims.len() > 50);
+    }
+
+    #[test]
+    fn faces_pick_from_2d_views_and_hidden_lines_dash_in_plan() {
+        let mut p = crate::defaults::new_project(crate::units::UnitSystem::Metric);
+        let lvl = p.levels()[0].0;
+        let wt = p.types_of(Category::Walls).next().unwrap().id;
+        let ft = p.types_of(Category::Floors).next().unwrap().id;
+        let wall = crate::edit::add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(6000.0, 0.0), 3000.0).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        // South elevation looks north at the wall's exterior face.
+        let south = p.views.iter().find(|v| matches!(v.kind, ViewKind::Elevation { dir: ElevationDir::South })).unwrap().clone();
+        let (id, q, n) = pick_face(&p, &south, DVec2::new(0.0, 1500.0), &fp).or_else(|| {
+            // The elevation frame's horizontal origin may differ: try along the wall.
+            (-8000..8000).step_by(500).find_map(|x| pick_face(&p, &south, DVec2::new(x as f64, 1500.0), &fp))
+        }).expect("a face of the wall");
+        assert_eq!(id, wall);
+        assert!(n.y.abs() > 0.99, "{n:?}");
+        assert!((q.z - 1500.0).abs() < 1.0);
+        // A plan ray hits the wall top only below the cut: walls are cut, so a plan pick
+        // through the wall finds its bottom-most face or nothing — floors are found from above.
+        let floor = crate::edit::add_floor(&mut p, lvl, ft, vec![DVec2::new(1000.0, 1000.0), DVec2::new(5000.0, 1000.0), DVec2::new(5000.0, 4000.0), DVec2::new(1000.0, 4000.0)]).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        let plan = p.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap().clone();
+        let (fid, _, fnorm) = pick_face(&p, &plan, DVec2::new(3000.0, 2500.0), &fp).unwrap();
+        assert_eq!(fid, floor);
+        assert!(fnorm.z.abs() > 0.99);
+
+        // Show Hidden Lines: a line under the floor turns dashed where the floor covers it.
+        let vid = plan.id;
+        let line = crate::edit::add_line(&mut p, None, Some(lvl), vec![DVec2::new(0.0, 2500.0), DVec2::new(6000.0, 2500.0)], None, LineStyle::Medium).unwrap();
+        p.view_mut(vid).unwrap().hidden_lines.push((floor, line));
+        let fp = analysis::wall_footprints(&p);
+        let d = plan::floor_plan(&p, p.view(vid).unwrap(), &fp);
+        let segs: Vec<(f64, Dash)> = d
+            .prims
+            .iter()
+            .filter(|(i, _)| *i == Some(line))
+            .filter_map(|(_, pr)| match pr {
+                Prim::Line { pts, stroke, .. } => Some(((pts[0].x + pts[1].x) / 2.0, stroke.dash)),
+                _ => None,
+            })
+            .collect();
+        assert!(segs.iter().any(|(x, dash)| *x > 1000.0 && *x < 5000.0 && *dash == Dash::Dashed), "{segs:?}");
+        assert!(segs.iter().any(|(x, dash)| *x < 1000.0 && *dash == Dash::Solid), "{segs:?}");
     }
 
     #[test]

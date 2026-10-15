@@ -150,7 +150,7 @@ fn annotate() -> Vec<Panel> {
             vec![
                 Labeled("Detail\nLine", C::DetailLine, vec![]),
                 Labeled("Region", C::FilledRegion, vec![C::FilledRegion, C::MaskingRegion]),
-                Labeled("Component", C::DetailComponent, vec![C::DetailComponent]),
+                Labeled("Component", C::DetailComponent, vec![C::DetailComponent, C::RepeatingDetail]),
                 Labeled("Revision\nCloud", C::RevisionCloud, vec![]),
                 Labeled("Detail\nGroup", C::PlaceDetailGroup, vec![C::PlaceDetailGroup, C::CreateGroup]),
                 Big(C::Insulation),

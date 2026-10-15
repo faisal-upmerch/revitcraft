@@ -276,6 +276,7 @@ pub enum Cmd {
     ViewReference,
     Paint,
     RemovePaint,
+    RepeatingDetail,
 }
 
 pub struct CmdInfo {
@@ -516,6 +517,7 @@ impl Cmd {
             DeactivateView => ci("Deactivate View", I::ActivateView, "Returns from the activated view to the sheet.", ""),
             Matchline => ci("Matchline", I::Matchline, "Draws a matchline where a plan continues on another sheet.", ""),
             ViewReference => ci("View Reference", I::ViewReference, "Places a reference to another view (detail and sheet number).", ""),
+            RepeatingDetail => ci("Repeating Detail Component", I::DetailComponent, "Draws a detail component repeated along a line (brick, CMU, sheathing).", ""),
             Paint => ci("Paint", I::Paint, "Paints a face of an element with a material.", "PT"),
             RemovePaint => ci("Remove Paint", I::Paint, "Removes the paint from a face.", ""),
             GuideGrid => ci("Guide Grid", I::GuideGrid, "Shows a guide grid on the sheet; viewports snap to it.", ""),
@@ -597,7 +599,7 @@ impl Cmd {
         Cmd::JoinGeometry, Cmd::UnjoinGeometry, Cmd::SwitchWindows, Cmd::CanvasTheme, Cmd::ShowHiddenLines, Cmd::RemoveHiddenLines, Cmd::GlobalParameters, Cmd::PlaceDetailGroup,
         Cmd::ElementKeynote, Cmd::MaterialKeynote, Cmd::UserKeynote, Cmd::KeynotingSettings, Cmd::KeynoteLegend,
         Cmd::ActivateView, Cmd::DeactivateView, Cmd::GuideGrid, Cmd::TitleBlock,
-        Cmd::Matchline, Cmd::ViewReference, Cmd::Paint, Cmd::RemovePaint,
+        Cmd::Matchline, Cmd::ViewReference, Cmd::Paint, Cmd::RemovePaint, Cmd::RepeatingDetail,
     ];
 
     /// Stable name for saving custom shortcuts.

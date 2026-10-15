@@ -137,6 +137,41 @@ impl Drawing {
     }
 
     /// Recolours and/or reweights every primitive of an element (overrides, halftone, phases).
+    /// Splits the lines added since `from` where they cross the polygons; the parts inside
+    /// are drawn dashed (hidden).
+    fn dash_inside(&mut self, from: usize, polys: &[Vec<DVec2>]) {
+        let tail: Vec<(Option<Id>, Prim)> = self.prims.drain(from..).collect();
+        let inside = |q: DVec2| polys.iter().any(|poly| geom::contains(poly, q));
+        for (id, prim) in tail {
+            let Prim::Line { mut pts, closed, stroke } = prim else {
+                self.prims.push((id, prim));
+                continue;
+            };
+            if closed && !pts.is_empty() {
+                pts.push(pts[0]);
+            }
+            for s in pts.windows(2) {
+                let (a, b) = (s[0], s[1]);
+                let mut ts = vec![0.0, 1.0];
+                for poly in polys {
+                    for k in 0..poly.len() {
+                        if let Some((t, _)) = geom::segment_intersection(a, b, poly[k], poly[(k + 1) % poly.len()]) {
+                            ts.push(t);
+                        }
+                    }
+                }
+                ts.sort_by(f64::total_cmp);
+                ts.dedup_by(|x, y| (*x - *y).abs() < 1e-9);
+                for w in ts.windows(2) {
+                    let (p0, p1) = (a.lerp(b, w[0]), a.lerp(b, w[1]));
+                    let hidden = inside((p0 + p1) / 2.0);
+                    let st = if hidden { Stroke { dash: Dash::Dashed, color: HIDDEN.color, width: HIDDEN.width.min(stroke.width) } } else { stroke };
+                    self.prims.push((id, Prim::Line { pts: vec![p0, p1], closed: false, stroke: st }));
+                }
+            }
+        }
+    }
+
     fn restyle(&mut self, from: usize, color: Option<[u8; 3]>, weight: Option<f32>, dash: Option<Dash>) {
         for (_, p) in &mut self.prims[from..] {
             match p {
@@ -562,6 +597,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         if !visible(e) {
             continue;
         }
+        let start = d.prims.len();
         match &e.kind {
             ElementKind::RoomSeparation(s) if s.level == c.level && area_plan.is_none() => d.line(Some(e.id), vec![s.start, s.end], false, THIN),
             ElementKind::AreaBoundary(s) if s.level == c.level && area_plan.is_some_and(|sc| s.scheme.is_none_or(|x| x == sc)) => {
@@ -581,6 +617,9 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 }
             }
             _ => {}
+        }
+        if d.prims.len() > start {
+            style_element(&c, e, d, start);
         }
     }
 
@@ -645,6 +684,19 @@ pub fn line_points(l: &LineElement) -> Vec<DVec2> {
 
 /// Applies overrides, halftone and phase graphics to the primitives an element just added.
 fn style_element(c: &Ctx, e: &Element, d: &mut Drawing, start: usize) {
+    // Show Hidden Lines: the parts under the obscuring element are dashed.
+    let polys: Vec<Vec<DVec2>> = c
+        .view
+        .hidden_lines
+        .iter()
+        .filter(|h| h.1 == e.id)
+        .filter_map(|h| c.p.element(h.0))
+        .flat_map(|o| element_outline(c.p, o, c.footprints))
+        .filter(|r| r.len() >= 3)
+        .collect();
+    if !polys.is_empty() {
+        d.dash_inside(start, &polys);
+    }
     if let Some(o) = crate::params::effective_override(c.p, c.view, e).as_ref() {
         let color = if o.halftone { Some(HALFTONE) } else { o.line_color };
         d.restyle(start, color, o.line_weight, None);
@@ -1298,6 +1350,22 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     d.line(Some(e.id), vec![c + DVec2::new(-w / 2.0, -h * 0.8), c + DVec2::new(w / 2.0, -h * 0.8), c + DVec2::new(w / 2.0 + h * 0.6, 0.0), c + DVec2::new(w / 2.0, h * 0.8), c + DVec2::new(-w / 2.0, h * 0.8), c + DVec2::new(-w / 2.0 - h * 0.6, 0.0)], true, ANNO);
                     d.text(Some(e.id), c, label, 2.2, Anchor::Center);
                 }
+                SymbolKind::RepeatingDetail if s.points.len() == 2 => {
+                    let Some(rd) = REPEATING_DETAILS.iter().find(|r| r.0 == s.value) else { continue };
+                    let (a, b) = (s.points[0], s.points[1]);
+                    let len = a.distance(b);
+                    let dir = (b - a) / len.max(1e-9);
+                    let n = (len / rd.2).floor() as usize;
+                    let lines = detail_component_lines(rd.1);
+                    for k in 0..n {
+                        let at = a + dir * (rd.2 * (k as f64 + 0.5));
+                        for (pts, closed) in &lines {
+                            let pts: Vec<DVec2> = pts.iter().map(|q| at + dir * q.x + geom::perp(dir) * q.y).collect();
+                            d.line(Some(e.id), pts, *closed, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
+                        }
+                    }
+                }
+                SymbolKind::RepeatingDetail => {}
                 SymbolKind::DetailComponent => {
                     for (pts, closed) in detail_component_lines(&s.value) {
                         let a = s.rotation_deg.to_radians();
@@ -1386,12 +1454,105 @@ pub fn detail_component_lines(name: &str) -> Vec<(Vec<DVec2>, bool)> {
             (vec![DVec2::new(-w / 2.0, h / 2.0), DVec2::new(w / 2.0, -h / 2.0)], false),
         ]
     };
+    // A sheet product seen in section: outline with a light hatch.
+    let board = |w: f64, t: f64, step: f64| {
+        let mut v = vec![(rect(w, t), true)];
+        let mut x = -w / 2.0 + step / 2.0;
+        while x + t * 0.6 < w / 2.0 {
+            v.push((vec![DVec2::new(x, -t / 2.0), DVec2::new(x + t * 0.6, t / 2.0)], false));
+            x += step;
+        }
+        v
+    };
+    // Wide-flange (I) shape: depth d, flange width bf, flange tf, web tw.
+    let wide_flange = |d: f64, bf: f64, tf: f64, tw: f64| {
+        let (hd, hb, hw) = (d / 2.0, bf / 2.0, tw / 2.0);
+        vec![(
+            vec![
+                DVec2::new(-hb, -hd),
+                DVec2::new(hb, -hd),
+                DVec2::new(hb, -hd + tf),
+                DVec2::new(hw, -hd + tf),
+                DVec2::new(hw, hd - tf),
+                DVec2::new(hb, hd - tf),
+                DVec2::new(hb, hd),
+                DVec2::new(-hb, hd),
+                DVec2::new(-hb, hd - tf),
+                DVec2::new(-hw, hd - tf),
+                DVec2::new(-hw, -hd + tf),
+                DVec2::new(-hb, -hd + tf),
+            ],
+            true,
+        )]
+    };
     match name {
-        n if n.ends_with("2x4") => lumber(38.0, 89.0),
-        n if n.ends_with("2x6") => lumber(38.0, 140.0),
-        n if n.ends_with("2x10") => lumber(38.0, 235.0),
+        n if n.starts_with("Dimension Lumber") || n.starts_with("Wood Blocking") => match n.rsplit(' ').next().unwrap_or("") {
+            "2x4" => lumber(38.0, 89.0),
+            "2x6" => lumber(38.0, 140.0),
+            "2x8" => lumber(38.0, 184.0),
+            "2x10" => lumber(38.0, 235.0),
+            "2x12" => lumber(38.0, 286.0),
+            "4x4" => lumber(89.0, 89.0),
+            _ => lumber(38.0, 89.0),
+        },
+        n if n.starts_with("Plywood") => board(1219.2, if n.ends_with("1/2\"") { 12.7 } else { 19.05 }, 60.0),
+        n if n.starts_with("Gypsum Wallboard") => board(1219.2, if n.ends_with("1/2\"") { 12.7 } else { 15.9 }, 1219.2 * 2.0),
+        n if n.starts_with("Rigid Insulation") => {
+            let t = if n.ends_with("1\"") { 25.4 } else { 50.8 };
+            let w = 1219.2;
+            let mut v = vec![(rect(w, t), true)];
+            // Rigid insulation: a zig-zag between the faces.
+            let mut zz = Vec::new();
+            let mut x = -w / 2.0;
+            let mut up = false;
+            while x <= w / 2.0 {
+                zz.push(DVec2::new(x, if up { t / 2.0 } else { -t / 2.0 }));
+                up = !up;
+                x += t;
+            }
+            v.push((zz, false));
+            v
+        }
+        n if n.starts_with("Brick-Section") => {
+            let (w, h) = (92.0, 57.0);
+            vec![(rect(w, h), true), (vec![DVec2::new(-w / 2.0, -h / 2.0), DVec2::new(w / 2.0, h / 2.0)], false)]
+        }
+        "Brick-Course" => {
+            // One brick course in a wall section (along the path) with its mortar joint.
+            vec![(rect(57.15, 92.0), true), (vec![DVec2::new(-28.5, -46.0), DVec2::new(28.5, 46.0)], false)]
+        }
+        n if n.starts_with("CMU-Course") => {
+            let (l, w) = (193.7, 193.7);
+            vec![(rect(l, w), true), (rect(l - 64.0, w - 64.0), true)]
+        }
+        "Sheathing-Course" => board(1216.0, 12.7, 60.0),
+        n if n.starts_with("Steel W-Section") => {
+            if n.ends_with("W8x31") { wide_flange(203.0, 203.0, 11.0, 7.2) } else { wide_flange(311.0, 165.0, 9.7, 5.8) }
+        }
+        n if n.starts_with("Steel HSS") => {
+            let (b, t) = (101.6, 5.9);
+            vec![(rect(b, b), true), (rect(b - 2.0 * t, b - 2.0 * t), true)]
+        }
+        n if n.starts_with("Steel Channel") => {
+            let (d, bf, tf, tw) = (203.0, 56.0, 9.9, 5.6);
+            vec![(vec![DVec2::new(0.0, -d / 2.0), DVec2::new(bf, -d / 2.0), DVec2::new(bf, -d / 2.0 + tf), DVec2::new(tw, -d / 2.0 + tf), DVec2::new(tw, d / 2.0 - tf), DVec2::new(bf, d / 2.0 - tf), DVec2::new(bf, d / 2.0), DVec2::new(0.0, d / 2.0)], true)]
+        }
+        n if n.starts_with("Concrete Footing") => {
+            let (w, h) = (609.6, 304.8);
+            let mut v = vec![(rect(w, h), true)];
+            // Concrete: a few aggregate triangles.
+            for (x, y) in [(-200.0, 40.0), (-60.0, -80.0), (90.0, 60.0), (210.0, -50.0)] {
+                v.push((vec![DVec2::new(x, y), DVec2::new(x + 30.0, y + 10.0), DVec2::new(x + 8.0, y + 32.0)], true));
+            }
+            v
+        }
+        n if n.starts_with("Break Line") => {
+            let l = 600.0;
+            vec![(vec![DVec2::new(-l / 2.0, 0.0), DVec2::new(-30.0, 0.0), DVec2::new(-12.0, 60.0), DVec2::new(12.0, -60.0), DVec2::new(30.0, 0.0), DVec2::new(l / 2.0, 0.0)], false)]
+        }
         n if n.starts_with("CMU") => {
-            let (w, h) = (194.0, 397.0);
+            let w = if n.ends_with("6\"") { 143.0 } else if n.ends_with("12\"") { 295.0 } else { 194.0 };
+            let h = 397.0;
             let core = |cy: f64| {
                 let (cw, ch) = (w - 64.0, h / 2.0 - 48.0);
                 vec![DVec2::new(-cw / 2.0, cy - ch / 2.0), DVec2::new(cw / 2.0, cy - ch / 2.0), DVec2::new(cw / 2.0, cy + ch / 2.0), DVec2::new(-cw / 2.0, cy + ch / 2.0)]
@@ -1459,7 +1620,7 @@ fn special_dimension(p: &Project, id: Id, dim: &Dimension, scale: f64, d: &mut D
             d.text_rot(Some(id), mid, fmt(format!("⌀ {}", p.units.length(a0.distance(b0)))), 2.5, a as f32);
         }
         DimKind::Angular if pts.len() >= 3 => {
-            let (a, v, b) = (pts[0], pts[1], pts[2]);
+            let (a, v, b) = annotation::angular_points(p, dim).unwrap_or((pts[0], pts[1], pts[2]));
             let r = dim.line_point.distance(v).max(scale * 4.0);
             let a0 = (a - v).y.atan2((a - v).x);
             let mut sweep = ((b - v).y.atan2((b - v).x) - a0).rem_euclid(std::f64::consts::TAU);

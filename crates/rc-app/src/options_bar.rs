@@ -248,6 +248,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
                 app.opts.insulation_width = w;
             }
+            ToolKind::RepeatingDetail => {
+                ui.label("Type:");
+                let mut k = app.opts.repeating_detail;
+                egui::ComboBox::from_id_salt("rd-type").selected_text(REPEATING_DETAILS[k.min(REPEATING_DETAILS.len() - 1)].0).width(160.0).show_ui(ui, |ui| {
+                    for (i, r) in REPEATING_DETAILS.iter().enumerate() {
+                        ui.selectable_value(&mut k, i, r.0);
+                    }
+                });
+                app.opts.repeating_detail = k;
+            }
             ToolKind::ViewReference => {
                 ui.label("Target View:");
                 let views: Vec<(Id, String)> = app.doc.data.views.iter().filter(|v| v.is_graphical() && !v.is_template && !matches!(v.kind, ViewKind::Sheet(_))).map(|v| (v.id, v.name.clone())).collect();
@@ -326,6 +336,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::Insulation => "Insulation",
                     SymbolKind::DetailComponent => "Detail Component",
                     SymbolKind::ViewReference => "View Reference",
+                    SymbolKind::RepeatingDetail => "Repeating Detail",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {
                     for s in [SymbolKind::NorthArrow, SymbolKind::BreakLine, SymbolKind::SpotElevation] {

@@ -26,6 +26,15 @@ pub fn resolve(p: &Project, r: &DimRef) -> Resolved {
         let q = a + d * (r.point - a).dot(d);
         Resolved { point: q, dir: Some(d) }
     };
+    if matches!(r.part, RefPart::ArcCenter | RefPart::ArcPoint | RefPart::ArcMid) {
+        let Some(arc) = element_arc(e).and_then(|(a, m, b)| geom::Arc2::through(a, m, b).map(|arc| (arc, m))) else { return fallback };
+        let (arc, m) = arc;
+        return match r.part {
+            RefPart::ArcCenter => Resolved { point: arc.center, dir: None },
+            RefPart::ArcMid => Resolved { point: m, dir: None },
+            _ => Resolved { point: arc.center + (r.point - arc.center).normalize_or(DVec2::X) * arc.radius, dir: None },
+        };
+    }
     match (&e.kind, &r.part) {
         (ElementKind::Wall(w), RefPart::WallCenter | RefPart::WallExterior | RefPart::WallInterior) => {
             let off = match r.part {
@@ -51,6 +60,29 @@ pub fn resolve(p: &Project, r: &DimRef) -> Resolved {
         }
         _ => fallback,
     }
+}
+
+/// Start, mid and end of an arc-shaped element.
+pub fn element_arc(e: &Element) -> Option<(DVec2, DVec2, DVec2)> {
+    match &e.kind {
+        ElementKind::Wall(w) => w.arc_mid.map(|m| (w.start, m, w.end)),
+        ElementKind::Grid(g) => g.arc_mid.map(|m| (g.start, m, g.end)),
+        ElementKind::Line(l) if l.pts.len() == 2 => l.arc_mid.map(|m| (l.pts[0], m, l.pts[1])),
+        _ => None,
+    }
+}
+
+/// Vertex and the two ray points of an angular dimension (the vertex follows the lines).
+pub fn angular_points(p: &Project, d: &Dimension) -> Option<(DVec2, DVec2, DVec2)> {
+    if d.refs.len() < 3 {
+        return None;
+    }
+    let (ra, rv, rb) = (resolve(p, &d.refs[0]), resolve(p, &d.refs[1]), resolve(p, &d.refs[2]));
+    let v = match (ra.dir, rb.dir) {
+        (Some(da), Some(db)) => geom::line_intersection(ra.point, da, rb.point, db).unwrap_or(rv.point),
+        _ => rv.point,
+    };
+    Some((ra.point, v, rb.point))
 }
 
 /// Coordinates of each reference along the dimension direction.

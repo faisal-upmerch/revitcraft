@@ -336,9 +336,13 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Suffix", TEXT, v(Text), false, false));
             d.push(def("Text Override", TEXT, v(Text), false, false));
             if e.view.is_some() {
-                // Project dimensions are labelled with a length global parameter.
+                // Project dimensions are labelled with a length (or, angular, an angle) global parameter.
+                let want = match &e.kind {
+                    ElementKind::Dimension(dm) if dm.kind == DimKind::Angular => ParamKind::Angle,
+                    _ => ParamKind::Length,
+                };
                 let mut names = vec!["<None>".to_string()];
-                names.extend(p.global_params.iter().filter(|g| g.kind == ParamKind::Length).map(|g| g.name.clone()));
+                names.extend(p.global_params.iter().filter(|g| g.kind == want).map(|g| g.name.clone()));
                 d.push(def("Label", OTHER, PKind::Choice(names), false, false));
             } else {
                 d.push(def("Label", OTHER, v(Text), false, false));
@@ -1290,6 +1294,29 @@ mod tests {
         let line = edit::add_line(&mut p, Some(vid), None, vec![geom::DVec2::ZERO, geom::DVec2::new(1000.0, 0.0)], None, LineStyle::Thin).unwrap();
         set(&mut p, line, "Line Style", "Red Dashed").unwrap();
         assert_eq!(get(&p, p.element(line).unwrap(), "Line Style"), Some(Value::Text("Red Dashed".into())));
+    }
+
+    #[test]
+    fn detail_library_and_repeating_details() {
+        // Every listed component draws its own geometry (not the fallback square).
+        let fallback = crate::plan::detail_component_lines("?");
+        for n in DETAIL_COMPONENTS {
+            let g = crate::plan::detail_component_lines(n);
+            assert!(!g.is_empty(), "{n}");
+            assert_ne!(format!("{g:?}"), format!("{fallback:?}"), "{n} uses the fallback");
+        }
+        for r in REPEATING_DETAILS {
+            assert_ne!(format!("{:?}", crate::plan::detail_component_lines(r.1)), format!("{fallback:?}"), "{}", r.0);
+        }
+        let mut p = defaults::new_project(units::UnitSystem::Metric);
+        let vid = p.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        // 10 brick courses fit in 677 mm.
+        let rd = edit::add_repeating_detail(&mut p, vid, geom::DVec2::ZERO, geom::DVec2::new(0.0, 677.0 + 1.0), "Brick").unwrap();
+        assert!(edit::add_repeating_detail(&mut p, vid, geom::DVec2::ZERO, geom::DVec2::new(0.0, 500.0), "Nope").is_err());
+        let fp = std::collections::HashMap::new();
+        let d = crate::plan::floor_plan(&p, p.view(vid).unwrap(), &fp);
+        let closed = d.prims.iter().filter(|(i, pr)| *i == Some(rd) && matches!(pr, crate::plan::Prim::Line { closed: true, .. })).count();
+        assert_eq!(closed, 10);
     }
 
     #[test]

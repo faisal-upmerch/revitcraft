@@ -32,7 +32,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine | FilledRegion | MaskingRegion | RevisionCloud
         | Text | TagByCategory | TagAll | Symbol | SpotCoordinate | SpotSlope => graphical_2d && !in_sketch,
         SaveSelection => sel,
-        Insulation | DetailComponent | MultiCategoryTag | MaterialTag | ElementKeynote | MaterialKeynote | UserKeynote => graphical_2d && !in_sketch,
+        Insulation | RepeatingDetail | DetailComponent | MultiCategoryTag | MaterialTag | ElementKeynote | MaterialKeynote | UserKeynote => graphical_2d && !in_sketch,
         ScopeBox => plan && !in_sketch,
         JoinGeometry | UnjoinGeometry => !in_sketch && view.is_some_and(|v| v.is_graphical()),
         ShowHiddenLines | RemoveHiddenLines => graphical_2d && !in_sketch,
@@ -46,7 +46,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DeactivateView => app.sheet_activation.is_some(),
         Matchline => plan && !in_sketch,
         ViewReference => graphical_2d && !in_sketch,
-        Paint | RemovePaint => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
+        Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
         TypeProperties => true,
         Paste | PasteSameLevel => app.clipboard.is_some(),
         Cut | CopyClip | Delete | MatchType | Pin | Unpin | Move | Copy | Rotate | MirrorPick | MirrorDraw | Array | Scale | HideElements | HideCategory
@@ -355,6 +355,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.scenes.clear();
         }
         Insulation => app.set_tool(ToolKind::Insulation),
+        RepeatingDetail => app.set_tool(ToolKind::RepeatingDetail),
         DetailComponent => app.set_tool(ToolKind::DetailComponent),
         TagAll => app.dialogs.tag_all = true,
         Symbol => app.set_tool(ToolKind::Symbol),
@@ -822,7 +823,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
             | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
-            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | ElementKeynote | MaterialKeynote | UserKeynote
+            | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | RepeatingDetail | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
     )

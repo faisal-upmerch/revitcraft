@@ -117,14 +117,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             if let Some(b) = boxes.iter().find(|b| b.view == v).cloned() {
                 painter.rect_filled(paper, 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 150));
                 let vr = Rect::from_two_pos(xf.s(b.min), xf.s(b.max)).intersect(rect);
-                let scale = app.doc.data.view(v).map(|x| x.scale).unwrap_or(100.0);
-                let d = app.drawing(v);
-                let wc = d.bounds().map(|(a, c)| (a + c) / 2.0).unwrap_or(DVec2::ZERO);
-                let mid = xf.w(vr.center());
-                let c = (b.min + b.max) / 2.0;
-                app.cams.insert(v, Cam2 { center: wc + (mid - c) * scale, zoom: xf.zoom / scale, fitted: true });
                 let mut child = ui.new_child(egui::UiBuilder::new().max_rect(vr).layout(egui::Layout::top_down(egui::Align::Min)));
-                canvas::show(app, &mut child, v);
+                if app.doc.data.view(v).is_some_and(|x| matches!(x.kind, ViewKind::ThreeD { .. })) {
+                    // A 3D viewport navigates in place (orbit, pan, zoom) like the 3D view.
+                    crate::view3d::show(app, &mut child, v);
+                } else {
+                    let scale = app.doc.data.view(v).map(|x| x.scale).unwrap_or(100.0);
+                    let d = app.drawing(v);
+                    let wc = d.bounds().map(|(a, c)| (a + c) / 2.0).unwrap_or(DVec2::ZERO);
+                    let mid = xf.w(vr.center());
+                    let c = (b.min + b.max) / 2.0;
+                    app.cams.insert(v, Cam2 { center: wc + (mid - c) * scale, zoom: xf.zoom / scale, fitted: true });
+                    canvas::show(app, &mut child, v);
+                }
                 painter.rect_stroke(Rect::from_two_pos(xf.s(b.min), xf.s(b.max)), 0.0, Stroke::new(2.0, style::ACCENT), egui::StrokeKind::Outside);
                 let outside = resp.hover_pos().is_some_and(|h| !vr.contains(h));
                 if resp.double_clicked() && outside {
@@ -212,8 +217,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     }
     if resp.double_clicked() {
         if let Some(v) = hover {
-            // Schedules and 3D views open; plans, sections and details activate in place.
-            let in_place = app.doc.data.view(v).is_some_and(|x| x.is_graphical() && !matches!(x.kind, ViewKind::ThreeD { .. }));
+            // Schedules open in their own view; plans, sections, details and 3D views activate in place.
+            let in_place = app.doc.data.view(v).is_some_and(|x| x.is_graphical());
             if in_place {
                 app.activate_viewport(view_id, v);
             } else {

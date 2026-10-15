@@ -147,17 +147,51 @@ fn apply_globals(p: &mut Project) -> Result<(), String> {
             params::set_value(p, id, &param, want).map_err(|e| format!("Global parameter '{gname}': {e}"))?;
         }
     }
-    // Dimensions labelled with a global drive their (single) segment.
+    // Dimensions labelled with a global drive their geometry. As in Revit, a label applies to
+    // a single-segment linear dimension, a radial/diameter dimension or an angular dimension.
     let dims: Vec<(Id, Dimension)> = p
         .elements
         .iter()
         .filter_map(|e| match &e.kind {
-            ElementKind::Dimension(d) if !d.label.is_empty() && d.refs.len() == 2 => Some((e.id, d.clone())),
+            ElementKind::Dimension(d) if !d.label.is_empty() => Some((e.id, d.clone())),
             _ => None,
         })
         .collect();
     for (_, d) in dims {
         let Some(g) = p.global(&d.label).filter(|g| !g.is_text()).cloned() else { continue };
+        match d.kind {
+            DimKind::Radial | DimKind::Diameter => {
+                let Some(id) = d.refs.iter().find_map(|r| r.element) else { continue };
+                let Some(e) = p.element(id) else { continue };
+                let Some(arc) = annotation::element_arc(e).and_then(|(a, m, b)| crate::geom::Arc2::through(a, m, b)) else { continue };
+                let want = if d.kind == DimKind::Radial { g.value } else { g.value / 2.0 };
+                if want <= 0.0 {
+                    return Err(format!("Global parameter '{}' must be greater than zero.", g.name));
+                }
+                if (want - arc.radius).abs() > 0.01 {
+                    if p.element(id).is_some_and(|e| e.pinned) {
+                        return Err(format!("The dimension labelled '{}' cannot change: its arc is pinned.", g.name));
+                    }
+                    edit::scale_elements(p, &[id], arc.center, want / arc.radius)?;
+                }
+                continue;
+            }
+            DimKind::Angular => {
+                let (Some((a, v, b)), Some(id)) = (annotation::angular_points(p, &d), d.refs.get(2).and_then(|r| r.element)) else { continue };
+                let (da, db) = ((a - v).normalize_or_zero(), (b - v).normalize_or_zero());
+                let signed = da.angle_to(db).to_degrees();
+                let delta = (g.value - signed.abs()) * signed.signum();
+                if delta.abs() > 1e-6 {
+                    if p.element(id).is_some_and(|e| e.pinned) {
+                        return Err(format!("The dimension labelled '{}' cannot change: its line is pinned.", g.name));
+                    }
+                    edit::rotate_elements(p, &[id], v, delta);
+                }
+                continue;
+            }
+            _ if d.refs.len() != 2 => continue,
+            _ => {}
+        }
         let now = annotation::coordinates(p, &d);
         let have = now[1] - now[0];
         let want = if have < 0.0 { -g.value } else { g.value };

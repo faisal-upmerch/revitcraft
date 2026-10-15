@@ -1002,6 +1002,12 @@ pub enum RefPart {
     EndEnd,
     /// Centre line of a family instance (along its hand direction).
     InstanceCenter,
+    /// Centre of an arc element (wall, line, grid).
+    ArcCenter,
+    /// The point of an arc element towards the stored point from its centre.
+    ArcPoint,
+    /// Mid point of an arc element.
+    ArcMid,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -1148,16 +1154,43 @@ pub enum SymbolKind {
     DetailComponent,
     /// A view reference: the id of the target view in `value`.
     ViewReference,
+    /// A detail repeated along `points[0]`..`points[1]`; the repeating type in `value`.
+    RepeatingDetail,
 }
 
 /// Built-in 2D detail components (Annotate > Component > Detail Component).
-pub const DETAIL_COMPONENTS: [&str; 6] = [
+pub const DETAIL_COMPONENTS: [&str; 24] = [
     "Dimension Lumber-Section : 2x4",
     "Dimension Lumber-Section : 2x6",
+    "Dimension Lumber-Section : 2x8",
     "Dimension Lumber-Section : 2x10",
-    "CMU-Section : 8\"",
+    "Dimension Lumber-Section : 2x12",
+    "Dimension Lumber-Section : 4x4",
+    "Plywood-Section : 1/2\"",
     "Plywood-Section : 3/4\"",
+    "Gypsum Wallboard-Section : 1/2\"",
+    "Gypsum Wallboard-Section : 5/8\"",
+    "Rigid Insulation-Section : 1\"",
+    "Rigid Insulation-Section : 2\"",
+    "CMU-Section : 6\"",
+    "CMU-Section : 8\"",
+    "CMU-Section : 12\"",
+    "Brick-Section : Standard",
+    "Steel W-Section : W8x31",
+    "Steel W-Section : W12x26",
+    "Steel HSS-Section : HSS4x4x1/4",
+    "Steel Channel-Section : C8x11.5",
     "Steel Angle-Section : L4x4x1/2",
+    "Concrete Footing-Section : 24x12",
+    "Wood Blocking-Section : 2x4",
+    "Break Line : Standard",
+];
+
+/// Repeating detail types: name, component repeated, spacing along the path (mm).
+pub const REPEATING_DETAILS: [(&str, &str, f64); 3] = [
+    ("Brick", "Brick-Course", 67.7),
+    ("CMU", "CMU-Course : 8\"", 203.2),
+    ("Plywood Sheathing", "Sheathing-Course", 1219.2),
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -2145,9 +2178,10 @@ pub struct View {
     /// Plans cropped to a scope box.
     #[serde(default)]
     pub scope_box: Option<Id>,
-    /// View > Show Hidden Lines: elements whose obscured edges are drawn dashed.
+    /// View > Show Hidden Lines: (obscuring element, hidden element) pairs whose obscured
+    /// edges are drawn dashed.
     #[serde(default)]
-    pub show_hidden: Vec<Id>,
+    pub hidden_lines: Vec<(Id, Id)>,
 }
 
 impl View {
@@ -2183,7 +2217,7 @@ impl View {
             title_on_sheet: String::new(),
             marker: None,
             scope_box: None,
-            show_hidden: Vec::new(),
+            hidden_lines: Vec::new(),
         }
     }
 

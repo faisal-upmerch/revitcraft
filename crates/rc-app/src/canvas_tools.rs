@@ -109,9 +109,11 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
         ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => "Click to place the group origin.".into(),
+        ToolKind::RepeatingDetail => if n == 0 { "Click to enter the start of the repeating detail.".into() } else { "Click to enter the end of the repeating detail.".into() },
         ToolKind::Matchline => if n == 0 { "Click the start of the matchline.".into() } else { "Click the end of the matchline.".into() },
         ToolKind::ViewReference => "Click to place the view reference.".into(),
-        ToolKind::Paint | ToolKind::RemovePaint => "Paint faces in a 3D view.".into(),
+        ToolKind::Paint => format!("Click a face to paint it with {}. Esc to finish.", app.opts.paint_material),
+        ToolKind::RemovePaint => "Click a painted face to remove its paint. Esc to finish.".into(),
         ToolKind::Room => "Click to place room".into(),
         ToolKind::CeilingAuto => "Click inside a room bounded by walls to place a ceiling, or choose Sketch Ceiling.".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
@@ -183,6 +185,50 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::Door | ToolKind::Window => hosted_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::Paint | ToolKind::RemovePaint => {
+            if clicked {
+                let fp = app.footprints();
+                let hit = rc_core::section::pick_face(&app.doc.data, view, cursor.unwrap_or_default(), &fp);
+                match hit {
+                    Some((id, q, n)) => {
+                        let remove = app.tool.kind == ToolKind::RemovePaint;
+                        let mat = app.opts.paint_material.clone();
+                        app.run(if remove { "Remove Paint" } else { "Paint" }, |p| if remove { edit::remove_paint(p, id, n, q) } else { edit::paint_face(p, id, n, q, &mat) });
+                    }
+                    None => app.error("There is no face here."),
+                }
+            }
+        }
+        ToolKind::RepeatingDetail => {
+            let Some(pt) = point else { return };
+            let (name, comp, spacing) = REPEATING_DETAILS[app.opts.repeating_detail.min(REPEATING_DETAILS.len() - 1)];
+            if let Some(a) = app.tool.pts.first().copied() {
+                let len = a.distance(pt);
+                let dir = (pt - a).normalize_or_zero();
+                let lines = rc_core::plan::detail_component_lines(comp);
+                for k in 0..((len / spacing).floor() as usize).min(400) {
+                    let at = a + dir * (spacing * (k as f64 + 0.5));
+                    for (pts, closed) in &lines {
+                        let mut s: Vec<egui::Pos2> = pts.iter().map(|q| xf.s(at + dir * q.x + geom::perp(dir) * q.y)).collect();
+                        if *closed {
+                            s.push(s[0]);
+                        }
+                        painter.add(egui::Shape::line(s, preview_stroke()));
+                    }
+                }
+                painter.line_segment([xf.s(a), xf.s(pt)], Stroke::new(1.0, style::PREVIEW));
+            }
+            if clicked {
+                match app.tool.pts.first().copied() {
+                    None => app.tool.pts.push(pt),
+                    Some(a) => {
+                        let vid = view.id;
+                        app.tool.pts = vec![pt];
+                        app.run("Repeating Detail", |p| edit::add_repeating_detail(p, vid, a, pt, name));
+                    }
+                }
+            }
+        }
         ToolKind::Matchline => {
             let Some(pt) = point else { return };
             if let Some(a) = app.tool.pts.first().copied() {
@@ -1435,7 +1481,20 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
             painter.text(xf.s(c) + vec2(10.0, -10.0), egui::Align2::LEFT_BOTTOM, preview, egui::FontId::proportional(12.0), style::TEMP_DIM);
             if clicked {
                 let vid = view.id;
-                let rr: Vec<DimRef> = refs.iter().map(|q| DimRef { element: None, part: RefPart::Point, point: *q }).collect();
+                // Associative references: the dimension follows the arc element.
+                let el = app.tool.picked.first().copied();
+                let rr: Vec<DimRef> = match kind {
+                    DimKind::Radial => vec![DimRef { element: el, part: RefPart::ArcCenter, point: refs[0] }, DimRef { element: el, part: RefPart::ArcPoint, point: refs[1] }],
+                    DimKind::Diameter => refs.iter().map(|q| DimRef { element: el, part: RefPart::ArcPoint, point: *q }).collect(),
+                    _ => {
+                        let start_end = el.and_then(|id| app.el(id)).is_some_and(|e| matches!(e.kind, ElementKind::Wall(_) | ElementKind::Line(_)));
+                        if start_end {
+                            vec![DimRef { element: el, part: RefPart::EndStart, point: refs[0] }, DimRef { element: el, part: RefPart::ArcMid, point: refs[1] }, DimRef { element: el, part: RefPart::EndEnd, point: refs[2] }]
+                        } else {
+                            refs.iter().map(|q| DimRef { element: None, part: RefPart::Point, point: *q }).collect()
+                        }
+                    }
+                };
                 if let Some(id) = app.run("Dimension", |p| {
                     let id = edit::add_dimension(p, vid, rr, DVec2::X, c)?;
                     if let Some(ElementKind::Dimension(dd)) = p.element_mut(id).map(|e| &mut e.kind) {
@@ -1465,7 +1524,8 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
                         let pick = c;
                         app.tool.pts.push(a);
                         app.tool.pts.push(b);
-                        app.tool.refs.push(DimRef { element: None, part: RefPart::Point, point: pick });
+                        let part = if line_el.and_then(|id| app.el(id)).is_some_and(|e| matches!(e.kind, ElementKind::Wall(_))) { RefPart::WallCenter } else { RefPart::Point };
+                        app.tool.refs.push(DimRef { element: line_el, part, point: pick });
                     }
                 }
                 return;
@@ -1495,10 +1555,12 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
             painter.text(xf.s(c) + vec2(10.0, -10.0), egui::Align2::LEFT_BOTTOM, units.format(ang, ParamKind::Angle), egui::FontId::proportional(12.0), style::TEMP_DIM);
             if clicked {
                 let vid = view.id;
+                // Ray references follow their lines; the vertex is their intersection.
+                let (ea, eb) = (app.tool.refs[0].clone(), app.tool.refs[1].clone());
                 let rr = vec![
-                    DimRef { element: None, part: RefPart::Point, point: v + da * r.max(1.0) },
+                    DimRef { element: ea.element, part: ea.part, point: v + da * r.max(1.0) },
                     DimRef { element: None, part: RefPart::Point, point: v },
-                    DimRef { element: None, part: RefPart::Point, point: v + db * r.max(1.0) },
+                    DimRef { element: eb.element, part: eb.part, point: v + db * r.max(1.0) },
                 ];
                 if let Some(id) = app.run("Angular Dimension", |p| {
                     let id = edit::add_dimension(p, vid, rr, DVec2::X, c)?;
@@ -2136,11 +2198,18 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                     } else {
                         let show = app.tool.kind == ToolKind::ShowHiddenLines;
                         let vid = view.id;
+                        let obscurer = app.tool.picked[0];
                         app.run(if show { "Show Hidden Lines" } else { "Remove Hidden Lines" }, |p| {
+                            if obscurer == id {
+                                return Err("Pick the element that is hidden by the first one.".into());
+                            }
                             let v = p.view_mut(vid).ok_or("No view.")?;
-                            v.show_hidden.retain(|x| *x != id);
+                            let before = v.hidden_lines.len();
+                            v.hidden_lines.retain(|h| *h != (obscurer, id));
                             if show {
-                                v.show_hidden.push(id);
+                                v.hidden_lines.push((obscurer, id));
+                            } else if v.hidden_lines.len() == before {
+                                return Err("These elements have no hidden lines shown.".into());
                             }
                             Ok(())
                         });

@@ -441,6 +441,22 @@ pub fn add_insulation(p: &mut Project, view: Id, a: DVec2, b: DVec2, width: f64)
     Ok(id)
 }
 
+/// A repeating detail component along a path.
+pub fn add_repeating_detail(p: &mut Project, view: Id, a: DVec2, b: DVec2, kind: &str) -> Result<Id, String> {
+    if !REPEATING_DETAILS.iter().any(|r| r.0 == kind) {
+        return Err(format!("Unknown repeating detail '{kind}'."));
+    }
+    if a.distance(b) < 1.0 {
+        return Err("The repeating detail is too short.".into());
+    }
+    let id = add_symbol(p, view, SymbolKind::RepeatingDetail, (a + b) / 2.0);
+    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+        s.points = vec![a, b];
+        s.value = kind.to_string();
+    }
+    Ok(id)
+}
+
 /// A scope box from two opposite corners.
 pub fn add_scope_box(p: &mut Project, a: DVec2, b: DVec2) -> Result<Id, String> {
     if (a.x - b.x).abs() < 1.0 || (a.y - b.y).abs() < 1.0 {
@@ -2349,6 +2365,54 @@ mod tests {
         })
         .unwrap();
         assert!((doc.data.wall(b).unwrap().start.x - 3500.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn radial_and_angular_labels_drive_geometry() {
+        let (p, lvl, wt) = project();
+        let mut doc = Document::new(p);
+        let view = doc.data.views.iter().find(|v| v.plan_level().is_some()).unwrap().id;
+        // An arc wall of radius 3000 about the origin, and two lines from the origin.
+        let (arc, la, lb) = doc
+            .transact("geometry", |p| {
+                let w = add_wall(p, lvl, wt, DVec2::new(3000.0, 0.0), DVec2::new(-3000.0, 0.0), 3000.0)?;
+                p.element_mut(w).and_then(Element::as_wall_mut).unwrap().arc_mid = Some(DVec2::new(0.0, 3000.0));
+                let la = add_line(p, Some(view), None, vec![DVec2::ZERO, DVec2::new(5000.0, 0.0)], None, LineStyle::Thin)?;
+                let lb = add_line(p, Some(view), None, vec![DVec2::ZERO, DVec2::new(0.0, 5000.0)], None, LineStyle::Thin)?;
+                Ok((w, la, lb))
+            })
+            .unwrap();
+        doc.transact("dims", |p| {
+            p.global_params.push(GlobalParameter { name: "R".into(), kind: ParamKind::Length, value: 4000.0, ..Default::default() });
+            p.global_params.push(GlobalParameter { name: "A".into(), kind: ParamKind::Angle, value: 60.0, ..Default::default() });
+            let r = add_dimension(p, view, vec![DimRef { element: Some(arc), part: RefPart::ArcCenter, point: DVec2::ZERO }, DimRef { element: Some(arc), part: RefPart::ArcPoint, point: DVec2::new(0.0, 3000.0) }], DVec2::X, DVec2::new(0.0, 1000.0))?;
+            let a = add_dimension(
+                p,
+                view,
+                vec![
+                    DimRef { element: Some(la), part: RefPart::Point, point: DVec2::new(2000.0, 0.0) },
+                    DimRef { element: None, part: RefPart::Point, point: DVec2::ZERO },
+                    DimRef { element: Some(lb), part: RefPart::Point, point: DVec2::new(0.0, 2000.0) },
+                ],
+                DVec2::X,
+                DVec2::new(1500.0, 1500.0),
+            )?;
+            for (id, kind, label) in [(r, DimKind::Radial, "R"), (a, DimKind::Angular, "A")] {
+                if let Some(Element { kind: ElementKind::Dimension(dm), .. }) = p.element_mut(id) {
+                    dm.kind = kind;
+                    dm.label = label.into();
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+        let w = doc.data.wall(arc).unwrap();
+        let a2 = geom::Arc2::through(w.start, w.arc_mid.unwrap(), w.end).unwrap();
+        assert!((a2.radius - 4000.0).abs() < 1e-6, "{}", a2.radius);
+        assert!(a2.center.length() < 1e-6);
+        let ElementKind::Line(l) = &doc.data.element(lb).unwrap().kind else { panic!() };
+        let ang = (l.pts[1] - l.pts[0]).y.atan2((l.pts[1] - l.pts[0]).x).to_degrees();
+        assert!((ang - 60.0).abs() < 1e-6, "{ang}");
     }
 
     #[test]

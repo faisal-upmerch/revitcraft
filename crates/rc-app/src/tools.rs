@@ -95,6 +95,7 @@ pub enum ToolKind {
     ViewReference,
     Paint,
     RemovePaint,
+    RepeatingDetail,
 }
 
 impl ToolKind {
@@ -178,6 +179,7 @@ impl ToolKind {
             ToolKind::ViewReference => "View Reference",
             ToolKind::Paint => "Paint",
             ToolKind::RemovePaint => "Remove Paint",
+            ToolKind::RepeatingDetail => "Repeating Detail",
         }
     }
 
@@ -589,6 +591,8 @@ pub struct ToolOptions {
     pub view_ref_target: Id,
     /// Paint: the material.
     pub paint_material: String,
+    /// Index into `REPEATING_DETAILS`.
+    pub repeating_detail: usize,
     /// Join Geometry: join more elements to the first pick.
     pub join_multiple: bool,
     /// Index into `DETAIL_COMPONENTS`.
@@ -680,6 +684,7 @@ impl ToolOptions {
             tag_mode: 0,
             insulation_width: if imperial { 76.2 } else { 75.0 },
             view_ref_target: 0,
+            repeating_detail: 0,
             paint_material: p.materials.iter().find(|m| m.class == "Paint").or(p.materials.first()).map(|m| m.name.clone()).unwrap_or_default(),
             join_multiple: false,
             detail_component: 0,
