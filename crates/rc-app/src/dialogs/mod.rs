@@ -53,6 +53,16 @@ pub struct Dialogs {
     pub export: Option<ExportKind>,
     pub export_sel: BTreeSet<Id>,
     pub export_size: u32,
+    /// DWG/DXF export: layer naming.
+    pub dxf_layers: rc_core::dxf::LayerStandard,
+    /// PDF export / print settings.
+    pub print: rc_core::sheet::PrintSettings,
+    pub pdf_separate: bool,
+    /// File > Print, Print Setup and Print Preview.
+    pub print_dialog: bool,
+    pub print_selected: bool,
+    pub print_setup: bool,
+    pub print_preview: Option<Id>,
     pub options: bool,
     pub exit: bool,
     pub create_group: Option<String>,
@@ -414,6 +424,9 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     stair_railing_dialog(app, ctx);
     cancel_stair_dialog(app, ctx);
     connect_levels_dialog(app, ctx);
+    print_dialog(app, ctx);
+    print_setup_dialog(app, ctx);
+    print_preview(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -594,6 +607,28 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
                 ui.add(egui::DragValue::new(&mut app.dialogs.export_size).range(200..=8000));
             });
         }
+        if kind == ExportKind::Dxf {
+            // The reference app's export setup: layers named by a CAD standard.
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                ui.label("Layers:");
+                let mut s = app.dialogs.dxf_layers;
+                egui::ComboBox::from_id_salt("dxf-layers").selected_text(s.label()).width(300.0).show_ui(ui, |ui| {
+                    for l in rc_core::dxf::LayerStandard::ALL {
+                        ui.selectable_value(&mut s, l, l.label());
+                    }
+                });
+                app.dialogs.dxf_layers = s;
+            });
+        }
+        if kind == ExportKind::Pdf {
+            // The reference app's PDF export settings.
+            ui.add_space(4.0);
+            ui.label(egui::RichText::new("File").strong());
+            ui.radio_value(&mut app.dialogs.pdf_separate, false, "Combine multiple selected views and sheets into a single file");
+            ui.radio_value(&mut app.dialogs.pdf_separate, true, "Create separate files");
+            print_settings_ui(ui, &mut app.dialogs.print);
+        }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             if ui.add_enabled(!app.dialogs.export_sel.is_empty(), egui::Button::new("Export...")).clicked() {
@@ -619,19 +654,272 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// Paper, zoom, colors and options of printing and PDF export (the reference app's Print Setup).
+fn print_settings_ui(ui: &mut egui::Ui, st: &mut rc_core::sheet::PrintSettings) {
+    {
+        {
+            ui.label(egui::RichText::new("Paper Format").strong());
+            ui.horizontal(|ui| {
+                if ui.radio(st.paper.is_none(), "Use sheet size").clicked() {
+                    st.paper = None;
+                }
+                if ui.radio(st.paper.is_some(), "Choose paper size:").clicked() && st.paper.is_none() {
+                    st.paper = Some(SheetSize::A3);
+                }
+                ui.add_enabled_ui(st.paper.is_some(), |ui| {
+                    let mut sz = st.paper.unwrap_or(SheetSize::A3);
+                    egui::ComboBox::from_id_salt("pdf-paper").selected_text(sz.label()).width(90.0).show_ui(ui, |ui| {
+                        for s in SheetSize::ALL {
+                            ui.selectable_value(&mut sz, s, s.label());
+                        }
+                    });
+                    if st.paper.is_some() {
+                        st.paper = Some(sz);
+                    }
+                });
+            });
+            ui.add_enabled_ui(st.paper.is_some(), |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("Orientation:");
+                    ui.radio_value(&mut st.landscape, false, "Portrait");
+                    ui.radio_value(&mut st.landscape, true, "Landscape");
+                });
+                ui.horizontal(|ui| {
+                    ui.label("Zoom:");
+                    ui.radio_value(&mut st.fit_to_page, true, "Fit to page");
+                    ui.radio_value(&mut st.fit_to_page, false, "Zoom: 100% size");
+                });
+            });
+            ui.horizontal(|ui| {
+                ui.label("Colors:");
+                egui::ComboBox::from_id_salt("pdf-colors").selected_text(st.colors.label()).width(110.0).show_ui(ui, |ui| {
+                    for c in rc_core::sheet::PrintColors::ALL {
+                        ui.selectable_value(&mut st.colors, c, c.label());
+                    }
+                });
+            });
+            ui.label(egui::RichText::new("Options").strong());
+            crate::style::check(ui, &mut st.hide_ref_planes, "Hide ref/work planes");
+            crate::style::check(ui, &mut st.hide_scope_boxes, "Hide scope boxes");
+        }
+    }
+}
+
+/// File > Print: printer (PDF), file, print range and settings, as in the reference app.
+fn print_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.print_dialog {
+        return;
+    }
+    let candidates: Vec<(Id, String)> = app
+        .doc
+        .data
+        .views
+        .iter()
+        .filter(|v| !v.is_template && (matches!(v.kind, ViewKind::Sheet(_)) || (v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. }))))
+        .map(|v| (v.id, match &v.kind {
+            ViewKind::Sheet(s) => format!("Sheet: {} - {}", s.number, v.name),
+            _ => format!("{}: {}", v.type_label(), v.name),
+        }))
+        .collect();
+    let (mut open, mut ok, mut close, mut preview, mut setup) = (true, false, false, false, false);
+    window("Print").open(&mut open).resizable(false).default_width(480.0).show(ctx, |ui| {
+        ui.label(egui::RichText::new("Printer").strong());
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            egui::ComboBox::from_id_salt("print-printer").selected_text("PDF (vector)").width(300.0).show_ui(ui, |ui| {
+                let _ = ui.selectable_label(true, "PDF (vector)");
+            });
+        });
+        ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, "Print to file"));
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("File").strong());
+        ui.radio_value(&mut app.dialogs.pdf_separate, false, "Combine multiple selected views/sheets into a single file");
+        ui.radio_value(&mut app.dialogs.pdf_separate, true, "Create separate files. View/sheet names will be appended to the specified name");
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("Print Range").strong());
+        ui.radio_value(&mut app.dialogs.print_selected, false, "Current window");
+        ui.radio_value(&mut app.dialogs.print_selected, true, "Selected views/sheets");
+        if app.dialogs.print_selected {
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+                egui::ScrollArea::vertical().max_height(180.0).show(ui, |ui| {
+                    ui.set_min_width(430.0);
+                    for (id, label) in &candidates {
+                        let mut on = app.dialogs.export_sel.contains(id);
+                        if crate::style::check(ui, &mut on, label).changed() {
+                            if on {
+                                app.dialogs.export_sel.insert(*id);
+                            } else {
+                                app.dialogs.export_sel.remove(id);
+                            }
+                        }
+                    }
+                });
+            });
+        }
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("Settings").strong());
+        ui.horizontal(|ui| {
+            ui.label(format!("Default ({}, {})", app.dialogs.print.paper.map(|s| s.label()).unwrap_or("sheet size"), app.dialogs.print.colors.label()));
+            if dlg_button(ui, "Setup...", false, true) {
+                setup = true;
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Close", false, true) {
+                close = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+            if dlg_button(ui, "Preview", false, true) {
+                preview = true;
+            }
+        });
+    });
+    if setup {
+        app.dialogs.print_setup = true;
+    }
+    if preview {
+        app.dialogs.print_preview = app.active;
+    }
+    if ok {
+        let ids: Vec<Id> = if app.dialogs.print_selected { app.dialogs.export_sel.iter().copied().collect() } else { app.active.into_iter().collect() };
+        app.dialogs.print_dialog = false;
+        app.dialogs.export_sel.clear();
+        if ids.is_empty() {
+            app.error("Select the views and sheets to print.");
+        } else {
+            export_pdf(app, &ids);
+        }
+    }
+    if close || !open {
+        app.dialogs.print_dialog = false;
+    }
+}
+
+/// File > Print Setup.
+fn print_setup_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.print_setup {
+        return;
+    }
+    let id = egui::Id::new("print-setup-edit");
+    let mut st: rc_core::sheet::PrintSettings = ctx.data(|m| m.get_temp(id)).unwrap_or_else(|| app.dialogs.print.clone());
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Print Setup").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Printer:");
+            ui.label("PDF (vector)");
+        });
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            ui.label("<in-session>");
+        });
+        ui.separator();
+        print_settings_ui(ui, &mut st);
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(id, st.clone()));
+    if ok {
+        app.dialogs.print = st;
+    }
+    if ok || cancel || !open {
+        app.dialogs.print_setup = false;
+        ctx.data_mut(|m| m.remove::<rc_core::sheet::PrintSettings>(id));
+    }
+}
+
+/// File > Print Preview: the page as it will print.
+fn print_preview(app: &mut App, ctx: &egui::Context) {
+    let Some(view_id) = app.dialogs.print_preview else { return };
+    let fp = app.footprints();
+    let Some(view) = app.doc.data.view(view_id).cloned() else {
+        app.dialogs.print_preview = None;
+        return;
+    };
+    let Some((page, prims)) = rc_core::sheet::print_layout(&app.doc.data, &view, &fp, &app.dialogs.print) else {
+        app.error("This view cannot be printed.");
+        app.dialogs.print_preview = None;
+        return;
+    };
+    let (mut open, mut print, mut close) = (true, false, false);
+    window("Print Preview").open(&mut open).default_size(vec2(760.0, 600.0)).resizable(true).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            if dlg_button(ui, "Print...", false, true) {
+                print = true;
+            }
+            if dlg_button(ui, "Close", false, true) {
+                close = true;
+            }
+            ui.label(format!("{} x {} mm", page.x.round(), page.y.round()));
+        });
+        let avail = ui.available_size().max(vec2(400.0, 300.0));
+        let (rect, _) = ui.allocate_exact_size(avail, egui::Sense::hover());
+        ui.painter().rect_filled(rect, 0.0, egui::Color32::from_gray(128));
+        let zoom = ((rect.width() as f64 - 24.0) / page.x).min((rect.height() as f64 - 24.0) / page.y);
+        let xf = crate::canvas::Xf { rect, center: page / 2.0, zoom, scale: 1.0, thin: false };
+        let painter = ui.painter_at(rect);
+        painter.rect_filled(egui::Rect::from_two_pos(xf.s(rc_core::geom::DVec2::ZERO), xf.s(page)), 0.0, egui::Color32::WHITE);
+        for prim in &prims {
+            match prim {
+                rc_core::sheet::SheetPrim::Line { pts, closed, width, color, dash, .. } => {
+                    let v: Vec<egui::Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
+                    crate::canvas::paint_polyline(&painter, &v, *closed, egui::Stroke::new((*width as f64 * zoom) as f32 * 0.9 + 0.3, egui::Color32::from_rgb(color[0], color[1], color[2])), *dash, &xf);
+                }
+                rc_core::sheet::SheetPrim::Fill { tris, color, .. } => {
+                    let mut mesh = egui::Mesh::default();
+                    let c = egui::Color32::from_rgba_unmultiplied(color[0], color[1], color[2], color[3]);
+                    for t in tris {
+                        let i = mesh.vertices.len() as u32;
+                        for q in t {
+                            mesh.colored_vertex(xf.s(*q), c);
+                        }
+                        mesh.add_triangle(i, i + 1, i + 2);
+                    }
+                    painter.add(egui::Shape::mesh(mesh));
+                }
+                rc_core::sheet::SheetPrim::Text { pos, text, size, anchor, angle, bold, .. } => {
+                    crate::canvas::paint_text_ex(&painter, xf.s(*pos), text, (*size as f64 * zoom) as f32, egui::Color32::BLACK, *anchor, *angle, *bold);
+                }
+                rc_core::sheet::SheetPrim::Image { min, max, .. } => {
+                    painter.rect_filled(egui::Rect::from_two_pos(xf.s(*min), xf.s(*max)), 0.0, egui::Color32::from_gray(225));
+                }
+            }
+        }
+    });
+    if print {
+        app.dialogs.print_preview = None;
+        app.dialogs.print_dialog = true;
+    }
+    if close || !open {
+        app.dialogs.print_preview = None;
+    }
+}
+
 fn safe_name(s: &str) -> String {
     s.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' || c == ' ' { c } else { '_' }).collect::<String>().trim().to_string()
 }
 
 fn export_dxf(app: &mut App, ids: &[Id]) {
+    let layers = app.dialogs.dxf_layers;
     let fp = app.footprints();
     let p = app.doc.data.clone();
     if ids.len() == 1 {
         let v = p.view(ids[0]).unwrap();
         let Some(path) = crate::files::FileDialog::new().add_filter("DXF", &["dxf"]).set_file_name(format!("{}.dxf", safe_name(&v.name))).save_file() else { return };
         let text = match &v.kind {
-            ViewKind::Sheet(_) => Some(rc_core::dxf::export_sheet(&p, v, &fp)),
-            _ => rc_core::dxf::export_view(&p, v, &fp),
+            ViewKind::Sheet(_) => Some(rc_core::dxf::export_sheet_with(&p, v, &fp, layers)),
+            _ => rc_core::dxf::export_view_with(&p, v, &fp, layers),
         };
         match text.map(|t| std::fs::write(&path, t)) {
             Some(Ok(())) => app.info(format!("Exported {}", path.display())),
@@ -645,8 +933,8 @@ fn export_dxf(app: &mut App, ids: &[Id]) {
     for id in ids {
         let Some(v) = p.view(*id) else { continue };
         let text = match &v.kind {
-            ViewKind::Sheet(s) => Some((rc_core::dxf::export_sheet(&p, v, &fp), format!("{} - {}", s.number, v.name))),
-            _ => rc_core::dxf::export_view(&p, v, &fp).map(|t| (t, format!("{} - {}", v.type_label(), v.name))),
+            ViewKind::Sheet(s) => Some((rc_core::dxf::export_sheet_with(&p, v, &fp, layers), format!("{} - {}", s.number, v.name))),
+            _ => rc_core::dxf::export_view_with(&p, v, &fp, layers).map(|t| (t, format!("{} - {}", v.type_label(), v.name))),
         };
         if let Some((t, name)) = text {
             if std::fs::write(dir.join(format!("{}.dxf", safe_name(&name))), t).is_ok() {
@@ -657,34 +945,57 @@ fn export_dxf(app: &mut App, ids: &[Id]) {
     app.info(format!("Exported {n} DXF file(s) to {}", dir.display()));
 }
 
-fn export_pdf(app: &mut App, ids: &[Id]) {
-    let Some(path) = crate::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name("Sheets.pdf").save_file() else { return };
+/// One PDF page per view or sheet, with the export settings applied.
+fn pdf_pages(app: &mut App, ids: &[Id]) -> Vec<(String, rc_core::pdf::Page)> {
     let fp = app.footprints();
     let data = app.doc.data.clone();
+    let settings = app.dialogs.print.clone();
     let mut pages = Vec::new();
     for id in ids {
         let Some(view) = data.view(*id).cloned() else { continue };
         match &view.kind {
-            ViewKind::Sheet(_) => {
+            ViewKind::Sheet(s) => {
+                let name = format!("{} - {}", s.number, view.name);
                 let mut render = |vid: Id, w: u32, h: u32| crate::view3d::render_image(app, vid, w, h);
-                pages.push(rc_core::sheet::to_pdf_page(&data, &view, &fp, &mut render));
+                pages.push((name, rc_core::sheet::to_pdf_page_with(&data, &view, &fp, &mut render, &settings)));
             }
             _ => {
-                if let Some(pg) = rc_core::sheet::view_to_pdf_page(&data, &view, &fp) {
-                    pages.push(pg);
+                if let Some(pg) = rc_core::sheet::view_to_pdf_page_with(&data, &view, &fp, &settings) {
+                    pages.push((format!("{} - {}", view.type_label(), view.name), pg));
                 }
             }
         }
     }
-    if pages.is_empty() {
-        app.error("Nothing to export.");
+    pages
+}
+
+fn export_pdf(app: &mut App, ids: &[Id]) {
+    let combine = !app.dialogs.pdf_separate || ids.len() == 1;
+    if combine {
+        let Some(path) = crate::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name(format!("{}.pdf", safe_name(&app.doc.data.info.name))).save_file() else { return };
+        let pages: Vec<rc_core::pdf::Page> = pdf_pages(app, ids).into_iter().map(|p| p.1).collect();
+        if pages.is_empty() {
+            app.error("Nothing to export.");
+            return;
+        }
+        let bytes = rc_core::pdf::write(pages, &app.doc.data.info.name);
+        match std::fs::write(&path, bytes) {
+            Ok(()) => app.info(format!("Exported {}", path.display())),
+            Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+        }
         return;
     }
-    let bytes = rc_core::pdf::write(pages, &data.info.name);
-    match std::fs::write(&path, bytes) {
-        Ok(()) => app.info(format!("Exported {}", path.display())),
-        Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+    // Separate files, named after each view or sheet.
+    let Some(dir) = crate::files::FileDialog::new().set_title("Choose a folder for the PDF files").pick_folder() else { return };
+    let project = app.doc.data.info.name.clone();
+    let mut n = 0;
+    for (name, page) in pdf_pages(app, ids) {
+        let file = dir.join(format!("{} - {}.pdf", safe_name(&project), safe_name(&name)));
+        if std::fs::write(&file, rc_core::pdf::write(vec![page], &name)).is_ok() {
+            n += 1;
+        }
     }
+    app.info(format!("Exported {n} PDF file(s) to {}", dir.display()));
 }
 
 /// Rasterises a 2D drawing to RGB (simple scanline renderer for image export).

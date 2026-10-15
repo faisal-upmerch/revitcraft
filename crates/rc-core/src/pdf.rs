@@ -1,4 +1,4 @@
-//! A small vector PDF writer (lines, fills, Helvetica text, RGB images) for sheet export.
+//! A small vector PDF writer (lines, fills, Arial text, RGB images) for sheet export.
 
 use flate2::Compression;
 use flate2::write::ZlibEncoder;
@@ -27,7 +27,7 @@ fn n(v: f64) -> String {
     if s == "-0" || s.is_empty() { "0".into() } else { s.to_string() }
 }
 
-/// Encodes text for a WinAnsi Helvetica string literal.
+/// Encodes text for a WinAnsi string literal.
 fn pdf_text(s: &str) -> String {
     let mut out = String::new();
     for c in s.chars() {
@@ -38,14 +38,7 @@ fn pdf_text(s: &str) -> String {
             }
             ' '..='~' => out.push(c),
             _ => {
-                let code: Option<u8> = match c {
-                    '€' => Some(0x80),
-                    '–' => Some(0x96),
-                    '—' => Some(0x97),
-                    '•' => Some(0x95),
-                    c if (c as u32) >= 0xA0 && (c as u32) <= 0xFF => Some(c as u32 as u8),
-                    _ => None,
-                };
+                let code = win_ansi(c);
                 match code {
                     Some(b) => {
                         let _ = write!(out, "\\{:03o}", b);
@@ -58,19 +51,112 @@ fn pdf_text(s: &str) -> String {
     out
 }
 
-/// Approximate Helvetica advance width (in em) used for centring text.
+/// WinAnsi code of a character (the encoding the PDF fonts use), if it has one.
+fn win_ansi(c: char) -> Option<u8> {
+    Some(match c {
+        ' '..='~' => c as u8,
+        '€' => 0x80,
+        '‚' => 0x82,
+        'ƒ' => 0x83,
+        '„' => 0x84,
+        '…' => 0x85,
+        '†' => 0x86,
+        '‡' => 0x87,
+        'ˆ' => 0x88,
+        '‰' => 0x89,
+        'Š' => 0x8A,
+        '‹' => 0x8B,
+        'Œ' => 0x8C,
+        'Ž' => 0x8E,
+        '\u{2018}' => 0x91,
+        '\u{2019}' => 0x92,
+        '\u{201C}' => 0x93,
+        '\u{201D}' => 0x94,
+        '•' => 0x95,
+        '–' => 0x96,
+        '—' => 0x97,
+        '˜' => 0x98,
+        '™' => 0x99,
+        'š' => 0x9A,
+        '›' => 0x9B,
+        'œ' => 0x9C,
+        'ž' => 0x9E,
+        'Ÿ' => 0x9F,
+        c if (0xA0..=0xFF).contains(&(c as u32)) => c as u32 as u8,
+        _ => return None,
+    })
+}
+
+/// Advance widths (1/1000 em) of Arial — metrically the same as Helvetica — for WinAnsi
+/// codes 32..=255, regular and bold. Revit's PDFs set annotation text in Arial.
+const ARIAL_WIDTHS: [u16; 224] = [
+    278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, // 32
+    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 278, 278, 584, 584, 584, 556, // 48
+    1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, // 64
+    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 278, 278, 278, 469, 556, // 80
+    333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, // 96
+    556, 556, 333, 500, 278, 556, 500, 722, 500, 500, 500, 334, 260, 334, 584, 350, // 112
+    556, 350, 222, 556, 333, 1000, 556, 556, 333, 1000, 667, 333, 1000, 350, 611, 350, // 128
+    350, 222, 222, 333, 333, 350, 556, 1000, 333, 1000, 500, 333, 944, 350, 500, 667, // 144
+    278, 333, 556, 556, 556, 556, 260, 556, 333, 737, 370, 556, 584, 333, 737, 333, // 160
+    400, 584, 333, 333, 333, 556, 537, 278, 333, 333, 365, 556, 834, 834, 834, 611, // 176
+    667, 667, 667, 667, 667, 667, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, // 192
+    722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611, // 208
+    556, 556, 556, 556, 556, 556, 889, 500, 556, 556, 556, 556, 278, 278, 278, 278, // 224
+    556, 556, 556, 556, 556, 556, 556, 584, 611, 556, 556, 556, 556, 500, 556, 500, // 240
+];
+
+const ARIAL_BOLD_WIDTHS: [u16; 224] = [
+    278, 333, 474, 556, 556, 889, 722, 238, 333, 333, 389, 584, 278, 333, 278, 278, // 32
+    556, 556, 556, 556, 556, 556, 556, 556, 556, 556, 333, 333, 584, 584, 584, 611, // 48
+    975, 722, 722, 722, 722, 667, 611, 778, 722, 278, 556, 722, 611, 833, 722, 778, // 64
+    667, 778, 722, 667, 611, 722, 667, 944, 667, 667, 611, 333, 278, 333, 584, 556, // 80
+    333, 556, 611, 556, 611, 556, 333, 611, 611, 278, 278, 556, 278, 889, 611, 611, // 96
+    611, 611, 389, 556, 333, 611, 556, 778, 556, 556, 500, 389, 280, 389, 584, 350, // 112
+    556, 350, 278, 556, 500, 1000, 556, 556, 333, 1000, 667, 333, 1000, 350, 611, 350, // 128
+    350, 278, 278, 500, 500, 350, 556, 1000, 333, 1000, 556, 333, 944, 350, 500, 667, // 144
+    278, 333, 556, 556, 556, 556, 280, 556, 333, 737, 370, 556, 584, 333, 737, 333, // 160
+    400, 584, 333, 333, 333, 611, 556, 278, 333, 333, 365, 556, 834, 834, 834, 611, // 176
+    722, 722, 722, 722, 722, 722, 1000, 722, 667, 667, 667, 667, 278, 278, 278, 278, // 192
+    722, 722, 778, 778, 778, 778, 778, 584, 778, 722, 722, 722, 722, 667, 667, 611, // 208
+    556, 556, 556, 556, 556, 556, 889, 556, 556, 556, 556, 556, 278, 278, 278, 278, // 224
+    611, 611, 611, 611, 611, 611, 611, 584, 611, 611, 611, 611, 611, 556, 611, 556, // 240
+];
+
+/// Advance width of `s` in em, from Arial's metrics (characters without a WinAnsi code count
+/// as a question mark, which is what the PDF shows for them).
+pub fn text_width_em_font(s: &str, bold: bool) -> f64 {
+    let table = if bold { &ARIAL_BOLD_WIDTHS } else { &ARIAL_WIDTHS };
+    s.chars().map(|c| table[(win_ansi(c).unwrap_or(b'?').max(32) - 32) as usize] as f64 / 1000.0).sum()
+}
+
+/// Advance width of regular text in em.
 pub fn text_width_em(s: &str) -> f64 {
-    s.chars()
-        .map(|c| match c {
-            'i' | 'j' | 'l' | '.' | ',' | ':' | ';' | '\'' | '!' | '|' => 0.24,
-            'f' | 't' | 'r' | 'I' | ' ' | '(' | ')' | '[' | ']' | '-' => 0.32,
-            'm' | 'M' | 'W' => 0.84,
-            'w' => 0.72,
-            c if c.is_ascii_uppercase() => 0.68,
-            c if c.is_ascii_digit() => 0.556,
-            _ => 0.54,
-        })
-        .sum()
+    text_width_em_font(s, false)
+}
+
+/// A non-embedded TrueType Arial font dictionary with its widths (viewers use the installed
+/// Arial, or a metric-compatible substitute).
+fn arial_font(bold: bool, descriptor: usize) -> Vec<u8> {
+    let table = if bold { &ARIAL_BOLD_WIDTHS } else { &ARIAL_WIDTHS };
+    let widths: Vec<String> = table.iter().map(|w| w.to_string()).collect();
+    format!(
+        "<< /Type /Font /Subtype /TrueType /BaseFont /{} /FirstChar 32 /LastChar 255 /Widths [{}] /FontDescriptor {} 0 R /Encoding /WinAnsiEncoding >>",
+        if bold { "Arial-BoldMT" } else { "ArialMT" },
+        widths.join(" "),
+        descriptor
+    )
+    .into_bytes()
+}
+
+fn arial_descriptor(bold: bool) -> Vec<u8> {
+    format!(
+        "<< /Type /FontDescriptor /FontName /{} /Flags 32 /FontBBox [{}] /ItalicAngle 0 /Ascent 905 /Descent -212 /CapHeight 716 /StemV {} >>",
+        if bold { "Arial-BoldMT" } else { "ArialMT" },
+        if bold { "-628 -376 2000 1018" } else { "-665 -325 2000 1006" },
+        if bold { 136 } else { 80 }
+    )
+    .into_bytes()
 }
 
 impl Page {
@@ -122,7 +208,7 @@ impl Page {
     /// Text with its baseline at y; `center` centres horizontally on x.
     pub fn text(&mut self, x: f64, y: f64, size_mm: f64, s: &str, rgb: [u8; 3], center: bool, bold: bool) {
         let size = size_mm * PT_PER_MM;
-        let w = if center { text_width_em(s) * size } else { 0.0 };
+        let w = if center { text_width_em_font(s, bold) * size } else { 0.0 };
         let _ = writeln!(
             self.ops,
             "BT /{} {} Tf {} {} {} rg {} {} Td ({}) Tj ET",
@@ -144,7 +230,7 @@ impl Page {
     pub fn text_anchored(&mut self, x: f64, y: f64, size_mm: f64, s: &str, rgb: [u8; 3], anchor: crate::plan::Anchor, bold: bool, angle: f64) {
         use crate::plan::Anchor;
         let size = size_mm * PT_PER_MM;
-        let w = text_width_em(s) * size;
+        let w = text_width_em_font(s, bold) * size;
         let (dx, dy) = match anchor {
             Anchor::Center => (-w / 2.0, -0.35 * size),
             Anchor::Left => (0.0, 0.21 * size),
@@ -178,7 +264,7 @@ impl Page {
             return;
         }
         let size = size_mm * PT_PER_MM;
-        let w = if center { text_width_em(s) * size } else { 0.0 };
+        let w = if center { text_width_em_font(s, bold) * size } else { 0.0 };
         let (c, sn) = (angle.cos(), angle.sin());
         let (px, py) = (x * PT_PER_MM - c * w / 2.0, y * PT_PER_MM - sn * w / 2.0);
         let _ = writeln!(
@@ -232,8 +318,11 @@ pub fn write(pages: Vec<Page>, title: &str) -> Vec<u8> {
     let font = reserve(&mut objects);
     let font_bold = reserve(&mut objects);
     let info = reserve(&mut objects);
-    objects[font - 1] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>".to_vec();
-    objects[font_bold - 1] = b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>".to_vec();
+    let (desc, desc_bold) = (reserve(&mut objects), reserve(&mut objects));
+    objects[font - 1] = arial_font(false, desc);
+    objects[font_bold - 1] = arial_font(true, desc_bold);
+    objects[desc - 1] = arial_descriptor(false);
+    objects[desc_bold - 1] = arial_descriptor(true);
     objects[info - 1] = format!("<< /Title ({}) /Producer (RevitCraft) >>", pdf_text(title)).into_bytes();
 
     let mut kids = Vec::new();
@@ -328,5 +417,20 @@ fn dash_array(dash: crate::plan::Dash) -> String {
         Dash::Dashed => format!("[{} {}] 0", mm(3.0), mm(1.5)),
         Dash::DashDot => format!("[{} {} {} {}] 0", mm(6.0), mm(1.2), mm(0.5), mm(1.2)),
         Dash::Dotted => format!("[{} {}] 0", mm(0.5), mm(1.1)),
+    }
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+
+    /// Arial (Helvetica-metric) advance widths, regular and bold.
+    #[test]
+    fn arial_widths() {
+        assert!((text_width_em_font("Hello", false) - 2.278).abs() < 1e-9);
+        assert!((text_width_em_font("Hello", true) - 2.445).abs() < 1e-9);
+        assert!((text_width_em("90°") - 1.512).abs() < 1e-9);
+        let pdf = String::from_utf8_lossy(&write(vec![Page::new(100.0, 100.0)], "t")).to_string();
+        assert!(pdf.contains("/BaseFont /ArialMT") && pdf.contains("/BaseFont /Arial-BoldMT") && pdf.contains("/Widths ["));
     }
 }

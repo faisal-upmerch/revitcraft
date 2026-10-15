@@ -865,7 +865,7 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                 2 => &[C::Open, C::ImportIfc, C::OpenSample, C::LoadFamily],
                 3 => &[C::SaveAs],
                 4 => &[C::ExportIfc, C::ExportDxf, C::ExportPdf, C::ExportImage, C::ExportCsv],
-                5 => &[C::ExportPdf],
+                5 => &[C::Print, C::PrintPreview, C::PrintSetup],
                 _ => &[],
             };
             if items.is_empty() {
@@ -885,7 +885,7 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                     }
                 }
             } else {
-                let title = ["", "Create a new project or family", "Open a project or family", "Save the current project", "Export the current project or view", "Print to PDF"][sub as usize];
+                let title = ["", "Create a new project or family", "Open a project or family", "Save the current project", "Export the current project or view", "Print the current view or selected views and sheets"][sub as usize];
                 ui.label(egui::RichText::new(title).font(style::bold(12.5)));
                 ui.add_space(6.0);
                 for c in items {

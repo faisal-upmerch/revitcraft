@@ -353,6 +353,9 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         WallOpening => app.set_tool(ToolKind::WallOpening),
         VerticalOpening => app.set_tool(ToolKind::VerticalOpening),
         DormerOpening => app.set_tool(ToolKind::DormerOpening),
+        Print => app.dialogs.print_dialog = true,
+        PrintPreview => app.dialogs.print_preview = app.active,
+        PrintSetup => app.dialogs.print_setup = true,
         Subdivide => {
             let host = app.selection.first().copied().filter(|id| matches!(app.el(*id).map(|e| &e.kind), Some(ElementKind::Toposolid(t)) if t.host.is_none()));
             match (host, app.active) {

@@ -49,11 +49,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let layout = app.sheet_layout(view_id);
     for prim in &layout.0 {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dash } => {
+            SheetPrim::Line { pts, closed, width, color, dash, .. } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
                 canvas::paint_polyline(&painter, &v, *closed, Stroke::new((*width * 4.5).clamp(1.0, 3.0), Color32::from_rgb(color[0], color[1], color[2])), *dash, &xf);
             }
-            SheetPrim::Fill { tris, color } => {
+            SheetPrim::Fill { tris, color, .. } => {
                 let mut mesh = egui::Mesh::default();
                 let c = Color32::from_rgba_unmultiplied(color[0], color[1], color[2], color[3]);
                 for t in tris {
@@ -65,7 +65,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 }
                 painter.add(egui::Shape::mesh(mesh));
             }
-            SheetPrim::Text { pos, text, size, anchor, angle, bold } => {
+            SheetPrim::Text { pos, text, size, anchor, angle, bold, .. } => {
                 let h = (*size as f64 * xf.zoom) as f32;
                 canvas::paint_text_ex(&painter, xf.s(*pos), text, h, Color32::BLACK, *anchor, *angle, *bold);
             }

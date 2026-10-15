@@ -39,6 +39,8 @@ pub enum Icon {
     WallOpening,
     VerticalOpening,
     DormerOpening,
+    PrintPreview,
+    PrintSetup,
     Subdivide,
     Mullion,
     SlantedColumn,
@@ -794,6 +796,16 @@ fn draw(g: &Pen, icon: Icon) {
                 g.rect(x - 0.05, 0.08, x + 0.05, 0.92, BLUE, ink);
             }
             g.rect(0.12, 0.45, 0.88, 0.55, BLUE, ink);
+        }
+        PrintPreview => {
+            g.sheet(0.12, 0.06, 0.7, 0.86);
+            g.circle((0.62, 0.62), 0.18, Color32::WHITE, ink);
+            g.line_w(&[(0.75, 0.75), (0.94, 0.94)], ink, g.w * 2.0);
+        }
+        PrintSetup => {
+            g.sheet(0.12, 0.06, 0.7, 0.86);
+            g.circle((0.68, 0.7), 0.16, G2, ink);
+            g.dot((0.68, 0.7), 0.06, Color32::WHITE);
         }
         DormerOpening => {
             // A pitched roof with a small dormer gable rising out of it.

@@ -11,9 +11,10 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub enum SheetPrim {
-    Line { pts: Vec<DVec2>, closed: bool, width: f32, color: [u8; 3], dash: plan::Dash },
-    Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4] },
-    Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32 },
+    /// `id`: the element drawn (None for the sheet's own graphics), for export layers.
+    Line { pts: Vec<DVec2>, closed: bool, width: f32, color: [u8; 3], dash: plan::Dash, id: Option<Id> },
+    Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4], id: Option<Id> },
+    Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32, id: Option<Id> },
     /// A rendered 3D image of `view` fills this rectangle.
     Image { view: Id, min: DVec2, max: DVec2 },
 }
@@ -99,11 +100,11 @@ pub fn viewport_boxes(p: &Project, sheet: &Sheet, footprints: &HashMap<Id, Footp
 }
 
 fn line(out: &mut Vec<SheetPrim>, pts: Vec<DVec2>, closed: bool, width: f32) {
-    out.push(SheetPrim::Line { pts, closed, width, color: [0, 0, 0], dash: plan::Dash::Solid });
+    out.push(SheetPrim::Line { pts, closed, width, color: [0, 0, 0], dash: plan::Dash::Solid, id: None });
 }
 
 fn text(out: &mut Vec<SheetPrim>, pos: DVec2, s: impl Into<String>, size: f32, bold: bool) {
-    out.push(SheetPrim::Text { pos, text: s.into(), size, anchor: Anchor::Left, bold, angle: 0.0 });
+    out.push(SheetPrim::Text { pos, text: s.into(), size, anchor: Anchor::Left, bold, angle: 0.0, id: None });
 }
 
 fn rect(a: DVec2, b: DVec2) -> Vec<DVec2> {
@@ -138,7 +139,7 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
     let map = |q: DVec2| center + (q - wc) / scale;
     let crop = d.crop;
     let inside = |q: DVec2| crop.is_none_or(|(a, b)| q.x >= a.x && q.x <= b.x && q.y >= a.y && q.y <= b.y);
-    for (_, prim) in d.prims {
+    for (id, prim) in d.prims {
         match prim {
             Prim::Line { pts, closed, stroke } => {
                 let mut pts = pts;
@@ -146,11 +147,11 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
                     pts.push(pts[0]);
                 }
                 match crop {
-                    None => out.push(SheetPrim::Line { pts: pts.into_iter().map(map).collect(), closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash }),
+                    None => out.push(SheetPrim::Line { pts: pts.into_iter().map(map).collect(), closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash, id }),
                     Some((a, b)) => {
                         for s in pts.windows(2) {
                             if let Some((p0, p1)) = clip_segment(s[0], s[1], a, b) {
-                                out.push(SheetPrim::Line { pts: vec![map(p0), map(p1)], closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash });
+                                out.push(SheetPrim::Line { pts: vec![map(p0), map(p1)], closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash, id });
                             }
                         }
                     }
@@ -168,11 +169,11 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
                         })
                         .collect(),
                 };
-                out.push(SheetPrim::Fill { tris: tris.into_iter().map(|t| [map(t[0]), map(t[1]), map(t[2])]).collect(), color });
+                out.push(SheetPrim::Fill { tris: tris.into_iter().map(|t| [map(t[0]), map(t[1]), map(t[2])]).collect(), color, id });
             }
             Prim::Text { pos, text, size, anchor, angle, bold, .. } => {
                 if inside(pos) {
-                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle });
+                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle, id });
                 }
             }
         }
@@ -278,8 +279,8 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
         let bubble = DVec2::new(vb.min.x + 4.5, ty + 1.0);
         line(&mut out, plan::circle(bubble, 4.5, 24), true, 0.35);
         line(&mut out, vec![bubble - DVec2::new(4.5, 0.0), bubble + DVec2::new(4.5, 0.0)], false, 0.25);
-        out.push(SheetPrim::Text { pos: bubble + DVec2::new(0.0, 2.0), text: vp.detail_number.clone(), size: 2.5, anchor: Anchor::Center, bold: true, angle: 0.0 });
-        out.push(SheetPrim::Text { pos: bubble - DVec2::new(0.0, 2.4), text: sheet.number.clone(), size: 1.8, anchor: Anchor::Center, bold: false, angle: 0.0 });
+        out.push(SheetPrim::Text { pos: bubble + DVec2::new(0.0, 2.0), text: vp.detail_number.clone(), size: 2.5, anchor: Anchor::Center, bold: true, angle: 0.0, id: None });
+        out.push(SheetPrim::Text { pos: bubble - DVec2::new(0.0, 2.4), text: sheet.number.clone(), size: 1.8, anchor: Anchor::Center, bold: false, angle: 0.0, id: None });
         let title = if v.title_on_sheet.is_empty() { v.name.clone() } else { v.title_on_sheet.clone() };
         let tx = vb.min.x + 11.0;
         text(&mut out, DVec2::new(tx, ty + 1.0), title, 3.5, true);
@@ -290,16 +291,16 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
     }
     // Annotation drawn on the sheet itself (text, detail lines, symbols, regions, clouds).
     // Already in paper millimetres: copied as they are.
-    for (_, prim) in sheet_annotations(p, view, footprints).prims {
+    for (id, prim) in sheet_annotations(p, view, footprints).prims {
         match prim {
             Prim::Line { mut pts, closed, stroke } => {
                 if closed && !pts.is_empty() {
                     pts.push(pts[0]);
                 }
-                out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash });
+                out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash, id });
             }
-            Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color }),
-            Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle }),
+            Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color, id }),
+            Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle, id }),
         }
     }
     out
@@ -314,6 +315,78 @@ pub fn sheet_annotations(p: &Project, view: &View, footprints: &HashMap<Id, Foot
     d
 }
 
+/// Colors of printed and exported sheets (the reference app's Print Setup "Colors").
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum PrintColors {
+    #[default]
+    Color,
+    /// Text and non-white lines black; solid fills and images in grey.
+    BlackLines,
+    Grayscale,
+}
+
+impl PrintColors {
+    pub const ALL: [PrintColors; 3] = [PrintColors::BlackLines, PrintColors::Grayscale, PrintColors::Color];
+    pub fn label(self) -> &'static str {
+        match self {
+            PrintColors::Color => "Color",
+            PrintColors::BlackLines => "Black Lines",
+            PrintColors::Grayscale => "Grayscale",
+        }
+    }
+}
+
+/// Print / PDF export settings, as in the reference app's Print Setup and PDF export.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PrintSettings {
+    pub colors: PrintColors,
+    /// Views (not sheets): None = a page sized to the view at its scale; Some = this paper.
+    pub paper: Option<SheetSize>,
+    pub landscape: bool,
+    /// On a chosen paper: fit the view to the page (else print it at 100% of its scale).
+    pub fit_to_page: bool,
+    pub hide_ref_planes: bool,
+    pub hide_scope_boxes: bool,
+}
+
+impl Default for PrintSettings {
+    fn default() -> Self {
+        PrintSettings { colors: PrintColors::Color, paper: None, landscape: true, fit_to_page: true, hide_ref_planes: true, hide_scope_boxes: true }
+    }
+}
+
+fn grey(c: [u8; 3]) -> u8 {
+    (0.299 * c[0] as f64 + 0.587 * c[1] as f64 + 0.114 * c[2] as f64).round() as u8
+}
+
+/// Applies the settings to laid-out primitives: hidden categories dropped, colours converted.
+pub fn apply_print_settings(p: &Project, prims: Vec<SheetPrim>, s: &PrintSettings) -> Vec<SheetPrim> {
+    let hidden = |id: Option<Id>| {
+        id.and_then(|i| p.element(i)).is_some_and(|e| (s.hide_ref_planes && e.category() == Category::ReferencePlanes) || (s.hide_scope_boxes && e.category() == Category::ScopeBoxes))
+    };
+    let line_color = |c: [u8; 3]| match s.colors {
+        PrintColors::Color => c,
+        PrintColors::BlackLines => if c.iter().all(|v| *v > 250) { c } else { [0, 0, 0] },
+        PrintColors::Grayscale => [grey(c); 3],
+    };
+    let fill_color = |c: [u8; 4]| match s.colors {
+        PrintColors::Color => c,
+        _ => {
+            let g = grey([c[0], c[1], c[2]]);
+            [g, g, g, c[3]]
+        }
+    };
+    prims
+        .into_iter()
+        .filter_map(|prim| match prim {
+            SheetPrim::Line { id, .. } | SheetPrim::Fill { id, .. } | SheetPrim::Text { id, .. } if hidden(id) => None,
+            SheetPrim::Line { pts, closed, width, color, dash, id } => Some(SheetPrim::Line { pts, closed, width, color: line_color(color), dash, id }),
+            SheetPrim::Fill { tris, color, id } => Some(SheetPrim::Fill { tris, color: fill_color(color), id }),
+            other => Some(other),
+        })
+        .collect()
+}
+
 /// Writes a sheet to PDF. `render` produces an RGB image (w, h, pixels) for 3D viewports.
 pub fn to_pdf_page(
     p: &Project,
@@ -321,14 +394,24 @@ pub fn to_pdf_page(
     footprints: &HashMap<Id, Footprint>,
     render: &mut dyn FnMut(Id, u32, u32) -> Option<crate::pdf::Image>,
 ) -> crate::pdf::Page {
+    to_pdf_page_with(p, view, footprints, render, &PrintSettings::default())
+}
+
+pub fn to_pdf_page_with(
+    p: &Project,
+    view: &View,
+    footprints: &HashMap<Id, Footprint>,
+    render: &mut dyn FnMut(Id, u32, u32) -> Option<crate::pdf::Image>,
+    settings: &PrintSettings,
+) -> crate::pdf::Page {
     let ViewKind::Sheet(sheet) = &view.kind else { return crate::pdf::Page::new(297.0, 210.0) };
     let (pw, ph) = sheet.size.paper();
     let mut page = crate::pdf::Page::new(pw, ph);
     let xy = |q: &DVec2| (q.x, q.y);
-    for prim in layout(p, view, footprints) {
+    for prim in apply_print_settings(p, layout(p, view, footprints), settings) {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dash } => page.line(&pts.iter().map(xy).collect::<Vec<_>>(), closed, width as f64, color, dash),
-            SheetPrim::Fill { tris, color } => {
+            SheetPrim::Line { pts, closed, width, color, dash, .. } => page.line(&pts.iter().map(xy).collect::<Vec<_>>(), closed, width as f64, color, dash),
+            SheetPrim::Fill { tris, color, .. } => {
                 let a = color[3] as f64 / 255.0;
                 if a <= 0.0 {
                     continue;
@@ -338,12 +421,18 @@ pub fn to_pdf_page(
                     page.fill(&t.iter().map(xy).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
             SheetPrim::Image { view, min, max } => {
                 let px_per_mm = 6.0;
                 let w = ((max.x - min.x) * px_per_mm).round().clamp(16.0, 4096.0) as u32;
                 let h = ((max.y - min.y) * px_per_mm).round().clamp(16.0, 4096.0) as u32;
-                if let Some(img) = render(view, w, h) {
+                if let Some(mut img) = render(view, w, h) {
+                    if settings.colors != PrintColors::Color {
+                        for px in img.rgb.chunks_mut(3) {
+                            let g = grey([px[0], px[1], px[2]]);
+                            px.copy_from_slice(&[g, g, g]);
+                        }
+                    }
                     page.image(min.x, min.y, max.x - min.x, max.y - min.y, img);
                 }
             }
@@ -354,16 +443,47 @@ pub fn to_pdf_page(
 
 /// A standalone view (not a sheet) as a PDF page at its scale.
 pub fn view_to_pdf_page(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Option<crate::pdf::Page> {
+    view_to_pdf_page_with(p, view, footprints, &PrintSettings::default())
+}
+
+/// What printing `view` puts on paper: the page size (mm) and its primitives with the settings
+/// applied. Sheets print at their sheet size; views on a page sized to them at their scale, or
+/// centred on the chosen paper at 100% or fitted inside 10 mm margins.
+pub fn print_layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, settings: &PrintSettings) -> Option<(DVec2, Vec<SheetPrim>)> {
+    if let ViewKind::Sheet(sheet) = &view.kind {
+        let (pw, ph) = sheet.size.paper();
+        return Some((DVec2::new(pw, ph), apply_print_settings(p, layout(p, view, footprints), settings)));
+    }
     let d = view_drawing(p, view, footprints)?;
     let (mn, mx) = d.bounds()?;
-    let size = (mx - mn) / view.scale + DVec2::splat(30.0);
+    let natural = (mx - mn) / view.scale;
+    let (page_size, scale) = match settings.paper {
+        None => (natural + DVec2::splat(30.0), view.scale),
+        Some(size) => {
+            let (a, b) = size.paper();
+            let (w, h) = if settings.landscape { (a.max(b), a.min(b)) } else { (a.min(b), a.max(b)) };
+            let paper = DVec2::new(w, h);
+            let fit = ((paper.x - 20.0) / natural.x.max(1e-6)).min((paper.y - 20.0) / natural.y.max(1e-6));
+            (paper, if settings.fit_to_page { view.scale / fit } else { view.scale })
+        }
+    };
+    let page_size = page_size.max(DVec2::new(100.0, 80.0));
     let mut out = Vec::new();
-    place_drawing(&mut out, d, size / 2.0, view.scale);
-    let mut page = crate::pdf::Page::new(size.x.max(100.0), size.y.max(80.0));
-    for prim in out {
+    place_drawing(&mut out, d, page_size / 2.0, scale);
+    Some((page_size, apply_print_settings(p, out, settings)))
+}
+
+/// A standalone view as a PDF page (see `print_layout`).
+pub fn view_to_pdf_page_with(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, settings: &PrintSettings) -> Option<crate::pdf::Page> {
+    if matches!(view.kind, ViewKind::Sheet(_)) {
+        return None;
+    }
+    let (page_size, prims) = print_layout(p, view, footprints, settings)?;
+    let mut page = crate::pdf::Page::new(page_size.x, page_size.y);
+    for prim in prims {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dash } => page.line(&pts.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), closed, width as f64, color, dash),
-            SheetPrim::Fill { tris, color } => {
+            SheetPrim::Line { pts, closed, width, color, dash, .. } => page.line(&pts.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), closed, width as f64, color, dash),
+            SheetPrim::Fill { tris, color, .. } => {
                 if color[3] == 0 {
                     continue;
                 }
@@ -373,7 +493,7 @@ pub fn view_to_pdf_page(p: &Project, view: &View, footprints: &HashMap<Id, Footp
                     page.fill(&t.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
             SheetPrim::Image { .. } => {}
         }
     }

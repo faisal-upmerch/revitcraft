@@ -2,7 +2,7 @@
 //! DXF drawings (lines, polylines with bulges, circles, arcs, ellipses, splines, text and
 //! block inserts) as linked CAD underlays.
 
-use crate::analysis::Footprint;
+use crate::analysis::{self, Footprint};
 use crate::geom::DVec2;
 use crate::model::*;
 use crate::plan::{Anchor, Dash, Drawing, Prim};
@@ -265,15 +265,108 @@ fn layer_name(s: &str) -> String {
     if s.is_empty() { "0".into() } else { s.to_uppercase() }
 }
 
-/// Writes a view drawing in model millimetres, one layer per category.
+/// How exported DWG/DXF layers are named.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum LayerStandard {
+    /// The American Institute of Architects CAD layer guidelines (the reference app's default
+    /// export setup): A-WALL, A-DOOR, A-GLAZ, S-GRID, A-ANNO-DIMS...
+    #[default]
+    Aia,
+    /// One layer per category, named after it.
+    Category,
+}
+
+impl LayerStandard {
+    pub const ALL: [LayerStandard; 2] = [LayerStandard::Aia, LayerStandard::Category];
+    pub fn label(self) -> &'static str {
+        match self {
+            LayerStandard::Aia => "American Institute of Architects Standard (AIA)",
+            LayerStandard::Category => "Category names",
+        }
+    }
+}
+
+/// AIA layer of an element (tags take their host's "-IDEN" layer, curtain walls "A-GLAZ-CWMG").
+fn aia_layer(p: &Project, e: &Element) -> String {
+    use Category::*;
+    let host_cat = match &e.kind {
+        ElementKind::Tag(t) => p.element(t.host).map(|h| h.category()),
+        _ => None,
+    };
+    let s = match e.category() {
+        Walls if matches!(&e.kind, ElementKind::Wall(w) if analysis::is_curtain(p, w)) => "A-GLAZ-CWMG",
+        Walls => "A-WALL",
+        Doors => "A-DOOR",
+        Windows => "A-GLAZ",
+        Floors => "A-FLOR",
+        Ceilings => "A-CLNG",
+        Roofs => "A-ROOF",
+        Stairs => "A-FLOR-STRS",
+        Ramps => "A-FLOR-LEVL",
+        Railings => "A-FLOR-HRAL",
+        Columns => "A-COLS",
+        StructuralColumns => "S-COLS",
+        StructuralFraming => "S-BEAM",
+        StructuralFoundations => "S-FNDN",
+        ShaftOpenings => "A-FLOR-OTLN",
+        Furniture => "A-FURN",
+        Casework => "A-FLOR-CASE",
+        PlumbingFixtures => "P-SANR-FIXT",
+        SpecialtyEquipment => "A-FLOR-SPCL",
+        GenericModels => "A-GENM",
+        Rooms => "A-AREA-IDEN",
+        Areas | AreaBoundary => "A-AREA",
+        RoomSeparation => "A-AREA-BNDY",
+        Grids => "S-GRID",
+        Levels => "S-GRID-IDEN",
+        ReferencePlanes => "A-ANNO-REFR",
+        Lines => "A-DETL",
+        Dimensions => "A-ANNO-DIMS",
+        TextNotes => "A-ANNO-TEXT",
+        Tags => match host_cat {
+            Some(Doors) => "A-DOOR-IDEN",
+            Some(Windows) => "A-GLAZ-IDEN",
+            Some(Rooms) | Some(Areas) => "A-AREA-IDEN",
+            Some(Walls) => "A-WALL-IDEN",
+            Some(StructuralColumns) | Some(StructuralFraming) => "S-ANNO-IDEN",
+            _ => "A-ANNO-IDEN",
+        },
+        FilledRegions => "A-DETL-PATT",
+        Symbols => "A-ANNO-SYMB",
+        Mass => "A-MASS",
+        Toposolid => "C-TOPO",
+        Site => "C-SITE",
+        Parking => "C-PRKG",
+        Planting => "L-PLNT",
+        PropertyLines => "C-PROP-LINE",
+        Matchline => "A-ANNO-MTCH",
+        ColorFillLegends => "A-ANNO-LEGN",
+        _ => return layer_name(e.category().label()),
+    };
+    s.to_string()
+}
+
+/// The layer an element's graphics go on under `std`.
+pub fn element_layer(p: &Project, e: &Element, std: LayerStandard) -> String {
+    match std {
+        LayerStandard::Aia => aia_layer(p, e),
+        LayerStandard::Category => layer_name(e.category().label()),
+    }
+}
+
+/// Writes a view drawing in model millimetres, on AIA layers.
 pub fn export_drawing(p: &Project, d: &Drawing, view_scale: f64) -> String {
-    let cats: HashMap<Id, Category> = p.elements.iter().map(|e| (e.id, e.category())).collect();
+    export_drawing_with(p, d, view_scale, LayerStandard::Aia)
+}
+
+/// Writes a view drawing in model millimetres with layers named by `std`. Cut patterns and
+/// fills go on the element layer's "-PATT" companion, as the reference app exports hatches.
+pub fn export_drawing_with(p: &Project, d: &Drawing, view_scale: f64, std: LayerStandard) -> String {
+    let layers: HashMap<Id, String> = p.elements.iter().map(|e| (e.id, element_layer(p, e, std))).collect();
+    let annotation = if std == LayerStandard::Aia { "A-ANNO-SYMB" } else { "ANNOTATION" };
     let mut w = Writer { out: String::new(), layers: BTreeSet::new() };
     for (id, prim) in &d.prims {
-        let layer = match id.and_then(|i| cats.get(&i)) {
-            Some(c) => layer_name(c.label()),
-            None => "ANNOTATION".into(),
-        };
+        let layer = id.and_then(|i| layers.get(&i).cloned()).unwrap_or_else(|| annotation.to_string());
         match prim {
             Prim::Line { pts, closed, stroke } => w.polyline(&layer, pts, *closed, stroke.color, stroke.dash),
             Prim::Fill { tris, color } => {
@@ -281,8 +374,9 @@ pub fn export_drawing(p: &Project, d: &Drawing, view_scale: f64) -> String {
                 if color[3] < 20 || (color[0] > 250 && color[1] > 250 && color[2] > 250) {
                     continue;
                 }
+                let fill_layer = if std == LayerStandard::Aia { format!("{layer}-PATT") } else { format!("{layer}-FILL") };
                 for t in tris {
-                    w.solid(&format!("{layer}-FILL"), t, [color[0], color[1], color[2]]);
+                    w.solid(&fill_layer, t, [color[0], color[1], color[2]]);
                 }
             }
             Prim::Text { pos, text, size, color, anchor, angle, .. } => {
@@ -295,28 +389,43 @@ pub fn export_drawing(p: &Project, d: &Drawing, view_scale: f64) -> String {
 
 /// Exports a plan, section, elevation, drafting view or legend.
 pub fn export_view(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Option<String> {
+    export_view_with(p, view, footprints, LayerStandard::Aia)
+}
+
+pub fn export_view_with(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, std: LayerStandard) -> Option<String> {
     let d = sheet::view_drawing(p, view, footprints)?;
-    Some(export_drawing(p, &d, view.scale))
+    Some(export_drawing_with(p, &d, view.scale, std))
 }
 
 /// Exports a sheet in paper millimetres (3D viewports appear as their frame).
 pub fn export_sheet(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> String {
+    export_sheet_with(p, view, footprints, LayerStandard::Aia)
+}
+
+/// A sheet with the views' elements on their layers and the sheet's own graphics (title block,
+/// viewport titles) on the title block layer.
+pub fn export_sheet_with(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, std: LayerStandard) -> String {
+    let aia = std == LayerStandard::Aia;
+    let layers: HashMap<Id, String> = p.elements.iter().map(|e| (e.id, element_layer(p, e, std))).collect();
+    let sheet_layer = if aia { "G-ANNO-TTLB" } else { "SHEET" };
+    let layer_of = |id: Option<Id>| id.and_then(|i| layers.get(&i).cloned()).unwrap_or_else(|| sheet_layer.to_string());
     let mut w = Writer { out: String::new(), layers: BTreeSet::new() };
     for prim in sheet::layout(p, view, footprints) {
         match prim {
-            SheetPrim::Line { pts, closed, color, dash, .. } => w.polyline("SHEET", &pts, closed, color, dash),
-            SheetPrim::Fill { tris, color } => {
+            SheetPrim::Line { pts, closed, color, dash, id, .. } => w.polyline(&layer_of(id), &pts, closed, color, dash),
+            SheetPrim::Fill { tris, color, id } => {
                 if color[3] < 20 || (color[0] > 250 && color[1] > 250 && color[2] > 250) {
                     continue;
                 }
+                let l = format!("{}-{}", layer_of(id), if aia { "PATT" } else { "FILL" });
                 for t in &tris {
-                    w.solid("SHEET-FILL", t, [color[0], color[1], color[2]]);
+                    w.solid(&l, t, [color[0], color[1], color[2]]);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, angle, .. } => w.text("SHEET-TEXT", pos, &text, size as f64, [0, 0, 0], anchor, (angle as f64).to_degrees()),
+            SheetPrim::Text { pos, text, size, anchor, angle, id, .. } => w.text(&layer_of(id).replace("SHEET", "SHEET-TEXT"), pos, &text, size as f64, [0, 0, 0], anchor, (angle as f64).to_degrees()),
             SheetPrim::Image { min, max, .. } => {
                 let pts = vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
-                w.polyline("SHEET-VIEWPORT", &pts, true, [128, 128, 128], Dash::Solid);
+                w.polyline(if aia { "G-ANNO-VPRT" } else { "SHEET-VIEWPORT" }, &pts, true, [128, 128, 128], Dash::Solid);
             }
         }
     }
@@ -720,7 +829,10 @@ mod tests {
         let view = p.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap();
         let text = export_view(&p, view, &fp).unwrap();
         assert!(text.contains("AC1009"));
-        assert!(text.contains("WALLS"));
+        // AIA layers by default; category names on request.
+        assert!(text.contains("A-WALL") && text.contains("S-GRID") && text.contains("A-DOOR"));
+        let named = export_view_with(&p, view, &fp, LayerStandard::Category).unwrap();
+        assert!(named.contains("WALLS"));
         assert!(text.trim_end().ends_with("EOF"));
         let cad = import(&text, "plan").unwrap();
         assert!(cad.polylines.len() > 20);
