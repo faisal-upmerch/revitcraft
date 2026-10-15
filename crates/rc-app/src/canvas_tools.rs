@@ -137,7 +137,9 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Room => "Click to place room".into(),
         ToolKind::CeilingAuto => "Click in an area bounded by walls to create ceiling".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
-        ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => "Click an element to tag it.".into(),
+        ToolKind::RoomTag => "Click to place room tag".into(),
+        ToolKind::AreaTag => "Click to place area tag".into(),
+        ToolKind::Tag => "Click an element to tag it.".into(),
         ToolKind::Level => if n == 0 { "Click the start of the level line (in a section or elevation).".into() } else { "Click the end of the level line.".into() },
         ToolKind::Text => "Click to place the text, type, then click outside the box to finish.".into(),
         ToolKind::Dimension(DimKind::Aligned) | ToolKind::Dimension(DimKind::Linear) => {
@@ -597,6 +599,23 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
             app.tool.reset();
         }
     }
+}
+
+/// A room-like region under the cursor: light blue with its reference cross.
+fn paint_region_preview(painter: &egui::Painter, xf: &Xf, poly: &[DVec2]) {
+    let mut mesh = egui::Mesh::default();
+    for [a, b, cc] in geom::triangulate(poly) {
+        let i = mesh.vertices.len() as u32;
+        for q in [poly[a], poly[b], poly[cc]] {
+            mesh.colored_vertex(xf.s(q), Color32::from_rgba_unmultiplied(150, 205, 230, 110));
+        }
+        mesh.add_triangle(i, i + 1, i + 2);
+    }
+    painter.add(egui::Shape::mesh(mesh));
+    let (mn, mx) = geom::bounds(poly.iter().copied());
+    let thin = Stroke::new(1.0, Color32::from_gray(70));
+    painter.line_segment([xf.s(mn), xf.s(mx)], thin);
+    painter.line_segment([xf.s(DVec2::new(mn.x, mx.y)), xf.s(DVec2::new(mx.x, mn.y))], thin);
 }
 
 /// The stair being sketched as it would be created (for its riser numbers).
@@ -1616,19 +1635,7 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
     if let Some(poly) = &region {
         if app.tool.kind == ToolKind::Room {
             // The region fills light blue with its reference cross, as in the reference app.
-            let mut mesh = egui::Mesh::default();
-            for [a, b, cc] in geom::triangulate(poly) {
-                let i = mesh.vertices.len() as u32;
-                for q in [poly[a], poly[b], poly[cc]] {
-                    mesh.colored_vertex(xf.s(q), Color32::from_rgba_unmultiplied(150, 205, 230, 110));
-                }
-                mesh.add_triangle(i, i + 1, i + 2);
-            }
-            painter.add(egui::Shape::mesh(mesh));
-            let (mn, mx) = geom::bounds(poly.iter().copied());
-            let thin = Stroke::new(1.0, Color32::from_gray(70));
-            painter.line_segment([xf.s(mn), xf.s(mx)], thin);
-            painter.line_segment([xf.s(DVec2::new(mn.x, mx.y)), xf.s(DVec2::new(mx.x, mn.y))], thin);
+            paint_region_preview(painter, xf, poly);
             // The room tag follows the cursor: its label and an empty number box.
             if app.opts.room_tag {
                 let p0 = xf.s(c);
@@ -1725,11 +1732,39 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
         ToolKind::AreaTag => matches!(e.kind, ElementKind::Area(_)),
         _ => e.view.is_none() && !matches!(e.kind, ElementKind::Level(_) | ElementKind::Grid(_) | ElementKind::RefPlane(_) | ElementKind::Room(_) | ElementKind::Area(_)) || matches!(e.kind, ElementKind::Room(_)),
     });
+    // Room tags pick the room the cursor is in, as in the reference app.
+    let room_under = (kind == ToolKind::RoomTag)
+        .then(|| {
+            let p = &app.doc.data;
+            let level = view.plan_level()?;
+            p.elements
+                .iter()
+                .filter_map(|e| match &e.kind {
+                    ElementKind::Room(r) if r.level == level && rc_core::analysis::visible_in(p, view, e) => analysis::room_boundary(p, r).filter(|b| geom::contains(&b.interior, c)).map(|b| (e.id, b.interior)),
+                    _ => None,
+                })
+                .min_by(|a, b| geom::area(&a.1).total_cmp(&geom::area(&b.1)))
+        })
+        .flatten();
+    let host = room_under.as_ref().map(|r| r.0).or(host);
     let Some(h) = host else { return };
     let hp = app.el(h).map(|e| rc_core::annotation::host_point(&app.doc.data, e)).unwrap_or(c);
     let leader = app.opts.tag_leader;
     let at = if leader { c } else if matches!(kind, ToolKind::RoomTag | ToolKind::AreaTag) { c } else { hp };
-    painter.circle_stroke(xf.s(at), 10.0, preview_stroke());
+    if let (Some((_, poly)), Some(ElementKind::Room(r))) = (room_under.as_ref(), app.el(h).map(|e| &e.kind)) {
+        // The room fills light blue with its cross; its tag follows the cursor.
+        paint_region_preview(painter, xf, poly);
+        let p0 = xf.s(at);
+        let (hn, hb) = (xf.text_px(3.0).max(6.0), xf.text_px(2.5).max(5.0));
+        let ink = Color32::from_gray(90);
+        let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, &r.name, style::bold(hn), ink);
+        let num = painter.layout_no_wrap(r.number.clone(), style::font(hb), ink);
+        let bx = egui::Rect::from_center_size(p0 + vec2(0.0, hb * 0.75), vec2(num.size().x.max(name.width() * 0.5) + hb, hb * 1.3));
+        painter.rect_stroke(bx, 0.0, Stroke::new(1.0, ink), egui::StrokeKind::Inside);
+        painter.galley(bx.center() - num.size() / 2.0, num, ink);
+    } else {
+        painter.circle_stroke(xf.s(at), 10.0, preview_stroke());
+    }
     if leader {
         painter.line_segment([xf.s(hp), xf.s(at)], preview_stroke());
     }

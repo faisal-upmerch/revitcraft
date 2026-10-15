@@ -87,7 +87,7 @@ fn set_tool_type(app: &mut App, cat: Category, t: Id) {
 }
 
 fn type_selector(app: &mut App, ui: &mut egui::Ui) {
-    if app.tool.kind == ToolKind::Room && app.opts.room_tag {
+    if app.tool.kind == ToolKind::RoomTag || (app.tool.kind == ToolKind::Room && app.opts.room_tag) {
         // The Room tool shows the tag it places, as in the reference app.
         selector_box(ui, Icon::RoomTag, "Room Tag", "", true);
         return;
@@ -295,6 +295,8 @@ fn new_label(app: &App) -> Option<&'static str> {
         ToolKind::Component => "New Components",
         ToolKind::Beam => "New Structural Framing",
         ToolKind::Room => "New Rooms",
+        ToolKind::RoomSeparator => "New <Room Separation>",
+        ToolKind::RoomTag => "Room Tags (1)",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => "Floors",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Roof) => "Roofs",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => "Ceilings",
@@ -608,6 +610,37 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                     ro(ui, &value);
                     ui.end_row();
                 }
+            });
+        }
+        ToolKind::RoomSeparator => {
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-rs").show(ui, |ui| {
+                prop_label(ui, "Moves With Nearby Elements", true);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Graphics", true);
+            prop_grid(ui, "new-rs-g").show(ui, |ui| {
+                prop_label(ui, "Detail Line", true);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
+                ui.end_row();
+            });
+        }
+        ToolKind::RoomTag => {
+            style::group_header_ui(ui, "Graphics", true);
+            prop_grid(ui, "new-rt").show(ui, |ui| {
+                prop_label(ui, "Leader Line", false);
+                crate::style::check(ui, &mut o.tag_leader, "");
+                ui.end_row();
+                prop_label(ui, "Orientation", false);
+                egui::ComboBox::from_id_salt("nrt-or").selected_text(if o.tag_horizontal { "Horizontal" } else { "Vertical" }).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut o.tag_horizontal, true, "Horizontal");
+                    ui.selectable_value(&mut o.tag_horizontal, false, "Vertical");
+                });
+                ui.end_row();
+                prop_label(ui, "Angle", true);
+                ro(ui, &units.format(if o.tag_horizontal { 0.0 } else { 90.0 }, ParamKind::Angle));
+                ui.end_row();
             });
         }
         ToolKind::Room => {
