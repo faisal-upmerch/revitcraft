@@ -35,7 +35,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
         Door | Window | Component | Column | StructColumn | Beam | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
-        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | Shaft | WallOpening | CurtainGrid | Section | Callout | ElevationView
+        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | Shaft | WallOpening | VerticalOpening | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
         RoofExtrusion => view.is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
@@ -348,6 +348,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         AreaBoundary => start_drawing(app, ToolKind::AreaBoundary),
         AreaTag => app.set_tool(ToolKind::AreaTag),
         WallOpening => app.set_tool(ToolKind::WallOpening),
+        VerticalOpening => app.set_tool(ToolKind::VerticalOpening),
         Level => app.set_tool(ToolKind::Level),
         Grid => start_drawing(app, ToolKind::Grid),
         RefPlane => start_drawing(app, ToolKind::RefPlane),
@@ -969,7 +970,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
     matches!(
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
-            | Railing | Stair | Ramp | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
+            | Railing | Stair | Ramp | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | VerticalOpening | Level | Grid | RefPlane
             | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | RepeatingDetail | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
@@ -1255,6 +1256,7 @@ pub fn finish_sketch(app: &mut App) {
                         })
                     }
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
+                    SketchKind::Opening(host) => app.run("Create Opening", |p| edit::add_vertical_opening(p, host, outer)),
                     SketchKind::Mass => app.run("Create Mass", |p| edit::add_mass(p, level, outer, o.mass_height)),
                     SketchKind::Toposolid => app.run("Create Toposolid", |p| edit::add_toposolid(p, level, outer, o.topo_height, o.topo_thickness)),
                     SketchKind::PropertyLine => app.run("Create Property Line", |p| edit::add_property_line(p, level, outer)),

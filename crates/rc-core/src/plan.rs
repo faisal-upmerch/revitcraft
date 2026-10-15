@@ -676,7 +676,8 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
             }
             ElementKind::Shaft(s) if s.base_level == c.level || shaft_spans(p, s, c.cut_z) => {
                 d.line(Some(e.id), s.boundary.clone(), true, MEDIUM);
-                if s.boundary.len() >= 3 {
+                // Shafts show their cross; a vertical opening is just the hole in its host.
+                if s.boundary.len() >= 3 && s.host.is_none() {
                     let (mn, mx) = geom::bounds(s.boundary.iter().copied());
                     d.line(Some(e.id), vec![mn, mx], false, THIN);
                     d.line(Some(e.id), vec![DVec2::new(mn.x, mx.y), DVec2::new(mx.x, mn.y)], false, THIN);

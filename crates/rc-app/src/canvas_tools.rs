@@ -156,6 +156,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
+        ToolKind::VerticalOpening => "Select a roof, floor, or ceiling.".into(),
         ToolKind::WallOpening => if n == 0 { "Click a wall at one side of the opening.".into() } else { "Click the other side of the opening.".into() },
         ToolKind::WallFoundation => "Pick a wall to add a wall foundation under it.".into(),
         ToolKind::Align => if n == 0 { "Please select line or point reference for alignment.".into() } else { "Select the entity to align.".into() },
@@ -306,6 +307,27 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto => room_tool(app, painter, xf, view, cursor, clicked),
+        ToolKind::VerticalOpening => {
+            // Pick the roof, floor or ceiling, then sketch the opening's boundary in it.
+            let Some(c) = cursor else { return };
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Floor(_) | ElementKind::Roof(_) | ElementKind::Ceiling(_)));
+            app.interact.hover = hit;
+            if clicked {
+                match hit {
+                    Some(host) => {
+                        let level = app.el(host).and_then(|e| e.level()).unwrap_or(0);
+                        let mut sk = tools::Sketch::new(SketchKind::Opening(host), view.id, level);
+                        sk.width = 0.0;
+                        app.sketch = Some(sk);
+                        app.opts.draw_mode = DrawMode::Line;
+                        app.opts.sketch_sub = SketchSub::Boundary;
+                        app.tool = Tool::new(ToolKind::SketchLine);
+                        app.select(vec![]);
+                    }
+                    None => app.error("Select a roof, floor, or ceiling."),
+                }
+            }
+        }
         ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => tag_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::ScopeBox => {
             let Some(pt) = point else { return };

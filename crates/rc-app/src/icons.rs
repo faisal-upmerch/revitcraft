@@ -37,6 +37,7 @@ pub enum Icon {
     AreaTag,
     Shaft,
     WallOpening,
+    VerticalOpening,
     Level,
     Grid,
     RefPlane,
@@ -755,6 +756,15 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.26, 0.08, 0.74, 0.92, Color32::WHITE, ink);
             g.thin_line(&[(0.26, 0.08), (0.74, 0.92)], ink);
             g.thin_line(&[(0.74, 0.08), (0.26, 0.92)], ink);
+        }
+        VerticalOpening => {
+            // A slab in perspective with a hole cut through it.
+            g.shade(&[(0.04, 0.56), (0.5, 0.3), (0.96, 0.5), (0.5, 0.76)], G0, G2, false);
+            g.shade(&[(0.04, 0.56), (0.5, 0.76), (0.5, 0.86), (0.04, 0.66)], G2, G3, false);
+            g.shade(&[(0.5, 0.76), (0.96, 0.5), (0.96, 0.6), (0.5, 0.86)], G1, G2, false);
+            g.poly(&[(0.32, 0.53), (0.52, 0.42), (0.7, 0.51), (0.5, 0.62)], Color32::WHITE, ink);
+            g.line(&[(0.5, 0.06), (0.5, 0.36)], BLUE);
+            g.arrow_head((0.5, 0.42), (0.5, 0.06), BLUE, 0.12);
         }
         WallOpening => {
             g.rect(0.08, 0.16, 0.92, 0.84, LGREY, ink);

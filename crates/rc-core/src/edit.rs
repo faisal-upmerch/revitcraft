@@ -841,7 +841,21 @@ pub fn add_shaft(p: &mut Project, base_level: Id, boundary: Vec<DVec2>) -> Resul
         return Err("A shaft needs a closed boundary.".into());
     }
     let top_level = p.levels().last().map(|l| l.0).filter(|t| *t != base_level);
-    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level, top_offset: 0.0, base_offset: 0.0, unconnected_height: 3000.0 })))
+    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level, top_offset: 0.0, base_offset: 0.0, unconnected_height: 3000.0, host: None })))
+}
+
+/// A vertical opening: cuts only `host` (a floor, roof or ceiling), through its whole depth.
+pub fn add_vertical_opening(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
+    let boundary = geom::clean(&boundary, 1.0);
+    if boundary.len() < 3 {
+        return Err("An opening needs a closed boundary.".into());
+    }
+    let e = p.element(host).ok_or("The host was not found.")?;
+    if !matches!(e.kind, ElementKind::Floor(_) | ElementKind::Roof(_) | ElementKind::Ceiling(_)) {
+        return Err("Vertical openings cut floors, roofs and ceilings.".into());
+    }
+    let base_level = e.level().unwrap_or(0);
+    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level: None, top_offset: 0.0, base_offset: 0.0, unconnected_height: 0.0, host: Some(host) })))
 }
 
 pub fn add_wall_foundation(p: &mut Project, wall: Id, type_id: Id) -> Result<Id, String> {
@@ -874,6 +888,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::Tag(t) => doomed.contains(&t.host),
                 ElementKind::WallFoundation(f) => doomed.contains(&f.wall),
                 ElementKind::Railing(r) => r.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&r.level),
+                ElementKind::Shaft(s) => s.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&s.base_level),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
                 || e.view.is_some_and(|v| !p.views.iter().any(|x| x.id == v));

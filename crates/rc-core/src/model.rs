@@ -949,6 +949,9 @@ pub struct Shaft {
     pub top_offset: f64,
     #[serde(default)]
     pub unconnected_height: f64,
+    /// Vertical openings: the floor, roof or ceiling cut (only that element); None = a shaft.
+    #[serde(default)]
+    pub host: Option<Id>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

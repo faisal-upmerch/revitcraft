@@ -65,6 +65,7 @@ pub enum ToolKind {
     ElevationMarker,
     CurtainGrid,
     WallOpening,
+    VerticalOpening,
     PlaceGroup,
     Align,
     Offset,
@@ -149,6 +150,7 @@ impl ToolKind {
             ToolKind::ElevationMarker => "Elevation",
             ToolKind::CurtainGrid => "Curtain Grid",
             ToolKind::WallOpening => "Wall Opening",
+            ToolKind::VerticalOpening => "Vertical Opening",
             ToolKind::PlaceGroup => "Model Group",
             ToolKind::Align => "Align",
             ToolKind::Offset => "Offset",
@@ -242,6 +244,7 @@ impl ToolKind {
                 | ToolKind::Callout
                 | ToolKind::ElevationMarker
                 | ToolKind::WallOpening
+                | ToolKind::VerticalOpening
                 | ToolKind::PlaceGroup
                 | ToolKind::CurtainGrid
         )
@@ -338,6 +341,8 @@ pub enum SketchKind {
     RoofExtrusion,
     Region { masking: bool },
     Shaft,
+    /// A vertical opening in this floor, roof or ceiling.
+    Opening(Id),
     Railing,
     Stair,
     Ramp,
@@ -360,6 +365,7 @@ impl SketchKind {
             SketchKind::RoofExtrusion => "Create Extrusion Roof Profile",
             SketchKind::Region { .. } | SketchKind::EditRegion(_) => "Create Filled Region Boundary",
             SketchKind::Shaft => "Create Shaft Opening Sketch",
+            SketchKind::Opening(_) => "Create Opening Boundary",
             SketchKind::Railing => "Create Railing Path",
             SketchKind::Stair => "Create Stair",
             SketchKind::Ramp => "Create Ramp Sketch",

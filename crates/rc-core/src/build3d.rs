@@ -41,8 +41,8 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
             None => MeshSet::default(),
         },
         ElementKind::Floor(f) => floor(p, e.id, f),
-        ElementKind::Roof(r) => roof(p, r),
-        ElementKind::Ceiling(c) => ceiling(p, c),
+        ElementKind::Roof(r) => roof(p, e.id, r),
+        ElementKind::Ceiling(c) => ceiling(p, e.id, c),
         ElementKind::Stair(s) => stair(p, s),
         ElementKind::Ramp(r) => ramp(p, r),
         ElementKind::Railing(r) => railing(p, r),
@@ -457,11 +457,13 @@ fn curtain_wall(p: &Project, w: &Wall, t: &SystemType, zb: f64, zt: f64) -> Mesh
 
 // ---------------------------------------------------------------- floors, ceilings, shafts
 
-/// Shaft openings overlapping the vertical band [z0, z1].
-pub fn shafts_cutting(p: &Project, z0: f64, z1: f64) -> Vec<Vec<DVec2>> {
+/// Openings cutting element `host` within the vertical band [z0, z1]: shafts overlapping the
+/// band, and vertical openings made in `host` itself.
+pub fn shafts_cutting(p: &Project, host: Id, z0: f64, z1: f64) -> Vec<Vec<DVec2>> {
     p.elements
         .iter()
         .filter_map(|e| match &e.kind {
+            ElementKind::Shaft(s) if s.host.is_some() => (s.host == Some(host) && s.boundary.len() >= 3).then(|| s.boundary.clone()),
             ElementKind::Shaft(s) => {
                 let b = p.level_elevation(s.base_level) + s.base_offset;
                 let t = match s.top_level.and_then(|l| p.level(l)) {
@@ -475,7 +477,7 @@ pub fn shafts_cutting(p: &Project, z0: f64, z1: f64) -> Vec<Vec<DVec2>> {
         .collect()
 }
 
-fn floor(p: &Project, _id: Id, f: &Floor) -> MeshSet {
+fn floor(p: &Project, id: Id, f: &Floor) -> MeshSet {
     let mut set = MeshSet::default();
     if f.boundary.len() < 3 {
         return set;
@@ -483,7 +485,7 @@ fn floor(p: &Project, _id: Id, f: &Floor) -> MeshSet {
     let top = analysis::floor_top_z(p, f);
     let thick = analysis::floor_thickness(p, f);
     let mut holes = f.holes.clone();
-    holes.extend(shafts_cutting(p, top - thick, top));
+    holes.extend(shafts_cutting(p, id, top - thick, top));
     let mut z = top;
     match p.sys_type(f.type_id) {
         Some(t) if !t.layers.is_empty() => {
@@ -506,7 +508,7 @@ fn floor(p: &Project, _id: Id, f: &Floor) -> MeshSet {
     set
 }
 
-fn ceiling(p: &Project, c: &Ceiling) -> MeshSet {
+fn ceiling(p: &Project, id: Id, c: &Ceiling) -> MeshSet {
     let mut set = MeshSet::default();
     if c.boundary.len() < 3 {
         return set;
@@ -514,7 +516,7 @@ fn ceiling(p: &Project, c: &Ceiling) -> MeshSet {
     let z = p.level_elevation(c.level) + c.height_offset;
     let thick = analysis::ceiling_thickness(p, c);
     let mut holes = c.holes.clone();
-    holes.extend(shafts_cutting(p, z, z + thick));
+    holes.extend(shafts_cutting(p, id, z, z + thick));
     let mut zz = z + thick;
     match p.sys_type(c.type_id) {
         Some(t) if !t.layers.is_empty() => {
@@ -639,7 +641,7 @@ fn merge_collinear(mut segs: Vec<(DVec2, DVec2)>) -> Vec<(DVec2, DVec2)> {
     segs
 }
 
-fn roof(p: &Project, r: &Roof) -> MeshSet {
+fn roof(p: &Project, id: Id, r: &Roof) -> MeshSet {
     let mut set = MeshSet::default();
     if r.footprint.len() < 3 {
         return set;
@@ -676,7 +678,7 @@ fn roof(p: &Project, r: &Roof) -> MeshSet {
     }
     // Shafts cut through the roof.
     let (z0, z1) = under.iter().flat_map(|t| t.iter()).fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(v.z), b.max(v.z)));
-    for s in shafts_cutting(p, z0, z1 + thick) {
+    for s in shafts_cutting(p, id, z0, z1 + thick) {
         set = csg::subtract_set(&set, &csg::prism(&s, z0 - 10.0, z1 + thick + 10.0));
     }
     if r.fascia || r.gutter {
@@ -1089,5 +1091,29 @@ mod stair_tests {
         assert!((span(&ys) - w).abs() < 1e-6, "landing depth {}", span(&ys));
         assert!((span(&xs) - (1300.0 + w)).abs() < 1e-6, "landing width {}", span(&xs));
         assert!(!stair(&p, s).by_material.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod opening_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// A vertical opening cuts its own floor only; a floor above it stays whole.
+    #[test]
+    fn vertical_opening_cuts_only_its_host() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let (l1, l2) = (p.levels()[0].0, p.levels()[1].0);
+        let ty = p.types_of(Category::Floors).next().unwrap().id;
+        let sq = |s: f64| vec![DVec2::new(0.0, 0.0), DVec2::new(s, 0.0), DVec2::new(s, s), DVec2::new(0.0, s)];
+        let f1 = crate::edit::add_floor(&mut p, l1, ty, sq(6000.0)).unwrap();
+        let f2 = crate::edit::add_floor(&mut p, l2, ty, sq(6000.0)).unwrap();
+        let hole: Vec<DVec2> = sq(1000.0).iter().map(|q| *q + DVec2::splat(2000.0)).collect();
+        let o = crate::edit::add_vertical_opening(&mut p, f1, hole).unwrap();
+        assert_eq!(shafts_cutting(&p, f1, -1e9, 1e9).len(), 1);
+        assert!(shafts_cutting(&p, f2, -1e9, 1e9).is_empty());
+        // Deleting the floor deletes its opening.
+        crate::edit::delete_elements(&mut p, &[f1]).unwrap();
+        assert!(p.element(o).is_none());
     }
 }
