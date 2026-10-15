@@ -1051,25 +1051,29 @@ fn hosted_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: 
     let (center, dir) = analysis::wall_point(&w, along);
     let n = geom::perp(dir);
     let t = analysis::wall_thickness(p, &w) / 2.0 + 20.0;
-    let q = [center - dir * (width / 2.0) - n * t, center + dir * (width / 2.0) - n * t, center + dir * (width / 2.0) + n * t, center - dir * (width / 2.0) + n * t];
-    painter.add(egui::Shape::closed_line(q.iter().map(|x| xf.s(*x)).collect(), Stroke::new(2.0, style::PREVIEW)));
     let flip = (side > 0.0) != app.opts.place_flip;
-    if is_door {
-        let s = if flip { 1.0 } else { -1.0 };
-        let hinge = center - dir * (width / 2.0) + n * (s * t);
-        let arc: Vec<Pos2> = (0..=16)
-            .map(|k| {
-                let a = std::f64::consts::FRAC_PI_2 * k as f64 / 16.0;
-                xf.s(hinge + dir * (width * a.cos()) + n * (s * width * a.sin()))
-            })
-            .collect();
-        painter.add(egui::Shape::line(arc, Stroke::new(1.0, style::PREVIEW)));
+    // As in the reference app the preview is the family's own plan symbol where it will go,
+    // and the cursor tooltip only appears away from walls.
+    painter.ctx().data_mut(|m| m.insert_temp(egui::Id::new("no-prompt-tip"), true));
+    let probe = p.family_type(type_id).map(|(f, _)| FamilyInstance { family_id: f.id, type_id, category: f.category, level: w.base_level, host: Some(wall_id), offset_along_host: along, flip_facing: flip, ..Default::default() });
+    if let Some(probe) = &probe {
+        let cut_z = p.level_elevation(level) + view.view_range.cut;
+        let probe = FamilyInstance { elevation: if is_door { 0.0 } else { app.opts.window_sill.unwrap_or(900.0) }, ..probe.clone() };
+        for s in rc_core::family_geom::instance_symbol(p, &probe, cut_z) {
+            let mut pts: Vec<Pos2> = s.pts.iter().map(|q| xf.s(*q)).collect();
+            if s.closed && !pts.is_empty() {
+                pts.push(pts[0]);
+            }
+            let w = if matches!(s.style, rc_core::family_geom::SymStyle::Cut) { 1.6 } else { 1.0 };
+            painter.add(egui::Shape::line(pts, Stroke::new(w, Color32::from_gray(70))));
+        }
+        // Temporary dimensions from the opening's edges to the nearest references, on the
+        // side it opens to.
+        let facing = n * if flip { 1.0 } else { -1.0 };
+        for td in crate::tempdims::hosted_dims_on(p, 0, &probe, &w, along, facing) {
+            temp_dim(painter, xf, td.a, td.b, &p.units.length(td.value), td.offset_px * 3.0);
+        }
     }
-    let units = p.units.clone();
-    let (s0, _) = analysis::wall_point(&w, 0.0);
-    let (s1, _) = analysis::wall_point(&w, len);
-    temp_dim(painter, xf, s0, center, &units.length(along), 26.0);
-    temp_dim(painter, xf, center, s1, &units.length(len - along), 26.0);
     if clicked {
         let tag = app.opts.tag_on_placement;
         let vid = view.id;

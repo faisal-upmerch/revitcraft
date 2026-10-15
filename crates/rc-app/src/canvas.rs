@@ -1171,7 +1171,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         }
     }
     // The tool's prompt follows the cursor when it rests and nothing is snapped.
-    if !app.tool.is_select() && app.interact.snap.as_ref().is_none_or(|s| s.kind == SnapKind::Free) && app.typed.is_empty() {
+    let no_tip = ui.ctx().data_mut(|m| m.remove_temp::<bool>(egui::Id::new("no-prompt-tip"))).unwrap_or(false);
+    if !no_tip && !app.tool.is_select() && app.interact.snap.as_ref().is_none_or(|s| s.kind == SnapKind::Free) && app.typed.is_empty() {
         if let Some(c) = resp.hover_pos() {
             let still = ui.input(|i| i.pointer.time_since_last_movement());
             if still > 0.35 && !app.interact.prompt.is_empty() {
@@ -1299,6 +1300,15 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
             }
         } else {
             app.interact.prompt = "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into();
+            // Over empty canvas the reference app shows the same hint beside a resting cursor.
+            if let Some(pos) = resp.hover_pos() {
+                let still = ui.input(|i| i.pointer.time_since_last_movement());
+                if still > 0.35 && app.interact.drag.is_none() && grip_hover.is_none() && tdim_hit.is_none() && perm_hit.is_none() {
+                    style::canvas_tooltip(painter, pos + vec2(12.0, 16.0), &app.interact.prompt);
+                } else if still <= 0.35 {
+                    ui.ctx().request_repaint_after(std::time::Duration::from_millis(400));
+                }
+            }
         }
     }
 
@@ -1416,8 +1426,12 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                     }
                 }
                 app.interact.drag = None;
-            } else if let Some(pt) = app.interact.point {
-                crate::canvas::temp_dim(painter, xf, start, pt, &app.doc.data.units.length(start.distance(pt)), -18.0);
+            } else {
+                // The reference app shows only the ghost and this hint while dragging.
+                app.interact.prompt = "Drag to new position".into();
+                if let Some(c) = resp.hover_pos() {
+                    style::canvas_tooltip(painter, c + vec2(12.0, 16.0), "Drag to new position");
+                }
             }
         }
         Some(Drag::Grip { id, grip, start }) => {

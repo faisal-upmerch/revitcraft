@@ -112,7 +112,12 @@ pub fn hosted_drag(app: &App) -> Option<(Id, f64, DVec2)> {
 /// The reference app's temporary dimensions of a door or window: from each edge of the
 /// opening to the nearest reference on that side along the host (the face of a wall that
 /// meets or crosses it, another opening, or the wall end), both on the exterior side.
-fn hosted_dims(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: f64) -> Vec<TempDim> {
+pub fn hosted_dims(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: f64) -> Vec<TempDim> {
+    hosted_dims_on(p, id, i, w, along, w.normal())
+}
+
+/// [`hosted_dims`] drawn on the side of the wall that `side` points to.
+pub fn hosted_dims_on(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: f64, side: DVec2) -> Vec<TempDim> {
     let len = w.length();
     let hw = analysis::opening_size(p, i).0 / 2.0;
     let (ul, ur) = (along - hw, along + hw);
@@ -148,7 +153,7 @@ fn hosted_dims(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: f64) ->
     let right = refs.iter().copied().filter(|r| *r >= ur + 1.0).fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.min(r))));
     // Witness lines start at the exterior face; the dimension line sits outside it.
     let face = analysis::wall_thickness(p, w) / 2.0;
-    let n = w.normal();
+    let n = if side.dot(w.normal()) >= 0.0 { w.normal() } else { -w.normal() };
     let at = |u: f64| analysis::wall_point(w, u).0 + n * face;
     let mut out = Vec::new();
     for (r, e) in left.map(|r| (r, ul)).into_iter().chain(right.map(|r| (r, ur))) {

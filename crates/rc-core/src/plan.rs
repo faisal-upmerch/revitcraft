@@ -429,6 +429,23 @@ pub fn pattern_lines(poly: &[DVec2], pattern: FillPattern, scale: f64) -> Vec<(D
     }
 }
 
+/// Where the ray from `c` towards `to` leaves a closed outline (or `c` without one).
+fn edge_toward(outline: &[DVec2], c: DVec2, to: DVec2) -> DVec2 {
+    let far = c + (to - c).normalize_or_zero() * 1.0e7;
+    let mut best: Option<(f64, DVec2)> = None;
+    for k in 0..outline.len() {
+        if let Some((t, u)) = geom::segment_intersection(c, far, outline[k], outline[(k + 1) % outline.len()]) {
+            if t > 0.0 && (0.0..=1.0).contains(&u) && best.is_none_or(|b| t < b.0) {
+                best = Some((t, c + (far - c) * t));
+            }
+        }
+    }
+    match best {
+        Some((_, q)) if q.distance(c) < to.distance(c) => q,
+        _ => c,
+    }
+}
+
 /// The concrete aggregate pattern: small triangles and dots scattered in a repeating tile
 /// (paper sizes, so the pattern reads the same at any scale).
 pub fn concrete_stipple(poly: &[DVec2], scale: f64) -> Vec<(DVec2, DVec2)> {
@@ -1476,19 +1493,38 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     }
                     continue;
                 }
+                // The tag's outline: the reference template's door tag is a pill, its window
+                // tag a diamond, other tags a box. Leaders start on the outline.
+                let mut outline: Vec<DVec2> = Vec::new();
                 if !room {
-                    let pts = vec![
-                        t.position + DVec2::new(-w / 2.0, -boxh / 2.0),
-                        t.position + DVec2::new(w / 2.0, -boxh / 2.0),
-                        t.position + DVec2::new(w / 2.0, boxh / 2.0),
-                        t.position + DVec2::new(-w / 2.0, boxh / 2.0),
-                    ];
-                    let is_door_window = p.element(t.host).is_some_and(|h| matches!(h.category(), Category::Doors | Category::Windows));
-                    if is_door_window {
-                        d.line(Some(e.id), circle(t.position, (w.max(boxh)) / 2.0, 24), true, ANNO);
-                    } else {
-                        d.line(Some(e.id), pts, true, ANNO);
-                    }
+                    let host_cat = p.element(t.host).map(|h| h.category());
+                    outline = match host_cat {
+                        Some(Category::Doors) => {
+                            let r = boxh / 2.0;
+                            let half = (w / 2.0 - r).max(r * 0.6);
+                            let mut v = Vec::new();
+                            for k in 0..=12 {
+                                let a = -std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * k as f64 / 12.0;
+                                v.push(t.position + DVec2::new(half + r * a.cos(), r * a.sin()));
+                            }
+                            for k in 0..=12 {
+                                let a = std::f64::consts::FRAC_PI_2 + std::f64::consts::PI * k as f64 / 12.0;
+                                v.push(t.position + DVec2::new(-half + r * a.cos(), r * a.sin()));
+                            }
+                            v
+                        }
+                        Some(Category::Windows) => {
+                            let s = (w.max(boxh) / 2.0) * 1.45;
+                            vec![t.position + DVec2::new(s, 0.0), t.position + DVec2::new(0.0, s), t.position + DVec2::new(-s, 0.0), t.position + DVec2::new(0.0, -s)]
+                        }
+                        _ => vec![
+                            t.position + DVec2::new(-w / 2.0, -boxh / 2.0),
+                            t.position + DVec2::new(w / 2.0, -boxh / 2.0),
+                            t.position + DVec2::new(w / 2.0, boxh / 2.0),
+                            t.position + DVec2::new(-w / 2.0, boxh / 2.0),
+                        ],
+                    };
+                    d.line(Some(e.id), outline.clone(), true, ANNO);
                 }
                 for (k, l) in lines.iter().enumerate() {
                     let y = (lines.len() as f64 - 1.0) / 2.0 - k as f64;
@@ -1497,7 +1533,8 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 if t.leader {
                     let host = p.element(t.host).map(|h| annotation::host_point(p, h)).unwrap_or(t.position);
                     let end = t.leader_end.unwrap_or(host);
-                    d.line(Some(e.id), vec![t.position, end], false, ANNO);
+                    let start = edge_toward(&outline, t.position, end);
+                    d.line(Some(e.id), vec![start, end], false, ANNO);
                 }
             }
             ElementKind::Text(tn) => {
