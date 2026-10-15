@@ -205,6 +205,18 @@ pub fn new_project(system: UnitSystem) -> Project {
     );
     let conc = sys(&mut p, Category::Walls, if imp { "Generic - 12\"" } else { "Generic - 300mm" }, WallFunction::Exterior, 180.0, vec![layer(Structure, "Concrete", t(300.0, 12.0), true)], &[], &[]);
     let found = sys(&mut p, Category::Walls, if imp { "Foundation - 12\" Concrete" } else { "Foundation - 300mm Concrete" }, WallFunction::Foundation, 160.0, vec![layer(Structure, "Concrete", t(300.0, 12.0), true)], &[], &[]);
+    // The reference app's plain curtain wall: no grid, no mullions until they are added.
+    let cw0 = p.new_id();
+    p.types.push(SystemType {
+        id: cw0,
+        category: Category::Walls,
+        name: "Curtain Wall 1".into(),
+        cost: 480.0,
+        wall_kind: WallKind::Curtain,
+        props: [("Vertical Spacing", 0.0), ("Horizontal Spacing", 0.0), ("Mullion Width", 0.0), ("Mullion Depth", 0.0)].iter().map(|(k, v)| (k.to_string(), *v)).collect(),
+        texts: [("Mullion Material", "Aluminum"), ("Panel Material", "Glass"), ("Solid Panel Material", "Aluminum")].iter().map(|(k, v)| (k.to_string(), v.to_string())).collect(),
+        ..Default::default()
+    });
     let cw_id = p.new_id();
     p.types.push(SystemType {
         id: cw_id,

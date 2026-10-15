@@ -64,6 +64,7 @@ pub enum ToolKind {
     Callout,
     ElevationMarker,
     CurtainGrid,
+    Mullion,
     WallOpening,
     VerticalOpening,
     PlaceGroup,
@@ -149,6 +150,7 @@ impl ToolKind {
             ToolKind::Callout => "Callout",
             ToolKind::ElevationMarker => "Elevation",
             ToolKind::CurtainGrid => "Curtain Grid",
+            ToolKind::Mullion => "Mullion",
             ToolKind::WallOpening => "Wall Opening",
             ToolKind::VerticalOpening => "Vertical Opening",
             ToolKind::PlaceGroup => "Model Group",
@@ -247,6 +249,7 @@ impl ToolKind {
                 | ToolKind::VerticalOpening
                 | ToolKind::PlaceGroup
                 | ToolKind::CurtainGrid
+                | ToolKind::Mullion
         )
     }
 }
@@ -645,6 +648,8 @@ pub struct ToolOptions {
     pub roof_base_offset: f64,
     /// New ceilings: Height Offset From Level.
     pub ceiling_offset: f64,
+    /// Mullion placement: 0 = Grid Line, 1 = Grid Line Segment, 2 = All Grid Lines.
+    pub mullion_mode: u8,
     /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
     pub use_radius: bool,
     /// New stairs (Properties and options bar while the runs are drawn).
@@ -783,6 +788,7 @@ impl ToolOptions {
             roof_base_offset: 0.0,
             ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
             use_radius: false,
+            mullion_mode: 0,
             stair_location: StairLocation::RunCenter,
             stair_base_offset: 0.0,
             stair_top: None,

@@ -29,13 +29,14 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp),
         RampBoundary | RampRiser => false,
         PlaceRoomsAuto | HighlightBoundaries => plan && !in_sketch,
+        MullionGridLine | MullionSegment | MullionAllLines => app.tool.kind == ToolKind::Mullion,
         StairLanding | StairSupport | ConnectLevels => false,
         RailingPickHost => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing),
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
         Door | Window | Component | Column | StructColumn | Beam | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
-        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | Shaft | WallOpening | VerticalOpening | CurtainGrid | Section | Callout | ElevationView
+        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | Shaft | WallOpening | VerticalOpening | Mullion | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
         RoofExtrusion => view.is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
@@ -349,6 +350,10 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         AreaTag => app.set_tool(ToolKind::AreaTag),
         WallOpening => app.set_tool(ToolKind::WallOpening),
         VerticalOpening => app.set_tool(ToolKind::VerticalOpening),
+        Mullion => app.set_tool(ToolKind::Mullion),
+        MullionGridLine => app.opts.mullion_mode = 0,
+        MullionSegment => app.opts.mullion_mode = 1,
+        MullionAllLines => app.opts.mullion_mode = 2,
         Level => app.set_tool(ToolKind::Level),
         Grid => start_drawing(app, ToolKind::Grid),
         RefPlane => start_drawing(app, ToolKind::RefPlane),
@@ -970,7 +975,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
     matches!(
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
-            | Railing | Stair | Ramp | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | VerticalOpening | Level | Grid | RefPlane
+            | Railing | Stair | Ramp | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | VerticalOpening | Mullion | Level | Grid | RefPlane
             | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | RepeatingDetail | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure

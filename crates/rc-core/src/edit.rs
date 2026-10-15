@@ -844,6 +844,32 @@ pub fn add_shaft(p: &mut Project, base_level: Id, boundary: Vec<DVec2>) -> Resul
     Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level, top_offset: 0.0, base_offset: 0.0, unconnected_height: 3000.0, host: None })))
 }
 
+/// Adds (`on`) or removes mullions on curtain grid segments of a curtain wall, fixing its grid.
+pub fn set_mullions(p: &mut Project, wall: Id, keys: &[String], on: bool) -> Result<usize, String> {
+    let w = p.wall(wall).cloned().ok_or("Pick a curtain wall.")?;
+    if !analysis::is_curtain(p, &w) {
+        return Err("Mullions go on curtain walls.".into());
+    }
+    let (_, _, auto) = build3d::mullion_spec(p, p.sys_type(w.type_id));
+    let (gu, gv) = build3d::curtain_grid(p, &w);
+    let wall_mut = p.element_mut(wall).and_then(Element::as_wall_mut).ok_or("Wall not found.")?;
+    let inner = |v: &[f64]| v[1..v.len() - 1].to_vec();
+    let grid = wall_mut.curtain.get_or_insert_with(|| CurtainGrid { u: inner(&gu), v: inner(&gv), ..Default::default() });
+    let mut n = 0;
+    for k in keys {
+        let was = grid.mullions.get(k).copied().unwrap_or(auto);
+        if was != on {
+            n += 1;
+        }
+        if on == auto {
+            grid.mullions.remove(k);
+        } else {
+            grid.mullions.insert(k.clone(), on);
+        }
+    }
+    Ok(n)
+}
+
 /// A vertical opening: cuts only `host` (a floor, roof or ceiling), through its whole depth.
 pub fn add_vertical_opening(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
     let boundary = geom::clean(&boundary, 1.0);

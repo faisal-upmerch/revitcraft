@@ -38,6 +38,10 @@ pub enum Icon {
     Shaft,
     WallOpening,
     VerticalOpening,
+    Mullion,
+    MullionGridLine,
+    MullionSegment,
+    MullionAllLines,
     Level,
     Grid,
     RefPlane,
@@ -756,6 +760,31 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.26, 0.08, 0.74, 0.92, Color32::WHITE, ink);
             g.thin_line(&[(0.26, 0.08), (0.74, 0.92)], ink);
             g.thin_line(&[(0.74, 0.08), (0.26, 0.92)], ink);
+        }
+        Mullion => {
+            g.rect(0.08, 0.08, 0.92, 0.92, LBLUE, ink);
+            g.rect(0.44, 0.08, 0.56, 0.92, G2, ink);
+            g.rect(0.08, 0.44, 0.92, 0.56, G2, ink);
+        }
+        MullionGridLine => {
+            g.rect(0.12, 0.08, 0.88, 0.92, LBLUE, ink);
+            g.dashed((0.12, 0.36), (0.88, 0.36), ink);
+            g.dashed((0.12, 0.64), (0.88, 0.64), ink);
+            g.rect(0.44, 0.08, 0.56, 0.92, BLUE, ink);
+        }
+        MullionSegment => {
+            g.rect(0.12, 0.08, 0.88, 0.92, LBLUE, ink);
+            g.dashed((0.12, 0.36), (0.88, 0.36), ink);
+            g.dashed((0.12, 0.64), (0.88, 0.64), ink);
+            g.dashed((0.5, 0.08), (0.5, 0.92), ink);
+            g.rect(0.44, 0.36, 0.56, 0.64, BLUE, ink);
+        }
+        MullionAllLines => {
+            g.rect(0.12, 0.08, 0.88, 0.92, LBLUE, ink);
+            for x in [0.36f32, 0.64] {
+                g.rect(x - 0.05, 0.08, x + 0.05, 0.92, BLUE, ink);
+            }
+            g.rect(0.12, 0.45, 0.88, 0.55, BLUE, ink);
         }
         VerticalOpening => {
             // A slab in perspective with a hole cut through it.

@@ -572,6 +572,16 @@ impl Ctx<'_> {
     }
 }
 
+/// Height of a plan view's cut plane.
+pub fn view_cut_z(p: &Project, view: &View) -> Option<f64> {
+    let level = view.plan_level()?;
+    let cut = match view.kind {
+        ViewKind::FloorPlan { cut_height, .. } if (view.view_range.cut - 1200.0).abs() < 1e-6 => cut_height,
+        _ => view.view_range.cut,
+    };
+    Some(p.level_elevation(level) + cut)
+}
+
 /// Builds the drawing for a plan-type view.
 pub fn floor_plan(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Drawing {
     let mut d = Drawing::default();
@@ -1299,11 +1309,16 @@ fn split_by_openings(w: &Wall, pts: &[DVec2], openings: &[(f64, f64)]) -> Vec<Ve
 
 fn curtain_plan(c: &Ctx, id: Id, w: &Wall, d: &mut Drawing) {
     let p = c.p;
-    let (us, _) = build3d::curtain_grid(p, w);
-    let t = p.sys_type(w.type_id);
-    let (mw, md) = (t.map(|t| t.prop("Mullion Width", 50.0)).unwrap_or(50.0), t.map(|t| t.prop("Mullion Depth", 150.0)).unwrap_or(150.0));
+    let (us, vs) = build3d::curtain_grid(p, w);
+    let (mw, md, auto) = build3d::mullion_spec(p, p.sys_type(w.type_id));
     d.line(Some(id), analysis::wall_path(w), false, MEDIUM);
-    for u in us {
+    // Mullions cut by the view: the vertical segment at the cut height of each grid line.
+    let zb = p.level_elevation(w.base_level) + w.base_offset;
+    let row = vs.windows(2).position(|r| zb + r[0] <= c.cut_z && c.cut_z < zb + r[1]).unwrap_or(0);
+    for (i, u) in us.into_iter().enumerate() {
+        if !build3d::has_mullion(w, &format!("v{i}:{row}"), auto) {
+            continue;
+        }
         let (pt, dir) = analysis::wall_point(w, u);
         let n = geom::perp(dir);
         let q = vec![pt - dir * (mw / 2.0) - n * (md / 2.0), pt + dir * (mw / 2.0) - n * (md / 2.0), pt + dir * (mw / 2.0) + n * (md / 2.0), pt - dir * (mw / 2.0) + n * (md / 2.0)];

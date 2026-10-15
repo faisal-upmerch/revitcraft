@@ -156,6 +156,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
+        ToolKind::Mullion => "Select a grid line to create mullion.".into(),
         ToolKind::VerticalOpening => "Select a roof, floor, or ceiling.".into(),
         ToolKind::WallOpening => if n == 0 { "Click a wall at one side of the opening.".into() } else { "Click the other side of the opening.".into() },
         ToolKind::WallFoundation => "Pick a wall to add a wall foundation under it.".into(),
@@ -493,7 +494,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 }
             }
         }
-        ToolKind::CurtainGrid | ToolKind::WallOpening | ToolKind::WallFoundation => wall_pick_tool(app, painter, xf, view, d, cursor, point, clicked),
+        ToolKind::CurtainGrid | ToolKind::Mullion | ToolKind::WallOpening | ToolKind::WallFoundation => wall_pick_tool(app, painter, xf, view, d, cursor, point, clicked),
         _ => modify_tool(app, ui, resp, painter, xf, view, d, cursor, point, clicked),
     }
 }
@@ -2410,7 +2411,7 @@ fn wall_pick_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
     let Some(c) = cursor else { return };
     let Some(level) = view.plan_level() else { return };
     let kind = app.tool.kind;
-    let curtain_only = kind == ToolKind::CurtainGrid;
+    let curtain_only = matches!(kind, ToolKind::CurtainGrid | ToolKind::Mullion);
     let first_wall = app.tool.picked.first().copied();
     let wall = match first_wall {
         Some(w) if kind == ToolKind::WallOpening => Some(w),
@@ -2438,6 +2439,33 @@ fn wall_pick_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
                 }
             }
         }
+        ToolKind::Mullion => {
+            // The grid line nearest the cursor (borders included) takes the mullion.
+            let (us, vs) = rc_core::build3d::curtain_grid(p, &w);
+            let (mw, md, _) = rc_core::build3d::mullion_spec(p, p.sys_type(w.type_id));
+            let Some((i, &gu)) = us.iter().enumerate().min_by(|a, b| (a.1 - u).abs().total_cmp(&(b.1 - u).abs())) else { return };
+            let zb = p.level_elevation(w.base_level) + w.base_offset;
+            let cut = rc_core::plan::view_cut_z(p, view).unwrap_or(zb + 1200.0);
+            let row = vs.windows(2).position(|r| zb + r[0] <= cut && cut < zb + r[1]).unwrap_or(0);
+            let keys: Vec<String> = match app.opts.mullion_mode {
+                1 => vec![format!("v{i}:{row}")],
+                2 => (0..us.len())
+                    .flat_map(|a| (0..vs.len() - 1).map(move |b| format!("v{a}:{b}")))
+                    .chain((0..vs.len()).flat_map(|a| (0..us.len() - 1).map(move |b| format!("h{a}:{b}"))))
+                    .collect(),
+                _ => (0..vs.len() - 1).map(|b| format!("v{i}:{b}")).collect(),
+            };
+            let lines: Vec<f64> = if app.opts.mullion_mode == 2 { us.clone() } else { vec![gu] };
+            for x in lines {
+                let (pt, dir) = analysis::wall_point(&w, x);
+                let nn = geom::perp(dir);
+                let q = [pt - dir * (mw / 2.0) - nn * (md / 2.0), pt + dir * (mw / 2.0) - nn * (md / 2.0), pt + dir * (mw / 2.0) + nn * (md / 2.0), pt - dir * (mw / 2.0) + nn * (md / 2.0)];
+                painter.add(egui::Shape::closed_line(q.iter().map(|v| xf.s(*v)).collect(), Stroke::new(2.0, style::PRESELECT)));
+            }
+            if clicked {
+                app.run("Mullion", |p| edit::set_mullions(p, wid, &keys, true).map(|_| ()));
+            }
+        }
         ToolKind::CurtainGrid => {
             painter.line_segment([xf.s(q - n * (t / 2.0 + 200.0)), xf.s(q + n * (t / 2.0 + 200.0))], Stroke::new(2.0, Color32::from_rgb(220, 40, 40)));
             temp_dim(painter, xf, analysis::wall_point(&w, 0.0).0, q, &units.length(u), 22.0);
@@ -2445,7 +2473,7 @@ fn wall_pick_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
                 app.run("Add Curtain Grid", |p| {
                     let (gu, gv) = rc_core::build3d::curtain_grid(p, &w);
                     let wall = p.element_mut(wid).and_then(Element::as_wall_mut).ok_or("Wall not found.")?;
-                    let grid = wall.curtain.get_or_insert_with(|| CurtainGrid { u: gu, v: gv, panels: Default::default() });
+                    let grid = wall.curtain.get_or_insert_with(|| CurtainGrid { u: gu, v: gv, ..Default::default() });
                     if grid.u.iter().any(|x| (x - u).abs() < 50.0) {
                         return Err("There is already a grid line here.".into());
                     }

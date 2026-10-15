@@ -83,6 +83,7 @@ fn architecture() -> Vec<Panel> {
                 Big(C::Ceiling),
                 Labeled("Floor", C::Floor, vec![C::Floor, C::FloorStructural]),
                 Labeled("Curtain\nGrid", C::CurtainGrid, vec![]),
+                Labeled("Mullion", C::Mullion, vec![]),
             ],
         ),
         panel("Circulation", vec![Big(C::Railing), Big(C::Ramp), Big(C::Stair)]),
@@ -420,6 +421,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
                 v.push(panel("Multiple", vec![Labeled("At\nGrids", C::ColumnsAtGrids, vec![]), Labeled("At\nColumns", C::ColumnsAtColumns, vec![])]));
             }
         }
+        if kind == ToolKind::Mullion {
+            v.push(panel("Placement", vec![Labeled("Grid\nLine", C::MullionGridLine, vec![]), Labeled("Grid Line\nSegment", C::MullionSegment, vec![]), Labeled("All Grid\nLines", C::MullionAllLines, vec![])]));
+        }
         if kind == ToolKind::Room {
             v.push(panel("Room", vec![Labeled("Place Rooms\nAutomatically", C::PlaceRoomsAuto, vec![]), Labeled("Highlight\nBoundaries", C::HighlightBoundaries, vec![])]));
         }
@@ -535,6 +539,9 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::SketchBoundary => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::Boundary,
         C::SlopeArrow => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SlopeArrow,
         C::SpanDirection => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SpanDirection,
+        C::MullionGridLine => k == T::Mullion && app.opts.mullion_mode == 0,
+        C::MullionSegment => k == T::Mullion && app.opts.mullion_mode == 1,
+        C::MullionAllLines => k == T::Mullion && app.opts.mullion_mode == 2,
         C::RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) && k == T::SketchLine,
         C::StairRun | C::StairStraight => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) && k == T::SketchLine,
         C::RailingPickHost => app.opts.sketch_sub == crate::tools::SketchSub::PickHost,

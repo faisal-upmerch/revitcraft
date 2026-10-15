@@ -567,6 +567,10 @@ pub struct CurtainGrid {
     /// Panels replaced by doors or solid panels, keyed by (column, row).
     #[serde(default)]
     pub panels: BTreeMap<String, PanelKind>,
+    /// Mullions added (true) or removed (false) on grid segments: "v{line}:{row}" for vertical
+    /// grid lines (borders included), "h{line}:{bay}" for horizontal ones.
+    #[serde(default)]
+    pub mullions: BTreeMap<String, bool>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]

@@ -399,22 +399,46 @@ pub fn curtain_grid(p: &Project, w: &Wall) -> (Vec<f64>, Vec<f64>) {
     (u, v)
 }
 
+/// Mullion (width, depth) of a curtain wall type, and whether its grid lines get mullions
+/// automatically. Types without a mullion width (like the reference app's "Curtain Wall")
+/// have none until the Mullion tool adds them, at the template's rectangular mullion size.
+pub fn mullion_spec(p: &Project, t: Option<&SystemType>) -> (f64, f64, bool) {
+    let mw = t.map(|t| t.prop("Mullion Width", 0.0)).unwrap_or(0.0);
+    if mw > 0.0 {
+        (mw, t.map(|t| t.prop("Mullion Depth", 150.0)).unwrap_or(150.0), true)
+    } else if p.units.system == crate::units::UnitSystem::Imperial {
+        (63.5, 127.0, false)
+    } else {
+        (50.0, 150.0, false)
+    }
+}
+
+/// Is there a mullion on grid segment `key` ("v{line}:{row}" or "h{line}:{bay}")?
+pub fn has_mullion(w: &Wall, key: &str, auto: bool) -> bool {
+    w.curtain.as_ref().and_then(|g| g.mullions.get(key)).copied().unwrap_or(auto)
+}
+
 fn curtain_wall(p: &Project, w: &Wall, t: &SystemType, zb: f64, zt: f64) -> MeshSet {
     let mut set = MeshSet::default();
     let (us, vs) = curtain_grid(p, w);
-    let mw = t.prop("Mullion Width", 50.0);
-    let md = t.prop("Mullion Depth", 150.0);
+    let (mw, md, auto) = mullion_spec(p, Some(t));
     let mullion = t.text("Mullion Material", "Aluminum");
     let glass = t.text("Panel Material", "Glass");
     let solid = t.text("Solid Panel Material", "Aluminum");
     let panel_t = 24.0;
     let point = |u: f64| analysis::wall_point(w, u);
-    // Vertical mullions.
-    for &u in &us {
+    // Vertical mullions, segment by segment between horizontal grid lines.
+    for (i, &u) in us.iter().enumerate() {
         let (c, d) = point(u);
         let n = geom::perp(d);
-        let o = geom::at(c - d * (mw / 2.0) - n * (md / 2.0), zb);
-        set.add_box(&mullion, o, geom::at(d * mw, 0.0), geom::at(n * md, 0.0), DVec3::Z * (zt - zb));
+        for j in 0..vs.len() - 1 {
+            if !has_mullion(w, &format!("v{i}:{j}"), auto) {
+                continue;
+            }
+            let (z0, z1) = (zb + vs[j], (zb + vs[j + 1]).min(zt));
+            let o = geom::at(c - d * (mw / 2.0) - n * (md / 2.0), z0);
+            set.add_box(&mullion, o, geom::at(d * mw, 0.0), geom::at(n * md, 0.0), DVec3::Z * (z1 - z0));
+        }
     }
     // Horizontal mullions and panels per bay (subdivided along arcs).
     for i in 0..us.len() - 1 {
@@ -427,7 +451,10 @@ fn curtain_wall(p: &Project, w: &Wall, t: &SystemType, zb: f64, zt: f64) -> Mesh
             let d = (pb - pa).normalize_or_zero();
             let n = geom::perp(d);
             let len = pa.distance(pb);
-            for &v in &vs {
+            for (jv, &v) in vs.iter().enumerate() {
+                if !has_mullion(w, &format!("h{jv}:{i}"), auto) {
+                    continue;
+                }
                 let z = zb + v;
                 let o = geom::at(pa - n * (md / 2.0), (z - mw / 2.0).max(zb));
                 let hgt = (z + mw / 2.0).min(zt) - (z - mw / 2.0).max(zb);
@@ -1115,5 +1142,31 @@ mod opening_tests {
         // Deleting the floor deletes its opening.
         crate::edit::delete_elements(&mut p, &[f1]).unwrap();
         assert!(p.element(o).is_none());
+    }
+}
+
+#[cfg(test)]
+mod mullion_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// A plain curtain wall has no mullions until the Mullion tool adds them to grid segments.
+    #[test]
+    fn mullions_follow_their_segments() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let ty = p.types.iter().find(|t| t.name == "Curtain Wall 1").unwrap().id;
+        let id = crate::edit::add_wall(&mut p, l1, ty, DVec2::ZERO, DVec2::new(6000.0, 0.0), 3000.0).unwrap();
+        let w = p.wall(id).unwrap().clone();
+        let (_, _, auto) = mullion_spec(&p, p.sys_type(ty));
+        assert!(!auto);
+        let glass_only = curtain_wall(&p, &w, p.sys_type(ty).unwrap(), 0.0, 3000.0);
+        assert!(!glass_only.by_material.contains_key("Aluminum"));
+        // Both borders (the grid's two ends) get mullions.
+        crate::edit::set_mullions(&mut p, id, &["v0:0".to_string(), "v1:0".to_string()], true).unwrap();
+        let w = p.wall(id).unwrap().clone();
+        assert!(has_mullion(&w, "v1:0", auto) && !has_mullion(&w, "h0:0", auto));
+        let with = curtain_wall(&p, &w, p.sys_type(ty).unwrap(), 0.0, 3000.0);
+        assert!(with.by_material.contains_key("Aluminum"));
     }
 }
