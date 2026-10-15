@@ -49,8 +49,6 @@ enum Item {
     Stack(Vec<Cmd>),
     /// A grid of icon-only buttons (two rows).
     Icons(Vec<Cmd>),
-    /// Toggle with a state.
-    Toggle(Cmd, bool),
     /// Icon-only buttons stacked vertically (the sketch Mode panel's ✗ over ✓).
     Column(Vec<Cmd>),
     /// A big button with its own ribbon label ("\n" breaks the line) and optional
@@ -80,7 +78,7 @@ fn architecture() -> Vec<Panel> {
                 Big(C::Door),
                 Big(C::Window),
                 Labeled("Component", C::Component, vec![C::Component, C::LoadFamily, C::NewFamily]),
-                Labeled("Column", C::Column, vec![C::Column, C::StructColumn]),
+                Labeled("Column", C::StructColumn, vec![C::StructColumn, C::Column]),
                 Labeled("Roof", C::RoofFootprint, vec![C::RoofFootprint, C::RoofExtrusion]),
                 Big(C::Ceiling),
                 Labeled("Floor", C::Floor, vec![C::Floor, C::FloorStructural]),
@@ -377,8 +375,10 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
     if !app.tool.is_select() {
         let kind = app.tool.kind;
         let mut v = Vec::new();
-        if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting | ToolKind::Beam) {
-            v.push(panel("Mode", vec![Big(C::LoadFamily)]));
+        if kind == ToolKind::Component {
+            v.push(panel("Mode", vec![Labeled("Load\nFamily", C::LoadFamily, vec![]), Labeled("Model\nIn-place", C::ModelInPlace, vec![])]));
+        } else if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting | ToolKind::Beam) {
+            v.push(panel("Mode", vec![Labeled("Load\nFamily", C::LoadFamily, vec![])]));
         }
         if let Some(d) = draw_panel(app) {
             v.push(d);
@@ -386,9 +386,16 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if kind == ToolKind::CeilingAuto {
             v.push(panel("Ceiling", vec![Big(C::AutoCeiling), Big(C::SketchCeiling)]));
         }
-        if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Room) {
-            let on = if kind == ToolKind::Room { app.opts.room_tag } else { app.opts.tag_on_placement };
-            v.push(panel("Tag", vec![Toggle(C::TagByCategory, on)]));
+        if kind == ToolKind::StructColumn {
+            v.push(panel("Placement", vec![Labeled("Vertical\nColumn", C::VerticalColumn, vec![]), Labeled("Slanted\nColumn", C::SlantedColumn, vec![])]));
+            if app.opts.column_multi.is_some() {
+                v.push(panel("Multiple", vec![Column(vec![C::MultipleCancel, C::MultipleFinish])]));
+            } else {
+                v.push(panel("Multiple", vec![Labeled("At\nGrids", C::ColumnsAtGrids, vec![]), Labeled("At\nColumns", C::ColumnsAtColumns, vec![])]));
+            }
+        }
+        if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::StructColumn) {
+            v.push(panel("Tag", vec![Labeled("Tag on\nPlacement", C::TagOnPlacement, vec![])]));
         }
         let title = match kind {
             ToolKind::Move | ToolKind::Copy | ToolKind::Rotate | ToolKind::Align | ToolKind::Offset | ToolKind::MirrorPick | ToolKind::MirrorDraw | ToolKind::Array | ToolKind::Scale | ToolKind::TrimCorner | ToolKind::TrimSingle | ToolKind::TrimMulti | ToolKind::Split | ToolKind::SplitGap => {
@@ -486,6 +493,14 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
     }
     match cmd {
         C::Modify => k == T::Select,
+        C::TagOnPlacement => match k {
+            T::Room => app.opts.room_tag,
+            T::StructColumn => app.opts.column_tag,
+            _ => app.opts.tag_on_placement,
+        },
+        C::VerticalColumn => k == T::StructColumn,
+        C::ColumnsAtGrids => app.opts.column_multi == Some(crate::tools::ColumnMulti::AtGrids),
+        C::ColumnsAtColumns => app.opts.column_multi == Some(crate::tools::ColumnMulti::AtColumns),
         C::WorkPlaneShow => app.active.is_some_and(|v| app.show_work_plane.contains(&v)),
         C::SketchBoundary => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::Boundary,
         C::SlopeArrow => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SlopeArrow,
@@ -682,7 +697,6 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                             ui.add_space(2.0);
                             match item {
                                 Big(c) => big_button(ui, app, *c, None, None, None),
-                                Toggle(c, on) => big_button(ui, app, *c, None, None, Some(*on)),
                                 Split(c, alts) => big_button(ui, app, *c, None, Some(alts), None),
                                 // "User Interface" is a menu, not a toggle.
                                 Labeled(label, c, alts) => big_button(ui, app, *c, Some(label), if alts.is_empty() { None } else { Some(alts) }, label.starts_with("User").then_some(false)),

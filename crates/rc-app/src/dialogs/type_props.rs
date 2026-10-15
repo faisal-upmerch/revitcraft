@@ -241,7 +241,7 @@ fn family_type(app: &mut App, ui: &mut egui::Ui, tid: Id) {
                     ui.label(egui::RichText::new(format!("= {}", prm.formula)).color(style::text_dim()).italics());
                 } else if prm.kind == ParamKind::YesNo {
                     let mut b = r.yes_no(&prm.name, false);
-                    if ui.checkbox(&mut b, "").changed() {
+                    if crate::style::check(ui, &mut b, "").changed() {
                         edits.push((prm.name.clone(), if b { "Yes".into() } else { "No".into() }));
                     }
                     ui.label("");
@@ -351,7 +351,7 @@ fn assembly(app: &mut App, ctx: &egui::Context) {
                                 l.thickness = v.max(0.0);
                             }
                         }
-                        ui.checkbox(&mut l.core, "");
+                        crate::style::check(ui, &mut l.core, "");
                         ui.end_row();
                     }
                 });

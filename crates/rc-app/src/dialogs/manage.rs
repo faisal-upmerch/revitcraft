@@ -38,7 +38,7 @@ fn guide_grid(app: &mut App, ctx: &egui::Context) {
     window("Assign Guide Grid").open(&mut open).resizable(false).show(ctx, |ui| {
         let mut show = sh.guide_grid.is_some();
         let mut spacing: f64 = ui.memory(|m| m.data.get_temp(key)).unwrap_or(sh.guide_grid.unwrap_or(25.0));
-        ui.checkbox(&mut show, "Show guide grid on this sheet");
+        crate::style::check(ui, &mut show, "Show guide grid on this sheet");
         ui.horizontal(|ui| {
             ui.label("Guide Spacing:");
             ui.add_enabled(show, egui::DragValue::new(&mut spacing).range(5.0..=200.0).speed(1.0).suffix(" mm"));
@@ -342,7 +342,7 @@ fn global_params(app: &mut App, ctx: &egui::Context) {
                             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(r.shrink2(vec2(3.0, 0.0))).layout(egui::Layout::left_to_right(egui::Align::Center)));
                             if g.kind == ParamKind::YesNo {
                                 let mut b = g.value != 0.0;
-                                if child.add_enabled(!computed, egui::Checkbox::new(&mut b, "")).changed() {
+                                if child.add_enabled_ui(!computed, |ui| crate::style::check(ui, &mut b, "")).inner.changed() {
                                     g.value = if b { 1.0 } else { 0.0 };
                                 }
                             } else if g.is_text() {
@@ -673,7 +673,7 @@ fn param_edit(app: &mut App, ctx: &egui::Context) {
                 list_box(ui, "lb1", vec2(250.0, 250.0), |ui| {
                     for c in &shown {
                         let mut on = q.categories.contains(c);
-                        if ui.checkbox(&mut on, c.label()).changed() {
+                        if crate::style::check(ui, &mut on, c.label()).changed() {
                             if on {
                                 q.categories.push(*c);
                             } else {
@@ -860,7 +860,7 @@ fn filters(app: &mut App, ctx: &egui::Context) {
                 ui.label("Categories");
                 ui.label(egui::RichText::new("Select one or more categories to be included in the filter. Parameters common to these categories will be available for defining filter rules.").size(11.0).color(style::text_dim()));
                 let mut hide: bool = ui.memory(|m| m.data.get_temp(hide_id)).unwrap_or(false);
-                ui.checkbox(&mut hide, "Hide un-checked categories");
+                crate::style::check(ui, &mut hide, "Hide un-checked categories");
                 ui.memory_mut(|m| m.data.insert_temp(hide_id, hide));
                 let f = &mut list[fi];
                 list_box(ui, "lb3", vec2(246.0, 236.0), |ui| {
@@ -869,7 +869,7 @@ fn filters(app: &mut App, ctx: &egui::Context) {
                         if hide && !on {
                             continue;
                         }
-                        if ui.checkbox(&mut on, c.label()).changed() {
+                        if crate::style::check(ui, &mut on, c.label()).changed() {
                             if on {
                                 f.categories.push(c);
                             } else {
@@ -1455,8 +1455,8 @@ fn find_replace(app: &mut App, ctx: &egui::Context) {
             ui.vertical(|ui| {
                 ui.set_width(170.0);
                 group(ui, "Options", |ui| {
-                    ui.checkbox(&mut f.match_case, "Match case");
-                    ui.checkbox(&mut f.whole_word, "Match whole word only");
+                    crate::style::check(ui, &mut f.match_case, "Match case");
+                    crate::style::check(ui, &mut f.whole_word, "Match whole word only");
                 });
             });
             ui.vertical(|ui| {

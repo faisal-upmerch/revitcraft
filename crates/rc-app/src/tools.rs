@@ -389,6 +389,13 @@ pub struct Sketch {
     pub span_edge: Option<usize>,
 }
 
+/// Placing several structural columns at once.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnMulti {
+    AtGrids,
+    AtColumns,
+}
+
 /// What clicks in a floor, ceiling or roof sketch create.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub enum SketchSub {
@@ -562,6 +569,21 @@ pub struct ToolOptions {
     pub group_type: Id,
     pub draw_mode: DrawMode,
     pub sketch_sub: SketchSub,
+    /// Components: rotate each instance right after placing it.
+    pub rotate_after_placement: bool,
+    /// Structural columns: placed downward (Depth) or upward (Height).
+    pub struct_column_depth: bool,
+    /// Structural columns: At Grids / At Columns in progress.
+    pub column_multi: Option<ColumnMulti>,
+    pub column_moves_grids: bool,
+    pub column_tag: bool,
+    /// The placement tool to return to after that rotation.
+    pub rotate_return: Option<ToolKind>,
+    /// New components (Properties palette while placing).
+    pub component_offset: f64,
+    pub component_moves_nearby: bool,
+    pub place_comments: String,
+    pub place_mark: String,
     /// New floors (Properties palette while sketching).
     pub floor_offset: f64,
     pub floor_room_bounding: bool,
@@ -670,6 +692,16 @@ impl ToolOptions {
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,
+            rotate_after_placement: false,
+            struct_column_depth: true,
+            column_multi: None,
+            column_moves_grids: true,
+            column_tag: false,
+            rotate_return: None,
+            component_offset: 0.0,
+            component_moves_nearby: false,
+            place_comments: String::new(),
+            place_mark: String::new(),
             floor_offset: 0.0,
             floor_room_bounding: true,
             slope_head_offset: 304.8,

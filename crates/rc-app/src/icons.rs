@@ -131,6 +131,7 @@ pub enum Icon {
     DrawPolyIn,
     DrawPolyCirc,
     DrawSpline,
+    ModelInPlace,
     BoundaryLine,
     SlopeArrow,
     SpanDirection,
@@ -1244,6 +1245,10 @@ fn draw(g: &Pen, icon: Icon) {
             for q in [(0.1, 0.55), (0.35, 0.25), (0.65, 0.8), (0.9, 0.52)] {
                 g.dot(q, 0.04, BLUE);
             }
+        }
+        ModelInPlace => {
+            g.solid_box(0.42, 0.9, 0.36, 0.36, 0.3);
+            g.pencil(0.62, 0.5, 0.3);
         }
         BoundaryLine => {
             g.line(&[(0.16, 0.86), (0.16, 0.2), (0.84, 0.2)], MAGENTA);

@@ -36,7 +36,7 @@ fn update_view(app: &mut App, vid: Id, name: &str, v: View) {
 fn color_override(ui: &mut egui::Ui, c: &mut Option<[u8; 3]>) {
     let mut on = c.is_some();
     ui.horizontal(|ui| {
-        if ui.checkbox(&mut on, "").changed() {
+        if crate::style::check(ui, &mut on, "").changed() {
             *c = if on { Some([200, 0, 0]) } else { None };
         }
         if let Some(col) = c.as_mut() {
@@ -138,7 +138,7 @@ fn vg(app: &mut App, ctx: &egui::Context) {
         };
         let mut show_all = !cats.iter().all(|c| v.hidden.contains(c));
         ui.horizontal(|ui| {
-            if ui.checkbox(&mut show_all, format!("Show {what} categories in this view")).changed() {
+            if crate::style::check(ui, &mut show_all, format!("Show {what} categories in this view")).changed() {
                 for c in &cats {
                     v.hidden.retain(|x| x != c);
                     if !show_all {
@@ -184,7 +184,7 @@ fn vg(app: &mut App, ctx: &egui::Context) {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
                         let mut vis = !v.hidden.contains(&c);
-                        let changed = cell(ui, widths[0], |ui| ui.checkbox(&mut vis, c.label()).changed());
+                        let changed = cell(ui, widths[0], |ui| crate::style::check(ui, &mut vis, c.label()).changed());
                         if changed {
                             if vis {
                                 v.hidden.retain(|x| *x != c);
@@ -211,7 +211,7 @@ fn vg(app: &mut App, ctx: &egui::Context) {
                             }
                         });
                         cell(ui, widths[4], |ui| {
-                            ui.checkbox(&mut o.halftone, "");
+                            crate::style::check(ui, &mut o.halftone, "");
                         });
                         let empty = o.line_color.is_none() && o.line_weight.is_none() && o.fill_color.is_none() && o.transparency == 0 && !o.halftone;
                         match (idx, empty) {
@@ -323,7 +323,7 @@ fn filters_tab(ui: &mut egui::Ui, all: &[ViewFilter], v: &mut View) -> bool {
                 let mut vis = !o.hidden;
                 cell(ui, widths[1], |ui| {
                     ui.add_space(22.0);
-                    if ui.checkbox(&mut vis, "").changed() {
+                    if crate::style::check(ui, &mut vis, "").changed() {
                         o.hidden = !vis;
                     }
                 });
@@ -345,7 +345,7 @@ fn filters_tab(ui: &mut egui::Ui, all: &[ViewFilter], v: &mut View) -> bool {
                 });
                 cell(ui, widths[5], |ui| {
                     ui.add_space(22.0);
-                    ui.checkbox(&mut o.halftone, "");
+                    crate::style::check(ui, &mut o.halftone, "");
                 });
             });
         }
@@ -559,7 +559,7 @@ fn new_plan(app: &mut App, ctx: &egui::Context) {
         ui.label("Levels:");
         for (id, l) in app.doc.data.levels() {
             let mut on = app.dialogs.new_plan_sel.contains(&id);
-            if ui.checkbox(&mut on, &l.name).changed() {
+            if crate::style::check(ui, &mut on, &l.name).changed() {
                 if on {
                     app.dialogs.new_plan_sel.insert(id);
                 } else {
@@ -705,8 +705,8 @@ fn schedule_props(app: &mut App, ctx: &egui::Context) {
                             }
                         });
                         ui.memory_mut(|m| m.data.insert_temp(key, st));
-                        ui.checkbox(&mut def.itemize, "Itemize every instance");
-                        ui.checkbox(&mut def.grand_total, "Grand totals");
+                        crate::style::check(ui, &mut def.itemize, "Itemize every instance");
+                        crate::style::check(ui, &mut def.grand_total, "Grand totals");
                     });
                 });
             }
@@ -754,11 +754,11 @@ fn schedule_props(app: &mut App, ctx: &egui::Context) {
                     ui.radio_value(&mut def.descending, false, "Ascending");
                     ui.radio_value(&mut def.descending, true, "Descending");
                 });
-                ui.checkbox(&mut def.group_headers, "Header and footer (group by the sort field)");
+                crate::style::check(ui, &mut def.group_headers, "Header and footer (group by the sort field)");
                 ui.label("Totals for:");
                 for f in def.fields.clone() {
                     let mut on = def.total_fields.contains(&f);
-                    if ui.checkbox(&mut on, &f).changed() {
+                    if crate::style::check(ui, &mut on, &f).changed() {
                         if on {
                             def.total_fields.push(f);
                         } else {
@@ -848,7 +848,7 @@ fn revisions(app: &mut App, ctx: &egui::Context) {
                 ui.add(egui::TextEdit::singleline(&mut r.description).desired_width(200.0));
                 ui.add(egui::TextEdit::singleline(&mut r.issued_to).desired_width(90.0));
                 ui.add(egui::TextEdit::singleline(&mut r.issued_by).desired_width(90.0));
-                ui.checkbox(&mut r.issued, "");
+                crate::style::check(ui, &mut r.issued, "");
                 ui.end_row();
             }
         });
@@ -895,7 +895,7 @@ fn override_graphics(app: &mut App, ctx: &egui::Context) {
             color_override(ui, &mut o.fill_color);
             ui.end_row();
             ui.label("Halftone");
-            ui.checkbox(&mut o.halftone, "");
+            crate::style::check(ui, &mut o.halftone, "");
             ui.end_row();
             ui.label("Transparency");
             let mut t = o.transparency as f64;

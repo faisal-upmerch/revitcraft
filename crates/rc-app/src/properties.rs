@@ -365,7 +365,7 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                     }
                     ui.end_row();
                     prop_label(ui, "Room Bounding", false);
-                    ui.checkbox(&mut o.wall_room_bounding, "");
+                    crate::style::check(ui, &mut o.wall_room_bounding, "");
                     ui.end_row();
                 });
             }
@@ -376,7 +376,7 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
             if open {
                 prop_grid(ui, "new-wall-s").show(ui, |ui| {
                     prop_label(ui, "Structural", false);
-                    ui.checkbox(&mut o.wall_structural, "");
+                    crate::style::check(ui, &mut o.wall_structural, "");
                     ui.end_row();
                 });
             }
@@ -408,6 +408,60 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                 ui.end_row();
             });
         }
+        ToolKind::StructColumn => {
+            // A new structural column's instance parameters.
+            let mat = app.doc.data.family_type(o.struct_column_type).map(|(f, t)| rc_core::family_params::Resolver::for_type(f, t)).map(|r| r.text("Structural Material", &r.text("Material", ""))).unwrap_or_default();
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-scol").show(ui, |ui| {
+                prop_label(ui, "Moves With Grids", false);
+                style::check(ui, &mut o.column_moves_grids, "");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Materials and Finishes", true);
+            prop_grid(ui, "new-scol-m").show(ui, |ui| {
+                prop_label(ui, "Structural Material", true);
+                ro(ui, &mat);
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Structural", true);
+            prop_grid(ui, "new-scol-s").show(ui, |ui| {
+                for (n, v) in [("Top Connection", "None"), ("Base Connection", "None")] {
+                    prop_label(ui, n, true);
+                    ro(ui, v);
+                    ui.end_row();
+                }
+            });
+        }
+        ToolKind::Component => {
+            // A new component's instance parameters (free instances host on the level).
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-comp").show(ui, |ui| {
+                prop_label(ui, "Level", false);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Host", true);
+                ro(ui, &format!("Level : {level_name}"));
+                ui.end_row();
+                prop_label(ui, "Offset from Host", false);
+                len_row(ui, "comp-off", &mut o.component_offset);
+                ui.end_row();
+                prop_label(ui, "Moves With Nearby Elements", false);
+                crate::style::check(ui, &mut o.component_moves_nearby, "");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Identity Data", true);
+            prop_grid(ui, "new-comp-id").show(ui, |ui| {
+                prop_label(ui, "Image", true);
+                ro(ui, "");
+                ui.end_row();
+                prop_label(ui, "Comments", false);
+                ui.add(egui::TextEdit::singleline(&mut o.place_comments).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                prop_label(ui, "Mark", false);
+                ui.add(egui::TextEdit::singleline(&mut o.place_mark).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+            });
+        }
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => {
             // A new floor's instance parameters while its boundary is sketched.
             let mut structural = matches!(app.sketch.as_ref().map(|s| &s.kind), Some(SketchKind::Floor { structural: true }));
@@ -422,16 +476,16 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                 len_row(ui, "floor-off", &mut o.floor_offset);
                 ui.end_row();
                 prop_label(ui, "Room Bounding", false);
-                ui.checkbox(&mut o.floor_room_bounding, "");
+                crate::style::check(ui, &mut o.floor_room_bounding, "");
                 ui.end_row();
                 prop_label(ui, "Related to Mass", true);
-                ui.add_enabled(false, egui::Checkbox::new(&mut false, ""));
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
                 ui.end_row();
             });
             style::group_header_ui(ui, "Structural", true);
             prop_grid(ui, "new-floor-s").show(ui, |ui| {
                 prop_label(ui, "Structural", false);
-                ui.checkbox(&mut structural, "");
+                crate::style::check(ui, &mut structural, "");
                 ui.end_row();
             });
             style::group_header_ui(ui, "Dimensions", true);
@@ -607,7 +661,7 @@ fn value_editor(ui: &mut egui::Ui, app: &App, d: &ParamDef, shown: &str, key: (&
     match &d.kind {
         PKind::Value(ParamKind::YesNo) => {
             let mut b = matches!(shown, "Yes" | "yes" | "1" | "true");
-            if ui.checkbox(&mut b, "").changed() {
+            if crate::style::check(ui, &mut b, "").changed() {
                 return Some(if b { "Yes".into() } else { "No".into() });
             }
             None
@@ -765,12 +819,12 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
                 });
                 ui.end_row();
                 row_label(ui, "Shadows");
-                ui.checkbox(&mut changed.shadows, "");
+                crate::style::check(ui, &mut changed.shadows, "");
                 ui.end_row();
             }
             if let ViewKind::FloorPlan { room_colors, .. } = &mut changed.kind {
                 row_label(ui, "Color Scheme (rooms)");
-                ui.checkbox(room_colors, "");
+                crate::style::check(ui, room_colors, "");
                 ui.end_row();
             }
             if v.plan_level().is_some() {
@@ -790,10 +844,10 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         prop_grid(ui, "view-extents").show(ui, |ui| {
             if !matches!(v.kind, ViewKind::ThreeD { .. }) {
                 row_label(ui, "Crop View");
-                ui.checkbox(&mut changed.crop_active, "");
+                crate::style::check(ui, &mut changed.crop_active, "");
                 ui.end_row();
                 row_label(ui, "Crop Region Visible");
-                ui.checkbox(&mut changed.crop_visible, "");
+                crate::style::check(ui, &mut changed.crop_visible, "");
                 ui.end_row();
             }
             if v.plan_level().is_some() {
@@ -826,7 +880,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
             if let ViewKind::ThreeD { .. } = v.kind {
                 row_label(ui, "Section Box");
                 let mut on = changed.section_box.is_some();
-                if ui.checkbox(&mut on, "").changed() {
+                if crate::style::check(ui, &mut on, "").changed() {
                     changed.section_box = None;
                     if on {
                         let fp = app.footprints();

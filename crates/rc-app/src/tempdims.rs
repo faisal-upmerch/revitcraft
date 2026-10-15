@@ -65,7 +65,7 @@ fn nearest_each_side(refs: &[(DVec2, DVec2)], pt: DVec2, n: DVec2, max: f64) -> 
 }
 
 /// Nearest wall centreline hit from `pt` along `dir`.
-fn ray_hit(p: &Project, level: Id, skip: Id, pt: DVec2, dir: DVec2, max: f64) -> Option<(DVec2, f64)> {
+pub(crate) fn ray_hit(p: &Project, level: Id, skip: Id, pt: DVec2, dir: DVec2, max: f64) -> Option<(DVec2, f64)> {
     let mut best: Option<(DVec2, f64)> = None;
     let far = pt + dir * max;
     for e in &p.elements {

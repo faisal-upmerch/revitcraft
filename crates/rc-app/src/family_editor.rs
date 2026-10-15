@@ -85,6 +85,8 @@ pub struct FamilyEditor {
     pub new_param: (String, ParamKind, bool, String),
     pub message: Option<String>,
     pub scene_key: u64,
+    /// Model In-place: finishing places the family's one instance in the project.
+    pub in_place: Option<Id>,
 }
 
 pub fn open(app: &mut App, family_id: Id) {
@@ -93,11 +95,17 @@ pub fn open(app: &mut App, family_id: Id) {
 }
 
 pub fn new_custom(app: &mut App, name: &str) {
+    new_family(app, name, Category::GenericModels, None);
+}
+
+/// A new family of `category` in the editor; `in_place` (a level) makes it an in-place
+/// family placed in the project when finished.
+pub fn new_family(app: &mut App, name: &str, category: Category, in_place: Option<Id>) {
     let params = rc_core::library::template_params(FamilyTemplate::Custom);
     let fam = Family {
         id: 0,
         name: rc_core::edit::unique_name(app.doc.data.families.iter().map(|f| f.name.clone()), name),
-        category: Category::GenericModels,
+        category,
         template: FamilyTemplate::Custom,
         params,
         types: vec![FamilyType { id: 0, name: "Type 1".into(), values: BTreeMap::new() }],
@@ -105,6 +113,7 @@ pub fn new_custom(app: &mut App, name: &str) {
     };
     let mut fe = FamilyEditor::new(None, fam);
     fe.dirty = true;
+    fe.in_place = in_place;
     app.family_editor = Some(fe);
 }
 
@@ -127,6 +136,7 @@ impl FamilyEditor {
             undo: Vec::new(),
             redo: Vec::new(),
             dirty: false,
+            in_place: None,
             show_types: !custom,
             new_param: (String::new(), ParamKind::Length, false, "Dimensions".into()),
             message: None,
@@ -285,7 +295,8 @@ pub fn show(app: &mut App, mut fe: FamilyEditor, ui: &mut egui::Ui) -> Option<Fa
                 }
             }
             ui.separator();
-            if big(ui, Icon::LoadIntoProject, "Load into Project and Close", false, true) {
+            let finish = if fe.in_place.is_some() { "Finish Model" } else { "Load into Project and Close" };
+            if big(ui, if fe.in_place.is_some() { Icon::Finish } else { Icon::LoadIntoProject }, finish, false, true) {
                 load = true;
             }
             if big(ui, Icon::Save, "Save As...", false, true) {
@@ -300,7 +311,7 @@ pub fn show(app: &mut App, mut fe: FamilyEditor, ui: &mut egui::Ui) -> Option<Fa
                     }
                 }
             }
-            if big(ui, Icon::Close, "Close", false, true) {
+            if big(ui, if fe.in_place.is_some() { Icon::Cancel } else { Icon::Close }, if fe.in_place.is_some() { "Cancel Model" } else { "Close" }, false, true) {
                 close = true;
             }
         });
@@ -382,6 +393,13 @@ pub fn show(app: &mut App, mut fe: FamilyEditor, ui: &mut egui::Ui) -> Option<Fa
     }
     if load {
         load_into_project(app, &fe);
+        // An in-place family's single instance sits at the project origin on its level.
+        if let Some(level) = fe.in_place {
+            let fam = app.doc.data.families.iter().rev().find(|f| f.name == fe.family.name).and_then(|f| f.types.first().map(|t| t.id));
+            if let Some(t) = fam {
+                app.run("Model In-Place", |p| rc_core::edit::place_free(p, t, level, rc_core::geom::DVec2::ZERO, 0.0));
+            }
+        }
         return None;
     }
     if close {
@@ -892,8 +910,8 @@ fn properties(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                     }
                 });
             });
-            ui.add_enabled(nd.planes.len() >= 3, egui::Checkbox::new(&mut nd.equal, "Equality (EQ)"));
-            ui.checkbox(&mut nd.locked, "Locked");
+            ui.add_enabled_ui(nd.planes.len() >= 3, |ui| crate::style::check(ui, &mut nd.equal, "Equality (EQ)"));
+            crate::style::check(ui, &mut nd.locked, "Locked");
             if ui.button("Create Parameter for Label...").clicked() {
                 fe.show_types = true;
                 fe.new_param = (String::new(), ParamKind::Length, false, "Dimensions".into());
@@ -911,7 +929,7 @@ fn properties(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 ui.label("Name:");
                 ui.text_edit_singleline(&mut nf.name);
             });
-            ui.checkbox(&mut nf.void, "Void (cuts solids)");
+            crate::style::check(ui, &mut nf.void, "Void (cuts solids)");
             if !nf.void {
                 ui.horizontal(|ui| {
                     ui.label("Material:");
@@ -1050,7 +1068,7 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                     ui.label(egui::RichText::new(&shown).color(style::text_dim()));
                 } else if p.kind == ParamKind::YesNo {
                     let mut b = r.yes_no(&p.name, false);
-                    if ui.checkbox(&mut b, "").changed() {
+                    if crate::style::check(ui, &mut b, "").changed() {
                         set_value = Some((p.name.clone(), if b { "Yes".into() } else { "No".into() }));
                     }
                 } else if p.kind == ParamKind::Material {

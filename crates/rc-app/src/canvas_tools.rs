@@ -113,7 +113,7 @@ pub fn prompt(app: &App) -> String {
         },
         ToolKind::Door => "Click on Wall to place Door (Space Bar to flip the instance left/right)".into(),
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
-        ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place. Space rotates by 90°.".into(),
+        ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place a free instance (Space Bar to Rotate)".into(),
         ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => "Click to place the group origin.".into(),
         ToolKind::RepeatingDetail => if n == 0 { "Click to enter the start of the repeating detail.".into() } else { "Click to enter the end of the repeating detail.".into() },
         ToolKind::Matchline => if n == 0 { "Click the start of the matchline.".into() } else { "Click the end of the matchline.".into() },
@@ -189,6 +189,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
     match kind {
         k if k.uses_draw_modes() => draw_tool(app, painter, xf, view, d, cursor, point, clicked),
         ToolKind::Door | ToolKind::Window => hosted_tool(app, painter, xf, view, d, cursor, clicked),
+        ToolKind::StructColumn if app.opts.column_multi.is_some() => column_multi_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
         ToolKind::Paint | ToolKind::RemovePaint => {
@@ -1183,6 +1184,121 @@ fn free_type(app: &App) -> Id {
     }
 }
 
+/// At Grids / At Columns: pick the grids or architectural columns, then Finish.
+fn column_multi_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, clicked: bool) {
+    let Some(multi) = app.opts.column_multi else { return };
+    let at_grids = multi == crate::tools::ColumnMulti::AtGrids;
+    app.interact.prompt = if at_grids { "Select grids (CTRL adds), then click Finish.".into() } else { "Select architectural columns, then click Finish.".into() };
+    // Picked elements stay highlighted; the columns-to-be preview at their places.
+    for id in app.tool.picked.clone() {
+        if let Some(e) = app.el(id) {
+            if let Some(s) = element_curve(e) {
+                draw_segs(painter, xf, &[s], Stroke::new(3.0, style::SELECT));
+            }
+        }
+    }
+    for q in column_multi_points(app) {
+        painter.rect_stroke(egui::Rect::from_center_size(xf.s(q), egui::vec2(10.0, 10.0)), 0.0, preview_stroke(), egui::StrokeKind::Middle);
+    }
+    let Some(c) = cursor else { return };
+    let hover = hover_of(app, view, d, c, xf, &|e| if at_grids { matches!(e.kind, ElementKind::Grid(_)) } else { e.category() == Category::Columns });
+    if let Some(h) = hover {
+        app.interact.hover = Some(h);
+        if clicked {
+            if let Some(k) = app.tool.picked.iter().position(|x| *x == h) {
+                app.tool.picked.remove(k);
+            } else {
+                app.tool.picked.push(h);
+            }
+        }
+    }
+}
+
+/// Where At Grids / At Columns would place columns.
+fn column_multi_points(app: &App) -> Vec<DVec2> {
+    let p = &app.doc.data;
+    let mut out: Vec<DVec2> = Vec::new();
+    match app.opts.column_multi {
+        Some(crate::tools::ColumnMulti::AtGrids) => {
+            let segs: Vec<(DVec2, DVec2)> = app.tool.picked.iter().filter_map(|id| match p.element(*id).map(|e| &e.kind) {
+                Some(ElementKind::Grid(g)) if g.arc_mid.is_none() => Some((g.start, g.end)),
+                _ => None,
+            }).collect();
+            for i in 0..segs.len() {
+                for j in i + 1..segs.len() {
+                    if let Some((t, u)) = geom::segment_intersection(segs[i].0, segs[i].1, segs[j].0, segs[j].1) {
+                        if (0.0..=1.0).contains(&t) && (0.0..=1.0).contains(&u) {
+                            let q = segs[i].0.lerp(segs[i].1, t);
+                            if !out.iter().any(|o| o.distance(q) < 1.0) {
+                                out.push(q);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Some(crate::tools::ColumnMulti::AtColumns) => {
+            for id in &app.tool.picked {
+                if let Some(i) = p.element(*id).and_then(|e| e.as_instance()) {
+                    out.push(i.location);
+                }
+            }
+        }
+        None => {}
+    }
+    out
+}
+
+/// Multiple > Finish: places a structural column at each point.
+pub fn finish_columns(app: &mut App) {
+    let pts = column_multi_points(app);
+    let Some(level) = app.active_level() else { return };
+    let ty = app.opts.struct_column_type;
+    if pts.is_empty() {
+        app.error(if app.opts.column_multi == Some(crate::tools::ColumnMulti::AtGrids) { "Select at least two crossing grids." } else { "Select at least one architectural column." });
+        return;
+    }
+    let o = app.opts.clone();
+    let n = pts.len();
+    app.run("Place Structural Columns", |p| {
+        for q in &pts {
+            let id = edit::place_free(p, ty, level, *q, 0.0)?;
+            set_column_extent(p, id, level, &o);
+        }
+        Ok(())
+    });
+    app.info(format!("Placed {n} structural column{}.", if n == 1 { "" } else { "s" }));
+    app.opts.column_multi = None;
+    app.tool.picked.clear();
+}
+
+/// Applies the Options Bar's Depth/Height and level to a new column.
+fn set_column_extent(p: &mut Project, id: Id, level: Id, o: &crate::tools::ToolOptions) {
+    let structural = p.element(id).is_some_and(|e| e.category() == Category::StructuralColumns);
+    let depth = structural && o.struct_column_depth;
+    let Some(i) = p.element_mut(id).and_then(Element::as_instance_mut) else { return };
+    i.moves_with_grids = structural && o.column_moves_grids;
+    match (depth, o.column_top) {
+        // Depth to a level below: the column runs from that level up to this one.
+        (true, Some(t)) => {
+            i.level = t;
+            i.top_level = Some(level);
+            i.top_offset = 0.0;
+        }
+        (true, None) => {
+            i.elevation = -o.column_height;
+            i.values.insert("Height".into(), rc_core::units::to_stored(o.column_height));
+        }
+        (false, Some(t)) => {
+            i.top_level = Some(t);
+            i.top_offset = 0.0;
+        }
+        (false, None) => {
+            i.values.insert("Height".into(), rc_core::units::to_stored(o.column_height));
+        }
+    }
+}
+
 fn free_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, point: Option<DVec2>, clicked: bool) {
     let Some(pt) = point else { return };
     let Some(level) = view.plan_level() else { return };
@@ -1200,24 +1316,45 @@ fn free_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, point
     } else {
         painter.circle_stroke(xf.s(pt), 8.0, preview_stroke());
     }
+    // Temporary dimensions to the nearest wall or grid across and along, as in the reference app.
+    for dirs in [[DVec2::X, -DVec2::X], [DVec2::Y, -DVec2::Y]] {
+        let best = dirs.iter().filter_map(|d| crate::tempdims::ray_hit(&app.doc.data, level, u32::MAX, pt, *d, 30000.0)).min_by(|a, b| a.1.total_cmp(&b.1));
+        if let Some((hit, dist)) = best {
+            temp_dim(painter, xf, hit, pt, &app.doc.data.units.length(dist), 0.0);
+        }
+    }
     if clicked {
         let rot = app.opts.rotation;
-        let top = if matches!(app.tool.kind, ToolKind::Column | ToolKind::StructColumn) { app.opts.column_top } else { None };
-        let height = app.opts.column_height;
+        let (offset, comments, mark) = (app.opts.component_offset, app.opts.place_comments.clone(), app.opts.place_mark.clone());
+        let column = matches!(app.tool.kind, ToolKind::Column | ToolKind::StructColumn);
+        let o = app.opts.clone();
+        let tag = app.tool.kind == ToolKind::StructColumn && app.opts.column_tag;
+        let vid = view.id;
         let name = format!("Place {}", app.tool.kind.name());
         if let Some(id) = app.run(&name, |p| {
             let id = edit::place_free(p, ty, level, pt, rot)?;
-            if let Some(i) = p.element_mut(id).and_then(Element::as_instance_mut) {
-                if let Some(t) = top {
-                    i.top_level = Some(t);
-                    i.top_offset = 0.0;
-                } else if i.top_level.is_none() && matches!(i.category, Category::Columns | Category::StructuralColumns) {
-                    i.values.insert("Height".into(), rc_core::units::to_stored(height));
-                }
+            if let Some(e) = p.element_mut(id) {
+                e.comments = comments;
+                e.mark = mark;
+            }
+            if column {
+                set_column_extent(p, id, level, &o);
+            } else if let Some(i) = p.element_mut(id).and_then(Element::as_instance_mut) {
+                i.elevation = offset;
+            }
+            if tag {
+                edit::add_tag(p, vid, id, pt + DVec2::new(0.0, 600.0), false)?;
             }
             Ok(id)
         }) {
-            app.select(vec![id]);
+            // Like the reference app the tool stays active with nothing selected, unless the
+            // instance is to be rotated right away.
+            if app.opts.rotate_after_placement {
+                let back = app.tool.kind;
+                app.select(vec![id]);
+                app.set_tool(ToolKind::Rotate);
+                app.opts.rotate_return = Some(back);
+            }
         }
     }
 }
@@ -2522,7 +2659,14 @@ pub(crate) fn rotate_now(app: &mut App, center: DVec2, ang: f64) {
         Ok(())
     });
     app.typed.clear();
-    app.set_tool(ToolKind::Select);
+    // Rotate after placement goes back to placing.
+    match app.opts.rotate_return.take() {
+        Some(back) => {
+            app.select(vec![]);
+            app.set_tool(back);
+        }
+        None => app.set_tool(ToolKind::Select),
+    }
 }
 
 fn mirror_now(app: &mut App, a: DVec2, b: DVec2) {

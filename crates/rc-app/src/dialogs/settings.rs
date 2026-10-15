@@ -50,7 +50,7 @@ fn options(app: &mut App, ctx: &egui::Context) {
             ui.selectable_value(&mut app.settings.dark, false, "Light");
             ui.selectable_value(&mut app.settings.dark, true, "Dark");
         });
-        ui.checkbox(&mut app.settings.tooltips, "Show tooltips");
+        crate::style::check(ui, &mut app.settings.tooltips, "Show tooltips");
         if ui.button("Keyboard Shortcuts: Customize...").clicked() {
             app.dialogs.shortcuts = Some(String::new());
         }
@@ -63,8 +63,8 @@ fn options(app: &mut App, ctx: &egui::Context) {
         });
         ui.add_space(6.0);
         ui.heading("Selection");
-        ui.checkbox(&mut app.settings.drag_on_selection, "Drag elements on selection");
-        ui.checkbox(&mut app.settings.select_pinned, "Select pinned elements");
+        crate::style::check(ui, &mut app.settings.drag_on_selection, "Drag elements on selection");
+        crate::style::check(ui, &mut app.settings.select_pinned, "Select pinned elements");
     });
     if !open {
         app.dialogs.options = false;
@@ -299,7 +299,7 @@ fn object_styles(app: &mut App, ctx: &egui::Context) {
                     weight_combo(ui, ("os-c", c), &mut s.cut_weight);
                     let mut on = s.color.is_some();
                     ui.horizontal(|ui| {
-                        if ui.checkbox(&mut on, "").changed() {
+                        if crate::style::check(ui, &mut on, "").changed() {
                             s.color = if on { Some([0, 0, 0]) } else { None };
                         }
                         if let Some(col) = s.color.as_mut() {
@@ -371,27 +371,27 @@ fn snaps(app: &mut App, ctx: &egui::Context) {
     let mut open = true;
     window("Snaps").open(&mut open).resizable(false).show(ctx, |ui| {
         let s = &mut app.settings.snaps;
-        ui.checkbox(&mut s.enabled, "Snaps On");
+        crate::style::check(ui, &mut s.enabled, "Snaps On");
         ui.add_enabled_ui(s.enabled, |ui| {
             ui.group(|ui| {
                 ui.label(egui::RichText::new("Dimension Snaps").strong());
-                ui.checkbox(&mut s.length_increments, "Length dimension snap increments (adapt to zoom)");
-                ui.checkbox(&mut s.angle_increments, "Angular dimension snap increments (adapt to zoom)");
+                crate::style::check(ui, &mut s.length_increments, "Length dimension snap increments (adapt to zoom)");
+                crate::style::check(ui, &mut s.angle_increments, "Angular dimension snap increments (adapt to zoom)");
             });
             ui.group(|ui| {
                 ui.label(egui::RichText::new("Object Snaps").strong());
                 egui::Grid::new("snap-grid").num_columns(3).show(ui, |ui| {
-                    ui.checkbox(&mut s.endpoints, "Endpoints (SE)");
-                    ui.checkbox(&mut s.midpoints, "Midpoints (SM)");
-                    ui.checkbox(&mut s.nearest, "Nearest (SN)");
+                    crate::style::check(ui, &mut s.endpoints, "Endpoints (SE)");
+                    crate::style::check(ui, &mut s.midpoints, "Midpoints (SM)");
+                    crate::style::check(ui, &mut s.nearest, "Nearest (SN)");
                     ui.end_row();
-                    ui.checkbox(&mut s.intersections, "Intersections (SI)");
-                    ui.checkbox(&mut s.centers, "Centers (SC)");
-                    ui.checkbox(&mut s.perpendicular, "Perpendicular (SP)");
+                    crate::style::check(ui, &mut s.intersections, "Intersections (SI)");
+                    crate::style::check(ui, &mut s.centers, "Centers (SC)");
+                    crate::style::check(ui, &mut s.perpendicular, "Perpendicular (SP)");
                     ui.end_row();
-                    ui.checkbox(&mut s.tangents, "Tangents (ST)");
-                    ui.checkbox(&mut s.quadrants, "Quadrants (SQ)");
-                    ui.checkbox(&mut s.remote, "Alignment & extensions");
+                    crate::style::check(ui, &mut s.tangents, "Tangents (ST)");
+                    crate::style::check(ui, &mut s.quadrants, "Quadrants (SQ)");
+                    crate::style::check(ui, &mut s.remote, "Alignment & extensions");
                     ui.end_row();
                 });
             });
@@ -617,7 +617,7 @@ fn purge(app: &mut App, ctx: &egui::Context) {
         egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
             for (k, label) in &items {
                 let mut on = st.checked.contains(k);
-                if ui.checkbox(&mut on, label).changed() {
+                if crate::style::check(ui, &mut on, label).changed() {
                     if on {
                         st.checked.insert(k.clone());
                     } else {

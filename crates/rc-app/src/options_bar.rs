@@ -111,7 +111,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::SketchLine => {
                 let sk_kind = app.sketch.as_ref().map(|s| s.kind);
                 if sk_kind.is_some_and(|k| k.is_roof()) {
-                    ui.checkbox(&mut app.opts.defines_slope, "Defines slope");
+                    crate::style::check(ui, &mut app.opts.defines_slope, "Defines slope");
                     ui.label("Overhang:");
                     let mut o = app.opts.overhang;
                     if length_field(ui, app, "roof-oh", &mut o, 60.0) {
@@ -176,8 +176,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 ui.label(egui::RichText::new("(relative to the toposolid level)").color(style::text_dim()));
             }
             ToolKind::Door | ToolKind::Window => {
-                ui.checkbox(&mut app.opts.tag_on_placement, "Tag on Placement");
-                ui.checkbox(&mut app.opts.tag_leader, "Leader");
+                crate::style::check(ui, &mut app.opts.tag_on_placement, "Tag on Placement");
+                crate::style::check(ui, &mut app.opts.tag_leader, "Leader");
             }
             ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => {
                 let detail = kind == ToolKind::PlaceDetailGroup;
@@ -193,11 +193,30 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 app.opts.group_type = t;
             }
             ToolKind::Component | ToolKind::IsolatedFooting => {
-                ui.label("Rotation:");
-                number_field(ui, &mut app.opts.rotation, 1.0, 0.0..=360.0, "°");
-                ui.label(egui::RichText::new("Space rotates by 90°.").color(style::text_dim()));
+                crate::style::check(ui, &mut app.opts.rotate_after_placement, "Rotate after placement");
             }
-            ToolKind::Column | ToolKind::StructColumn => {
+            ToolKind::StructColumn => {
+                crate::style::check(ui, &mut app.opts.rotate_after_placement, "Rotate after placement");
+                sep(ui);
+                let mut depth = app.opts.struct_column_depth;
+                egui::ComboBox::from_id_salt("col-dir").selected_text(if depth { "Depth:" } else { "Height:" }).width(70.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut depth, true, "Depth:");
+                    ui.selectable_value(&mut depth, false, "Height:");
+                });
+                app.opts.struct_column_depth = depth;
+                let mut top = app.opts.column_top;
+                level_combo(ui, app, "col-top", &mut top, "Unconnected");
+                app.opts.column_top = top;
+                if top.is_none() {
+                    let mut h = app.opts.column_height;
+                    if length_field(ui, app, "col-h", &mut h, 70.0) {
+                        app.opts.column_height = h.max(100.0);
+                    }
+                }
+            }
+            ToolKind::Column => {
+                crate::style::check(ui, &mut app.opts.rotate_after_placement, "Rotate after placement");
+                sep(ui);
                 ui.label("Height:");
                 let mut top = app.opts.column_top;
                 level_combo(ui, app, "col-top", &mut top, "Unconnected");
@@ -218,7 +237,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 if length_field(ui, app, "room-up", &mut h, 70.0) {
                     app.opts.room_upper = h.max(100.0);
                 }
-                ui.checkbox(&mut app.opts.room_tag, "Tag on placement");
+                crate::style::check(ui, &mut app.opts.room_tag, "Tag on placement");
             }
             ToolKind::Area | ToolKind::AreaTag | ToolKind::RoomTag | ToolKind::Tag => {
                 let mut hz = app.opts.tag_horizontal;
@@ -227,9 +246,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     ui.selectable_value(&mut hz, false, "Vertical");
                 });
                 app.opts.tag_horizontal = hz;
-                ui.checkbox(&mut app.opts.tag_leader, "Leader");
+                crate::style::check(ui, &mut app.opts.tag_leader, "Leader");
                 if kind == ToolKind::Area {
-                    ui.checkbox(&mut app.opts.room_tag, "Tag on placement");
+                    crate::style::check(ui, &mut app.opts.room_tag, "Tag on placement");
                 }
             }
             ToolKind::Insulation => {
@@ -282,7 +301,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 app.opts.paint_material = m;
             }
             ToolKind::JoinGeometry => {
-                ui.checkbox(&mut app.opts.join_multiple, "Multiple Join");
+                crate::style::check(ui, &mut app.opts.join_multiple, "Multiple Join");
             }
             ToolKind::DetailComponent => {
                 ui.label("Type:");
@@ -297,7 +316,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::Text => {
                 ui.label("Size:");
                 number_field(ui, &mut app.opts.text_size, 0.1, 1.0..=20.0, " mm");
-                ui.checkbox(&mut app.opts.text_bold, "Bold");
+                crate::style::check(ui, &mut app.opts.text_bold, "Bold");
                 ui.label("Rotation:");
                 number_field(ui, &mut app.opts.rotation, 1.0, 0.0..=360.0, "°");
             }
@@ -315,7 +334,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
             ToolKind::Level => {
-                ui.checkbox(&mut app.opts.make_plan, "Make Plan View");
+                crate::style::check(ui, &mut app.opts.make_plan, "Make Plan View");
             }
             ToolKind::Section => {
                 ui.label("Far Clip Offset:");
@@ -360,14 +379,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
             ToolKind::Move | ToolKind::Copy => {
-                ui.checkbox(&mut app.opts.constrain, "Constrain");
+                crate::style::check(ui, &mut app.opts.constrain, "Constrain");
                 if kind == ToolKind::Copy {
-                    ui.checkbox(&mut app.opts.copy_multiple, "Multiple");
+                    crate::style::check(ui, &mut app.opts.copy_multiple, "Multiple");
                 }
             }
             ToolKind::Rotate => {
                 // Copy | Angle | Center of rotation: Place / Default, as in the reference options bar.
-                ui.checkbox(&mut app.opts.rotate_copy, "Copy");
+                crate::style::check(ui, &mut app.opts.rotate_copy, "Copy");
                 ui.label("Angle:");
                 let key = egui::Id::new("rotate-angle");
                 let mut s: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_default();
@@ -393,7 +412,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
             ToolKind::MirrorPick | ToolKind::MirrorDraw => {
-                ui.checkbox(&mut app.opts.mirror_copy, "Copy");
+                crate::style::check(ui, &mut app.opts.mirror_copy, "Copy");
             }
             ToolKind::Array => {
                 ui.selectable_value(&mut app.opts.array_radial, false, "Linear");
@@ -407,7 +426,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     ui.label("Move To:");
                     ui.selectable_value(&mut app.opts.array_last, false, "2nd");
                     ui.selectable_value(&mut app.opts.array_last, true, "Last");
-                    ui.checkbox(&mut app.opts.constrain, "Constrain");
+                    crate::style::check(ui, &mut app.opts.constrain, "Constrain");
                 }
             }
             ToolKind::Scale => {
@@ -422,10 +441,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 if length_field(ui, app, "off-d", &mut d, 80.0) {
                     app.opts.offset_dist = d.max(1.0);
                 }
-                ui.checkbox(&mut app.opts.offset_copy, "Copy");
+                crate::style::check(ui, &mut app.opts.offset_copy, "Copy");
             }
             ToolKind::Align => {
-                ui.checkbox(&mut app.opts.align_multiple, "Multiple Alignment");
+                crate::style::check(ui, &mut app.opts.align_multiple, "Multiple Alignment");
                 ui.label("Prefer:");
                 let mut pr = app.opts.align_prefer;
                 egui::ComboBox::from_id_salt("align-pref").selected_text(pr.label()).width(130.0).show_ui(ui, |ui| {
@@ -464,7 +483,7 @@ fn draw_common(app: &mut App, ui: &mut egui::Ui, mode: DrawMode, with_offset: bo
         app.opts.poly_sides = n.round() as u32;
     }
     if !matches!(mode, DrawMode::Rect | DrawMode::PolyIn | DrawMode::PolyCirc | DrawMode::Circle | DrawMode::Fillet | DrawMode::PickLines | DrawMode::PickWalls) {
-        ui.checkbox(&mut app.opts.chain, "Chain");
+        crate::style::check(ui, &mut app.opts.chain, "Chain");
     }
     if with_offset && !matches!(mode, DrawMode::Fillet) {
         ui.label("Offset:");
@@ -476,7 +495,7 @@ fn draw_common(app: &mut App, ui: &mut egui::Ui, mode: DrawMode, with_offset: bo
     // Floor and ceiling sketches pick walls at their core face by default.
     let floorish = app.sketch.as_ref().is_some_and(|s| matches!(s.kind, crate::tools::SketchKind::Floor { .. } | crate::tools::SketchKind::EditFloor(_) | crate::tools::SketchKind::Ceiling | crate::tools::SketchKind::EditCeiling(_)));
     if mode == DrawMode::PickWalls && floorish {
-        ui.checkbox(&mut app.opts.extend_to_core, "Extend into wall (to core)");
+        crate::style::check(ui, &mut app.opts.extend_to_core, "Extend into wall (to core)");
     }
     if mode == DrawMode::Fillet {
         ui.label("Radius:");

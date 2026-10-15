@@ -276,3 +276,33 @@ pub fn canvas_tooltip(painter: &egui::Painter, pos: egui::Pos2, text: &str) -> e
     painter.galley(bg.min + egui::vec2(3.0, 1.0), galley, Color32::from_gray(60));
     bg
 }
+
+/// The reference app's check box: a white square with a grey border and a dark tick.
+/// Replaces egui's, whose unchecked box all but disappears on white panels.
+pub fn check(ui: &mut egui::Ui, checked: &mut bool, label: impl Into<egui::WidgetText>) -> egui::Response {
+    let galley = label.into().into_galley(ui, None, f32::INFINITY, egui::TextStyle::Button);
+    let side = 13.0;
+    let gap = if galley.size().x > 0.0 { 5.0 } else { 0.0 };
+    let size = egui::vec2(side + gap + galley.size().x, side.max(galley.size().y));
+    let (rect, mut resp) = ui.allocate_exact_size(size, egui::Sense::click());
+    if resp.clicked() {
+        *checked = !*checked;
+        resp.mark_changed();
+    }
+    let enabled = ui.is_enabled();
+    let b = egui::Rect::from_min_size(egui::pos2(rect.left(), rect.center().y - side / 2.0), egui::vec2(side, side));
+    let p = ui.painter();
+    let fill = if enabled { pick(Color32::WHITE, Color32::from_rgb(52, 55, 61)) } else { pick(Color32::from_gray(244), Color32::from_rgb(60, 63, 69)) };
+    let border = if enabled && resp.hovered() { pick(Color32::from_rgb(0, 120, 215), Color32::from_rgb(90, 160, 240)) } else if enabled { pick(Color32::from_gray(112), Color32::from_gray(160)) } else { pick(Color32::from_gray(185), Color32::from_gray(100)) };
+    p.rect_filled(b, 0.0, fill);
+    p.rect_stroke(b, 0.0, Stroke::new(1.0, border), egui::StrokeKind::Inside);
+    if *checked {
+        let tick = if enabled { pick(Color32::from_gray(30), Color32::from_gray(230)) } else { pick(Color32::from_gray(150), Color32::from_gray(130)) };
+        p.add(egui::Shape::line(vec![egui::pos2(b.left() + 3.0, b.center().y), egui::pos2(b.left() + 5.5, b.bottom() - 3.5), egui::pos2(b.right() - 3.0, b.top() + 3.5)], Stroke::new(1.6, tick)));
+    }
+    if galley.size().x > 0.0 {
+        let color = if enabled { text() } else { text_dim() };
+        p.galley(egui::pos2(b.right() + gap, rect.center().y - galley.size().y / 2.0), galley, color);
+    }
+    resp
+}

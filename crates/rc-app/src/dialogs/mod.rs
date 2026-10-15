@@ -87,6 +87,8 @@ pub struct Dialogs {
     pub type_props_assembly: bool,
     pub override_graphics: Option<Id>,
     pub new_family: bool,
+    /// Model In-place: (step, category, name).
+    pub in_place: Option<(u8, Category, String)>,
     pub rename_view: Option<(Id, String)>,
     pub rename_type: Option<(Id, String)>,
     pub text_edit: Option<Id>,
@@ -400,6 +402,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     export_dialog(app, ctx);
     create_group(app, ctx);
     work_plane(app, ctx);
+    new_family_dialog(app, ctx);
+    in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
     tag_all(app, ctx);
     renames(app, ctx);
@@ -563,7 +567,7 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
                         app.dialogs.export_sel.clear();
                         app.dialogs.export_sel.insert(*id);
                     }
-                } else if ui.checkbox(&mut on, label).changed() {
+                } else if crate::style::check(ui, &mut on, label).changed() {
                     if on {
                         app.dialogs.export_sel.insert(*id);
                     } else {
@@ -793,6 +797,121 @@ fn export_image(app: &mut App, id: Id) {
 
 // ---------------------------------------------------------------- small dialogs
 
+/// Family templates offered by New Family (all start from the generic template).
+const FAMILY_TEMPLATES: [(&str, Category); 6] = [
+    ("Generic Model", Category::GenericModels),
+    ("Furniture", Category::Furniture),
+    ("Casework", Category::Casework),
+    ("Specialty Equipment", Category::SpecialtyEquipment),
+    ("Plumbing Fixture", Category::PlumbingFixtures),
+    ("Column", Category::Columns),
+];
+
+/// File > New > Family: choose a template.
+fn new_family_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.new_family {
+        return;
+    }
+    let sel_id = egui::Id::new("nf-template");
+    let mut sel: usize = ctx.data(|m| m.get_temp(sel_id)).unwrap_or(0);
+    let imperial = app.doc.data.units.system == rc_core::units::UnitSystem::Imperial;
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("New Family - Select Template File").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+            ui.set_min_width(380.0);
+            for (k, (name, _)) in FAMILY_TEMPLATES.iter().enumerate() {
+                let label = format!("{}{name}.rft", if imperial { "" } else { "Metric " });
+                let r = ui.selectable_label(sel == k, label);
+                if r.clicked() {
+                    sel = k;
+                }
+                if r.double_clicked() {
+                    ok = true;
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "Open", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(sel_id, sel));
+    if ok {
+        let (name, cat) = FAMILY_TEMPLATES[sel];
+        crate::family_editor::new_family(app, name, cat, None);
+    }
+    if ok || cancel || !open {
+        app.dialogs.new_family = false;
+    }
+}
+
+/// Model In-place: Family Category and Parameters, then the name, then the editor.
+fn in_place_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some((step, mut cat, mut name)) = app.dialogs.in_place.clone() else { return };
+    let cats = [Category::Casework, Category::Columns, Category::Furniture, Category::GenericModels, Category::PlumbingFixtures, Category::SpecialtyEquipment];
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    if step == 0 {
+        window("Family Category and Parameters").open(&mut open).resizable(false).default_width(340.0).show(ctx, |ui| {
+            ui.label(egui::RichText::new("Family Category").strong());
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+                ui.set_min_width(300.0);
+                for c in cats {
+                    let r = ui.selectable_label(cat == c, c.label());
+                    if r.clicked() {
+                        cat = c;
+                    }
+                    if r.double_clicked() {
+                        ok = true;
+                    }
+                }
+            });
+            ui.add_space(8.0);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if dlg_button(ui, "Cancel", false, true) {
+                    cancel = true;
+                }
+                if dlg_button(ui, "OK", true, true) {
+                    ok = true;
+                }
+            });
+        });
+        app.dialogs.in_place = if cancel || !open { None } else if ok { Some((1, cat, name)) } else { Some((0, cat, name)) };
+        return;
+    }
+    window("Name").open(&mut open).resizable(false).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
+        });
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, !name.trim().is_empty()) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        app.dialogs.in_place = None;
+        let level = app.active_level().or_else(|| app.doc.data.levels().first().map(|l| l.0));
+        if let Some(level) = level {
+            crate::family_editor::new_family(app, name.trim(), cat, Some(level));
+        }
+        return;
+    }
+    app.dialogs.in_place = if cancel || !open { None } else { Some((1, cat, name)) };
+}
+
 /// The reference app's Work Plane dialog: the current plane, and a new one by name.
 fn work_plane(app: &mut App, ctx: &egui::Context) {
     if !app.dialogs.work_plane {
@@ -914,7 +1033,7 @@ fn create_group(app: &mut App, ctx: &egui::Context) {
             });
             ui.end_row();
         });
-        ui.checkbox(&mut open_editor, "Open in group editor");
+        crate::style::check(ui, &mut open_editor, "Open in group editor");
         ui.memory_mut(|m| m.data.insert_temp(edit_id, open_editor));
         ui.add_space(8.0);
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -953,7 +1072,7 @@ fn tag_all(app: &mut App, ctx: &egui::Context) {
         egui::ScrollArea::vertical().max_height(260.0).show(ui, |ui| {
             for c in [Category::Doors, Category::Windows, Category::Rooms, Category::Areas, Category::Walls, Category::Furniture, Category::Casework, Category::PlumbingFixtures, Category::GenericModels, Category::StructuralColumns, Category::StructuralFraming] {
                 let mut on = app.dialogs.tag_all_cats.contains(&c);
-                if ui.checkbox(&mut on, format!("{} Tags", c.singular())).changed() {
+                if crate::style::check(ui, &mut on, format!("{} Tags", c.singular())).changed() {
                     if on {
                         app.dialogs.tag_all_cats.insert(c);
                     } else {
@@ -962,7 +1081,7 @@ fn tag_all(app: &mut App, ctx: &egui::Context) {
                 }
             }
         });
-        ui.checkbox(&mut app.opts.tag_leader, "Leader");
+        crate::style::check(ui, &mut app.opts.tag_leader, "Leader");
         if ui.button("OK").clicked() {
             ok = true;
         }
@@ -1178,7 +1297,7 @@ fn filter(app: &mut App, ctx: &egui::Context) {
             ui.end_row();
             for (k, ids) in &counts {
                 let mut on = checked.contains(k);
-                if ui.checkbox(&mut on, k).changed() {
+                if crate::style::check(ui, &mut on, k).changed() {
                     if on {
                         checked.insert(k.clone());
                     } else {

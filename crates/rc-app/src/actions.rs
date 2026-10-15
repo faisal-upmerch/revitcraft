@@ -626,6 +626,23 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         NewFamily => app.dialogs.new_family = true,
+        ModelInPlace => app.dialogs.in_place = Some((0, Category::GenericModels, "Family1".into())),
+        TagOnPlacement => match app.tool.kind {
+            ToolKind::Room => app.opts.room_tag = !app.opts.room_tag,
+            ToolKind::StructColumn => app.opts.column_tag = !app.opts.column_tag,
+            _ => app.opts.tag_on_placement = !app.opts.tag_on_placement,
+        },
+        VerticalColumn => app.opts.column_multi = None,
+        SlantedColumn => app.info("Slanted columns are not available yet; place a vertical column and use a beam for bracing."),
+        ColumnsAtGrids | ColumnsAtColumns => {
+            app.opts.column_multi = Some(if cmd == ColumnsAtGrids { crate::tools::ColumnMulti::AtGrids } else { crate::tools::ColumnMulti::AtColumns });
+            app.tool.picked.clear();
+        }
+        MultipleFinish => crate::canvas_tools::finish_columns(app),
+        MultipleCancel => {
+            app.opts.column_multi = None;
+            app.tool.picked.clear();
+        }
         PickNewHost => app.set_tool(ToolKind::PickHost),
         GoToView => {
             if let Some(v) = app.selection.iter().copied().find(|id| app.doc.data.view(*id).is_some()) {
