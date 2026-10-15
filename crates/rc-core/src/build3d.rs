@@ -61,11 +61,77 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
     }
 }
 
+/// A subdivision's surface: its host's top surface inside the subdivision boundary, raised
+/// by the subdivision's thickness (a hair above the host when that is zero).
+pub fn subdivision_triangles(p: &Project, t: &Toposolid) -> Vec<[DVec3; 3]> {
+    let Some(host) = t.host.and_then(|h| p.element(h)).and_then(|e| match &e.kind {
+        ElementKind::Toposolid(h) => Some(h.clone()),
+        _ => None,
+    }) else {
+        return vec![];
+    };
+    let lift = t.thickness.max(2.0);
+    let region = geom::ensure_ccw(&t.boundary);
+    let mut out = Vec::new();
+    for tri in analysis::topo_triangles(p, &host) {
+        let (a, b, c) = (tri[0].truncate(), tri[1].truncate(), tri[2].truncate());
+        let ccw = geom::cross2(b - a, c - a) > 0.0;
+        let corners = if ccw { [a, b, c] } else { [a, c, b] };
+        // Sutherland-Hodgman: the region clipped to this (convex) triangle.
+        let mut poly = region.clone();
+        for k in 0..3 {
+            let (e0, e1) = (corners[k], corners[(k + 1) % 3]);
+            let inside = |q: DVec2| geom::cross2(e1 - e0, q - e0) >= -1e-9;
+            let mut next = Vec::new();
+            for i in 0..poly.len() {
+                let (s, e) = (poly[i], poly[(i + 1) % poly.len()]);
+                match (inside(s), inside(e)) {
+                    (true, true) => next.push(e),
+                    (true, false) | (false, true) => {
+                        let (ds, de) = (geom::cross2(e1 - e0, s - e0), geom::cross2(e1 - e0, e - e0));
+                        let x = s + (e - s) * (ds / (ds - de));
+                        next.push(x);
+                        if inside(e) {
+                            next.push(e);
+                        }
+                    }
+                    (false, false) => {}
+                }
+            }
+            poly = next;
+            if poly.len() < 3 {
+                break;
+            }
+        }
+        if poly.len() < 3 {
+            continue;
+        }
+        // Heights from the host triangle's plane.
+        let n = (tri[1] - tri[0]).cross(tri[2] - tri[0]);
+        if n.z.abs() < 1e-9 {
+            continue;
+        }
+        let z = |q: DVec2| tri[0].z - (n.x * (q.x - tri[0].x) + n.y * (q.y - tri[0].y)) / n.z + lift;
+        for [i, j, k] in geom::triangulate(&poly) {
+            out.push([poly[i].extend(z(poly[i])), poly[j].extend(z(poly[j])), poly[k].extend(z(poly[k]))]);
+        }
+    }
+    out
+}
+
 /// Toposolid: the triangulated top surface, a flat bottom and vertical sides.
 fn toposolid(p: &Project, t: &Toposolid) -> MeshSet {
     let mut set = MeshSet::default();
     let n = t.boundary.len();
     if n < 3 {
+        return set;
+    }
+    if t.host.is_some() {
+        let mat = if t.material.is_empty() { "Grass" } else { t.material.as_str() };
+        let m = set.mesh(mat);
+        for [a, b, c] in subdivision_triangles(p, t) {
+            m.add_polygon_facing(&[a, b, c], DVec3::Z);
+        }
         return set;
     }
     let mat = if t.material.is_empty() { "Site - Earth" } else { t.material.as_str() };
@@ -1294,5 +1360,35 @@ mod slanted_column_tests {
         };
         assert!(cx(zmin).abs() < 1.0, "base x {}", cx(zmin));
         assert!((cx(zmax) - 2000.0).abs() < 1.0, "top x {}", cx(zmax));
+    }
+}
+
+#[cfg(test)]
+mod subdivision_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// A subdivision drapes over its toposolid's sloped surface, inside its own boundary.
+    #[test]
+    fn subdivision_follows_the_surface() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let sq = vec![DVec2::new(0.0, 0.0), DVec2::new(10000.0, 0.0), DVec2::new(10000.0, 10000.0), DVec2::new(0.0, 10000.0)];
+        let topo = crate::edit::add_toposolid(&mut p, l1, sq, 0.0, 1000.0).unwrap();
+        if let Some(ElementKind::Toposolid(t)) = p.element_mut(topo).map(|e| &mut e.kind) {
+            t.heights = vec![0.0, 1000.0, 1000.0, 0.0];
+        }
+        let path = vec![DVec2::new(2000.0, 2000.0), DVec2::new(6000.0, 2000.0), DVec2::new(6000.0, 4000.0), DVec2::new(2000.0, 4000.0)];
+        let sub = crate::edit::add_subdivision(&mut p, topo, path, "Grass").unwrap();
+        let ElementKind::Toposolid(t) = &p.element(sub).unwrap().kind else { panic!() };
+        let tris = subdivision_triangles(&p, t);
+        let area: f64 = tris.iter().map(|t| geom::cross2(t[1].truncate() - t[0].truncate(), t[2].truncate() - t[0].truncate()).abs() / 2.0).sum();
+        assert!((area - 8.0e6).abs() < 1.0, "area {area}");
+        for v in tris.iter().flat_map(|t| t.iter()) {
+            // Surface height rises 1000 over x = 0..10000, plus the 2 mm lift.
+            assert!((v.z - (v.x / 10.0 + 2.0)).abs() < 1e-6);
+        }
+        crate::edit::delete_elements(&mut p, &[topo]).unwrap();
+        assert!(p.element(sub).is_none());
     }
 }

@@ -189,7 +189,7 @@ fn massing_site() -> Vec<Panel> {
                 Labeled("Property\nLine", C::PropertyLine, vec![]),
             ],
         ),
-        panel("Modify Site", vec![Labeled("Modify Sub\nElements", C::ModifySubElements, vec![])]),
+        panel("Modify Site", vec![Labeled("Modify Sub\nElements", C::ModifySubElements, vec![]), Labeled("Subdivide", C::Subdivide, vec![])]),
     ]
 }
 
@@ -473,6 +473,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
     }
     if cats.iter().any(|c| matches!(c, Category::Floors | Category::Roofs | Category::Ceilings | Category::FilledRegions)) && cats.len() == 1 {
         v.push(panel("Mode", vec![Big(C::EditBoundary)]));
+    }
+    if has(Category::Toposolid) && cats.len() == 1 {
+        v.push(panel("Modify Site", vec![Labeled("Modify Sub\nElements", C::ModifySubElements, vec![]), Labeled("Subdivide", C::Subdivide, vec![])]));
     }
     if cats.iter().any(|c| matches!(c, Category::Doors | Category::Windows)) {
         v.push(panel("Host", vec![Big(C::PickNewHost), Stack(vec![C::FlipFacing, C::FlipHand])]));

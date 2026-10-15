@@ -38,6 +38,7 @@ pub enum Icon {
     Shaft,
     WallOpening,
     VerticalOpening,
+    Subdivide,
     Mullion,
     SlantedColumn,
     MullionGridLine,
@@ -792,6 +793,11 @@ fn draw(g: &Pen, icon: Icon) {
                 g.rect(x - 0.05, 0.08, x + 0.05, 0.92, BLUE, ink);
             }
             g.rect(0.12, 0.45, 0.88, 0.55, BLUE, ink);
+        }
+        Subdivide => {
+            g.shade(&[(0.04, 0.6), (0.5, 0.34), (0.96, 0.56), (0.5, 0.86)], Color32::from_rgb(214, 196, 160), Color32::from_rgb(176, 160, 132), false);
+            g.poly(&[(0.3, 0.6), (0.52, 0.48), (0.72, 0.58), (0.5, 0.7)], Color32::from_rgb(120, 170, 90), ink);
+            g.closed(&[(0.04, 0.6), (0.5, 0.34), (0.96, 0.56), (0.5, 0.86)], ink);
         }
         VerticalOpening => {
             // A slab in perspective with a hole cut through it.

@@ -917,6 +917,9 @@ pub struct Toposolid {
     /// Elevation points inside the boundary: (position, height above the level).
     #[serde(default)]
     pub points: Vec<(DVec2, f64)>,
+    /// Subdivisions: the toposolid whose surface this region lies on (with its own material).
+    #[serde(default)]
+    pub host: Option<Id>,
 }
 
 /// A closed site property line.

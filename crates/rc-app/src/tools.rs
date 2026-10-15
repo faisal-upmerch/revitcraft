@@ -346,6 +346,8 @@ pub enum SketchKind {
     Shaft,
     /// A vertical opening in this floor, roof or ceiling.
     Opening(Id),
+    /// A subdivision of this toposolid.
+    Subdivide(Id),
     Railing,
     Stair,
     Ramp,
@@ -369,6 +371,7 @@ impl SketchKind {
             SketchKind::Region { .. } | SketchKind::EditRegion(_) => "Create Filled Region Boundary",
             SketchKind::Shaft => "Create Shaft Opening Sketch",
             SketchKind::Opening(_) => "Create Opening Boundary",
+            SketchKind::Subdivide(_) => "Create Subdivision Boundary",
             SketchKind::Railing => "Create Railing Path",
             SketchKind::Stair => "Create Stair",
             SketchKind::Ramp => "Create Ramp Sketch",

@@ -674,6 +674,10 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                     d.line(Some(e.id), m.boundary.clone(), true, MEDIUM);
                 }
             }
+            ElementKind::Toposolid(t) if t.host.is_some() && t.boundary.len() >= 3 && p.level_elevation(t.level) <= c.cut_z => {
+                // Subdivisions: their boundary on the host surface.
+                d.line(Some(e.id), t.boundary.clone(), true, THIN);
+            }
             ElementKind::Toposolid(t) if t.boundary.len() >= 3 && p.level_elevation(t.level) <= c.cut_z => {
                 let interval = if p.units.system == crate::units::UnitSystem::Imperial { 1524.0 } else { 1000.0 };
                 for (a, b, major) in analysis::topo_contours(p, t, interval) {

@@ -303,7 +303,7 @@ pub fn add_toposolid(p: &mut Project, level: Id, boundary: Vec<DVec2>, height: f
     }
     let boundary = geom::ensure_ccw(&boundary);
     let heights = vec![height; boundary.len()];
-    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary, heights, thickness, material: String::new(), points: vec![] })))
+    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary, heights, thickness, material: String::new(), points: vec![], host: None })))
 }
 
 /// Sets the height (above its level) of a toposolid point: boundary points first, then the
@@ -870,6 +870,20 @@ pub fn set_mullions(p: &mut Project, wall: Id, keys: &[String], on: bool) -> Res
     Ok(n)
 }
 
+/// A toposolid subdivision: a region of `host`'s surface with its own material.
+pub fn add_subdivision(p: &mut Project, host: Id, boundary: Vec<DVec2>, material: &str) -> Result<Id, String> {
+    let boundary = geom::clean(&boundary, 1.0);
+    if boundary.len() < 3 {
+        return Err("A subdivision needs a closed boundary.".into());
+    }
+    let Some(ElementKind::Toposolid(h)) = p.element(host).map(|e| &e.kind) else { return Err("Select a toposolid to subdivide.".into()) };
+    if h.host.is_some() {
+        return Err("A subdivision cannot be subdivided; subdivide the toposolid.".into());
+    }
+    let level = h.level;
+    Ok(push(p, ElementKind::Toposolid(Toposolid { level, boundary: geom::ensure_ccw(&boundary), heights: Vec::new(), thickness: 0.0, material: material.to_string(), points: Vec::new(), host: Some(host) })))
+}
+
 /// A vertical opening: cuts only `host` (a floor, roof or ceiling), through its whole depth.
 pub fn add_vertical_opening(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
     let boundary = geom::clean(&boundary, 1.0);
@@ -915,6 +929,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::WallFoundation(f) => doomed.contains(&f.wall),
                 ElementKind::Railing(r) => r.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&r.level),
                 ElementKind::Shaft(s) => s.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&s.base_level),
+                ElementKind::Toposolid(t) => t.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&t.level),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
                 || e.view.is_some_and(|v| !p.views.iter().any(|x| x.id == v));

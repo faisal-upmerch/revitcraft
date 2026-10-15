@@ -29,6 +29,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp),
         RampBoundary | RampRiser => false,
         PlaceRoomsAuto | HighlightBoundaries => plan && !in_sketch,
+        Subdivide => !in_sketch && app.selection.len() == 1 && sel_el(&|e| matches!(&e.kind, ElementKind::Toposolid(t) if t.host.is_none())),
         MullionGridLine | MullionSegment | MullionAllLines => app.tool.kind == ToolKind::Mullion,
         StairLanding | StairSupport => false,
         ConnectLevels => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair),
@@ -351,6 +352,20 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         AreaTag => app.set_tool(ToolKind::AreaTag),
         WallOpening => app.set_tool(ToolKind::WallOpening),
         VerticalOpening => app.set_tool(ToolKind::VerticalOpening),
+        Subdivide => {
+            let host = app.selection.first().copied().filter(|id| matches!(app.el(*id).map(|e| &e.kind), Some(ElementKind::Toposolid(t)) if t.host.is_none()));
+            match (host, app.active) {
+                (Some(h), Some(view)) => {
+                    let level = app.el(h).and_then(|e| e.level()).unwrap_or(0);
+                    app.sketch = Some(crate::tools::Sketch::new(SketchKind::Subdivide(h), view, level));
+                    app.opts.draw_mode = DrawMode::Line;
+                    app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
+                    app.tool = Tool::new(ToolKind::SketchLine);
+                    app.select(vec![]);
+                }
+                _ => app.error("Select a toposolid to subdivide."),
+            }
+        }
         Mullion => app.set_tool(ToolKind::Mullion),
         MullionGridLine => app.opts.mullion_mode = 0,
         MullionSegment => app.opts.mullion_mode = 1,
@@ -1282,6 +1297,10 @@ pub fn finish_sketch(app: &mut App) {
                     }
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
                     SketchKind::Opening(host) => app.run("Create Opening", |p| edit::add_vertical_opening(p, host, outer)),
+                    SketchKind::Subdivide(host) => {
+                        let mat = if app.doc.data.materials.iter().any(|m| m.name == "Grass") { "Grass" } else { "" };
+                        app.run("Subdivide", |p| edit::add_subdivision(p, host, outer, mat))
+                    }
                     SketchKind::Mass => app.run("Create Mass", |p| edit::add_mass(p, level, outer, o.mass_height)),
                     SketchKind::Toposolid => app.run("Create Toposolid", |p| edit::add_toposolid(p, level, outer, o.topo_height, o.topo_thickness)),
                     SketchKind::PropertyLine => app.run("Create Property Line", |p| edit::add_property_line(p, level, outer)),
