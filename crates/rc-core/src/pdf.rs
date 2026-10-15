@@ -132,6 +132,39 @@ impl Page {
         );
     }
 
+    /// Text placed like the views draw it: `Center` centres the text box on the point,
+    /// `Left`/`Right` put its bottom-left/bottom-right corner there (the box bottom is the
+    /// descender line, about 0.21 em below the baseline).
+    #[allow(clippy::too_many_arguments)]
+    pub fn text_anchored(&mut self, x: f64, y: f64, size_mm: f64, s: &str, rgb: [u8; 3], anchor: crate::plan::Anchor, bold: bool, angle: f64) {
+        use crate::plan::Anchor;
+        let size = size_mm * PT_PER_MM;
+        let w = text_width_em(s) * size;
+        let (dx, dy) = match anchor {
+            Anchor::Center => (-w / 2.0, -0.35 * size),
+            Anchor::Left => (0.0, 0.21 * size),
+            Anchor::Right => (-w, 0.21 * size),
+        };
+        let (c, sn) = (angle.cos(), angle.sin());
+        let (px, py) = (x * PT_PER_MM + c * dx - sn * dy, y * PT_PER_MM + sn * dx + c * dy);
+        let _ = writeln!(
+            self.ops,
+            "BT /{} {} Tf {} {} {} rg {} {} {} {} {} {} Tm ({}) Tj ET",
+            if bold { "F2" } else { "F1" },
+            n(size),
+            n(rgb[0] as f64 / 255.0),
+            n(rgb[1] as f64 / 255.0),
+            n(rgb[2] as f64 / 255.0),
+            n(c),
+            n(sn),
+            n(-sn),
+            n(c),
+            n(px),
+            n(py),
+            pdf_text(s)
+        );
+    }
+
     /// Text rotated by `angle` radians about its anchor.
     #[allow(clippy::too_many_arguments)]
     pub fn text_rot(&mut self, x: f64, y: f64, size_mm: f64, s: &str, rgb: [u8; 3], center: bool, bold: bool, angle: f64) {

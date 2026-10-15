@@ -552,15 +552,17 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
             let w = num("Width", 900.0);
             let fw = num("Frame Width", 50.0);
             let t = f.depth.max(100.0) / 2.0;
-            out.push(line(rect(-w / 2.0 - fw, -w / 2.0, -t, t), true, SymStyle::Projection));
-            out.push(line(rect(w / 2.0, w / 2.0 + fw, -t, t), true, SymStyle::Projection));
+            // Frame and open leaf are cut by the plan (Frame/Panel cut pens); the swing is a
+            // symbolic line.
+            out.push(line(rect(-w / 2.0 - fw, -w / 2.0, -t, t), true, SymStyle::Cut));
+            out.push(line(rect(w / 2.0, w / 2.0 + fw, -t, t), true, SymStyle::Cut));
             let swing = |out: &mut Vec<SymLine>, hinge_x: f64, leaf: f64, dir: f64| {
                 let hinge = f.plan(hinge_x, -t);
                 let open_end = f.plan(hinge_x, -t - leaf);
                 // The open leaf: a thin panel standing at the jamb, inside the opening.
                 let pt = num("Thickness", 45.0).clamp(20.0, 80.0);
                 let (x0, x1) = if dir > 0.0 { (hinge_x, hinge_x + pt) } else { (hinge_x - pt, hinge_x) };
-                out.push(line(rect(x0, x1, -t - leaf, -t), true, SymStyle::Projection));
+                out.push(line(rect(x0, x1, -t - leaf, -t), true, SymStyle::Cut));
                 let a_open = (open_end - hinge).y.atan2((open_end - hinge).x);
                 let closed = f.plan(hinge_x + dir * leaf, -t);
                 let a_closed = (closed - hinge).y.atan2((closed - hinge).x);
@@ -608,11 +610,12 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
             let t = f.depth.max(100.0) / 2.0;
             let s = if cut { SymStyle::Projection } else { SymStyle::Hidden };
             out.push(line(rect(-w / 2.0, w / 2.0, -t, t), true, s));
-            out.push(line(vec![f.plan(-w / 2.0, 0.0), f.plan(w / 2.0, 0.0)], false, if cut { SymStyle::Detail } else { SymStyle::Hidden }));
+            // Glass and frame are cut by the plan; the sill/jamb outline is seen below it.
+            out.push(line(vec![f.plan(-w / 2.0, 0.0), f.plan(w / 2.0, 0.0)], false, if cut { SymStyle::Cut } else { SymStyle::Hidden }));
             if cut {
                 let fd = num("Frame Depth", 100.0) / 2.0;
-                out.push(line(vec![f.plan(-w / 2.0, -fd), f.plan(w / 2.0, -fd)], false, SymStyle::Detail));
-                out.push(line(vec![f.plan(-w / 2.0, fd), f.plan(w / 2.0, fd)], false, SymStyle::Detail));
+                out.push(line(vec![f.plan(-w / 2.0, -fd), f.plan(w / 2.0, -fd)], false, SymStyle::Cut));
+                out.push(line(vec![f.plan(-w / 2.0, fd), f.plan(w / 2.0, fd)], false, SymStyle::Cut));
             }
         }
         RectColumn | RoundColumn | SteelColumn => {

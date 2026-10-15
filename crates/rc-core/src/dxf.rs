@@ -144,7 +144,7 @@ impl Writer {
         }
     }
 
-    fn text(&mut self, layer: &str, pos: DVec2, text: &str, height: f64, rgb: [u8; 3], centered: bool, angle_deg: f64) {
+    fn text(&mut self, layer: &str, pos: DVec2, text: &str, height: f64, rgb: [u8; 3], anchor: Anchor, angle_deg: f64) {
         if text.trim().is_empty() {
             return;
         }
@@ -157,13 +157,17 @@ impl Writer {
         if angle_deg.abs() > 1e-6 {
             self.num(50, angle_deg);
         }
-        if centered {
-            self.pair(72, 1);
-            self.num(11, pos.x);
-            self.num(21, pos.y);
-            self.num(31, 0.0);
-            self.pair(73, 2);
-        }
+        // Justification as the views draw it: centred (middle), or bottom-left/right.
+        let (h, v) = match anchor {
+            Anchor::Center => (1, 2),
+            Anchor::Left => (0, 1),
+            Anchor::Right => (2, 1),
+        };
+        self.pair(72, h);
+        self.num(11, pos.x);
+        self.num(21, pos.y);
+        self.num(31, 0.0);
+        self.pair(73, v);
     }
 
     fn finish(self, units: i32) -> String {
@@ -282,7 +286,7 @@ pub fn export_drawing(p: &Project, d: &Drawing, view_scale: f64) -> String {
                 }
             }
             Prim::Text { pos, text, size, color, anchor, angle } => {
-                w.text(&layer, *pos, text, *size as f64 * view_scale, *color, *anchor == Anchor::Center, (*angle as f64).to_degrees())
+                w.text(&layer, *pos, text, *size as f64 * view_scale, *color, *anchor, (*angle as f64).to_degrees())
             }
         }
     }
@@ -309,7 +313,7 @@ pub fn export_sheet(p: &Project, view: &View, footprints: &HashMap<Id, Footprint
                     w.solid("SHEET-FILL", t, [color[0], color[1], color[2]]);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, angle, .. } => w.text("SHEET-TEXT", pos, &text, size as f64, [0, 0, 0], anchor == Anchor::Center, (angle as f64).to_degrees()),
+            SheetPrim::Text { pos, text, size, anchor, angle, .. } => w.text("SHEET-TEXT", pos, &text, size as f64, [0, 0, 0], anchor, (angle as f64).to_degrees()),
             SheetPrim::Image { min, max, .. } => {
                 let pts = vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
                 w.polyline("SHEET-VIEWPORT", &pts, true, [128, 128, 128], Dash::Solid);

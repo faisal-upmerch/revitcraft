@@ -5,7 +5,7 @@ use crate::app::App;
 use crate::canvas::{self, Drag, Xf, temp_dim};
 use crate::style;
 use crate::tools::{self, DrawMode, Seg, ToolKind};
-use eframe::egui::{self, Color32, Pos2, Rect, Stroke, vec2};
+use eframe::egui::{self, Color32, Pos2, Stroke, vec2};
 use rc_core::analysis;
 use rc_core::edit;
 use rc_core::geom::{self, DVec2};
@@ -497,7 +497,19 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
             let mut outline: Vec<Pos2> = a.iter().chain(b.iter()).map(|q| xf.s(*q)).collect();
             outline.push(outline[0]);
             painter.add(egui::Shape::line(outline, preview_stroke()));
-            draw_segs(painter, xf, &[s], Stroke::new(1.0, style::PREVIEW.gamma_multiply(0.6)));
+            // The location line as a light-blue dashed alignment line running past both ends.
+            let pts = s.points();
+            if pts.len() >= 2 {
+                let (p0, p1) = (xf.s(pts[0]), xf.s(pts[pts.len() - 1]));
+                if matches!(s, Seg::Line(..)) && p0.distance(p1) > 1.0 {
+                    let d = (p1 - p0).normalized();
+                    canvas::reference_line(painter, p0 - d * 30.0, p1 + d * 30.0);
+                } else {
+                    for w in pts.windows(2) {
+                        canvas::reference_line(painter, xf.s(w[0]), xf.s(w[1]));
+                    }
+                }
+            }
         }
     } else {
         let color = if app.sketch.is_some() { style::SKETCH } else { style::PREVIEW };
@@ -568,13 +580,22 @@ fn angle_arc(painter: &egui::Painter, xf: &Xf, a: DVec2, reference: DVec2, pt: D
         xf.s(a + DVec2::new(t.cos(), t.sin()) * r)
     }).collect();
     painter.add(egui::Shape::line(pts, Stroke::new(1.0, style::TEMP_DIM_LINE)));
+    // The value sits outside the arc at its middle, written along the arc as the reference
+    // app does.
     let tm = t0 + sweep / 2.0;
-    let q = xf.s(a + DVec2::new(tm.cos(), tm.sin()) * (r + xf.len(12.0)));
+    let q = xf.s(a + DVec2::new(tm.cos(), tm.sin()) * (r + xf.len(9.0)));
     let text = units.format(deg, ParamKind::Angle);
-    let galley = painter.layout_no_wrap(text, style::font(12.0), style::TEMP_DIM);
-    let rect = Rect::from_center_size(q, galley.size());
-    painter.rect_filled(rect.expand(1.0), 0.0, Color32::from_rgba_unmultiplied(255, 255, 255, 200));
-    painter.galley(rect.min, galley, style::TEMP_DIM);
+    let galley = painter.layout_no_wrap(text, style::bold(11.0), style::TEMP_DIM);
+    // Screen angle of the tangent, kept upright.
+    let mut ang = -(tm as f32) + std::f32::consts::FRAC_PI_2;
+    while ang > std::f32::consts::FRAC_PI_2 {
+        ang -= std::f32::consts::PI;
+    }
+    while ang < -std::f32::consts::FRAC_PI_2 {
+        ang += std::f32::consts::PI;
+    }
+    let size = galley.size();
+    painter.add(egui::epaint::TextShape::new(q - size / 2.0, galley, style::TEMP_DIM).with_angle_and_anchor(ang, egui::Align2::CENTER_CENTER));
 }
 
 /// Offsets of the wall faces relative to the drawn line for the current location line:
@@ -1003,6 +1024,8 @@ fn hosted_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: 
     let type_id = if is_door { app.opts.door_type } else { app.opts.window_type };
     let wall = hover_of(app, view, d, c, xf, &|e| matches!(&e.kind, ElementKind::Wall(w) if w.base_level == level));
     let Some(wall_id) = wall else {
+        // Nothing to host it here: the "not allowed" cursor, as in the reference app.
+        painter.ctx().set_cursor_icon(egui::CursorIcon::NotAllowed);
         if clicked {
             app.error(format!("{} must be hosted by a wall. Hover over a wall in this plan.", if is_door { "Doors" } else { "Windows" }));
         }

@@ -571,6 +571,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         };
         let d = resp.drag_delta();
         orbit_about(&mut cam, pv, d.x, if ring_drag { 0.0 } else { d.y });
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
         pivot_shown = Some(pv).filter(|_| !drag_from_cube);
         moved = true;
     } else {
@@ -584,6 +585,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             moved = true;
         } else if middle_drag {
             pan(&mut cam, resp.drag_delta(), rect);
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
             moved = true;
         }
     }

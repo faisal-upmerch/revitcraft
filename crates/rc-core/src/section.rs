@@ -508,6 +508,19 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
     for (_, t, _) in &tris {
         zb.raster(*t);
     }
+    // Cut faces cap the elements at the section plane, so nothing behind a cut shows in any
+    // output (vector exports have no white masks to rely on).
+    if f.cuts {
+        for it in &items {
+            for m in it.full.by_material.values() {
+                for lp in chain(mesh_cut_segments(m, &f)).into_iter().filter(|lp| lp.len() >= 3) {
+                    for [a, b, c] in geom::triangulate(&lp) {
+                        zb.raster([(lp[a], 0.0), (lp[b], 0.0), (lp[c], 0.0)]);
+                    }
+                }
+            }
+        }
+    }
     zb.finish();
 
     // Shaded: painter's algorithm, far to near.
@@ -527,10 +540,12 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
     // Visible edges beyond the cut; obscured edges dashed for Show Hidden Lines elements.
     for it in &items {
         let reveal = view.hidden_lines.iter().any(|h| h.1 == it.id);
+        // Projection pens of the reference Object Styles.
+        let proj = plan::pen(plan::category_pens(p.element(it.id).map(|e| e.category()).unwrap_or_default()).0, view.scale);
         let stroke = match it.status {
-            analysis::PhaseStatus::Existing => Stroke::new(0.13, [120, 120, 120], Dash::Solid),
-            analysis::PhaseStatus::Demolished => Stroke::new(0.13, [120, 120, 120], Dash::Dotted),
-            _ => plan::THIN,
+            analysis::PhaseStatus::Existing => Stroke { color: [120, 120, 120], ..proj },
+            analysis::PhaseStatus::Demolished => Stroke { color: [120, 120, 120], dash: Dash::Dotted, ..proj },
+            _ => proj,
         };
         for (a, b) in feature_edges(&it.set) {
             let (va, da) = f.to_view(a);
@@ -635,7 +650,7 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
                         d.line(Some(it.id), vec![a, b], false, plan::PATTERN);
                     }
                     if detailed {
-                        d.line(Some(it.id), lp.clone(), true, plan::THIN);
+                        d.line(Some(it.id), lp.clone(), true, plan::pen(1, view.scale));
                     }
                 }
             }
@@ -692,7 +707,7 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
                         pts.pop();
                     }
                     if pts.len() >= 3 {
-                        d.line(Some(owner), pts, true, plan::HEAVY);
+                        d.line(Some(owner), pts, true, plan::pen(plan::category_pens(p.element(owner).map(|e| e.category()).unwrap_or_default()).1, view.scale).as_cut());
                     }
                 }
             }
@@ -724,8 +739,12 @@ fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVe
                 }
                 d.fill(Some(id), &pts, [0, 0, 0, 255]);
             }
-            d.prims.push((Some(id), Prim::Text { pos: c + DVec2::new(-r, r * 1.6), text: l.name.clone(), size: 2.4, color: [0, 0, 0], anchor: Anchor::Left, angle: 0.0 }));
-            d.prims.push((Some(id), Prim::Text { pos: c + DVec2::new(r * 1.6, -r * 0.1), text: p.units.length(l.elevation), size: 2.4, color: [0, 0, 0], anchor: Anchor::Left, angle: 0.0 }));
+            // As the reference level head: name above the line and elevation below it, both
+            // right-aligned just before the target.
+            let x = c.x - r * 1.5;
+            let gap = 0.6 * scale;
+            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y + gap), text: l.name.clone(), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0 }));
+            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y - gap - 2.5 * 1.25 * scale), text: p.units.length(l.elevation), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0 }));
         }
     }
     if view.shows(Category::Grids) {

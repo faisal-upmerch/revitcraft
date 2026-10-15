@@ -338,7 +338,7 @@ pub fn to_pdf_page(
                     page.fill(&t.iter().map(xy).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_rot(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor == Anchor::Center, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
             SheetPrim::Image { view, min, max } => {
                 let px_per_mm = 6.0;
                 let w = ((max.x - min.x) * px_per_mm).round().clamp(16.0, 4096.0) as u32;
@@ -373,7 +373,7 @@ pub fn view_to_pdf_page(p: &Project, view: &View, footprints: &HashMap<Id, Footp
                     page.fill(&t.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_rot(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor == Anchor::Center, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
             SheetPrim::Image { .. } => {}
         }
     }

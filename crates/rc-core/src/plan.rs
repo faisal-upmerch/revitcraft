@@ -25,11 +25,16 @@ pub struct Stroke {
     pub width: f32,
     pub color: [u8; 3],
     pub dash: Dash,
+    /// Drawn where the view plane cuts the element (Object Styles cut weight applies).
+    pub cut: bool,
 }
 
 impl Stroke {
     pub const fn new(width: f32, color: [u8; 3], dash: Dash) -> Stroke {
-        Stroke { width, color, dash }
+        Stroke { width, color, dash, cut: false }
+    }
+    pub const fn as_cut(self) -> Stroke {
+        Stroke { cut: true, ..self }
     }
     pub fn dashed(&self) -> bool {
         self.dash != Dash::Solid
@@ -48,7 +53,59 @@ pub const REFPLANE: Stroke = Stroke::new(0.13, [30, 140, 60], Dash::DashDot);
 pub const ANNO: Stroke = Stroke::new(0.18, [0, 0, 0], Dash::Solid);
 pub const HALFTONE: [u8; 3] = [165, 165, 165];
 /// Fill pattern lines: the thinnest pen, black.
-pub const PATTERN: Stroke = Stroke::new(0.1, [0, 0, 0], Dash::Solid);
+pub const PATTERN: Stroke = Stroke::new(0.076, [0, 0, 0], Dash::Solid);
+
+/// The reference template's model line weights in inches on paper, pens 1–16, for view
+/// scales 1:12, 1:24, 1:48, 1:96, 1:192 and 1:384 (1" = 1'-0" down to 1/32" = 1'-0").
+const PEN_TABLE: [[f32; 6]; 16] = [
+    [0.003, 0.003, 0.003, 0.003, 0.003, 0.003],
+    [0.007, 0.007, 0.007, 0.005, 0.003, 0.003],
+    [0.012, 0.012, 0.011, 0.008, 0.004, 0.003],
+    [0.018, 0.018, 0.016, 0.012, 0.006, 0.004],
+    [0.025, 0.025, 0.022, 0.018, 0.009, 0.006],
+    [0.035, 0.035, 0.030, 0.025, 0.013, 0.009],
+    [0.050, 0.050, 0.042, 0.035, 0.018, 0.013],
+    [0.075, 0.075, 0.060, 0.050, 0.025, 0.018],
+    [0.100, 0.100, 0.090, 0.075, 0.035, 0.025],
+    [0.135, 0.135, 0.120, 0.100, 0.050, 0.035],
+    [0.175, 0.175, 0.155, 0.135, 0.065, 0.050],
+    [0.225, 0.225, 0.200, 0.175, 0.085, 0.065],
+    [0.300, 0.300, 0.250, 0.225, 0.110, 0.085],
+    [0.400, 0.400, 0.300, 0.300, 0.150, 0.110],
+    [0.500, 0.500, 0.400, 0.400, 0.200, 0.150],
+    [0.600, 0.600, 0.500, 0.500, 0.250, 0.200],
+];
+const PEN_SCALES: [f64; 6] = [12.0, 24.0, 48.0, 96.0, 192.0, 384.0];
+
+/// Width in paper millimetres of model pen `pen` (1–16) at a view scale (the nearest
+/// tabulated scale applies, as in the reference app).
+pub fn pen_mm(pen: u8, scale: f64) -> f32 {
+    let row = (pen.clamp(1, 16) - 1) as usize;
+    let s = scale.max(1.0).ln();
+    let col = (0..PEN_SCALES.len()).min_by(|a, b| (PEN_SCALES[*a].ln() - s).abs().total_cmp(&(PEN_SCALES[*b].ln() - s).abs())).unwrap_or(3);
+    PEN_TABLE[row][col] * 25.4
+}
+
+/// A solid black line of model pen `n`.
+pub fn pen(n: u8, scale: f64) -> Stroke {
+    Stroke::new(pen_mm(n, scale), [0, 0, 0], Dash::Solid)
+}
+
+/// The reference template's Object Styles: (projection, cut) pens per category. Doors and
+/// windows use their Frame/Panel subcategories (cut 3) for the parts the plan cuts.
+pub fn category_pens(c: Category) -> (u8, u8) {
+    use Category::*;
+    match c {
+        Walls | Floors | Roofs | Ceilings | StructuralFoundations => (2, 5),
+        Doors | Windows => (1, 3),
+        Columns | StructuralColumns | StructuralFraming => (1, 4),
+        Stairs | Casework | GenericModels | Ramps => (1, 3),
+        Furniture | Railings | PlumbingFixtures | SpecialtyEquipment => (1, 1),
+        Mass | Site => (1, 2),
+        Toposolid => (1, 6),
+        _ => (1, 3),
+    }
+}
 
 /// Stroke of a line style, with Manage > Additional Settings > Line Styles edits applied.
 pub fn line_style_stroke(p: &Project, s: LineStyle) -> Stroke {
@@ -85,8 +142,12 @@ pub fn builtin_line_stroke(s: LineStyle) -> Stroke {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Anchor {
+    /// Centred both ways on the position.
     Center,
+    /// Bottom-left corner of the text at the position.
     Left,
+    /// Bottom-right corner of the text at the position.
+    Right,
 }
 
 #[derive(Clone, Debug)]
@@ -167,7 +228,7 @@ impl Drawing {
                 for w in ts.windows(2) {
                     let (p0, p1) = (a.lerp(b, w[0]), a.lerp(b, w[1]));
                     let hidden = inside((p0 + p1) / 2.0);
-                    let st = if hidden { Stroke { dash: Dash::Dashed, color: HIDDEN.color, width: HIDDEN.width.min(stroke.width) } } else { stroke };
+                    let st = if hidden { Stroke { dash: Dash::Dashed, color: HIDDEN.color, width: HIDDEN.width.min(stroke.width), cut: false } } else { stroke };
                     self.prims.push((id, Prim::Line { pts: vec![p0, p1], closed: false, stroke: st }));
                 }
             }
@@ -221,7 +282,7 @@ pub fn apply_object_styles(p: &Project, d: &mut Drawing) {
                 if let (Some(c), true) = (style.color, default_color) {
                     stroke.color = c;
                 }
-                let cut = stroke.width >= 0.45;
+                let cut = stroke.cut;
                 if let Some(w) = if cut { style.cut_weight } else { style.projection_weight } {
                     stroke.width = w;
                 }
@@ -555,9 +616,9 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         let start = d.prims.len();
         match &e.kind {
             ElementKind::Floor(f) if f.level == c.level && f.boundary.len() >= 3 => {
-                d.line(Some(e.id), f.boundary.clone(), true, THIN);
+                d.line(Some(e.id), f.boundary.clone(), true, pen(2, c.scale));
                 for h in &f.holes {
-                    d.line(Some(e.id), h.clone(), true, THIN);
+                    d.line(Some(e.id), h.clone(), true, pen(2, c.scale));
                 }
             }
             ElementKind::Mass(m) if m.boundary.len() >= 3 => {
@@ -639,15 +700,17 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
             continue;
         }
         let start = d.prims.len();
+        let (proj, cutp) = category_pens(e.category());
         for s in family_geom::instance_symbol(p, i, c.cut_z) {
             if let Some(fill) = s.fill {
                 d.fill(Some(e.id), &s.pts, [fill[0], fill[1], fill[2], 255]);
             }
             let stroke = match s.style {
-                SymStyle::Cut => HEAVY,
-                SymStyle::Projection => MEDIUM,
-                SymStyle::Detail => THIN,
-                SymStyle::Hidden => HIDDEN,
+                SymStyle::Cut => pen(cutp, c.scale).as_cut(),
+                SymStyle::Projection => pen(proj, c.scale),
+                // Swings and other symbolic lines: the thinnest pen.
+                SymStyle::Detail => pen(1, c.scale),
+                SymStyle::Hidden => Stroke { width: pen_mm(1, c.scale), ..HIDDEN },
             };
             d.line(Some(e.id), s.pts, s.closed, stroke);
         }
@@ -664,8 +727,8 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         let start = d.prims.len();
         for s in r.path.windows(2) {
             let n = geom::perp((s[1] - s[0]).normalize_or_zero()) * w;
-            d.line(Some(e.id), vec![s[0] + n, s[1] + n], false, MEDIUM);
-            d.line(Some(e.id), vec![s[0] - n, s[1] - n], false, MEDIUM);
+            d.line(Some(e.id), vec![s[0] + n, s[1] + n], false, pen(1, c.scale));
+            d.line(Some(e.id), vec![s[0] - n, s[1] - n], false, pen(1, c.scale));
         }
         style_element(c, e, d, start);
     }
@@ -976,7 +1039,7 @@ fn walls_graphics(c: &Ctx, d: &mut Drawing) {
             }
         } else if w.base_level == c.level && zt < c.cut_z {
             let start = d.prims.len();
-            d.line(Some(e.id), fp.polygon(), true, MEDIUM);
+            d.line(Some(e.id), fp.polygon(), true, pen(2, c.scale));
             style_element(c, e, d, start);
         }
     }
@@ -987,10 +1050,10 @@ fn walls_graphics(c: &Ctx, d: &mut Drawing) {
             union = union.difference(&h);
         }
         let (fill, stroke) = match key {
-            1 => ([200, 200, 200, 255], Stroke::new(0.35, [110, 110, 110], Dash::Solid)),
-            2 => ([255, 255, 255, 0], Stroke::new(0.35, [110, 110, 110], Dash::Dotted)),
+            1 => ([200, 200, 200, 255], Stroke { color: [110, 110, 110], ..pen(5, c.scale).as_cut() }),
+            2 => ([255, 255, 255, 0], Stroke { color: [110, 110, 110], dash: Dash::Dotted, ..pen(5, c.scale).as_cut() }),
             // Coarse walls are hollow (no coarse fill pattern), as in the reference template.
-            _ => ([255, 255, 255, 0], HEAVY),
+            _ => ([255, 255, 255, 0], pen(5, c.scale).as_cut()),
         };
         if fill[3] > 0 {
             d.prims.insert(0, (None, Prim::Fill { tris: fill_tris(&union), color: fill }));
@@ -1059,7 +1122,7 @@ fn wall_layers(c: &Ctx, id: Id, w: &Wall, fp: &Footprint, d: &mut Drawing) {
     for &b in &bounds[1..bounds.len() - 1] {
         let pts = offset_line(b);
         for seg in split_by_openings(w, &pts, &openings) {
-            emit(d, seg, THIN);
+            emit(d, seg, pen(1, c.scale));
         }
     }
     // Material cut patterns show at Medium and Fine (Coarse uses the type's coarse fill).

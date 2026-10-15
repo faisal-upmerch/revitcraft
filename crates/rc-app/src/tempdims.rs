@@ -89,8 +89,90 @@ fn ray_hit(p: &Project, level: Id, skip: Id, pt: DVec2, dir: DVec2, max: f64) ->
     best
 }
 
+/// A door or window being dragged along its host: (id, position along the host, delta along
+/// the host). The reference app slides hosted openings along their wall, kept inside it.
+pub fn hosted_drag(app: &App) -> Option<(Id, f64, DVec2)> {
+    let Some(crate::canvas::Drag::Move { start, ids }) = &app.interact.drag else { return None };
+    let pt = app.interact.point?;
+    if ids.len() != 1 {
+        return None;
+    }
+    let p = &app.doc.data;
+    let i = p.element(ids[0])?.as_instance()?;
+    let w = p.wall(i.host?)?;
+    let (_, dir) = analysis::wall_point(w, i.offset_along_host);
+    let hw = analysis::opening_size(p, i).0 / 2.0;
+    let len = w.length();
+    let along = (i.offset_along_host + (pt - *start).dot(dir)).clamp(hw.min(len / 2.0), (len - hw).max(len / 2.0));
+    let (a, _) = analysis::wall_point(w, i.offset_along_host);
+    let (b, _) = analysis::wall_point(w, along);
+    Some((ids[0], along, b - a))
+}
+
+/// The reference app's temporary dimensions of a door or window: from each edge of the
+/// opening to the nearest reference on that side along the host (the face of a wall that
+/// meets or crosses it, another opening, or the wall end), both on the exterior side.
+fn hosted_dims(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: f64) -> Vec<TempDim> {
+    let len = w.length();
+    let hw = analysis::opening_size(p, i).0 / 2.0;
+    let (ul, ur) = (along - hw, along + hw);
+    let mut refs: Vec<f64> = vec![0.0, len];
+    let dir = w.direction();
+    for (e, o) in p.walls() {
+        if Some(e.id) == i.host || o.base_level != w.base_level || o.arc_mid.is_some() || o.length() < 1.0 {
+            continue;
+        }
+        let od = o.direction();
+        let s = geom::cross2(dir, od).abs();
+        if s < 0.05 {
+            continue;
+        }
+        let Some(x) = geom::line_intersection(w.start, dir, o.start, od) else { continue };
+        let (q, _) = geom::closest_on_segment(o.start, o.end, x);
+        let t = (x - w.start).dot(dir);
+        if q.distance(x) > analysis::JOIN_TOLERANCE || t < -analysis::wall_thickness(p, w) || t > len + analysis::wall_thickness(p, w) {
+            continue;
+        }
+        let ht = analysis::wall_thickness(p, o) / 2.0 / s;
+        refs.push(t - ht);
+        refs.push(t + ht);
+    }
+    for (e2, i2) in p.hosted_by(i.host.unwrap_or_default()) {
+        if e2.id != id {
+            let h2 = analysis::opening_size(p, i2).0 / 2.0;
+            refs.push(i2.offset_along_host - h2);
+            refs.push(i2.offset_along_host + h2);
+        }
+    }
+    let left = refs.iter().copied().filter(|r| *r <= ul - 1.0).fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.max(r))));
+    let right = refs.iter().copied().filter(|r| *r >= ur + 1.0).fold(None, |m: Option<f64>, r| Some(m.map_or(r, |m| m.min(r))));
+    // Witness lines start at the exterior face; the dimension line sits outside it.
+    let face = analysis::wall_thickness(p, w) / 2.0;
+    let n = w.normal();
+    let at = |u: f64| analysis::wall_point(w, u).0 + n * face;
+    let mut out = Vec::new();
+    for (r, e) in left.map(|r| (r, ul)).into_iter().chain(right.map(|r| (r, ur))) {
+        let (a, b) = (at(r), at(e));
+        let dw = (b - a).normalize_or_zero();
+        // A positive screen offset moves towards the world's -perp of the dimension.
+        let sign = if (-geom::perp(dw)).dot(n) >= 0.0 { 1.0 } else { -1.0 };
+        out.push(TempDim { a, b, value: (e - r).abs(), offset_px: 26.0 * sign });
+    }
+    out
+}
+
 pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
-    if app.selection.len() != 1 || !app.tool.is_select() || app.sketch.is_some() {
+    if let Some((id, along, _)) = hosted_drag(app) {
+        // Live dimensions while a door or window slides along its wall.
+        let p = &app.doc.data;
+        if let Some(i) = p.element(id).and_then(|e| e.as_instance()) {
+            if let Some(w) = i.host.and_then(|h| p.wall(h)) {
+                return hosted_dims(p, id, i, w, along);
+            }
+        }
+        return vec![];
+    }
+    if app.interact.drag.is_some() || app.selection.len() != 1 || !app.tool.is_select() || app.sketch.is_some() {
         return vec![];
     }
     let id = app.selection[0];
@@ -128,14 +210,7 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
         }
         ElementKind::Instance(i) if level.is_some() => {
             if let Some(w) = i.host.and_then(|h| p.wall(h)) {
-                let (pt, _) = analysis::wall_point(w, i.offset_along_host);
-                let len = w.length();
-                if i.offset_along_host > 1.0 {
-                    out.push(TempDim { a: analysis::wall_point(w, 0.0).0, b: pt, value: i.offset_along_host, offset_px: 24.0 });
-                }
-                if len - i.offset_along_host > 1.0 {
-                    out.push(TempDim { a: analysis::wall_point(w, len).0, b: pt, value: len - i.offset_along_host, offset_px: 24.0 });
-                }
+                out.extend(hosted_dims(p, id, i, w, i.offset_along_host));
             } else if i.end.is_none() {
                 let loc = analysis::instance_location(p, i);
                 for dir in [DVec2::X, -DVec2::X, DVec2::Y, -DVec2::Y] {

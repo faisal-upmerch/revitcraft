@@ -352,6 +352,7 @@ pub fn paint_text(painter: &egui::Painter, pos: Pos2, text: &str, h: f32, color:
     let align = match anchor {
         Anchor::Center => egui::Align2::CENTER_CENTER,
         Anchor::Left => egui::Align2::LEFT_BOTTOM,
+        Anchor::Right => egui::Align2::RIGHT_BOTTOM,
     };
     let a = align.pos_in_rect(&galley.rect).to_vec2();
     let shape = egui::epaint::TextShape::new(pos - a, galley, color).with_angle_and_anchor(-angle, align);
@@ -462,6 +463,8 @@ fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, vie
     if resp.dragged_by(egui::PointerButton::Middle) {
         let d = resp.drag_delta();
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
+        // The pan cursor while the middle button drags.
+        resp.ctx.set_cursor_icon(egui::CursorIcon::Move);
     }
     if resp.double_clicked_by(egui::PointerButton::Middle) {
         cam.fitted = false;
@@ -737,6 +740,11 @@ pub fn snap_point(app: &mut App, view: Id, cursor: DVec2, xf: &Xf, reference: Op
     snap::snap(&inp)
 }
 
+/// A light-blue dashed reference line (the location line of a snapped element).
+pub fn reference_line(painter: &egui::Painter, a: Pos2, b: Pos2) {
+    painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, style::TRACK), 5.0, 4.0));
+}
+
 /// A light-blue dash-dot tracking line.
 pub fn track_line(painter: &egui::Painter, a: Pos2, b: Pos2) {
     painter.extend(egui::Shape::dashed_line_with_offset(&[a, b], Stroke::new(1.0, style::TRACK), &[12.0, 2.0], &[3.0, 3.0], 0.0));
@@ -995,7 +1003,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     for e in app.doc.data.elements.iter().filter(|e| e.group.is_some_and(|g| sel.contains(&g))) {
         sel_draw.insert(e.id);
     }
+    let hosted = crate::tempdims::hosted_drag(app);
     let move_offset = match (&app.interact.drag, app.interact.point) {
+        // Doors and windows slide along their host.
+        (Some(Drag::Move { .. }), Some(_)) if is_active && hosted.is_some() => hosted.map(|h| h.2).unwrap_or_default(),
         (Some(Drag::Move { start, .. }), Some(pt)) if is_active => pt - *start,
         _ => DVec2::ZERO,
     };
@@ -1143,9 +1154,31 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         let clicked = resp.clicked_by(egui::PointerButton::Primary);
         canvas_tools::handle(app, ui, &resp, &painter, &xf, &view, &drawing, cursor, point, clicked);
     }
-    if let Some(s) = &app.interact.snap {
-        if wants_snap {
-            paint_snap(&painter, &xf, s);
+    if let Some(s) = app.interact.snap.clone() {
+        // A door or window sliding along its wall shows no snap, only its dimensions.
+        if wants_snap && crate::tempdims::hosted_drag(app).is_none() {
+            // As in the reference app, the element being snapped to shows its location line
+            // as a light-blue dashed reference.
+            if !matches!(s.kind, SnapKind::Free | SnapKind::Angle) {
+                if let Some(w) = s.target.and_then(|id| app.doc.data.wall(id)) {
+                    let pts: Vec<Pos2> = rc_core::analysis::wall_path(w).iter().map(|q| xf.s(*q)).collect();
+                    for seg in pts.windows(2) {
+                        reference_line(&painter, seg[0], seg[1]);
+                    }
+                }
+            }
+            paint_snap(&painter, &xf, &s);
+        }
+    }
+    // The tool's prompt follows the cursor when it rests and nothing is snapped.
+    if !app.tool.is_select() && app.interact.snap.as_ref().is_none_or(|s| s.kind == SnapKind::Free) && app.typed.is_empty() {
+        if let Some(c) = resp.hover_pos() {
+            let still = ui.input(|i| i.pointer.time_since_last_movement());
+            if still > 0.35 && !app.interact.prompt.is_empty() {
+                style::canvas_tooltip(&painter, c + vec2(12.0, 16.0), &app.interact.prompt);
+            } else if still <= 0.35 {
+                ui.ctx().request_repaint_after(std::time::Duration::from_millis(400));
+            }
         }
     }
     // Typed value box.
@@ -1195,7 +1228,7 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
     grips::paint(painter, xf, &grip_list, app.interact.hover_grip.as_ref());
 
     // Temporary dimensions (editable).
-    let temp_dims = if app.interact.drag.is_none() { crate::tempdims::compute(app, view, xf) } else { vec![] };
+    let temp_dims = crate::tempdims::compute(app, view, xf);
     let mut tdim_hit: Option<usize> = None;
     let mut perm_hit: Option<usize> = None;
     for (k, td) in temp_dims.iter().enumerate() {
@@ -1246,6 +1279,12 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
         }
         app.interact.tab_pressed = false;
         app.interact.hover = if grip_hover.is_some() || tdim_hit.is_some() || perm_hit.is_some() { None } else { cands.get(app.interact.tab_index.min(cands.len().saturating_sub(1))).copied() };
+        // Over a selected element that can be dragged the cursor becomes the move cursor.
+        if let Some(h) = app.interact.hover {
+            if app.selection.contains(&h) && app.el(h).is_some_and(|e| !e.pinned) {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
+            }
+        }
         if !cands.is_empty() {
             let h = app.interact.hover;
             app.interact.prompt = h.map(|h| describe(app, h)).unwrap_or_default();
@@ -1345,7 +1384,19 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                 }
             }
         }
+        Some(Drag::Move { start, ids }) if crate::tempdims::hosted_drag(app).is_some() && !ctrl => {
+            painter.ctx().set_cursor_icon(egui::CursorIcon::Move);
+            let (id, along, _) = crate::tempdims::hosted_drag(app).unwrap();
+            if resp.drag_stopped() {
+                app.run("Move", |p| rc_core::edit::set_opening_offset(p, id, along));
+                app.interact.drag = None;
+            } else if let Some(c) = resp.hover_pos() {
+                style::canvas_tooltip(painter, c + vec2(12.0, 16.0), "Drag to new position");
+            }
+            let _ = (start, ids);
+        }
         Some(Drag::Move { start, ids }) => {
+            painter.ctx().set_cursor_icon(egui::CursorIcon::Move);
             if resp.drag_stopped() {
                 if let Some(pt) = app.interact.point {
                     let delta = pt - start;

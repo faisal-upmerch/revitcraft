@@ -268,11 +268,11 @@ pub fn header(ui: &mut egui::Ui, text: &str) {
 
 /// A small light-yellow-free Windows tooltip box (white with a grey border) at `pos`.
 pub fn canvas_tooltip(painter: &egui::Painter, pos: egui::Pos2, text: &str) -> egui::Rect {
-    let galley = painter.layout(text.to_string(), font(11.5), Color32::from_gray(40), 320.0);
-    let bg = egui::Rect::from_min_size(pos, galley.size()).expand2(egui::vec2(4.0, 2.0)).translate(egui::vec2(4.0, 2.0));
-    painter.rect_filled(bg.translate(egui::vec2(1.5, 1.5)), 0.0, Color32::from_black_alpha(30));
-    painter.rect_filled(bg, 0.0, Color32::from_rgb(252, 252, 252));
-    painter.rect_stroke(bg, 0.0, Stroke::new(1.0, Color32::from_gray(150)), egui::StrokeKind::Inside);
-    painter.galley(bg.min + egui::vec2(4.0, 2.0), galley, Color32::from_gray(40));
+    // The reference app's snap label: small text in a flat light box with a grey border.
+    let galley = painter.layout(text.to_string(), font(10.5), Color32::from_gray(60), 320.0);
+    let bg = egui::Rect::from_min_size(pos, galley.size()).expand2(egui::vec2(3.0, 1.0)).translate(egui::vec2(3.0, 1.0));
+    painter.rect_filled(bg, 0.0, Color32::from_rgb(245, 245, 245));
+    painter.rect_stroke(bg, 0.0, Stroke::new(1.0, Color32::from_gray(170)), egui::StrokeKind::Inside);
+    painter.galley(bg.min + egui::vec2(3.0, 1.0), galley, Color32::from_gray(60));
     bg
 }
