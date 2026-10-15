@@ -344,7 +344,7 @@ fn quantize_font(h: f32) -> f32 {
 }
 
 pub fn paint_text(painter: &egui::Painter, pos: Pos2, text: &str, h: f32, color: Color32, anchor: Anchor, angle: f32) {
-    if h < 3.0 || text.is_empty() {
+    if h < 1.5 || text.is_empty() {
         return;
     }
     let h = quantize_font(h.min(96.0));

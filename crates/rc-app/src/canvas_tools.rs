@@ -933,8 +933,71 @@ fn do_fillet(app: &mut App, view: &View) {
 
 // ---------------------------------------------------------------- doors and windows
 
+/// Doors and windows placed on a wall seen in an elevation or section: the cursor sets the
+/// position along the wall; the sill follows the type (doors sit on the level).
+fn hosted_tool_elevation(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, c: DVec2, clicked: bool) {
+    let is_door = app.tool.kind == ToolKind::Door;
+    let type_id = if is_door { app.opts.door_type } else { app.opts.window_type };
+    // Wall edges under the cursor, else the wall face hit by the view ray.
+    let wall = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Wall(_))).or_else(|| {
+        let fp = app.footprints();
+        rc_core::section::pick_face(&app.doc.data, view, c, &fp).map(|h| h.0).filter(|id| app.doc.data.wall(*id).is_some())
+    });
+    let Some(wall_id) = wall else {
+        if clicked {
+            app.error(format!("{} must be hosted by a wall. Hover over a wall.", if is_door { "Doors" } else { "Windows" }));
+        }
+        return;
+    };
+    let fp = app.footprints();
+    let p = &app.doc.data;
+    let Some(w) = p.wall(wall_id).cloned() else { return };
+    let (Some((o, dir3)), Some(frame)) = (rc_core::section::view_ray(p, view, c, &fp), rc_core::section::view_frame(p, view, &fp)) else { return };
+    // Where the view ray meets the wall's centre plane.
+    let n3 = geom::at(w.normal(), 0.0);
+    let denom = dir3.dot(n3);
+    let hit = if denom.abs() > 1e-9 { o + dir3 * ((geom::at(w.start, 0.0) - o).dot(n3) / denom) } else { o };
+    let (mut along, _) = analysis::wall_project(&w, hit.truncate());
+    let r = p.family_type(type_id).map(|(f, t)| rc_core::family_params::Resolver::for_type(f, t));
+    let width = r.as_ref().map(|r| r.num("Rough Width", r.num("Width", 900.0))).unwrap_or(900.0);
+    let height = r.as_ref().map(|r| r.num("Rough Height", r.num("Height", if is_door { 2100.0 } else { 1200.0 }))).unwrap_or(2100.0);
+    let default_sill = if is_door { 0.0 } else { r.as_ref().map(|r| r.num("Default Sill Height", 900.0)).unwrap_or(900.0) };
+    let sill = if is_door { 0.0 } else { app.opts.window_sill.unwrap_or(default_sill) };
+    let len = w.length();
+    let step = crate::snap::length_increment(xf.zoom, p.units.system == rc_core::units::UnitSystem::Imperial).max(10.0);
+    along = ((along / step).round() * step).clamp(width / 2.0, (len - width / 2.0).max(width / 2.0));
+    let base = p.level_elevation(w.base_level) + w.base_offset;
+    let (a, _) = analysis::wall_point(&w, along - width / 2.0);
+    let (b, _) = analysis::wall_point(&w, along + width / 2.0);
+    let corners = [(a, base + sill), (b, base + sill), (b, base + sill + height), (a, base + sill + height)];
+    let pts: Vec<Pos2> = corners.iter().map(|(q, z)| xf.s(frame.to_view(geom::at(*q, *z)).0)).collect();
+    painter.add(egui::Shape::closed_line(pts, Stroke::new(2.0, style::PREVIEW)));
+    let units = p.units.clone();
+    let (s0, _) = analysis::wall_point(&w, 0.0);
+    let lo = frame.to_view(geom::at(s0, base)).0;
+    let mid = frame.to_view(geom::at(analysis::wall_point(&w, along).0, base)).0;
+    temp_dim(painter, xf, lo, mid, &units.length(along), -26.0);
+    if clicked {
+        let name = if is_door { "Place Door" } else { "Place Window" };
+        let sill_set = if is_door { None } else { app.opts.window_sill };
+        app.run(name, |p| {
+            let id = edit::place_hosted(p, type_id, wall_id, along, false)?;
+            if let Some(s) = sill_set {
+                if let Some(i) = p.element_mut(id).and_then(|e| e.as_instance_mut()) {
+                    i.elevation = s;
+                }
+            }
+            Ok(id)
+        });
+    }
+}
+
 fn hosted_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, clicked: bool) {
     let Some(c) = cursor else { return };
+    if matches!(view.kind, ViewKind::Elevation { .. } | ViewKind::Section { .. }) {
+        hosted_tool_elevation(app, painter, xf, view, d, c, clicked);
+        return;
+    }
     let Some(level) = view.plan_level() else { return };
     let is_door = app.tool.kind == ToolKind::Door;
     let type_id = if is_door { app.opts.door_type } else { app.opts.window_type };

@@ -222,7 +222,7 @@ fn keynoting(app: &mut App, ctx: &egui::Context) {
                 let shown = if file.is_empty() { "Built-in keynote table".to_string() } else { file.clone() };
                 ui.add(egui::TextEdit::singleline(&mut shown.clone()).desired_width(300.0).interactive(false));
                 if dlg_button(ui, "Browse...", false, true) {
-                    load = Some(rfd::FileDialog::new().add_filter("Keynote file", &["txt"]).pick_file());
+                    load = Some(crate::files::FileDialog::new().add_filter("Keynote file", &["txt"]).pick_file());
                 }
             });
             ui.horizontal(|ui| {

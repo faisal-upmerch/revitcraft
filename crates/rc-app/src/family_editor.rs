@@ -289,7 +289,7 @@ pub fn show(app: &mut App, mut fe: FamilyEditor, ui: &mut egui::Ui) -> Option<Fa
                 load = true;
             }
             if big(ui, Icon::Save, "Save As...", false, true) {
-                let path = rfd::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{}.rcfa", fe.family.name)).save_file();
+                let path = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{}.rcfa", fe.family.name)).save_file();
                 if let Some(mut path) = path {
                     if path.extension().is_none() {
                         path.set_extension(rc_core::io::FAMILY_EXTENSION);

@@ -20,6 +20,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     let sel = !app.selection.is_empty();
     let sel_el = |f: &dyn Fn(&Element) -> bool| app.selection.iter().any(|id| app.el(*id).is_some_and(f));
     let in_sketch = app.sketch.is_some();
+    let on_sheet = view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_)));
     match cmd {
         Undo => app.doc.can_undo() || in_sketch,
         Redo => app.doc.can_redo(),
@@ -29,6 +30,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
         RoofExtrusion => view.is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
         Level => !plan && graphical_2d,
+        Text | DetailLine | FilledRegion | MaskingRegion | RevisionCloud | Symbol if on_sheet && !in_sketch => true,
         DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | DetailLine | FilledRegion | MaskingRegion | RevisionCloud
         | Text | TagByCategory | TagAll | Symbol | SpotCoordinate | SpotSlope => graphical_2d && !in_sketch,
         SaveSelection => sel,
@@ -124,7 +126,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         ImportIfc => {
             if app.confirm_discard(Pending::ImportIfc) {
-                if let Some(path) = rfd::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file() {
+                if let Some(path) = crate::files::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file() {
                     app.import_ifc_path(&path);
                 }
             }
@@ -270,12 +272,12 @@ pub fn exec(app: &mut App, cmd: Cmd) {
 
         // ---------------- insert
         LinkCad | ImportCad => {
-            if let Some(path) = rfd::FileDialog::new().add_filter("DXF drawing", &["dxf"]).pick_file() {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("DXF drawing", &["dxf"]).pick_file() {
                 link_cad_path(app, &path);
             }
         }
         LoadFamily => {
-            if let Some(path) = rfd::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
                 load_family_path(app, &path);
             }
         }
@@ -848,7 +850,7 @@ fn start_drawing(app: &mut App, kind: ToolKind) {
 fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     let view_ok = match kind {
         SketchKind::RoofExtrusion => app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })),
-        SketchKind::Region { .. } | SketchKind::RevisionCloud => app.active_view().is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. })),
+        SketchKind::Region { .. } | SketchKind::RevisionCloud => app.active_view().is_some_and(|v| (v.is_graphical() || matches!(v.kind, ViewKind::Sheet(_))) && !matches!(v.kind, ViewKind::ThreeD { .. })),
         _ => app.active_level().is_some(),
     };
     if !view_ok {
@@ -1568,7 +1570,7 @@ pub fn link_cad_path(app: &mut App, path: &std::path::Path) {
 }
 
 fn export_ifc(app: &mut App) {
-    let Some(path) = rfd::FileDialog::new().add_filter("IFC", &["ifc"]).set_file_name("Project1.ifc").save_file() else { return };
+    let Some(path) = crate::files::FileDialog::new().add_filter("IFC", &["ifc"]).set_file_name("Project1.ifc").save_file() else { return };
     let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let text = rc_core::ifc::export(&app.doc.data, &name, &crate::app::timestamp());
     match std::fs::write(&path, text) {
@@ -1579,7 +1581,7 @@ fn export_ifc(app: &mut App) {
 
 fn export_csv(app: &mut App) {
     let Some(v) = app.active_view().cloned() else { return };
-    let Some(path) = rfd::FileDialog::new().add_filter("CSV", &["csv"]).set_file_name(format!("{}.csv", v.name)).save_file() else { return };
+    let Some(path) = crate::files::FileDialog::new().add_filter("CSV", &["csv"]).set_file_name(format!("{}.csv", v.name)).save_file() else { return };
     let Some(table) = app.table(v.id) else { return };
     match std::fs::write(&path, rc_core::schedule::to_csv(&v.name, &table)) {
         Ok(()) => app.info(format!("Exported {}", path.display())),

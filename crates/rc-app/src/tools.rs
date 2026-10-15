@@ -212,8 +212,6 @@ impl ToolKind {
         matches!(
             self,
             ToolKind::Wall
-                | ToolKind::Door
-                | ToolKind::Window
                 | ToolKind::Component
                 | ToolKind::Column
                 | ToolKind::StructColumn

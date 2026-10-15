@@ -143,8 +143,70 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             app.sheet_activation = None;
         }
     }
-    // Viewport selection and moves.
+    // Annotation on the sheet: tools draw at paper scale, clicks select it.
     let cursor = resp.hover_pos().map(|s| xf.w(s));
+    let notes = rc_core::sheet::sheet_annotations(&app.doc.data, &view, &app.footprints());
+    let note_sel: std::collections::HashSet<Id> = app.selection.iter().copied().filter(|id| app.el(*id).is_some_and(|e| e.view == Some(view_id))).collect();
+    if !note_sel.is_empty() {
+        let hl: Vec<(Option<Id>, Prim)> = notes.prims.iter().filter(|(id, _)| id.is_some_and(|i| note_sel.contains(&i))).cloned().collect();
+        canvas::paint_prims(&painter, &hl, &xf, &|_, _| Some(style::SELECT));
+    }
+    // Move with viewports selected moves the viewports.
+    let vp_sel: Vec<Id> = app.selection.iter().copied().filter(|id| sh.viewports.iter().any(|vp| vp.view == *id)).collect();
+    if app.tool.kind == crate::tools::ToolKind::Move && !vp_sel.is_empty() {
+        app.interact.prompt = if app.tool.pts.is_empty() { "Click to enter move start point.".into() } else { "Click to enter move end point.".into() };
+        if let (Some(a), Some(c)) = (app.tool.pts.first().copied(), cursor) {
+            painter.line_segment([xf.s(a), xf.s(c)], Stroke::new(1.5, style::PREVIEW));
+        }
+        if resp.clicked_by(egui::PointerButton::Primary) {
+            if let Some(c) = cursor {
+                match app.tool.pts.first().copied() {
+                    None => app.tool.pts.push(c),
+                    Some(a) => {
+                        let d = c - a;
+                        app.run("Move Viewport", |p| {
+                            if let Some(ViewKind::Sheet(s)) = p.view_mut(view_id).map(|v| &mut v.kind) {
+                                for vp in s.viewports.iter_mut().filter(|vp| vp_sel.contains(&vp.view)) {
+                                    vp.cx += d.x;
+                                    vp.cy += d.y;
+                                }
+                            }
+                            Ok(())
+                        });
+                        app.set_tool(crate::tools::ToolKind::Select);
+                        app.select(vp_sel);
+                    }
+                }
+            }
+        }
+        return;
+    }
+    if !app.tool.is_select() || app.sketch.is_some() {
+        let mut sv = view.clone();
+        sv.scale = 1.0;
+        app.interact.prompt = crate::canvas_tools::prompt(app);
+        let clicked = resp.clicked_by(egui::PointerButton::Primary);
+        crate::canvas_tools::handle(app, ui, &resp, &painter, &xf, &sv, &notes, cursor, cursor, clicked);
+        if let Some(sk) = app.sketch.as_ref() {
+            for s in &sk.segs {
+                let pts: Vec<Pos2> = s.points().iter().map(|q| xf.s(*q)).collect();
+                painter.add(egui::Shape::line(pts, Stroke::new(2.0, style::SKETCH)));
+            }
+        }
+        return;
+    }
+    if resp.clicked_by(egui::PointerButton::Primary) {
+        if let Some(id) = cursor.and_then(|c| rc_core::section::pick(&notes, c, 4.0 / xf.zoom)) {
+            let ctrl = ui.input(|i| i.modifiers.ctrl);
+            let mut s = if ctrl { app.selection.clone() } else { vec![] };
+            if !s.contains(&id) {
+                s.push(id);
+            }
+            app.select(s);
+            return;
+        }
+    }
+    // Viewport selection and moves.
     let hover = cursor.and_then(|c| boxes.iter().find(|b| c.x >= b.min.x && c.x <= b.max.x && c.y >= b.min.y && c.y <= b.max.y)).map(|b| b.view);
     let sel_vp: Option<Id> = app.selection.iter().copied().find(|id| sh.viewports.iter().any(|vp| vp.view == *id));
     for b in &boxes {

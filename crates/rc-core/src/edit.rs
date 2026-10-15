@@ -2071,9 +2071,18 @@ pub fn new_floor_plan(p: &mut Project, level: Id) -> Result<Id, String> {
 
 /// Duplicate (optionally With Detailing: view-specific annotation is copied too).
 pub fn duplicate_view(p: &mut Project, view: Id, with_detailing: bool) -> Result<Id, String> {
-    let src = p.view(view).ok_or("View not found.")?.clone();
-    if matches!(src.kind, ViewKind::Sheet(_)) {
-        return Err("Sheets cannot be duplicated.".into());
+    let mut src = p.view(view).ok_or("View not found.")?.clone();
+    // Duplicate Sheet: a new sheet number and no viewports (views sit on one sheet only).
+    if let ViewKind::Sheet(sh) = &mut src.kind {
+        let numbers: Vec<String> = p.views.iter().filter_map(|v| match &v.kind {
+            ViewKind::Sheet(s) => Some(s.number.clone()),
+            _ => None,
+        }).collect();
+        let base = sh.number.trim_end_matches(|c: char| c.is_ascii_digit()).to_string();
+        let start: u32 = sh.number[base.len()..].parse().unwrap_or(100);
+        sh.number = (start + 1..).map(|n| format!("{base}{n}")).find(|n| !numbers.contains(n)).unwrap();
+        sh.viewports.clear();
+        sh.revisions.clear();
     }
     let name = unique_name(p.views.iter().map(|v| v.name.clone()), &format!("{} Copy", src.name));
     let id = p.new_id();

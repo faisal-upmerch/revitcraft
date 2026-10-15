@@ -182,6 +182,7 @@ pub struct App {
     pub quit_requested: bool,
     pub screenshot: Option<(PathBuf, u32)>,
     pub input_script: Option<crate::script::InputScript>,
+    pub selftest: Option<crate::selftest::SelfTest>,
     pub family_editor: Option<crate::family_editor::FamilyEditor>,
     pub settings_dirty: bool,
     /// Home screen thumbnails per recent project path (None = no thumbnail).
@@ -236,6 +237,7 @@ impl App {
             quit_requested: false,
             screenshot: std::env::var("RC_SCREENSHOT").ok().map(|p| (PathBuf::from(p), 0)),
             input_script: crate::script::InputScript::from_env(),
+            selftest: None,
             family_editor: None,
             settings_dirty: false,
             thumbs: HashMap::new(),
@@ -259,6 +261,7 @@ impl App {
             };
             match args[k].as_str() {
                 "--sample" => self.open_sample(),
+                "--selftest" => self.selftest = Some(crate::selftest::SelfTest::new(self)),
                 "--sample-site" => self.replace_document(rc_core::sample::sample_site(), None),
                 "--imperial" => self.replace_document(defaults::new_project(UnitSystem::Imperial), None),
                 "--view" => {
@@ -313,6 +316,7 @@ impl App {
                         self.save_to(std::path::Path::new(&path));
                     }
                 }
+                "" => {}
                 path => self.open_path(std::path::Path::new(path)),
             }
             k += 1;
@@ -656,8 +660,34 @@ impl App {
             self.error(format!("{}: select elements first, then start the tool.", kind.name()));
             return;
         }
-        let three_d_tool = matches!(kind, ToolKind::Paint | ToolKind::RemovePaint);
-        if self.active_view().is_some_and(|v| !v.is_graphical() || (matches!(v.kind, ViewKind::ThreeD { .. }) && !three_d_tool)) && kind != ToolKind::Select {
+        let three_d_tool = matches!(kind, ToolKind::Paint | ToolKind::RemovePaint) || crate::view3d::is_3d_tool(kind);
+        // Sheets take annotation (and Move for viewports), as in the reference app.
+        let sheet_tool = matches!(
+            kind,
+            ToolKind::Text
+                | ToolKind::DetailLine
+                | ToolKind::Symbol
+                | ToolKind::SketchLine
+                | ToolKind::Move
+                | ToolKind::Copy
+                | ToolKind::Rotate
+                | ToolKind::Array
+                | ToolKind::Scale
+                | ToolKind::Measure
+                | ToolKind::MirrorPick
+                | ToolKind::MirrorDraw
+                | ToolKind::TrimCorner
+                | ToolKind::TrimSingle
+                | ToolKind::TrimMulti
+                | ToolKind::Split
+                | ToolKind::SplitGap
+                | ToolKind::MatchType
+                | ToolKind::Align
+                | ToolKind::Offset
+                | ToolKind::ZoomRegion
+        );
+        let on_sheet = self.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_)));
+        if !(on_sheet && sheet_tool) && self.active_view().is_some_and(|v| !v.is_graphical() || (matches!(v.kind, ViewKind::ThreeD { .. }) && !three_d_tool)) && kind != ToolKind::Select {
             self.error(format!("{} cannot be used in this view. Open a plan, section or elevation.", kind.name()));
             return;
         }
@@ -750,7 +780,7 @@ impl App {
     }
 
     pub fn open_dialog(&mut self) {
-        if let Some(path) = rfd::FileDialog::new().add_filter("Projects and IFC", &[io::EXTENSION, "ifc"]).add_filter("RevitCraft Project", &[io::EXTENSION]).add_filter("IFC", &["ifc"]).pick_file() {
+        if let Some(path) = crate::files::FileDialog::new().add_filter("Projects and IFC", &[io::EXTENSION, "ifc"]).add_filter("RevitCraft Project", &[io::EXTENSION]).add_filter("IFC", &["ifc"]).pick_file() {
             self.open_path(&path);
         }
     }
@@ -780,7 +810,7 @@ impl App {
     }
 
     pub fn save_as(&mut self) -> bool {
-        let Some(mut path) = rfd::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).set_file_name("Project1.rcx").save_file() else {
+        let Some(mut path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).set_file_name("Project1.rcx").save_file() else {
             return false;
         };
         if path.extension().is_none() {
@@ -1021,9 +1051,23 @@ impl App {
 
     // ------------------------------------------------------------ frame
 
+    /// Text of the toast on screen (the self-test counts command errors with it).
+    pub fn toast_text(&self) -> Option<String> {
+        self.toast.as_ref().map(|t| t.text.clone())
+    }
+
     pub fn frame(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         self.now = ctx.input(|i| i.time);
+        if let Some(mut st) = self.selftest.take() {
+            if st.step(self, &ctx) {
+                self.selftest = Some(st);
+            } else {
+                self.doc.dirty = false;
+                self.quit_requested = true;
+                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+        }
         if style::is_dark() != self.settings.dark {
             style::apply(&ctx, self.settings.dark);
         }
@@ -1304,6 +1348,9 @@ impl eframe::App for App {
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
         if let Some(s) = self.input_script.as_mut() {
             s.feed(raw_input);
+        }
+        if let Some(st) = self.selftest.as_ref() {
+            st.input(raw_input);
         }
     }
 }

@@ -508,7 +508,7 @@ pub fn set_tool_type(app: &mut App, type_id: Id) {
 
 pub fn save_family(app: &mut App, fid: Id) {
     let Some(fam) = app.doc.data.family(fid).cloned() else { return };
-    let Some(mut path) = rfd::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{}.rcfa", fam.name)).save_file() else { return };
+    let Some(mut path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{}.rcfa", fam.name)).save_file() else { return };
     if path.extension().is_none() {
         path.set_extension(rc_core::io::FAMILY_EXTENSION);
     }

@@ -483,7 +483,7 @@ fn pending(app: &mut App, ctx: &egui::Context) {
             Pending::Open => app.open_dialog(),
             Pending::Sample => app.open_sample(),
             Pending::ImportIfc => {
-                if let Some(path) = rfd::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file() {
+                if let Some(path) = crate::files::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file() {
                     app.import_ifc_path(&path);
                 }
             }
@@ -608,7 +608,7 @@ fn export_dxf(app: &mut App, ids: &[Id]) {
     let p = app.doc.data.clone();
     if ids.len() == 1 {
         let v = p.view(ids[0]).unwrap();
-        let Some(path) = rfd::FileDialog::new().add_filter("DXF", &["dxf"]).set_file_name(format!("{}.dxf", safe_name(&v.name))).save_file() else { return };
+        let Some(path) = crate::files::FileDialog::new().add_filter("DXF", &["dxf"]).set_file_name(format!("{}.dxf", safe_name(&v.name))).save_file() else { return };
         let text = match &v.kind {
             ViewKind::Sheet(_) => Some(rc_core::dxf::export_sheet(&p, v, &fp)),
             _ => rc_core::dxf::export_view(&p, v, &fp),
@@ -620,7 +620,7 @@ fn export_dxf(app: &mut App, ids: &[Id]) {
         }
         return;
     }
-    let Some(dir) = rfd::FileDialog::new().set_title("Choose a folder for the DXF files").pick_folder() else { return };
+    let Some(dir) = crate::files::FileDialog::new().set_title("Choose a folder for the DXF files").pick_folder() else { return };
     let mut n = 0;
     for id in ids {
         let Some(v) = p.view(*id) else { continue };
@@ -638,7 +638,7 @@ fn export_dxf(app: &mut App, ids: &[Id]) {
 }
 
 fn export_pdf(app: &mut App, ids: &[Id]) {
-    let Some(path) = rfd::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name("Sheets.pdf").save_file() else { return };
+    let Some(path) = crate::files::FileDialog::new().add_filter("PDF", &["pdf"]).set_file_name("Sheets.pdf").save_file() else { return };
     let fp = app.footprints();
     let data = app.doc.data.clone();
     let mut pages = Vec::new();
@@ -776,7 +776,7 @@ fn export_image(app: &mut App, id: Id) {
         app.error("This view could not be rendered.");
         return;
     };
-    let Some(mut path) = rfd::FileDialog::new().add_filter("PNG image", &["png"]).set_file_name(format!("{}.png", safe_name(&view.name))).save_file() else { return };
+    let Some(mut path) = crate::files::FileDialog::new().add_filter("PNG image", &["png"]).set_file_name(format!("{}.png", safe_name(&view.name))).save_file() else { return };
     if path.extension().is_none() {
         path.set_extension("png");
     }

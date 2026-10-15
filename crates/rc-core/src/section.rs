@@ -138,15 +138,39 @@ struct ZBuf {
     w: usize,
     h: usize,
     depth: Vec<f32>,
+    /// Deepest value over each pixel and its 8 neighbours (built by `finish`).
+    deepest: Vec<f32>,
 }
 
 impl ZBuf {
+    /// Precomputes the 3x3 neighbourhood maximum used by `visible`; outside the buffer is
+    /// background (infinite depth).
+    fn finish(&mut self) {
+        let (w, h) = (self.w, self.h);
+        let at = |x: isize, y: isize| if x < 0 || y < 0 || x as usize >= w || y as usize >= h { f32::INFINITY } else { self.depth[y as usize * w + x as usize] };
+        // Separable max: rows, then columns.
+        let mut rows = vec![0f32; w * h];
+        for y in 0..h as isize {
+            for x in 0..w as isize {
+                rows[y as usize * w + x as usize] = at(x - 1, y).max(at(x, y)).max(at(x + 1, y));
+            }
+        }
+        let row_at = |x: usize, y: isize| if y < 0 || y as usize >= h { f32::INFINITY } else { rows[y as usize * w + x] };
+        let mut out = vec![0f32; w * h];
+        for y in 0..h as isize {
+            for x in 0..w {
+                out[y as usize * w + x] = row_at(x, y - 1).max(row_at(x, y)).max(row_at(x, y + 1));
+            }
+        }
+        self.deepest = out;
+    }
+
     fn new(min: DVec2, max: DVec2) -> ZBuf {
         let size = (max - min).max(DVec2::splat(1.0));
         let px = (size.x.max(size.y) / 1400.0).max(5.0);
         let w = (size.x / px).ceil() as usize + 2;
         let h = (size.y / px).ceil() as usize + 2;
-        ZBuf { min, px, w, h, depth: vec![f32::INFINITY; w * h] }
+        ZBuf { min, px, w, h, depth: vec![f32::INFINITY; w * h], deepest: Vec::new() }
     }
 
     fn raster(&mut self, t: [(DVec2, f64); 3]) {
@@ -156,24 +180,42 @@ impl ZBuf {
         if det.abs() < 1e-9 {
             return;
         }
-        let x0 = a.x.min(b.x).min(c.x).floor().max(0.0) as usize;
-        let x1 = (a.x.max(b.x).max(c.x).ceil() as usize).min(self.w - 1);
+        // Scanline fill: for each pixel row, the span inside the triangle, with the depth
+        // plane stepped along it.
+        let (e1, e2) = (b - a, c - a);
+        let (dz1, dz2) = (t[1].1 - t[0].1, t[2].1 - t[0].1);
+        let dzdx = (dz1 * e2.y - dz2 * e1.y) / det;
+        let dzdy = (dz2 * e1.x - dz1 * e2.x) / det;
         let y0 = a.y.min(b.y).min(c.y).floor().max(0.0) as usize;
-        let y1 = (a.y.max(b.y).max(c.y).ceil() as usize).min(self.h - 1);
+        let y1 = (a.y.max(b.y).max(c.y).ceil().max(0.0) as usize).min(self.h - 1);
+        let edges = [(a, b), (b, c), (c, a)];
         for y in y0..=y1 {
-            for x in x0..=x1 {
-                let q = DVec2::new(x as f64 + 0.5, y as f64 + 0.5);
-                let l1 = geom::cross2(b - q, c - q) / det;
-                let l2 = geom::cross2(c - q, a - q) / det;
-                let l3 = 1.0 - l1 - l2;
-                if l1 < -1e-6 || l2 < -1e-6 || l3 < -1e-6 {
-                    continue;
+            let yc = y as f64 + 0.5;
+            let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+            for (p, q) in edges {
+                if (p.y - yc) * (q.y - yc) <= 0.0 && (p.y - q.y).abs() > 1e-12 {
+                    let x = p.x + (yc - p.y) * (q.x - p.x) / (q.y - p.y);
+                    lo = lo.min(x);
+                    hi = hi.max(x);
                 }
-                let z = (l1 * t[0].1 + l2 * t[1].1 + l3 * t[2].1) as f32;
-                let slot = &mut self.depth[y * self.w + x];
-                if z < *slot {
-                    *slot = z;
+            }
+            if lo > hi {
+                continue;
+            }
+            let xs = (lo - 0.5).ceil().max(0.0) as usize;
+            let xe = ((hi - 0.5).floor().max(-1.0)) as isize;
+            if xe < xs as isize {
+                continue;
+            }
+            let xe = (xe as usize).min(self.w - 1);
+            let row = y * self.w;
+            let mut z = t[0].1 + dzdx * (xs as f64 + 0.5 - a.x) + dzdy * (yc - a.y);
+            for x in xs..=xe {
+                let slot = &mut self.depth[row + x];
+                if (z as f32) < *slot {
+                    *slot = z as f32;
                 }
+                z += dzdx;
             }
         }
     }
@@ -184,14 +226,7 @@ impl ZBuf {
         let (cx, cy) = (p.x.floor() as isize, p.y.floor() as isize);
         // An edge is visible if it is not behind the surface in its whole 3x3 neighbourhood;
         // silhouette edges touch background (infinite depth) and stay visible.
-        let mut deepest = f32::NEG_INFINITY;
-        for dy in -1..=1 {
-            for dx in -1..=1 {
-                let (x, y) = (cx + dx, cy + dy);
-                let v = if x < 0 || y < 0 || x as usize >= self.w || y as usize >= self.h { f32::INFINITY } else { self.depth[y as usize * self.w + x as usize] };
-                deepest = deepest.max(v);
-            }
-        }
+        let deepest = if cx < 0 || cy < 0 || cx as usize >= self.w || cy as usize >= self.h { f32::INFINITY } else { self.deepest[cy as usize * self.w + cx as usize] };
         (depth as f32) <= deepest + (self.px as f32) * 2.0 + 20.0
     }
 }
@@ -355,6 +390,7 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
     for (_, t, _) in &tris {
         zb.raster(*t);
     }
+    zb.finish();
 
     // Shaded: painter's algorithm, far to near.
     if shaded {

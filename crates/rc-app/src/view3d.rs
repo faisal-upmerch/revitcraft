@@ -160,6 +160,252 @@ fn pan(cam: &mut Camera, d: egui::Vec2, rect: Rect) {
     cam.target += shift;
 }
 
+/// Modify tools available in 3D views, as in the reference app.
+pub fn is_3d_tool(k: crate::tools::ToolKind) -> bool {
+    use crate::tools::ToolKind as T;
+    matches!(
+        k,
+        T::Move | T::Copy | T::Rotate | T::Array | T::MirrorPick | T::MirrorDraw | T::Align | T::Measure | T::Split | T::SplitGap | T::JoinGeometry | T::UnjoinGeometry
+            | T::MatchType | T::AttachTop | T::AttachBase | T::TrimCorner | T::TrimSingle | T::TrimMulti | T::ZoomRegion | T::Door | T::Window
+    )
+}
+
+/// Runs a modify tool in a 3D view: elements are picked on their faces, points come from the
+/// face under the cursor or the work plane at the level of the elements being modified.
+#[allow(clippy::too_many_arguments)]
+fn tool_3d(app: &mut App, resp: &egui::Response, painter: &egui::Painter, rect: Rect, cam: &Camera, view: &View, o: DVec3, d: DVec3) {
+    use crate::tools::ToolKind as T;
+    use rc_core::edit;
+    use rc_core::geom::DVec2;
+    let kind = app.tool.kind;
+    let hit = app.scenes.get(&view.id).and_then(|s| render3d::pick(s, o, d, view.section_box));
+    let hit_id = hit.map(|h| h.0).and_then(|id| crate::canvas::selectable_id(app, view, id));
+    app.interact.hover3d = hit_id;
+    let z0 = app.tool.ids.first().and_then(|id| app.el(*id)).and_then(|e| e.level()).map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);
+    let on_plane = if d.z.abs() > 1e-9 {
+        let t = (z0 - o.z) / d.z;
+        (t > 0.0).then(|| (o + d * t).truncate())
+    } else {
+        None
+    };
+    let point = hit.map(|h| h.1.truncate()).or(on_plane);
+    let at3 = |q: DVec2| DVec3::new(q.x, q.y, z0);
+    let preview = |a: DVec2, b: DVec2| {
+        if let (Some(sa), Some(sb)) = (screen_of(cam, rect, at3(a)), screen_of(cam, rect, at3(b))) {
+            painter.line_segment([sa, sb], Stroke::new(1.5, style::PREVIEW));
+        }
+    };
+    let ids = app.tool.ids.clone();
+    let pts = app.tool.pts.clone();
+    if let (Some(a), Some(c)) = (pts.first(), point) {
+        if !matches!(kind, T::Align | T::TrimCorner | T::TrimSingle | T::TrimMulti | T::MatchType | T::JoinGeometry | T::UnjoinGeometry) {
+            preview(*a, c);
+        }
+    }
+    // The centre of the elements being modified (rotation centre).
+    let centre = || {
+        let fp = app.footprints();
+        let pts: Vec<DVec2> = ids.iter().filter_map(|id| app.el(*id)).flat_map(|e| rc_core::plan::element_outline(&app.doc.data, e, &fp).into_iter().flatten()).collect();
+        let (mn, mx) = rc_core::geom::bounds(pts);
+        if mn.x <= mx.x { (mn + mx) / 2.0 } else { DVec2::ZERO }
+    };
+    if kind == T::ZoomRegion {
+        if resp.dragged() {
+            if let (Some(start), Some(cur)) = (resp.ctx.input(|i| i.pointer.press_origin()), resp.hover_pos()) {
+                painter.rect_stroke(Rect::from_two_pos(start, cur), 0.0, Stroke::new(1.0, style::ACCENT), egui::StrokeKind::Middle);
+            }
+        }
+        if resp.drag_stopped() {
+            if let (Some(start), Some(end)) = (resp.ctx.input(|i| i.pointer.press_origin()), resp.hover_pos()) {
+                let r = Rect::from_two_pos(start, end);
+                if r.width() > 4.0 && r.height() > 4.0 {
+                    let mut c2 = *cam;
+                    let f = (r.height() / rect.height()).max(r.width() / rect.width()) as f64;
+                    let cx = ((r.center().x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
+                    let cy = (1.0 - (r.center().y - rect.top()) / rect.height() * 2.0) as f64;
+                    let (ro, rd) = cam.ray(cx, cy, (rect.width() / rect.height().max(1.0)) as f32);
+                    let target = app.scenes.get(&view.id).and_then(|s| render3d::pick(s, ro, rd, view.section_box)).map(|h| h.1).unwrap_or(ro + rd * (cam.target - cam.eye).length());
+                    let shift = target - c2.target;
+                    c2.target += shift;
+                    c2.eye += shift;
+                    if c2.perspective {
+                        c2.eye = c2.target + (c2.eye - c2.target) * f.max(0.05);
+                    } else {
+                        c2.ortho_height *= f.max(0.02);
+                    }
+                    app.cams3d.insert(view.id, c2);
+                    app.set_tool(T::Select);
+                }
+            }
+        }
+        return;
+    }
+    // Doors and windows go on the wall face under the cursor.
+    if matches!(kind, T::Door | T::Window) {
+        let wall = hit.filter(|h| app.doc.data.wall(h.0).is_some());
+        if let Some((wid, q)) = wall {
+            let w = app.doc.data.wall(wid).unwrap().clone();
+            let (along, _) = rc_core::analysis::wall_project(&w, q.truncate());
+            let is_door = kind == T::Door;
+            let type_id = if is_door { app.opts.door_type } else { app.opts.window_type };
+            let width = app.doc.data.family_type(type_id).map(|(f, t)| rc_core::family_params::Resolver::for_type(f, t)).map(|r| r.num("Rough Width", r.num("Width", 900.0))).unwrap_or(900.0);
+            let along = along.clamp(width / 2.0, (w.length() - width / 2.0).max(width / 2.0));
+            let (c, dir) = rc_core::analysis::wall_point(&w, along);
+            let base = app.doc.data.level_elevation(w.base_level) + w.base_offset;
+            let corners = [c - dir * (width / 2.0), c + dir * (width / 2.0)];
+            let pts: Vec<Pos2> = [(corners[0], base), (corners[1], base), (corners[1], base + 2100.0), (corners[0], base + 2100.0)].iter().filter_map(|(p2, z)| screen_of(cam, rect, DVec3::new(p2.x, p2.y, *z))).collect();
+            if pts.len() == 4 {
+                painter.add(egui::Shape::closed_line(pts, Stroke::new(2.0, style::PREVIEW)));
+            }
+            if resp.clicked_by(egui::PointerButton::Primary) {
+                let sill = if is_door { None } else { app.opts.window_sill };
+                app.run(if is_door { "Place Door" } else { "Place Window" }, |p| {
+                    let id = edit::place_hosted(p, type_id, wid, along, false)?;
+                    if let Some(s) = sill {
+                        if let Some(i) = p.element_mut(id).and_then(|e| e.as_instance_mut()) {
+                            i.elevation = s;
+                        }
+                    }
+                    Ok(id)
+                });
+            }
+        } else if resp.clicked_by(egui::PointerButton::Primary) {
+            app.error(if kind == T::Door { "Doors must be hosted by a wall. Click a wall face." } else { "Windows must be hosted by a wall. Click a wall face." });
+        }
+        return;
+    }
+    if !resp.clicked_by(egui::PointerButton::Primary) {
+        return;
+    }
+    match kind {
+        T::Move | T::Copy | T::Array | T::MirrorDraw | T::Measure | T::Rotate => {
+            let Some(c) = point else { return };
+            if pts.is_empty() {
+                app.tool.pts.push(c);
+                return;
+            }
+            let a = pts[0];
+            match kind {
+                T::Move => {
+                    app.run("Move", |p| {
+                        edit::move_elements(p, &ids, c - a);
+                        Ok(())
+                    });
+                    app.tool.reset();
+                    app.set_tool(T::Select);
+                    app.select(ids);
+                }
+                T::Copy => {
+                    let made = app.run("Copy", |p| Ok(edit::copy_elements(p, &ids, c - a)));
+                    if app.opts.copy_multiple {
+                        // Further clicks copy again from the same start.
+                        return;
+                    }
+                    app.set_tool(T::Select);
+                    app.select(made.unwrap_or_default());
+                }
+                T::Array => {
+                    let n = app.opts.array_count.max(2) as usize;
+                    let step = if app.opts.array_last { (c - a) / (n - 1) as f64 } else { c - a };
+                    app.run("Array", |p| edit::array_linear(p, &ids, step, n));
+                    app.set_tool(T::Select);
+                }
+                T::MirrorDraw => {
+                    let copy = app.opts.mirror_copy;
+                    app.run("Mirror", |p| {
+                        let targets = if copy { edit::copy_elements(p, &ids, DVec2::ZERO) } else { ids.clone() };
+                        edit::mirror_elements(p, &targets, a, c);
+                        Ok(())
+                    });
+                    app.set_tool(T::Select);
+                }
+                T::Measure => {
+                    let units = app.doc.data.units.clone();
+                    app.info(format!("Length: {}   ΔX: {}   ΔY: {}", units.length(a.distance(c)), units.length((c.x - a.x).abs()), units.length((c.y - a.y).abs())));
+                    app.tool.pts.clear();
+                }
+                _ => {
+                    // Rotate: the first click sets the start ray, the second the end ray.
+                    let ctr = centre();
+                    let deg = (a - ctr).angle_to(c - ctr).to_degrees();
+                    let copy = app.opts.rotate_copy;
+                    app.run("Rotate", |p| {
+                        let targets = if copy { edit::copy_elements(p, &ids, DVec2::ZERO) } else { ids.clone() };
+                        edit::rotate_elements(p, &targets, ctr, deg);
+                        Ok(())
+                    });
+                    app.set_tool(T::Select);
+                    app.select(ids);
+                }
+            }
+        }
+        T::MirrorPick => {
+            let Some((a, b)) = hit_id.and_then(|id| app.el(id)).and_then(edit::linear_axis) else {
+                app.error("Pick a straight wall, line or grid as the mirror axis.");
+                return;
+            };
+            let copy = app.opts.mirror_copy;
+            app.run("Mirror", |p| {
+                let targets = if copy { edit::copy_elements(p, &ids, DVec2::ZERO) } else { ids.clone() };
+                edit::mirror_elements(p, &targets, a, b);
+                Ok(())
+            });
+            app.set_tool(T::Select);
+        }
+        T::Split | T::SplitGap => {
+            let (Some(id), Some(c)) = (hit_id, point) else { return };
+            let gap = if kind == T::SplitGap { app.opts.split_gap } else { 0.0 };
+            app.run("Split", |p| edit::split_element(p, id, c, gap));
+        }
+        T::Align | T::TrimCorner | T::TrimSingle | T::TrimMulti | T::JoinGeometry | T::UnjoinGeometry | T::MatchType => {
+            let (Some(id), Some(c)) = (hit_id, point) else { return };
+            if app.tool.picked.is_empty() {
+                app.tool.picked.push(id);
+                app.tool.pts = vec![c];
+                if kind == T::Align && app.el(id).and_then(edit::linear_axis).is_none() {
+                    app.error("Pick a straight wall, line or grid as the alignment reference.");
+                    app.tool.reset();
+                }
+                return;
+            }
+            let (first, first_pt) = (app.tool.picked[0], app.tool.pts.first().copied().unwrap_or(c));
+            let ok = match kind {
+                T::Align => {
+                    let (ra, rb) = app.el(first).and_then(edit::linear_axis).unwrap_or((first_pt, first_pt));
+                    app.run("Align", |p| edit::align(p, ra, rb, id, c)).is_some()
+                }
+                T::TrimCorner => app.run("Trim/Extend", |p| edit::trim_extend_corner(p, first, first_pt, id, c)).is_some(),
+                T::TrimSingle | T::TrimMulti => {
+                    app.run("Trim/Extend", |p| edit::trim_extend_to(p, first, &[(id, c)]));
+                    // Multiple: keep the boundary and trim more elements.
+                    if kind == T::TrimMulti {
+                        return;
+                    }
+                    true
+                }
+                T::JoinGeometry => app.run("Join Geometry", |p| edit::join_geometry(p, first, id)).is_some(),
+                T::UnjoinGeometry => app.run("Unjoin Geometry", |p| edit::unjoin_geometry(p, first, id)).is_some(),
+                _ => {
+                    app.run("Match Type", |p| edit::match_type(p, first, &[id]));
+                    // Match Type keeps the source for more picks.
+                    return;
+                }
+            };
+            let _ = ok;
+            app.tool.picked.clear();
+            app.tool.pts.clear();
+        }
+        T::AttachTop | T::AttachBase => {
+            let Some(target) = hit_id else { return };
+            let top = kind == T::AttachTop;
+            app.run(if top { "Attach Top" } else { "Attach Base" }, |p| edit::attach_walls(p, &ids, target, top));
+            app.set_tool(T::Select);
+            app.select(ids);
+        }
+        _ => {}
+    }
+}
+
 fn screen_of(cam: &Camera, rect: Rect, p: DVec3) -> Option<Pos2> {
     let aspect = rect.width() / rect.height().max(1.0);
     let ndc = cam.project(p, aspect);
@@ -298,6 +544,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 ui.ctx().request_repaint();
             }
             app.interact.prompt = hit_id.map(|id| crate::canvas::describe(app, id)).unwrap_or_else(|| "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into());
+            // Modify tools that work in 3D (Move, Copy, Rotate, Align, Trim, Join, Attach, ...).
+            let modify_3d = is_3d_tool(app.tool.kind);
+            if modify_3d {
+                app.interact.prompt = crate::canvas_tools::prompt(app);
+                tool_3d(app, &resp, &painter, rect, &cam, &view, o, d);
+            }
             // Paint: click faces to paint them (or remove their paint).
             let painting = matches!(app.tool.kind, crate::tools::ToolKind::Paint | crate::tools::ToolKind::RemovePaint);
             if painting {
@@ -311,7 +563,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                     }
                 }
             }
-            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting {
+            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting && !modify_3d {
                 match hit_id {
                     Some(id) if ctrl => {
                         let mut s = app.selection.clone();
@@ -339,7 +591,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             }
         }
         // Window selection with a plain left drag in select mode.
-        if mode == NavMode::Select && !shift && !drag_from_cube && section_drag.is_none() {
+        if mode == NavMode::Select && !shift && !drag_from_cube && section_drag.is_none() && !is_3d_tool(app.tool.kind) {
             if let (Some(start), Some(cur)) = (press_origin.filter(|_| left_drag || resp.drag_stopped()), resp.hover_pos().or(pointer)) {
                 if rect.contains(start) {
                     let r = Rect::from_two_pos(start, cur);

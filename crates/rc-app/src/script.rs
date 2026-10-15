@@ -1,6 +1,6 @@
 //! Scripted input for automated screenshots: `RC_INPUT` holds `;`-separated steps
 //! `FRAME ACTION ARGS`, e.g. `20 move 800 400; 22 click 800 400; 30 type 40; 32 key Enter`.
-//! Actions: move X Y, click X Y, drag X0 Y0 X1 Y1, rclick X Y, dblclick X Y, key NAME, type TEXT, scroll X Y DY.
+//! Actions: move X Y, click X Y, text STRING (text input), drag X0 Y0 X1 Y1, rclick X Y, dblclick X Y, key NAME, type TEXT, scroll X Y DY.
 //! `RC_SHOT_FRAME` sets the frame of the screenshot (default 14).
 
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton, pos2, vec2};
@@ -57,6 +57,7 @@ impl InputScript {
                         events.push((f + 1, key_event(k, false)));
                     }
                 }
+                "text" => events.push((f, Event::Text(parts[2..].join(" ")))),
                 "type" => {
                     let t = parts[2..].join(" ");
                     for (i, c) in t.chars().enumerate() {

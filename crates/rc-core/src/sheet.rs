@@ -288,7 +288,30 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
             text(&mut out, DVec2::new(tx, ty - 4.5), format!("1 : {}", v.scale.round()), 2.5, false);
         }
     }
+    // Annotation drawn on the sheet itself (text, detail lines, symbols, regions, clouds).
+    // Already in paper millimetres: copied as they are.
+    for (_, prim) in sheet_annotations(p, view, footprints).prims {
+        match prim {
+            Prim::Line { mut pts, closed, stroke } => {
+                if closed && !pts.is_empty() {
+                    pts.push(pts[0]);
+                }
+                out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dashed: stroke.dashed() });
+            }
+            Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color }),
+            Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle }),
+        }
+    }
     out
+}
+
+/// The sheet's own annotation, drawn at paper scale (1 model mm = 1 paper mm).
+pub fn sheet_annotations(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Drawing {
+    let mut sv = view.clone();
+    sv.scale = 1.0;
+    let mut d = Drawing::default();
+    plan::annotation_graphics(p, &sv, footprints, &mut d);
+    d
 }
 
 /// Writes a sheet to PDF. `render` produces an RGB image (w, h, pixels) for 3D viewports.
