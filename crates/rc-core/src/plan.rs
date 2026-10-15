@@ -155,7 +155,7 @@ pub enum Prim {
     Line { pts: Vec<DVec2>, closed: bool, stroke: Stroke },
     Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4] },
     /// Text height is in paper millimetres; angle in radians (counter-clockwise).
-    Text { pos: DVec2, text: String, size: f32, color: [u8; 3], anchor: Anchor, angle: f32 },
+    Text { pos: DVec2, text: String, size: f32, color: [u8; 3], anchor: Anchor, angle: f32, bold: bool },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -173,10 +173,13 @@ impl Drawing {
         }
     }
     pub fn text(&mut self, id: Option<Id>, pos: DVec2, text: impl Into<String>, size: f32, anchor: Anchor) {
-        self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor, angle: 0.0 }));
+        self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor, angle: 0.0, bold: false }));
+    }
+    pub fn text_bold(&mut self, id: Option<Id>, pos: DVec2, text: impl Into<String>, size: f32, anchor: Anchor) {
+        self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor, angle: 0.0, bold: true }));
     }
     pub fn text_rot(&mut self, id: Option<Id>, pos: DVec2, text: impl Into<String>, size: f32, angle: f32) {
-        self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor: Anchor::Center, angle }));
+        self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor: Anchor::Center, angle, bold: false }));
     }
     pub fn fill(&mut self, id: Option<Id>, poly: &[DVec2], color: [u8; 4]) {
         if poly.len() < 3 {
@@ -787,7 +790,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                     d.line(Some(e.id), pts.clone(), false, Stroke::new(0.13, color, Dash::Solid));
                 }
                 for (pos, text, h) in &cad.texts {
-                    d.prims.push((Some(e.id), Prim::Text { pos: *pos, text: text.clone(), size: (*h / c.scale) as f32, color: HALFTONE, anchor: Anchor::Left, angle: 0.0 }));
+                    d.prims.push((Some(e.id), Prim::Text { pos: *pos, text: text.clone(), size: (*h / c.scale) as f32, color: HALFTONE, anchor: Anchor::Left, angle: 0.0, bold: false }));
                 }
             }
             _ => {}
@@ -908,11 +911,12 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
     // A 1/2" circle with a dark arrow wedge outside it, like the standard elevation mark.
     let r = 6.0 * scale;
     let heavy = Stroke::new(0.25, [0, 0, 0], Dash::Solid);
-    let mark = |d: &mut Drawing, id: Id, c: DVec2, look: DVec2| {
+    // shape: (base offset along look, half width of the base, tip distance), all in radii.
+    let mark_shaped = |d: &mut Drawing, id: Id, c: DVec2, look: DVec2, shape: (f64, f64, f64)| {
         let side = geom::perp(look);
         // The wedge between the circle and the arrow triangle, as quads along rays from the
         // centre (the region is concave, so it is built directly).
-        let (top, tip, bottom) = (c + side * (r * 1.22) + look * (r * 0.12), c + look * (r * 1.62), c - side * (r * 1.22) + look * (r * 0.12));
+        let (top, tip, bottom) = (c + side * (r * shape.1) + look * (r * shape.0), c + look * (r * shape.2), c - side * (r * shape.1) + look * (r * shape.0));
         let edge_hit = |u: DVec2, p: DVec2, q: DVec2| -> DVec2 {
             let e = q - p;
             let den = u.x * e.y - u.y * e.x;
@@ -953,13 +957,19 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
         match &v.kind {
             ViewKind::Section { start, end, .. } if view.shows(Category::Symbols) => {
                 let dir = (*end - *start).normalize_or_zero();
-                let look = -geom::perp(dir);
+                let look = crate::section::section_look(*start, *end);
                 d.line(Some(v.id), vec![*start, *end], false, Stroke::new(0.35, [0, 0, 0], Dash::DashDot));
+                // The reference template's section head at both ends: a circle split along the
+                // section line, detail number over sheet number ("-" and "---" until the view
+                // is on a sheet), and a filled triangle on the divider pointing the way it looks.
+                let (num, sheet) = sheet_ref(v.id).unwrap_or_else(|| ("-".into(), "---".into()));
                 for (pt, out) in [(*start, -dir), (*end, dir)] {
                     let c = pt + out * r;
-                    mark(d, v.id, c, look);
+                    mark_shaped(d, v.id, c, look, (0.0, 1.42, 1.4));
+                    d.line(Some(v.id), vec![c - dir * r, c + dir * r], false, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
+                    d.text(Some(v.id), c + look * (r * 0.45), num.clone(), 2.0, Anchor::Center);
+                    d.text(Some(v.id), c - look * (r * 0.45), sheet.clone(), 2.0, Anchor::Center);
                 }
-                d.text(Some(v.id), *start - dir * r, v.name.chars().take(4).collect::<String>(), 2.2, Anchor::Center);
             }
             ViewKind::Elevation { dir } if view.plan_level().is_some() && view.shows(Category::Symbols) => {
                 // Elevation markers sit outside the model on each side.
@@ -972,7 +982,7 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
                     Some((o, _)) => o,
                     None => DVec2::new(c.x - look.x * ((mx.x - mn.x) / 2.0 + off), c.y - look.y * ((mx.y - mn.y) / 2.0 + off)),
                 };
-                mark(d, v.id, pos, look);
+                mark_shaped(d, v.id, pos, look, (0.12, 1.22, 1.62));
                 d.line(Some(v.id), vec![pos - DVec2::X * (r * 0.92), pos + DVec2::X * (r * 0.92)], false, Stroke::new(0.18, [0, 0, 0], Dash::Solid));
                 if let Some((num, sheet)) = sheet_ref(v.id) {
                     d.text(Some(v.id), pos + DVec2::Y * (r * 0.42), num, 2.0, Anchor::Center);
@@ -1150,7 +1160,15 @@ fn wall_layers(c: &Ctx, id: Id, w: &Wall, fp: &Footprint, d: &mut Drawing) {
             poly.extend(inner.iter().rev());
             let pattern = p.material(&l.material).map(|m| m.cut_pattern).unwrap_or_default();
             if pattern == FillPattern::Solid {
-                d.fill(Some(id), &poly, [0, 0, 0, 255]);
+                // Solid layers stop at openings and at the walls this one runs into.
+                let mut region = MultiPolygon::new(vec![to_geo(&poly)]);
+                for (u0, u1) in &openings {
+                    region = region.difference(&MultiPolygon::new(vec![to_geo(&opening_rect(p, w, (u0 + u1) / 2.0, u1 - u0))]));
+                }
+                for o in &others {
+                    region = region.difference(&MultiPolygon::new(vec![to_geo(o)]));
+                }
+                d.prims.push((Some(id), Prim::Fill { tris: fill_tris(&region), color: [0, 0, 0, 255] }));
             }
             for (a, b) in pattern_lines(&poly, pattern, c.scale) {
                 // Clipped exactly at the jambs of openings.
@@ -1481,7 +1499,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 if room {
                     let name = lines.first().copied().unwrap_or("");
                     let number = lines.get(1).copied().unwrap_or("");
-                    d.text(Some(e.id), t.position + DVec2::new(0.0, h * 0.85), name.to_string(), 3.0, Anchor::Center);
+                    d.text_bold(Some(e.id), t.position + DVec2::new(0.0, h * 0.85), name.to_string(), 3.0, Anchor::Center);
                     let nw = (number.chars().count().max(3) as f64 * h * 0.6 + h * 1.2) / 2.0;
                     let (y0, y1) = (-h * 1.15, h * 0.05);
                     let c = t.position;
@@ -1550,6 +1568,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                             color: [0, 0, 0],
                             anchor: Anchor::Left,
                             angle: tn.rotation_deg.to_radians() as f32,
+                            bold: tn.bold,
                         },
                     ));
                 }

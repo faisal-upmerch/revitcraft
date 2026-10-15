@@ -8,7 +8,7 @@ use crate::style;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, pos2};
 use rc_core::geom::DVec2;
 use rc_core::model::*;
-use rc_core::plan::{Dash, Prim};
+use rc_core::plan::Prim;
 use rc_core::sheet::SheetPrim;
 
 pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
@@ -49,9 +49,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let layout = app.sheet_layout(view_id);
     for prim in &layout.0 {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dashed } => {
+            SheetPrim::Line { pts, closed, width, color, dash } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
-                canvas::paint_polyline(&painter, &v, *closed, Stroke::new((*width * 4.5).clamp(1.0, 3.0), Color32::from_rgb(color[0], color[1], color[2])), if *dashed { Dash::Dashed } else { Dash::Solid }, &xf);
+                canvas::paint_polyline(&painter, &v, *closed, Stroke::new((*width * 4.5).clamp(1.0, 3.0), Color32::from_rgb(color[0], color[1], color[2])), *dash, &xf);
             }
             SheetPrim::Fill { tris, color } => {
                 let mut mesh = egui::Mesh::default();
@@ -67,8 +67,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             }
             SheetPrim::Text { pos, text, size, anchor, angle, bold } => {
                 let h = (*size as f64 * xf.zoom) as f32;
-                let t = if *bold { text.clone() } else { text.clone() };
-                canvas::paint_text(&painter, xf.s(*pos), &t, h, Color32::BLACK, *anchor, *angle);
+                canvas::paint_text_ex(&painter, xf.s(*pos), text, h, Color32::BLACK, *anchor, *angle, *bold);
             }
             SheetPrim::Image { view: v3, min, max } => {
                 let r = Rect::from_two_pos(xf.s(*min), xf.s(*max));
@@ -91,7 +90,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             }
         }
     }
-    let _ = Prim::Text { pos: DVec2::ZERO, text: String::new(), size: 0.0, color: [0; 3], anchor: rc_core::plan::Anchor::Center, angle: 0.0 };
+    let _ = Prim::Text { pos: DVec2::ZERO, text: String::new(), size: 0.0, color: [0; 3], anchor: rc_core::plan::Anchor::Center, angle: 0.0, bold: false };
 
     if app.active_tab() != Some(view_id) {
         return;

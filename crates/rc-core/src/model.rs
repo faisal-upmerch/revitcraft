@@ -2504,7 +2504,7 @@ pub struct ObjectStyle {
 impl Project {
     pub fn empty() -> Project {
         Project {
-            format: 3,
+            format: 4,
             next_id: 1,
             info: ProjectInfo::default(),
             materials: Vec::new(),

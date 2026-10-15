@@ -1812,8 +1812,7 @@ fn view_marker_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View
     let a = app.tool.pts.first().copied();
     match (kind, a) {
         (ToolKind::Section, Some(a)) => {
-            let d = (pt - a).normalize_or_zero();
-            let look = -geom::perp(d);
+            let look = rc_core::section::section_look(a, pt);
             let depth = app.opts.section_depth;
             painter.line_segment([xf.s(a), xf.s(pt)], Stroke::new(2.0, style::PREVIEW));
             let far = [a + look * depth, pt + look * depth];

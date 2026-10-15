@@ -5,7 +5,7 @@ use std::path::Path;
 
 pub const EXTENSION: &str = "rcx";
 pub const FAMILY_EXTENSION: &str = "rcfa";
-pub const FORMAT_VERSION: u32 = 3;
+pub const FORMAT_VERSION: u32 = 4;
 
 pub fn to_json(p: &Project) -> String {
     serde_json::to_string_pretty(p).expect("project serialises")
@@ -49,6 +49,16 @@ fn migrate(p: &mut Project) {
             }
         }
         p.format = 3;
+    }
+    if p.format < 4 {
+        // Format 3 sections looked to the right of their line; they now look to the left.
+        // Swapping the ends keeps each saved section looking the same way.
+        for v in &mut p.views {
+            if let crate::model::ViewKind::Section { start, end, .. } = &mut v.kind {
+                std::mem::swap(start, end);
+            }
+        }
+        p.format = 4;
     }
 }
 

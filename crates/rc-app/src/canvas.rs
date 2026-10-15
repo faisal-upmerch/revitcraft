@@ -343,12 +343,14 @@ fn quantize_font(h: f32) -> f32 {
     (h / step).round().max(1.0) * step
 }
 
-pub fn paint_text(painter: &egui::Painter, pos: Pos2, text: &str, h: f32, color: Color32, anchor: Anchor, angle: f32) {
+#[allow(clippy::too_many_arguments)]
+pub fn paint_text_ex(painter: &egui::Painter, pos: Pos2, text: &str, h: f32, color: Color32, anchor: Anchor, angle: f32, bold: bool) {
     if h < 1.5 || text.is_empty() {
         return;
     }
     let h = quantize_font(h.min(96.0));
-    let galley = painter.layout_no_wrap(text.to_string(), egui::FontId::proportional(h), color);
+    let font = if bold { style::bold(h) } else { egui::FontId::proportional(h) };
+    let galley = painter.layout_no_wrap(text.to_string(), font, color);
     let align = match anchor {
         Anchor::Center => egui::Align2::CENTER_CENTER,
         Anchor::Left => egui::Align2::LEFT_BOTTOM,
@@ -391,13 +393,13 @@ pub fn paint_prims(painter: &egui::Painter, prims: &[(Option<Id>, Prim)], xf: &X
                 }
                 paint_polyline(painter, &v, *closed, Stroke::new(xf.px(stroke.width), c), stroke.dash, xf);
             }
-            Prim::Text { pos, text, size, color, anchor, angle } => {
+            Prim::Text { pos, text, size, color, anchor, angle, bold } => {
                 let Some(c) = color_of(*id, *color) else { continue };
                 let p = xf.s(*pos);
                 if !clip.contains(p) {
                     continue;
                 }
-                paint_text(painter, p, text, xf.text_px(*size), c, *anchor, *angle);
+                paint_text_ex(painter, p, text, xf.text_px(*size), c, *anchor, *angle, *bold);
             }
         }
     }
@@ -428,8 +430,8 @@ fn paint_highlight(painter: &egui::Painter, d: &Drawing, ids: &HashSet<Id>, xf: 
                 }
                 painter.add(egui::Shape::mesh(mesh));
             }
-            Prim::Text { pos, text, size, anchor, angle, .. } => {
-                paint_text(painter, xf.s(*pos + offset), text, xf.text_px(*size), color, *anchor, *angle);
+            Prim::Text { pos, text, size, anchor, angle, bold, .. } => {
+                paint_text_ex(painter, xf.s(*pos + offset), text, xf.text_px(*size), color, *anchor, *angle, *bold);
             }
         }
     }

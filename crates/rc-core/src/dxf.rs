@@ -285,7 +285,7 @@ pub fn export_drawing(p: &Project, d: &Drawing, view_scale: f64) -> String {
                     w.solid(&format!("{layer}-FILL"), t, [color[0], color[1], color[2]]);
                 }
             }
-            Prim::Text { pos, text, size, color, anchor, angle } => {
+            Prim::Text { pos, text, size, color, anchor, angle, .. } => {
                 w.text(&layer, *pos, text, *size as f64 * view_scale, *color, *anchor, (*angle as f64).to_degrees())
             }
         }
@@ -304,7 +304,7 @@ pub fn export_sheet(p: &Project, view: &View, footprints: &HashMap<Id, Footprint
     let mut w = Writer { out: String::new(), layers: BTreeSet::new() };
     for prim in sheet::layout(p, view, footprints) {
         match prim {
-            SheetPrim::Line { pts, closed, color, dashed, .. } => w.polyline("SHEET", &pts, closed, color, if dashed { Dash::Dashed } else { Dash::Solid }),
+            SheetPrim::Line { pts, closed, color, dash, .. } => w.polyline("SHEET", &pts, closed, color, dash),
             SheetPrim::Fill { tris, color } => {
                 if color[3] < 20 || (color[0] > 250 && color[1] > 250 && color[2] > 250) {
                     continue;

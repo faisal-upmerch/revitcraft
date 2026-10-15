@@ -10,6 +10,13 @@ use crate::model::*;
 use crate::plan::{self, Anchor, Dash, Drawing, Prim, Stroke};
 use std::collections::HashMap;
 
+/// The direction a section looks: to the left of its line as drawn, so a section sketched
+/// left to right looks up the screen, as in the reference app (its right is the line's
+/// direction).
+pub fn section_look(start: DVec2, end: DVec2) -> DVec2 {
+    geom::perp((end - start).normalize_or_zero())
+}
+
 /// Maps model space to a section/elevation's 2D space.
 #[derive(Clone, Copy, Debug)]
 pub struct ViewFrame {
@@ -96,7 +103,7 @@ pub fn view_frame(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>)
     match &view.kind {
         ViewKind::Section { start, end, depth, z_min, z_max } => {
             let d = (*end - *start).normalize_or_zero();
-            let look = -geom::perp(d);
+            let look = section_look(*start, *end);
             Some(ViewFrame {
                 origin: geom::at(*start, 0.0),
                 right: geom::at(d, 0.0),
@@ -346,7 +353,7 @@ fn line_in_tri(o: DVec2, d: DVec2, t: &[DVec2; 3]) -> Option<(f64, f64)> {
 /// Running-bond coursing on a vertical face: horizontal bed joints every `course`, head
 /// joints every `unit`, offset by half a unit on alternate courses. Model units, aligned to
 /// the world so neighbouring faces line up.
-fn coursing(w: &[DVec3; 3], n: DVec3, course: f64, unit: f64) -> Vec<(DVec3, DVec3)> {
+pub fn coursing(w: &[DVec3; 3], n: DVec3, course: f64, unit: f64) -> Vec<(DVec3, DVec3)> {
     if n.z.abs() > 0.05 {
         return vec![];
     }
@@ -743,8 +750,8 @@ fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVe
             // right-aligned just before the target.
             let x = c.x - r * 1.5;
             let gap = 0.6 * scale;
-            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y + gap), text: l.name.clone(), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0 }));
-            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y - gap - 2.5 * 1.25 * scale), text: p.units.length(l.elevation), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0 }));
+            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y + gap), text: l.name.clone(), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0, bold: false }));
+            d.prims.push((Some(id), Prim::Text { pos: DVec2::new(x, y - gap - 2.5 * 1.25 * scale), text: p.units.length(l.elevation), size: 2.5, color: [0, 0, 0], anchor: Anchor::Right, angle: 0.0, bold: false }));
         }
     }
     if view.shows(Category::Grids) {
@@ -812,6 +819,25 @@ pub fn pick(dw: &Drawing, pt: DVec2, tol: f64) -> Option<Id> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn view_frames_are_not_mirrored() {
+        // A viewer's right must be look × up, or the drawing is a mirror image.
+        let p = crate::sample::sample_house();
+        let fp = analysis::wall_footprints(&p);
+        let mut views: Vec<View> = p.views.iter().filter(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })).cloned().collect();
+        for (s, e) in [(DVec2::new(0.0, 0.0), DVec2::new(5000.0, 0.0)), (DVec2::new(0.0, 0.0), DVec2::new(0.0, 5000.0)), (DVec2::new(3000.0, 0.0), DVec2::new(0.0, 4000.0))] {
+            views.push(View::new(0, "S", 100.0, ViewKind::Section { start: s, end: e, depth: 8000.0, z_min: -1000.0, z_max: 9000.0 }));
+        }
+        assert!(views.len() >= 7);
+        for v in &views {
+            let f = view_frame(&p, v, &fp).unwrap();
+            assert!((f.look.cross(DVec3::Z) - f.right).length() < 1e-9, "{} is mirrored", v.name);
+        }
+        // Drawn left to right, a section looks up the screen (north).
+        let s = View::new(0, "S", 100.0, ViewKind::Section { start: DVec2::ZERO, end: DVec2::new(5000.0, 0.0), depth: 8000.0, z_min: 0.0, z_max: 1.0 });
+        assert!(view_frame(&p, &s, &fp).unwrap().look.y > 0.99);
+    }
 
     #[test]
     fn section_through_sample_has_cut_poche_and_levels() {

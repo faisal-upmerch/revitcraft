@@ -88,7 +88,7 @@ impl Page {
     }
 
     /// Strokes a polyline; coordinates in millimetres from the bottom-left corner.
-    pub fn line(&mut self, pts: &[(f64, f64)], closed: bool, width_mm: f64, rgb: [u8; 3], dashed: bool) {
+    pub fn line(&mut self, pts: &[(f64, f64)], closed: bool, width_mm: f64, rgb: [u8; 3], dash: crate::plan::Dash) {
         if pts.len() < 2 {
             return;
         }
@@ -99,10 +99,15 @@ impl Page {
             n(rgb[0] as f64 / 255.0),
             n(rgb[1] as f64 / 255.0),
             n(rgb[2] as f64 / 255.0),
-            if dashed { "[4 2] 0" } else { "[] 0" }
+            dash_array(dash)
         );
         self.path(pts, closed);
         self.ops.push_str("S\n");
+    }
+
+    /// Shorthand for solid or plain dashed lines.
+    pub fn line_dashed(&mut self, pts: &[(f64, f64)], closed: bool, width_mm: f64, rgb: [u8; 3], dashed: bool) {
+        self.line(pts, closed, width_mm, rgb, if dashed { crate::plan::Dash::Dashed } else { crate::plan::Dash::Solid });
     }
 
     pub fn fill(&mut self, pts: &[(f64, f64)], rgb: [u8; 3]) {
@@ -298,7 +303,7 @@ mod tests {
     #[test]
     fn writes_a_well_formed_pdf() {
         let mut page = Page::new(420.0, 297.0);
-        page.line(&[(10.0, 10.0), (410.0, 10.0), (410.0, 287.0)], false, 0.5, [0, 0, 0], false);
+        page.line(&[(10.0, 10.0), (410.0, 10.0), (410.0, 287.0)], false, 0.5, [0, 0, 0], crate::plan::Dash::Solid);
         page.fill(&[(20.0, 20.0), (40.0, 20.0), (40.0, 40.0)], [200, 100, 50]);
         page.text(50.0, 50.0, 3.5, "Area 12.50 m² (ground)", [0, 0, 0], true, false);
         page.image(100.0, 100.0, 50.0, 30.0, Image { width: 2, height: 1, rgb: vec![255, 0, 0, 0, 0, 255] });
@@ -311,5 +316,17 @@ mod tests {
         let off: usize = text[start..].lines().next().unwrap().parse().unwrap();
         assert_eq!(&bytes[off..off + 4], b"xref");
         assert!(pdf_text("m²").contains("\\262"));
+    }
+}
+
+/// PDF dash arrays (points) for the line patterns, in paper sizes matching the views.
+fn dash_array(dash: crate::plan::Dash) -> String {
+    use crate::plan::Dash;
+    let mm = |v: f64| n(v * PT_PER_MM);
+    match dash {
+        Dash::Solid => "[] 0".into(),
+        Dash::Dashed => format!("[{} {}] 0", mm(3.0), mm(1.5)),
+        Dash::DashDot => format!("[{} {} {} {}] 0", mm(6.0), mm(1.2), mm(0.5), mm(1.2)),
+        Dash::Dotted => format!("[{} {}] 0", mm(0.5), mm(1.1)),
     }
 }

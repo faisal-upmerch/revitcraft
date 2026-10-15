@@ -187,8 +187,7 @@ pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
         }
         match &v.kind {
             ViewKind::Section { start, end, depth, .. } => {
-                let d = (*end - *start).normalize_or_zero();
-                let look = -geom::perp(d);
+                let look = rc_core::section::section_look(*start, *end);
                 out.push(g(id, GripKind::SectionEnd(true), *start));
                 out.push(g(id, GripKind::SectionEnd(false), *end));
                 out.push(Grip { id, kind: GripKind::SectionDepth, pos: (*start + *end) / 2.0 + look * *depth, dir: look, on: false });
@@ -470,8 +469,7 @@ pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, 
             (ViewKind::Section { start: s, .. }, GripKind::SectionEnd(true)) => *s = pt,
             (ViewKind::Section { end: e, .. }, GripKind::SectionEnd(false)) => *e = pt,
             (ViewKind::Section { start: s, end: e, depth, .. }, GripKind::SectionDepth) => {
-                let d = (*e - *s).normalize_or_zero();
-                let look = -geom::perp(d);
+                let look = rc_core::section::section_look(*s, *e);
                 let mid = (*s + *e) / 2.0;
                 *depth = (pt - mid).dot(look).max(100.0);
             }

@@ -453,6 +453,29 @@ impl Renderer {
                     }
                 }
             }
+            // Model surface patterns (brick and block coursing) on the outer faces, as the
+            // reference app draws them in 3D.
+            if selected {
+                continue;
+            }
+            let outer = set.without_internal_faces();
+            for (mat_name, mesh) in &outer.by_material {
+                let (course, unit) = match p.material(mat_name).map(|m| m.surface_pattern) {
+                    Some(rc_core::model::SurfacePattern::Brick) => (75.0, 225.0),
+                    Some(rc_core::model::SurfacePattern::Block) => (200.0, 400.0),
+                    _ => continue,
+                };
+                let color = srgb_color(if half { [170, 170, 170] } else { [80, 80, 80] }, 1.0);
+                for tri in mesh.indices.chunks(3) {
+                    let w = [mesh.positions[tri[0] as usize], mesh.positions[tri[1] as usize], mesh.positions[tri[2] as usize]];
+                    let n = (w[1] - w[0]).cross(w[2] - w[0]).normalize_or_zero();
+                    for (a, b) in rc_core::section::coursing(&w, n, course, unit) {
+                        for q in [a, b] {
+                            lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color, extra: [0.0; 4] });
+                        }
+                    }
+                }
+            }
         }
         let device = &self.state.device;
         let buf = |verts: &[Vertex], label: &str| -> Option<(wgpu::Buffer, u32)> {

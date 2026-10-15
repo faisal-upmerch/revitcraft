@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 #[derive(Clone, Debug)]
 pub enum SheetPrim {
-    Line { pts: Vec<DVec2>, closed: bool, width: f32, color: [u8; 3], dashed: bool },
+    Line { pts: Vec<DVec2>, closed: bool, width: f32, color: [u8; 3], dash: plan::Dash },
     Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4] },
     Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32 },
     /// A rendered 3D image of `view` fills this rectangle.
@@ -99,7 +99,7 @@ pub fn viewport_boxes(p: &Project, sheet: &Sheet, footprints: &HashMap<Id, Footp
 }
 
 fn line(out: &mut Vec<SheetPrim>, pts: Vec<DVec2>, closed: bool, width: f32) {
-    out.push(SheetPrim::Line { pts, closed, width, color: [0, 0, 0], dashed: false });
+    out.push(SheetPrim::Line { pts, closed, width, color: [0, 0, 0], dash: plan::Dash::Solid });
 }
 
 fn text(out: &mut Vec<SheetPrim>, pos: DVec2, s: impl Into<String>, size: f32, bold: bool) {
@@ -146,11 +146,11 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
                     pts.push(pts[0]);
                 }
                 match crop {
-                    None => out.push(SheetPrim::Line { pts: pts.into_iter().map(map).collect(), closed: false, width: stroke.width, color: stroke.color, dashed: stroke.dashed() }),
+                    None => out.push(SheetPrim::Line { pts: pts.into_iter().map(map).collect(), closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash }),
                     Some((a, b)) => {
                         for s in pts.windows(2) {
                             if let Some((p0, p1)) = clip_segment(s[0], s[1], a, b) {
-                                out.push(SheetPrim::Line { pts: vec![map(p0), map(p1)], closed: false, width: stroke.width, color: stroke.color, dashed: stroke.dashed() });
+                                out.push(SheetPrim::Line { pts: vec![map(p0), map(p1)], closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash });
                             }
                         }
                     }
@@ -170,9 +170,9 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
                 };
                 out.push(SheetPrim::Fill { tris: tris.into_iter().map(|t| [map(t[0]), map(t[1]), map(t[2])]).collect(), color });
             }
-            Prim::Text { pos, text, size, anchor, angle, .. } => {
+            Prim::Text { pos, text, size, anchor, angle, bold, .. } => {
                 if inside(pos) {
-                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold: false, angle });
+                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle });
                 }
             }
         }
@@ -296,7 +296,7 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
                 if closed && !pts.is_empty() {
                     pts.push(pts[0]);
                 }
-                out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dashed: stroke.dashed() });
+                out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash });
             }
             Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color }),
             Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle }),
@@ -327,7 +327,7 @@ pub fn to_pdf_page(
     let xy = |q: &DVec2| (q.x, q.y);
     for prim in layout(p, view, footprints) {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dashed } => page.line(&pts.iter().map(xy).collect::<Vec<_>>(), closed, width as f64, color, dashed),
+            SheetPrim::Line { pts, closed, width, color, dash } => page.line(&pts.iter().map(xy).collect::<Vec<_>>(), closed, width as f64, color, dash),
             SheetPrim::Fill { tris, color } => {
                 let a = color[3] as f64 / 255.0;
                 if a <= 0.0 {
@@ -362,7 +362,7 @@ pub fn view_to_pdf_page(p: &Project, view: &View, footprints: &HashMap<Id, Footp
     let mut page = crate::pdf::Page::new(size.x.max(100.0), size.y.max(80.0));
     for prim in out {
         match prim {
-            SheetPrim::Line { pts, closed, width, color, dashed } => page.line(&pts.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), closed, width as f64, color, dashed),
+            SheetPrim::Line { pts, closed, width, color, dash } => page.line(&pts.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), closed, width as f64, color, dash),
             SheetPrim::Fill { tris, color } => {
                 if color[3] == 0 {
                     continue;
