@@ -658,6 +658,12 @@ pub struct Floor {
     /// Optional slope arrow: (tail, head, rise at the head relative to the tail).
     #[serde(default)]
     pub slope: Option<(DVec2, DVec2, f64)>,
+    /// Rooms are bounded by the floor's edges.
+    #[serde(default = "yes")]
+    pub room_bounding: bool,
+    /// Span direction of a structural deck (set by the sketch's span direction edge).
+    #[serde(default)]
+    pub span: Option<DVec2>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

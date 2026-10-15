@@ -138,6 +138,13 @@ pub struct Cache {
     pub sheets: HashMap<Id, Rc<(Vec<rc_core::sheet::SheetPrim>, Vec<rc_core::sheet::ViewportBox>)>>,
 }
 
+/// A view's work plane.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WorkPlaneRef {
+    Level(Id),
+    RefPlane(Id),
+}
+
 pub struct App {
     pub doc: Document,
     pub renderer: Option<Renderer>,
@@ -157,6 +164,12 @@ pub struct App {
     pub cam3d_history: HashMap<Id, Vec<Camera>>,
     /// ViewCube Home views set with "Set Current View as Home".
     pub home3d: HashMap<Id, Camera>,
+    /// Work Plane > Show: views showing their work plane grid.
+    pub show_work_plane: std::collections::HashSet<Id>,
+    /// Work Plane > Set: each view's work plane (a level, or a named reference plane).
+    pub work_planes: HashMap<Id, WorkPlaneRef>,
+    /// Work Plane > Viewer: the view whose work plane the floating viewer shows.
+    pub work_plane_viewer: Option<Id>,
     pub cache: Cache,
     pub scenes: HashMap<Id, Scene>,
     pub toast: Option<Toast>,
@@ -215,6 +228,9 @@ impl App {
             cams3d: HashMap::new(),
             cam3d_history: HashMap::new(),
             home3d: HashMap::new(),
+            show_work_plane: Default::default(),
+            work_planes: HashMap::new(),
+            work_plane_viewer: None,
             cache: Cache::default(),
             scenes: HashMap::new(),
             toast: None,

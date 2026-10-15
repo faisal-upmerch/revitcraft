@@ -97,7 +97,7 @@ pub fn add_floor(p: &mut Project, level: Id, type_id: Id, boundary: Vec<DVec2>) 
     if boundary.len() < 3 || geom::area(&boundary) < 1e4 {
         return Err("A floor boundary needs at least three points enclosing an area.".into());
     }
-    Ok(push(p, ElementKind::Floor(Floor { boundary: geom::ensure_ccw(&boundary), level, type_id, ..Default::default() })))
+    Ok(push(p, ElementKind::Floor(Floor { boundary: geom::ensure_ccw(&boundary), level, type_id, room_bounding: true, ..Default::default() })))
 }
 
 pub fn add_ceiling(p: &mut Project, level: Id, type_id: Id, boundary: Vec<DVec2>, height: f64) -> Result<Id, String> {

@@ -4,7 +4,7 @@
 use crate::app::App;
 use crate::canvas::{self, Drag, Xf, temp_dim};
 use crate::style;
-use crate::tools::{self, DrawMode, Seg, ToolKind};
+use crate::tools::{self, DrawMode, Seg, SketchKind, SketchSub, Tool, ToolKind};
 use eframe::egui::{self, Color32, Pos2, Stroke, vec2};
 use rc_core::analysis;
 use rc_core::edit;
@@ -64,8 +64,9 @@ pub fn modes_for(kind: ToolKind) -> &'static [DrawMode] {
     use DrawMode::*;
     match kind {
         ToolKind::Wall => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines],
-        ToolKind::SketchLine => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines, PickWalls],
-        ToolKind::ModelLine | ToolKind::DetailLine | ToolKind::RoomSeparator | ToolKind::AreaBoundary => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, PickLines],
+        ToolKind::SketchLine => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, Spline, Ellipse, PartialEllipse, PickLines, PickWalls],
+        ToolKind::ModelLine | ToolKind::DetailLine => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, Spline, Ellipse, PartialEllipse, PickLines],
+        ToolKind::RoomSeparator | ToolKind::AreaBoundary => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, Spline, Ellipse, PartialEllipse, PickLines],
         ToolKind::Grid => &[Line, Arc3, ArcCenter, PickLines],
         ToolKind::RefPlane | ToolKind::Beam => &[Line, PickLines],
         _ => &[],
@@ -84,6 +85,8 @@ pub fn prompt(app: &App) -> String {
     let n = t.pts.len();
     let mode = effective_mode(app);
     match t.kind {
+        ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SlopeArrow => if n == 0 { "Click to enter the tail of the slope arrow.".into() } else { "Click to enter the head of the slope arrow.".into() },
+        ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SpanDirection => "Pick a boundary line to set the span direction.".into(),
         k if k.uses_draw_modes() => match mode {
             DrawMode::PickLines => "Pick a line, edge, wall or grid to create from it.".into(),
             DrawMode::PickWalls => "Pick walls to create the boundary (the face on the cursor side is used).".into(),
@@ -93,6 +96,9 @@ pub fn prompt(app: &App) -> String {
             DrawMode::Arc3 => ["Click the arc start.", "Click the arc end.", "Click a point on the arc to set its radius."][n.min(2)].into(),
             DrawMode::ArcCenter => ["Click the arc center.", "Click the arc start (radius).", "Click the arc end."][n.min(2)].into(),
             DrawMode::ArcTangent => "Click the end point of the tangent arc.".into(),
+            DrawMode::Spline => if n == 0 { "Click to enter the spline start point.".into() } else { "Click to add a control point. Click the last point again or press Enter to finish.".into() },
+            DrawMode::Ellipse => ["Click to enter the ellipse center.", "Click to enter the end of the first axis.", "Click to enter the other radius."][n.min(2)].into(),
+            DrawMode::PartialEllipse => ["Click to enter the start of the axis.", "Click to enter the end of the axis.", "Click to enter the other radius."][n.min(2)].into(),
             DrawMode::Line => {
                 let what = if k == ToolKind::Wall { "wall" } else { "line" };
                 if n == 0 {
@@ -460,6 +466,7 @@ pub fn enter(app: &mut App) {
         return;
     }
     match app.tool.kind {
+        k if k.uses_draw_modes() && effective_mode(app) == DrawMode::Spline && app.tool.pts.len() >= 2 => app.interact.finish_spline = true,
         k if k.uses_draw_modes() => {
             if app.tool.in_progress() || app.tool.tangent.is_some() {
                 app.tool.reset();
@@ -475,6 +482,10 @@ pub fn enter(app: &mut App) {
 // ---------------------------------------------------------------- draw-mode tools
 
 fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, point: Option<DVec2>, clicked: bool) {
+    if app.sketch.as_ref().is_some_and(|s| s.view == view.id) && app.opts.sketch_sub != SketchSub::Boundary {
+        sketch_sub_tool(app, painter, xf, cursor, point, clicked);
+        return;
+    }
     let mode = effective_mode(app);
     if mode.is_pick() {
         pick_draw_tool(app, painter, xf, view, d, mode, cursor, clicked);
@@ -484,6 +495,16 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
     let kind = app.tool.kind;
     let sides = app.opts.poly_sides;
     let tangent = app.tool.tangent;
+    // A spline finishes on Enter or when its last point is clicked again.
+    if mode == DrawMode::Spline && app.tool.pts.len() >= 2 {
+        let again = clicked && app.tool.pts.last().is_some_and(|l| l.distance(pt) <= xf.len(6.0));
+        if std::mem::take(&mut app.interact.finish_spline) || again {
+            let segs = tools::spline_segs(&app.tool.pts);
+            app.tool.pts.clear();
+            commit_segs(app, view, &segs);
+            return;
+        }
+    }
     let segs = tools::preview(mode, &app.tool.pts, pt, sides, tangent);
     // Preview, with the wall thickness for walls.
     if kind == ToolKind::Wall {
@@ -548,6 +569,48 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
         } else {
             app.tool.reset();
         }
+    }
+}
+
+/// Slope arrows and span direction in floor sketches.
+fn sketch_sub_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, cursor: Option<DVec2>, point: Option<DVec2>, clicked: bool) {
+    match app.opts.sketch_sub {
+        SketchSub::SlopeArrow => {
+            let Some(pt) = point else { return };
+            if let Some(a) = app.tool.pts.first().copied() {
+                crate::canvas::paint_slope_arrow(painter, xf, a, pt, style::PREVIEW);
+                temp_dim(painter, xf, a, pt, &app.doc.data.units.length(a.distance(pt)), -22.0);
+                if clicked && a.distance(pt) > 1.0 {
+                    if let Some(sk) = app.sketch.as_mut() {
+                        sk.slope_arrow = Some((a, pt));
+                    }
+                    app.tool.pts.clear();
+                    app.opts.sketch_sub = SketchSub::Boundary;
+                    app.tool = Tool::select();
+                }
+            } else if clicked {
+                app.tool.pts.push(pt);
+            }
+        }
+        SketchSub::SpanDirection => {
+            let Some(c) = cursor else { return };
+            let hit = app.sketch.as_ref().and_then(|sk| {
+                sk.segs.iter().enumerate().map(|(k, s)| (s.distance_to(c), k)).filter(|(dd, _)| *dd <= xf.len(8.0)).min_by(|a, b| a.0.total_cmp(&b.0)).map(|x| x.1)
+            });
+            if let (Some(k), Some(sk)) = (hit, app.sketch.as_ref()) {
+                draw_segs(painter, xf, &[sk.segs[k]], Stroke::new(3.0, style::PRESELECT));
+                if clicked {
+                    if let Some(sk) = app.sketch.as_mut() {
+                        if matches!(sk.segs[k], Seg::Line(..)) {
+                            sk.span_edge = Some(k);
+                        }
+                    }
+                    app.opts.sketch_sub = SketchSub::Boundary;
+                    app.tool = Tool::select();
+                }
+            }
+        }
+        SketchSub::Boundary => {}
     }
 }
 
@@ -818,8 +881,21 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
         let t = analysis::wall_thickness(&app.doc.data, w);
         let side = if (c - w.start).dot(w.normal()) >= 0.0 { 1.0 } else { -1.0 };
         let roof = app.sketch.as_ref().is_some_and(|s| s.kind.is_roof());
-        extra = side * (t / 2.0 + if roof { app.opts.overhang } else { 0.0 });
+        let floorish = app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. } | SketchKind::EditFloor(_) | SketchKind::Ceiling | SketchKind::EditCeiling(_)));
+        extra = if floorish && app.opts.extend_to_core {
+            // "Extend into wall (to core)": the boundary follows the core face on the cursor side.
+            let (plus, minus) = analysis::wall_core_offsets(&app.doc.data, w);
+            if side > 0.0 { plus } else { minus }
+        } else {
+            side * (t / 2.0 + if roof { app.opts.overhang } else { 0.0 })
+        };
         let _ = &mut seg;
+    }
+    // The wall being picked highlights and its name follows the cursor, as in the reference app.
+    app.interact.hover = Some(id);
+    painter.ctx().data_mut(|m| m.insert_temp(egui::Id::new("no-prompt-tip"), true));
+    if painter.ctx().input(|i| i.pointer.time_since_last_movement()) > 0.35 {
+        style::canvas_tooltip(painter, xf.s(c) + egui::vec2(12.0, 16.0), &crate::canvas::describe(app, id));
     }
     let shown = seg.offset(extra);
     draw_segs(painter, xf, &[shown], Stroke::new(2.5, style::PRESELECT));

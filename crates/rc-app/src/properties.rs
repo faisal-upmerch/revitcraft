@@ -408,6 +408,44 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                 ui.end_row();
             });
         }
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => {
+            // A new floor's instance parameters while its boundary is sketched.
+            let mut structural = matches!(app.sketch.as_ref().map(|s| &s.kind), Some(SketchKind::Floor { structural: true }));
+            let thick = app.doc.data.sys_type(o.floor_type).map(|t| t.thickness()).unwrap_or(0.0);
+            let top = level.map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0) + o.floor_offset;
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-floor").show(ui, |ui| {
+                prop_label(ui, "Level", false);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Height Offset From Level", false);
+                len_row(ui, "floor-off", &mut o.floor_offset);
+                ui.end_row();
+                prop_label(ui, "Room Bounding", false);
+                ui.checkbox(&mut o.floor_room_bounding, "");
+                ui.end_row();
+                prop_label(ui, "Related to Mass", true);
+                ui.add_enabled(false, egui::Checkbox::new(&mut false, ""));
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Structural", true);
+            prop_grid(ui, "new-floor-s").show(ui, |ui| {
+                prop_label(ui, "Structural", false);
+                ui.checkbox(&mut structural, "");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Dimensions", true);
+            prop_grid(ui, "new-floor-d").show(ui, |ui| {
+                for (name, value) in [("Slope", String::new()), ("Perimeter", String::new()), ("Area", String::new()), ("Volume", String::new()), ("Elevation at Top", units.length(top)), ("Elevation at Bottom", units.length(top - thick)), ("Thickness", units.length(thick))] {
+                    prop_label(ui, name, true);
+                    ro(ui, &value);
+                    ui.end_row();
+                }
+            });
+            if let Some(SketchKind::Floor { structural: s }) = app.sketch.as_mut().map(|s| &mut s.kind) {
+                *s = structural;
+            }
+        }
         _ => {
             style::group_header_ui(ui, "Constraints", true);
             prop_grid(ui, "new-other").show(ui, |ui| {

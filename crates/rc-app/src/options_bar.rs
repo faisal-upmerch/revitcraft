@@ -473,6 +473,11 @@ fn draw_common(app: &mut App, ui: &mut egui::Ui, mode: DrawMode, with_offset: bo
             app.opts.offset = o;
         }
     }
+    // Floor and ceiling sketches pick walls at their core face by default.
+    let floorish = app.sketch.as_ref().is_some_and(|s| matches!(s.kind, crate::tools::SketchKind::Floor { .. } | crate::tools::SketchKind::EditFloor(_) | crate::tools::SketchKind::Ceiling | crate::tools::SketchKind::EditCeiling(_)));
+    if mode == DrawMode::PickWalls && floorish {
+        ui.checkbox(&mut app.opts.extend_to_core, "Extend into wall (to core)");
+    }
     if mode == DrawMode::Fillet {
         ui.label("Radius:");
         let mut r = app.opts.radius;

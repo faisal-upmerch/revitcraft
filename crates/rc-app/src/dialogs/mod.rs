@@ -56,6 +56,8 @@ pub struct Dialogs {
     pub options: bool,
     pub exit: bool,
     pub create_group: Option<String>,
+    /// Work Plane > Set.
+    pub work_plane: bool,
     pub tag_all: bool,
     pub tag_all_cats: BTreeSet<Category>,
     pub view_templates: bool,
@@ -397,6 +399,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     }
     export_dialog(app, ctx);
     create_group(app, ctx);
+    work_plane(app, ctx);
+    work_plane_viewer(app, ctx);
     tag_all(app, ctx);
     renames(app, ctx);
     filter(app, ctx);
@@ -788,6 +792,106 @@ fn export_image(app: &mut App, id: Id) {
 }
 
 // ---------------------------------------------------------------- small dialogs
+
+/// The reference app's Work Plane dialog: the current plane, and a new one by name.
+fn work_plane(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.work_plane {
+        return;
+    }
+    let Some(view_id) = app.active else {
+        app.dialogs.work_plane = false;
+        return;
+    };
+    use crate::app::WorkPlaneRef;
+    let p = &app.doc.data;
+    let mut planes: Vec<(String, WorkPlaneRef)> = p.levels().iter().map(|(id, l)| (format!("Level : {}", l.name), WorkPlaneRef::Level(*id))).collect();
+    for e in &p.elements {
+        if let ElementKind::RefPlane(r) = &e.kind {
+            if !r.name.is_empty() {
+                planes.push((format!("Reference Plane : {}", r.name), WorkPlaneRef::RefPlane(e.id)));
+            }
+        }
+    }
+    let current = app.work_planes.get(&view_id).copied().or_else(|| app.doc.data.view(view_id).and_then(|v| v.plan_level()).map(WorkPlaneRef::Level));
+    let name_of = |w: Option<WorkPlaneRef>| w.and_then(|w| planes.iter().find(|(_, x)| *x == w).map(|(n, _)| n.clone())).unwrap_or_else(|| "<not associated>".into());
+    let pick_id = egui::Id::new("wp-choice");
+    let mut choice: usize = ctx.data(|m| m.get_temp(pick_id)).unwrap_or_else(|| planes.iter().position(|(_, w)| Some(*w) == current).unwrap_or(0));
+    let mut open = true;
+    let (mut ok, mut cancel, mut show) = (false, false, false);
+    window("Work Plane").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        ui.label(egui::RichText::new("Current Work Plane").strong());
+        ui.horizontal(|ui| {
+            ui.label("Name:");
+            ui.label(name_of(current));
+        });
+        ui.horizontal(|ui| {
+            if dlg_button(ui, "Show", false, true) {
+                show = true;
+            }
+            let _ = dlg_button(ui, "Dissociate", false, false);
+        });
+        ui.separator();
+        ui.label(egui::RichText::new("Specify a new Work Plane").strong());
+        ui.horizontal(|ui| {
+            let _ = ui.radio(true, "Name");
+            egui::ComboBox::from_id_salt("wp-name").width(240.0).selected_text(planes.get(choice).map(|x| x.0.clone()).unwrap_or_default()).show_ui(ui, |ui| {
+                for (k, (n, _)) in planes.iter().enumerate() {
+                    ui.selectable_value(&mut choice, k, n);
+                }
+            });
+        });
+        ui.add_enabled(false, egui::RadioButton::new(false, "Pick a plane"));
+        ui.add_enabled(false, egui::RadioButton::new(false, "Pick a line and use the work plane it was sketched in"));
+        ui.add_space(8.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(pick_id, choice));
+    if show {
+        app.show_work_plane.insert(view_id);
+    }
+    if ok {
+        if let Some((n, w)) = planes.get(choice).cloned() {
+            app.work_planes.insert(view_id, w);
+            app.info(format!("Work plane: {n}."));
+        }
+    }
+    if ok || cancel || !open {
+        app.dialogs.work_plane = false;
+        ctx.data_mut(|m| m.remove::<usize>(pick_id));
+    }
+}
+
+/// Work Plane > Viewer: a floating window showing the current work plane's view, fitted.
+fn work_plane_viewer(app: &mut App, ctx: &egui::Context) {
+    let Some(view_id) = app.work_plane_viewer else { return };
+    let Some(view) = app.doc.data.view(view_id).cloned() else {
+        app.work_plane_viewer = None;
+        return;
+    };
+    let drawing = app.drawing(view_id);
+    let mut open = true;
+    window("Workplane Viewer").open(&mut open).default_size(vec2(420.0, 320.0)).resizable(true).show(ctx, |ui| {
+        let (rect, _) = ui.allocate_exact_size(ui.available_size().max(vec2(300.0, 220.0)), egui::Sense::hover());
+        ui.painter().rect_filled(rect, 0.0, egui::Color32::WHITE);
+        if let Some((mn, mx)) = drawing.bounds() {
+            let size = (mx - mn).max(rc_core::geom::DVec2::splat(1.0));
+            let zoom = ((rect.width() as f64 - 20.0) / size.x).min((rect.height() as f64 - 20.0) / size.y);
+            let xf = crate::canvas::Xf { rect, center: (mn + mx) / 2.0, zoom, scale: view.scale, thin: app.thin_lines };
+            crate::canvas::paint_prims(&ui.painter_at(rect), &drawing.prims, &xf, &|_, rgb| Some(egui::Color32::from_rgb(rgb[0], rgb[1], rgb[2])));
+        }
+    });
+    if !open {
+        app.work_plane_viewer = None;
+    }
+}
 
 fn create_group(app: &mut App, ctx: &egui::Context) {
     let Some(mut name) = app.dialogs.create_group.clone() else { return };

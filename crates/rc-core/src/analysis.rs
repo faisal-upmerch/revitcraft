@@ -382,6 +382,24 @@ impl Footprint {
 
 pub const JOIN_TOLERANCE: f64 = 5.0;
 
+/// Offsets of a wall's core boundaries from its location line along its normal:
+/// (core face on the + side, core face on the − side). Walls without a core use their faces.
+pub fn wall_core_offsets(p: &Project, w: &Wall) -> (f64, f64) {
+    let t = wall_thickness(p, w);
+    let Some(ty) = p.sys_type(w.type_id) else { return (t / 2.0, -t / 2.0) };
+    let mut o = t / 2.0;
+    let (mut plus, mut minus) = (None, None);
+    for l in &ty.layers {
+        let o0 = o - l.thickness;
+        if l.core {
+            plus.get_or_insert(o);
+            minus = Some(o0);
+        }
+        o = o0;
+    }
+    (plus.unwrap_or(t / 2.0), minus.unwrap_or(-t / 2.0))
+}
+
 /// Wall outlines with mitred L-corner joins between straight walls whose endpoints meet.
 pub fn wall_footprints(p: &Project) -> HashMap<Id, Footprint> {
     let walls: Vec<(Id, &Wall)> = p.walls().filter(|(_, w)| w.length() > 1e-6).map(|(e, w)| (e.id, w)).collect();

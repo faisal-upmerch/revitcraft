@@ -16,6 +16,12 @@ pub enum DrawMode {
     Fillet,
     PickLines,
     PickWalls,
+    /// Smooth curve through clicked points (Enter, or clicking the last point, finishes).
+    Spline,
+    /// Centre, one axis end, then the other radius.
+    Ellipse,
+    /// The two ends of an axis, then the other radius: half an ellipse.
+    PartialEllipse,
 }
 
 impl DrawMode {
@@ -377,11 +383,24 @@ pub struct Sketch {
     pub selected: Vec<usize>,
     /// Stairs: run width.
     pub width: f64,
+    /// Floors: slope arrow (tail, head).
+    pub slope_arrow: Option<(DVec2, DVec2)>,
+    /// Floors: the boundary line that sets the span direction (the first one by default).
+    pub span_edge: Option<usize>,
+}
+
+/// What clicks in a floor, ceiling or roof sketch create.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum SketchSub {
+    #[default]
+    Boundary,
+    SlopeArrow,
+    SpanDirection,
 }
 
 impl Sketch {
     pub fn new(kind: SketchKind, view: Id, level: Id) -> Sketch {
-        Sketch { kind, segs: Vec::new(), slopes: Vec::new(), view, level, selected: Vec::new(), width: 1200.0 }
+        Sketch { kind, segs: Vec::new(), slopes: Vec::new(), view, level, selected: Vec::new(), width: 1200.0, slope_arrow: None, span_edge: None }
     }
 
     pub fn push(&mut self, s: Seg, slope: bool) {
@@ -542,6 +561,14 @@ pub struct ToolOptions {
     pub footing_type: Id,
     pub group_type: Id,
     pub draw_mode: DrawMode,
+    pub sketch_sub: SketchSub,
+    /// New floors (Properties palette while sketching).
+    pub floor_offset: f64,
+    pub floor_room_bounding: bool,
+    /// Slope arrows: height offset at the head.
+    pub slope_head_offset: f64,
+    /// Pick Walls in floor sketches: boundary on the core face.
+    pub extend_to_core: bool,
     pub poly_sides: u32,
     /// Wall top: None = Unconnected (uses `wall_height`).
     pub wall_top: Option<Id>,
@@ -642,6 +669,11 @@ impl ToolOptions {
             footing_type: first_fam(Category::StructuralFoundations),
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
             draw_mode: DrawMode::Line,
+            sketch_sub: SketchSub::Boundary,
+            floor_offset: 0.0,
+            floor_room_bounding: true,
+            slope_head_offset: 304.8,
+            extend_to_core: true,
             poly_sides: 6,
             wall_top: None,
             wall_depth: false,
@@ -848,8 +880,73 @@ pub fn draw_step(mode: DrawMode, pts: &mut Vec<DVec2>, click: DVec2, sides: u32,
             pts.clear();
             tangent_arc(start, dir, click).map(|s| vec![s])
         }
+        DrawMode::Spline => {
+            if pts.last().is_none_or(|l| l.distance(click) > 1.0) {
+                pts.push(click);
+            }
+            None
+        }
+        DrawMode::Ellipse | DrawMode::PartialEllipse => {
+            if pts.len() < 2 {
+                if pts.last().is_none_or(|l| l.distance(click) > 1.0) {
+                    pts.push(click);
+                }
+                return None;
+            }
+            let (p0, p1) = (pts[0], pts[1]);
+            pts.clear();
+            let pts = ellipse_points(mode == DrawMode::PartialEllipse, p0, p1, click)?;
+            let n = pts.len();
+            let closed = mode == DrawMode::Ellipse;
+            Some((0..if closed { n } else { n - 1 }).map(|k| Seg::Line(pts[k], pts[(k + 1) % n])).collect())
+        }
         DrawMode::Fillet | DrawMode::PickLines | DrawMode::PickWalls => None,
     }
+}
+
+/// Points of an ellipse (centre `a`, axis end `b`) or a half ellipse (axis ends `a` and
+/// `b`), the other radius being the distance of `c` from the axis.
+pub fn ellipse_points(half: bool, a: DVec2, b: DVec2, c: DVec2) -> Option<Vec<DVec2>> {
+    let (center, axis) = if half { ((a + b) / 2.0, (b - a) / 2.0) } else { (a, b - a) };
+    if axis.length() < 1.0 {
+        return None;
+    }
+    let n = geom::perp(axis.normalize());
+    let minor = (c - center).dot(n);
+    if minor.abs() < 1.0 {
+        return None;
+    }
+    let pt = |t: f64| center + axis * t.cos() + n * (minor * t.sin());
+    Some(if half {
+        // From a (t = π) to b (t = 0) through the side of c.
+        (0..=24).map(|k| pt(std::f64::consts::PI * (1.0 - k as f64 / 24.0))).collect()
+    } else {
+        (0..48).map(|k| pt(std::f64::consts::TAU * k as f64 / 48.0)).collect()
+    })
+}
+
+/// A Catmull-Rom spline through the points, as short line segments.
+pub fn spline_segs(pts: &[DVec2]) -> Vec<Seg> {
+    if pts.len() < 2 {
+        return vec![];
+    }
+    let n = pts.len();
+    let get = |i: isize| pts[i.clamp(0, n as isize - 1) as usize];
+    let mut out = Vec::new();
+    let mut prev = pts[0];
+    for i in 0..n - 1 {
+        let (p0, p1, p2, p3) = (get(i as isize - 1), get(i as isize), get(i as isize + 1), get(i as isize + 2));
+        for k in 1..=10 {
+            let t = k as f64 / 10.0;
+            let (t2, t3) = (t * t, t * t * t);
+            let q = (p1 * 2.0 + (p2 - p0) * t + (p0 * 2.0 - p1 * 5.0 + p2 * 4.0 - p3) * t2 + (p1 * 3.0 - p0 - p2 * 3.0 + p3) * t3) * 0.5;
+            if q.distance(prev) > 1e-6 {
+                out.push(Seg::Line(prev, q));
+                prev = q;
+            }
+        }
+    }
+    out
 }
 
 /// Vertices of a regular polygon centred at `c` with a vertex (inscribed) or edge midpoint
@@ -891,6 +988,12 @@ pub fn preview(mode: DrawMode, pts: &[DVec2], cursor: DVec2, sides: u32, tangent
         DrawMode::Arc3 if pts.len() == 1 => vec![Seg::Line(pts[0], cursor)],
         DrawMode::ArcCenter if pts.len() == 1 => vec![Seg::Line(pts[0], cursor)],
         DrawMode::ArcTangent if tangent.is_none() && pts.is_empty() => vec![],
+        DrawMode::Spline => {
+            let mut all = pts.to_vec();
+            all.push(cursor);
+            spline_segs(&all)
+        }
+        DrawMode::Ellipse | DrawMode::PartialEllipse if pts.len() == 1 => vec![Seg::Line(pts[0], cursor)],
         _ if mode.is_pick() => vec![],
         _ if pts.is_empty() && mode != DrawMode::ArcTangent => vec![],
         _ => draw_step(mode, &mut tmp, cursor, sides, tangent, false).unwrap_or_default(),

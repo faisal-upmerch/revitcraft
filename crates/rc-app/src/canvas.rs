@@ -288,6 +288,8 @@ pub struct Interact {
     pub text_input: Option<(DVec2, String, bool)>,
     /// Enter was pressed with a typed value: treat it as a click at the computed point.
     pub pending_enter: bool,
+    /// Enter pressed while drawing a spline: finish it.
+    pub finish_spline: bool,
 }
 
 pub fn canvas_bg(app: &App) -> Color32 {
@@ -742,6 +744,40 @@ pub fn snap_point(app: &mut App, view: Id, cursor: DVec2, xf: &Xf, reference: Op
     snap::snap(&inp)
 }
 
+/// A sketch slope arrow: a line from tail to head with an open arrowhead.
+pub fn paint_slope_arrow(painter: &egui::Painter, xf: &Xf, a: DVec2, b: DVec2, color: Color32) {
+    let (pa, pb) = (xf.s(a), xf.s(b));
+    if pa.distance(pb) < 2.0 {
+        return;
+    }
+    painter.line_segment([pa, pb], Stroke::new(2.0, color));
+    let d = (pb - pa).normalized();
+    let n = vec2(-d.y, d.x);
+    painter.line_segment([pb, pb - d * 12.0 + n * 6.0], Stroke::new(2.0, color));
+    painter.line_segment([pb, pb - d * 12.0 - n * 6.0], Stroke::new(2.0, color));
+}
+
+/// The work plane grid of a plan (its level): light-blue lines at the grid spacing over the
+/// model extents.
+fn paint_work_plane_grid(app: &App, painter: &egui::Painter, xf: &Xf, d: &Drawing) {
+    let spacing = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 3048.0 } else { 3000.0 };
+    let Some((mn, mx)) = d.bounds() else { return };
+    let (x0, y0) = ((mn.x / spacing).floor() * spacing - spacing, (mn.y / spacing).floor() * spacing - spacing);
+    let (x1, y1) = ((mx.x / spacing).ceil() * spacing + spacing, (mx.y / spacing).ceil() * spacing + spacing);
+    let st = Stroke::new(1.0, Color32::from_rgba_unmultiplied(80, 150, 230, 150));
+    let mut x = x0;
+    while x <= x1 + 1.0 {
+        painter.line_segment([xf.s(DVec2::new(x, y0)), xf.s(DVec2::new(x, y1))], st);
+        x += spacing;
+    }
+    let mut y = y0;
+    while y <= y1 + 1.0 {
+        painter.line_segment([xf.s(DVec2::new(x0, y)), xf.s(DVec2::new(x1, y))], st);
+        y += spacing;
+    }
+    painter.rect_stroke(Rect::from_two_pos(xf.s(DVec2::new(x0, y0)), xf.s(DVec2::new(x1, y1))), 0.0, Stroke::new(1.5, Color32::from_rgb(60, 130, 220)), egui::StrokeKind::Middle);
+}
+
 /// A light-blue dashed reference line (the location line of a snapped element).
 pub fn reference_line(painter: &egui::Painter, a: Pos2, b: Pos2) {
     painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, style::TRACK), 5.0, 4.0));
@@ -948,7 +984,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     {
         let p = &app.doc.data;
         let show_mass = app.show_mass;
+        // While sketching, everything else in the view is halftone, as in the reference app.
+        let sketching = app.sketch.as_ref().is_some_and(|s| s.view == view_id);
         let color_of = |id: Option<Id>, rgb: [u8; 3]| -> Option<Color32> {
+            if sketching {
+                let h = |c: u8| ((c as u16 + 255) / 2) as u8;
+                if id.and_then(|i| index.get(&i)).and_then(|i| p.elements.get(*i)).is_some_and(|e| temp.as_ref().is_some_and(|t| t.hides(e.id, e.category()))) {
+                    return None;
+                }
+                return Some(Color32::from_rgb(h(rgb[0]), h(rgb[1]), h(rgb[2])));
+            }
             if let Some(e) = id.and_then(|i| index.get(&i)).and_then(|i| p.elements.get(*i)) {
                 if temp.as_ref().is_some_and(|t| t.hides(e.id, e.category())) {
                     return None;
@@ -1075,6 +1120,21 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             let hovered = is_active && app.interact.hover_seg == Some(k);
             let color = if selected { style::SELECT } else if hovered { style::PRESELECT } else { style::SKETCH };
             paint_polyline(&painter, &pts, false, Stroke::new(2.0, color), Dash::Solid, &xf);
+            // The span direction symbol sits on the span edge of floor sketches.
+            let floor = matches!(sk.kind, crate::tools::SketchKind::Floor { .. } | crate::tools::SketchKind::EditFloor(_));
+            if floor && sk.span_edge.unwrap_or(0) == k && matches!(s, crate::tools::Seg::Line(..)) {
+                let (a, b) = (xf.s(s.start()), xf.s(s.end()));
+                let d = (b - a).normalized();
+                let n = vec2(-d.y, d.x);
+                let m = a + (b - a) * 0.5 + n * 9.0;
+                for off in [-3.0f32, 3.0] {
+                    painter.line_segment([m + n * off - d * 12.0, m + n * off + d * 12.0], Stroke::new(1.5, style::SKETCH));
+                }
+                for sgn in [-1.0f32, 1.0] {
+                    let tip = m + d * (16.0 * sgn);
+                    painter.add(egui::Shape::convex_polygon(vec![tip, tip - d * (6.0 * sgn) + n * 4.0, tip - d * (6.0 * sgn) - n * 4.0], style::SKETCH, Stroke::NONE));
+                }
+            }
             if sk.kind.is_roof() && sk.slopes.get(k).copied().unwrap_or(true) {
                 // Slope-defining edge: a small triangle marker.
                 let mid = xf.s((s.start() + s.end()) / 2.0);
@@ -1083,6 +1143,14 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 painter.add(egui::Shape::convex_polygon(vec![mid + n * 4.0 - d * 6.0, mid + n * 4.0 + d * 6.0, mid + n * 12.0], style::SKETCH, Stroke::NONE));
             }
         }
+    }
+
+    if let Some((a, b)) = app.sketch.as_ref().filter(|s| s.view == view_id).and_then(|s| s.slope_arrow) {
+        paint_slope_arrow(&painter, &xf, a, b, style::SKETCH);
+    }
+    // The work plane grid (Show).
+    if app.show_work_plane.contains(&view_id) && is_plan(&view) {
+        paint_work_plane_grid(app, &painter, &xf, &drawing);
     }
 
     // Measure result.

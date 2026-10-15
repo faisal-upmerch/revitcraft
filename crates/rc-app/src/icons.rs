@@ -130,6 +130,14 @@ pub enum Icon {
     DrawRect,
     DrawPolyIn,
     DrawPolyCirc,
+    DrawSpline,
+    BoundaryLine,
+    SlopeArrow,
+    SpanDirection,
+    WorkPlaneShow,
+    WorkPlaneViewer,
+    DrawEllipse,
+    DrawPartialEllipse,
     DrawCircle,
     DrawArc3,
     DrawArcCenter,
@@ -1225,6 +1233,55 @@ fn draw(g: &Pen, icon: Icon) {
         }
         DrawCircle => {
             g.circle((0.5, 0.5), 0.36, Color32::TRANSPARENT, ink);
+            g.dot((0.5, 0.5), 0.04, BLUE);
+        }
+        DrawSpline => {
+            let pts: Vec<Pt> = (0..=20).map(|k| {
+                let t = k as f32 / 20.0;
+                (0.1 + 0.8 * t, 0.55 - 0.3 * (t * TAU).sin() * (1.0 - t * 0.3))
+            }).collect();
+            g.line(&pts, ink);
+            for q in [(0.1, 0.55), (0.35, 0.25), (0.65, 0.8), (0.9, 0.52)] {
+                g.dot(q, 0.04, BLUE);
+            }
+        }
+        BoundaryLine => {
+            g.line(&[(0.16, 0.86), (0.16, 0.2), (0.84, 0.2)], MAGENTA);
+            g.dot((0.16, 0.86), 0.05, ink);
+            g.dot((0.84, 0.2), 0.05, ink);
+        }
+        SlopeArrow => {
+            g.shade(&[(0.06, 0.66), (0.62, 0.42), (0.94, 0.56), (0.38, 0.8)], G0, G2, false);
+            g.arrow((0.22, 0.68), (0.74, 0.46), MAGENTA);
+        }
+        SpanDirection => {
+            g.shade(&[(0.06, 0.62), (0.6, 0.38), (0.94, 0.52), (0.4, 0.76)], G0, G2, false);
+            g.line(&[(0.18, 0.52), (0.72, 0.3)], ink);
+            g.line(&[(0.28, 0.66), (0.82, 0.44)], ink);
+            g.arrow_head((0.72, 0.3), (0.18, 0.52), ink, 0.12);
+            g.arrow_head((0.18, 0.52), (0.72, 0.3), ink, 0.12);
+        }
+        WorkPlaneShow => {
+            g.shade(&[(0.22, 0.24), (0.94, 0.24), (0.78, 0.76), (0.06, 0.76)], G0, G1, false);
+            for k in 1..4 {
+                let t = k as f32 / 4.0;
+                g.thin_line(&[(0.22 + 0.72 * t, 0.24), (0.06 + 0.72 * t, 0.76)], SKY);
+                g.thin_line(&[(0.22 - 0.16 * t, 0.24 + 0.52 * t), (0.94 - 0.16 * t, 0.24 + 0.52 * t)], SKY);
+            }
+            g.circle((0.8, 0.78), 0.12, YELLOW, OUTLINE);
+        }
+        WorkPlaneViewer => {
+            g.shade(&[(0.1, 0.12), (0.9, 0.12), (0.9, 0.88), (0.1, 0.88)], G1, G2, false);
+            g.shade(&[(0.16, 0.24), (0.84, 0.24), (0.84, 0.82), (0.16, 0.82)], G0, G0, false);
+            g.solid_box(0.5, 0.74, 0.22, 0.22, 0.22);
+        }
+        DrawEllipse | DrawPartialEllipse => {
+            let (a0, a1) = if icon == DrawEllipse { (0.0, TAU) } else { (PI, TAU) };
+            let pts: Vec<Pt> = (0..=32).map(|k| {
+                let a = a0 + (a1 - a0) * k as f32 / 32.0;
+                (0.5 + 0.4 * a.cos(), 0.5 + 0.24 * a.sin())
+            }).collect();
+            g.line(&pts, ink);
             g.dot((0.5, 0.5), 0.04, BLUE);
         }
         DrawArc3 => {

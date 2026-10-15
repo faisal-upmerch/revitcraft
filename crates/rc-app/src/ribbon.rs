@@ -7,7 +7,7 @@ use crate::canvas_tools;
 use crate::commands::Cmd;
 use crate::icons::{self};
 use crate::style;
-use crate::tools::{DrawMode, ToolKind};
+use crate::tools::{DrawMode, SketchKind, ToolKind};
 use eframe::egui::{self, Color32, Rect, Sense, Stroke, pos2, vec2};
 use rc_core::model::*;
 
@@ -51,6 +51,8 @@ enum Item {
     Icons(Vec<Cmd>),
     /// Toggle with a state.
     Toggle(Cmd, bool),
+    /// Icon-only buttons stacked vertically (the sketch Mode panel's ✗ over ✓).
+    Column(Vec<Cmd>),
     /// A big button with its own ribbon label ("\n" breaks the line) and optional
     /// alternatives under the arrow.
     Labeled(&'static str, Cmd, Vec<Cmd>),
@@ -100,7 +102,7 @@ fn architecture() -> Vec<Panel> {
         ),
         panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![])]),
         panel("Datum", vec![Big(C::Level), Big(C::Grid)]),
-        panel("Work Plane", vec![Labeled("Ref\nPlane", C::RefPlane, vec![])]),
+        work_plane_panel(),
     ]
 }
 
@@ -115,7 +117,7 @@ fn structure() -> Vec<Panel> {
         panel("Model", vec![Labeled("Component", C::Component, vec![]), Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
         panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![])]),
         panel("Datum", vec![Big(C::Level), Big(C::Grid)]),
-        panel("Work Plane", vec![Labeled("Ref\nPlane", C::RefPlane, vec![])]),
+        work_plane_panel(),
     ]
 }
 
@@ -292,6 +294,11 @@ fn modify_panels() -> Vec<Panel> {
     ]
 }
 
+/// Set, Show, Ref Plane and Viewer, as on the reference app's Architecture tab.
+fn work_plane_panel() -> Panel {
+    panel("Work Plane", vec![Labeled("Set", C::WorkPlaneSet, vec![]), Labeled("Show", C::WorkPlaneShow, vec![]), Labeled("Ref\nPlane", C::RefPlane, vec![]), Labeled("Viewer", C::WorkPlaneViewer, vec![])])
+}
+
 fn draw_panel(app: &App) -> Option<Panel> {
     let kind = app.tool.kind;
     let modes: Vec<Cmd> = if app.sketch.is_some() && (kind == ToolKind::SketchLine || kind == ToolKind::Select) {
@@ -302,7 +309,17 @@ fn draw_panel(app: &App) -> Option<Panel> {
     if modes.is_empty() {
         return None;
     }
-    Some(panel("Draw", vec![Icons(modes)]))
+    // Floor, ceiling and roof sketches: what to draw (boundary, slope arrow, span direction)
+    // beside the shape gallery, as in the reference app.
+    let left: Vec<Cmd> = match app.sketch.as_ref().map(|s| &s.kind) {
+        Some(SketchKind::Floor { .. } | SketchKind::EditFloor(_)) => vec![C::SketchBoundary, C::SlopeArrow, C::SpanDirection],
+        Some(SketchKind::Ceiling | SketchKind::EditCeiling(_) | SketchKind::Roof | SketchKind::EditRoof(_)) => vec![C::SketchBoundary, C::SlopeArrow],
+        _ => vec![],
+    };
+    if left.is_empty() {
+        return Some(panel("Draw", vec![Icons(modes)]));
+    }
+    Some(panel("Draw", vec![Stack(left), Icons(modes)]))
 }
 
 fn mode_cmd(m: DrawMode) -> Cmd {
@@ -318,6 +335,9 @@ fn mode_cmd(m: DrawMode) -> Cmd {
         DrawMode::Fillet => C::DrawFillet,
         DrawMode::PickLines => C::PickLines,
         DrawMode::PickWalls => C::PickWalls,
+        DrawMode::Spline => C::DrawSpline,
+        DrawMode::Ellipse => C::DrawEllipse,
+        DrawMode::PartialEllipse => C::DrawPartialEllipse,
     }
 }
 
@@ -334,6 +354,9 @@ fn cmd_mode(c: Cmd) -> Option<DrawMode> {
         C::DrawFillet => DrawMode::Fillet,
         C::PickLines => DrawMode::PickLines,
         C::PickWalls => DrawMode::PickWalls,
+        C::DrawSpline => DrawMode::Spline,
+        C::DrawEllipse => DrawMode::Ellipse,
+        C::DrawPartialEllipse => DrawMode::PartialEllipse,
         _ => return None,
     })
 }
@@ -341,10 +364,11 @@ fn cmd_mode(c: Cmd) -> Option<DrawMode> {
 /// The contextual tab: (title, extra panels) for the current selection/tool/sketch.
 fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
     if let Some(sk) = &app.sketch {
-        let mut v = vec![panel("Mode", vec![Big(C::FinishSketch), Big(C::CancelSketch)])];
+        let mut v = vec![panel("Mode", vec![Column(vec![C::CancelSketch, C::FinishSketch])])];
         if let Some(d) = draw_panel(app) {
             v.push(d);
         }
+        v.push(work_plane_panel());
         return Some((sk.kind.title().to_string(), v));
     }
     if app.group_edit.is_some() {
@@ -458,10 +482,14 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
     use crate::tools::ToolKind as T;
     let k = app.tool.kind;
     if let Some(m) = cmd_mode(cmd) {
-        return (k.uses_draw_modes() || app.sketch.is_some()) && app.opts.draw_mode == m && !(app.sketch.is_some() && k == T::Select);
+        return (k.uses_draw_modes() || app.sketch.is_some()) && app.opts.draw_mode == m && !(app.sketch.is_some() && k == T::Select) && app.opts.sketch_sub == crate::tools::SketchSub::Boundary;
     }
     match cmd {
         C::Modify => k == T::Select,
+        C::WorkPlaneShow => app.active.is_some_and(|v| app.show_work_plane.contains(&v)),
+        C::SketchBoundary => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::Boundary,
+        C::SlopeArrow => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SlopeArrow,
+        C::SpanDirection => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SpanDirection,
         C::Wall => k == T::Wall && !app.opts.wall_structural,
         C::WallStructural => k == T::Wall && app.opts.wall_structural,
         C::Door => k == T::Door,
@@ -658,6 +686,12 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                                 Split(c, alts) => big_button(ui, app, *c, None, Some(alts), None),
                                 // "User Interface" is a menu, not a toggle.
                                 Labeled(label, c, alts) => big_button(ui, app, *c, Some(label), if alts.is_empty() { None } else { Some(alts) }, label.starts_with("User").then_some(false)),
+                                Column(cs) => {
+                                    ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+                                    for c in cs {
+                                        icon_button(ui, app, *c, 32.0);
+                                    }
+                                }
                                 Stack(cs) => {
                                     let w = cs
                                         .iter()

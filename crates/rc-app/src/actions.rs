@@ -637,8 +637,32 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.sketch = None;
             app.tool = Tool::select();
         }
-        DrawLine | DrawRect | DrawPolyIn | DrawPolyCirc | DrawCircle | DrawArc3 | DrawArcCenter | DrawArcTangent | DrawFillet | PickLines | PickWalls => {
+        SketchBoundary | SlopeArrow | SpanDirection => {
+            app.opts.sketch_sub = match cmd {
+                SlopeArrow => crate::tools::SketchSub::SlopeArrow,
+                SpanDirection => crate::tools::SketchSub::SpanDirection,
+                _ => crate::tools::SketchSub::Boundary,
+            };
+            if app.sketch.is_some() {
+                app.tool = Tool::new(ToolKind::SketchLine);
+            }
+            app.tool.reset();
+        }
+        WorkPlaneSet => app.dialogs.work_plane = true,
+        WorkPlaneShow => {
+            if let Some(v) = app.active {
+                if !app.show_work_plane.remove(&v) {
+                    app.show_work_plane.insert(v);
+                }
+            }
+        }
+        WorkPlaneViewer => app.work_plane_viewer = app.active,
+        DrawLine | DrawRect | DrawPolyIn | DrawPolyCirc | DrawCircle | DrawArc3 | DrawArcCenter | DrawArcTangent | DrawFillet | DrawSpline | DrawEllipse | DrawPartialEllipse | PickLines | PickWalls => {
+            app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
             let mode = match cmd {
+                DrawSpline => DrawMode::Spline,
+                DrawEllipse => DrawMode::Ellipse,
+                DrawPartialEllipse => DrawMode::PartialEllipse,
                 DrawLine => DrawMode::Line,
                 DrawRect => DrawMode::Rect,
                 DrawPolyIn => DrawMode::PolyIn,
@@ -873,6 +897,7 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     sk.width = app.opts.stair_width;
     app.sketch = Some(sk);
     app.opts.draw_mode = mode;
+    app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
     app.tool = Tool::new(ToolKind::SketchLine);
     app.select(vec![]);
 }
@@ -889,6 +914,9 @@ fn edit_boundary(app: &mut App) {
         _ => return,
     };
     let mut sk = Sketch::new(kind, view, level);
+    if let ElementKind::Floor(f) = &e.kind {
+        sk.slope_arrow = f.slope.map(|(a, b, _)| (a, b));
+    }
     for ring in &rings {
         let n = ring.len();
         for k in 0..n {
@@ -896,8 +924,14 @@ fn edit_boundary(app: &mut App) {
             sk.push(Seg::Line(ring[k], ring[(k + 1) % n]), flag);
         }
     }
+    if let ElementKind::Floor(f) = &e.kind {
+        if let Some(d) = f.span {
+            sk.span_edge = sk.segs.iter().position(|s| (s.end() - s.start()).normalize_or_zero().dot(d).abs() > 0.9999);
+        }
+    }
     app.sketch = Some(sk);
     app.opts.draw_mode = DrawMode::Line;
+    app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
     app.tool = Tool::select();
     app.select(vec![]);
 }
@@ -922,6 +956,13 @@ fn close_sketch_chain(app: &mut App) {
 }
 
 /// Finish Edit Mode (green check): validates the sketch and creates or updates the element.
+/// Direction of the sketch's span edge (the first boundary line unless one was picked).
+fn span_dir(sk: &Sketch) -> Option<DVec2> {
+    let s = sk.segs.get(sk.span_edge.unwrap_or(0))?;
+    let d = (s.end() - s.start()).normalize_or_zero();
+    (d != DVec2::ZERO).then_some(d)
+}
+
 pub fn finish_sketch(app: &mut App) {
     let Some(sk) = app.sketch.clone() else { return };
     let o = app.opts.clone();
@@ -987,6 +1028,10 @@ pub fn finish_sketch(app: &mut App) {
                         if let Some(ElementKind::Floor(f)) = p.element_mut(id).map(|e| &mut e.kind) {
                             f.holes = holes;
                             f.structural = structural;
+                            f.height_offset = o.floor_offset;
+                            f.room_bounding = o.floor_room_bounding;
+                            f.slope = sk.slope_arrow.map(|(a, b)| (a, b, o.slope_head_offset));
+                            f.span = span_dir(&sk);
                         }
                         Ok(id)
                     }),
@@ -1043,6 +1088,9 @@ pub fn finish_sketch(app: &mut App) {
                         if let Some(ElementKind::Floor(f)) = p.element_mut(id).map(|e| &mut e.kind) {
                             f.boundary = geom::ensure_ccw(&outer);
                             f.holes = holes;
+                            let rise = f.slope.map(|s| s.2).unwrap_or(o.slope_head_offset);
+                            f.slope = sk.slope_arrow.map(|(a, b)| (a, b, rise));
+                            f.span = span_dir(&sk);
                         }
                         Ok(id)
                     }),
