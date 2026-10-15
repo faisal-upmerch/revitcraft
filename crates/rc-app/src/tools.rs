@@ -387,6 +387,40 @@ pub struct Sketch {
     pub slope_arrow: Option<(DVec2, DVec2)>,
     /// Floors: the boundary line that sets the span direction (the first one by default).
     pub span_edge: Option<usize>,
+    /// Railings: the stair the railing follows (Pick New Host).
+    pub host: Option<Id>,
+}
+
+/// Stair run Location Line: where the clicked path lies across the run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum StairLocation {
+    SupportLeft,
+    RunLeft,
+    RunCenter,
+    RunRight,
+    SupportRight,
+}
+
+impl StairLocation {
+    pub const ALL: [StairLocation; 5] = [StairLocation::SupportLeft, StairLocation::RunLeft, StairLocation::RunCenter, StairLocation::RunRight, StairLocation::SupportRight];
+    pub fn label(self) -> &'static str {
+        match self {
+            StairLocation::SupportLeft => "Exterior Support: Left",
+            StairLocation::RunLeft => "Run: Left",
+            StairLocation::RunCenter => "Run: Center",
+            StairLocation::RunRight => "Run: Right",
+            StairLocation::SupportRight => "Exterior Support: Right",
+        }
+    }
+    /// Offset of the run centre line from the clicked path, along the path's left normal.
+    /// Monolithic runs have no separate supports, so their edges coincide with the run's.
+    pub fn center_shift(self, width: f64) -> f64 {
+        match self {
+            StairLocation::SupportLeft | StairLocation::RunLeft => -width / 2.0,
+            StairLocation::RunCenter => 0.0,
+            StairLocation::RunRight | StairLocation::SupportRight => width / 2.0,
+        }
+    }
 }
 
 /// Placing several structural columns at once.
@@ -403,11 +437,13 @@ pub enum SketchSub {
     Boundary,
     SlopeArrow,
     SpanDirection,
+    /// Railings: pick the stair to host the railing.
+    PickHost,
 }
 
 impl Sketch {
     pub fn new(kind: SketchKind, view: Id, level: Id) -> Sketch {
-        Sketch { kind, segs: Vec::new(), slopes: Vec::new(), view, level, selected: Vec::new(), width: 1200.0, slope_arrow: None, span_edge: None }
+        Sketch { kind, segs: Vec::new(), slopes: Vec::new(), view, level, selected: Vec::new(), width: 1200.0, slope_arrow: None, span_edge: None, host: None }
     }
 
     pub fn push(&mut self, s: Seg, slope: bool) {
@@ -599,6 +635,17 @@ pub struct ToolOptions {
     pub ceiling_offset: f64,
     /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
     pub use_radius: bool,
+    /// New stairs (Properties and options bar while the runs are drawn).
+    pub stair_location: StairLocation,
+    pub stair_base_offset: f64,
+    pub stair_top: Option<Id>,
+    pub stair_top_offset: f64,
+    /// Desired Number of Risers; 0 = from the type's maximum riser height.
+    pub stair_risers: u32,
+    /// The stair's Railing setting (None = no railings).
+    pub stair_railing: Option<Id>,
+    /// New railings: Base Offset.
+    pub railing_base_offset: f64,
     pub poly_sides: u32,
     /// Wall top: None = Unconnected (uses `wall_height`).
     pub wall_top: Option<Id>,
@@ -718,6 +765,13 @@ impl ToolOptions {
             roof_base_offset: 0.0,
             ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
             use_radius: false,
+            stair_location: StairLocation::RunCenter,
+            stair_base_offset: 0.0,
+            stair_top: None,
+            stair_top_offset: 0.0,
+            stair_risers: 0,
+            stair_railing: Some(first_sys(Category::Railings)),
+            railing_base_offset: 0.0,
             poly_sides: 6,
             wall_top: None,
             wall_depth: false,
@@ -799,6 +853,9 @@ impl ToolOptions {
         sys(&mut self.ceiling_type, fresh.ceiling_type);
         sys(&mut self.stair_type, fresh.stair_type);
         sys(&mut self.railing_type, fresh.railing_type);
+        if self.stair_railing.is_some() {
+            self.stair_railing = fresh.stair_railing;
+        }
         sys(&mut self.foundation_type, fresh.foundation_type);
         let fam = |id: &mut Id, f: Id| {
             if p.family_type(*id).is_none() {

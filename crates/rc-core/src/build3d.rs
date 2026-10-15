@@ -740,15 +740,24 @@ pub struct StairLayout {
 }
 
 pub fn stair_layout(p: &Project, s: &Stair) -> StairLayout {
-    let (n, rh, _tread, _rise) = analysis::stair_numbers(p, s);
+    let (n, rh, tread, _rise) = analysis::stair_numbers(p, s);
     let base = analysis::stair_base_z(p, s);
     let lens: Vec<f64> = s.runs.iter().map(|r| r.start.distance(r.end).max(1.0)).collect();
-    let total: f64 = lens.iter().sum();
-    let mut counts: Vec<u32> = lens.iter().map(|l| ((n as f64) * l / total).round().max(1.0) as u32).collect();
-    let sum: i64 = counts.iter().map(|c| *c as i64).sum();
-    if let Some(last) = counts.last_mut() {
-        *last = (*last as i64 + n as i64 - sum).max(1) as u32;
-    }
+    // Runs drawn riser by riser (whole treads long) keep their counts, as in the reference app,
+    // even when they make fewer risers than the stair needs; other runs share the risers out.
+    let snapped: Vec<u32> = lens.iter().map(|l| analysis::run_risers(*l, tread)).collect();
+    let whole = lens.iter().all(|l| (l / tread - (l / tread).round()).abs() * tread < 1.0);
+    let counts = if whole || snapped.iter().sum::<u32>() == n {
+        snapped
+    } else {
+        let total: f64 = lens.iter().sum();
+        let mut counts: Vec<u32> = lens.iter().map(|l| ((n as f64) * l / total).round().max(1.0) as u32).collect();
+        let sum: i64 = counts.iter().map(|c| *c as i64).sum();
+        if let Some(last) = counts.last_mut() {
+            *last = (*last as i64 + n as i64 - sum).max(1) as u32;
+        }
+        counts
+    };
     let mut runs = Vec::new();
     let mut first = 0;
     let mut landings = Vec::new();
@@ -762,14 +771,35 @@ pub fn stair_layout(p: &Project, s: &Stair) -> StairLayout {
             let d1 = (nxt.end - nxt.start).normalize_or_zero();
             let (n0, n1) = (geom::perp(d0) * (r.width / 2.0), geom::perp(d1) * (nxt.width / 2.0));
             let mut pts = vec![r.end - n0, r.end + n0, nxt.start - n1, nxt.start + n1];
-            // Extend the landing to cover the turn.
-            pts.push(r.end + d0 * r.width - n0);
-            pts.push(r.end + d0 * r.width + n0);
-            let hull = convex_hull(&pts);
-            landings.push((hull, base + first as f64 * rh));
+            // A turn needs a landing one run width deep beyond the run ends (the reference app's
+            // automatic landing); a straight continuation only bridges the gap.
+            let turning = d0.dot(d1) < 0.999;
+            if turning {
+                pts.push(r.end + d0 * r.width - n0);
+                pts.push(r.end + d0 * r.width + n0);
+                if d0.dot(d1) < -0.5 {
+                    // Switchback: one run width beyond whichever run reaches further.
+                    pts.push(nxt.start + d0 * r.width.max(nxt.width));
+                }
+            }
+            // The landing is the rectangle, in the first run's frame, around those points.
+            let side = geom::perp(d0);
+            let (mut u0, mut u1, mut v0, mut v1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
+            for q in &pts {
+                let (u, v) = ((*q - r.end).dot(d0), (*q - r.end).dot(side));
+                (u0, u1, v0, v1) = (u0.min(u), u1.max(u), v0.min(v), v1.max(v));
+            }
+            let at = |u: f64, v: f64| r.end + d0 * u + side * v;
+            let rect = if turning || u1 - u0 > 1.0 { vec![at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] } else { convex_hull(&pts) };
+            landings.push((rect, base + first as f64 * rh));
         }
     }
     StairLayout { runs, riser: rh, base, landings }
+}
+
+/// Tread depth of a run of `risers` risers over plan length `len`.
+pub fn run_going(len: f64, risers: u32) -> f64 {
+    len / (risers.max(2) - 1) as f64
 }
 
 fn convex_hull(pts: &[DVec2]) -> Vec<DVec2> {
@@ -813,20 +843,24 @@ fn stair(p: &Project, s: &Stair) -> MeshSet {
         }
         let d = (run.end - run.start) / len;
         let n = geom::perp(d);
-        let going = len / *risers as f64;
+        // A run of N risers has N - 1 treads: the first riser stands at the run start and the
+        // last at the run end, rising onto the landing or floor (as in the reference app).
+        let going = run_going(len, *risers);
         let rh = lay.riser;
         // Side profile (u, z) of steps plus the sloped waist underneath.
         let mut prof = vec![DVec2::new(0.0, *z0)];
         for k in 0..*risers {
             let u = k as f64 * going;
             prof.push(DVec2::new(u, z0 + (k + 1) as f64 * rh));
-            prof.push(DVec2::new(u + going, z0 + (k + 1) as f64 * rh));
+            if k + 1 < *risers {
+                prof.push(DVec2::new(u + going, z0 + (k + 1) as f64 * rh));
+            }
         }
         let top = z0 + *risers as f64 * rh;
         let slope = (rh / going).atan();
         // Vertical thickness of the waist slab below the pitch line through the nosings.
         let wv = waist / slope.cos();
-        prof.push(DVec2::new(len, (top + rh - wv).min(top - 1.0)));
+        prof.push(DVec2::new(len, (top - wv).min(top - 1.0)));
         let u_floor = ((wv - rh) * going / rh).clamp(0.0, len - 1.0);
         prof.push(DVec2::new(u_floor, *z0));
         let prof = geom::clean(&prof, 0.1);
@@ -860,8 +894,8 @@ pub fn stair_height_at(p: &Project, s: &Stair, q: DVec2) -> Option<f64> {
         let u = (q - run.start).dot(d);
         let o = (q - run.start).dot(geom::perp(d));
         if u >= -1.0 && u <= len + 1.0 && o.abs() <= run.width / 2.0 + 200.0 {
-            // Smooth nosing line for railings.
-            return Some(z0 + lay.riser * (*risers as f64) * (u / len).clamp(0.0, 1.0));
+            // Smooth nosing line for railings: first nosing at the run start, last at its end.
+            return Some(z0 + lay.riser * (1.0 + (*risers as f64 - 1.0) * (u / len.max(1e-9)).clamp(0.0, 1.0)));
         }
     }
     for (poly, z) in &lay.landings {
@@ -929,4 +963,37 @@ pub fn family_type_preview(family: &Family, ftype: &FamilyType) -> MeshSet {
         inst.end_elevation = 3000.0;
     }
     family_geom::instance_mesh(&p, &inst)
+}
+
+#[cfg(test)]
+mod stair_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// A switchback drawn riser by riser keeps its run counts, gets a full-width landing and
+    /// has one tread fewer than risers per run.
+    #[test]
+    fn switchback_stair_as_drawn() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let ty = p.types_of(Category::Stairs).next().unwrap().id;
+        let (_, _, tread, _) = analysis::stair_numbers(&p, &Stair { base_level: l1, top_level: p.level_above(l1).map(|l| l.0), type_id: ty, unconnected_height: 3000.0, ..Default::default() });
+        let w = 1200.0;
+        let runs = vec![
+            StairRun { start: DVec2::new(0.0, 0.0), end: DVec2::new(0.0, 7.0 * tread), width: w },
+            StairRun { start: DVec2::new(1300.0, 7.0 * tread), end: DVec2::new(1300.0, 7.0 * tread - 8.0 * tread), width: w },
+        ];
+        let id = crate::edit::add_stair(&mut p, l1, ty, runs, None).unwrap();
+        let ElementKind::Stair(s) = &p.element(id).unwrap().kind else { panic!() };
+        let lay = stair_layout(&p, s);
+        assert_eq!(lay.runs.iter().map(|r| r.1).collect::<Vec<_>>(), vec![8, 9]);
+        assert!((run_going(7.0 * tread, 8) - tread).abs() < 1e-9);
+        let (poly, _) = &lay.landings[0];
+        assert_eq!(poly.len(), 4);
+        let (ys, xs): (Vec<f64>, Vec<f64>) = poly.iter().map(|q| (q.y, q.x)).unzip();
+        let span = |v: &[f64]| v.iter().cloned().fold(f64::MIN, f64::max) - v.iter().cloned().fold(f64::MAX, f64::min);
+        assert!((span(&ys) - w).abs() < 1e-6, "landing depth {}", span(&ys));
+        assert!((span(&xs) - (1300.0 + w)).abs() < 1e-6, "landing width {}", span(&xs));
+        assert!(!stair(&p, s).by_material.is_empty());
+    }
 }

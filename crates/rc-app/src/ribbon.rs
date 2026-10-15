@@ -299,8 +299,13 @@ fn work_plane_panel() -> Panel {
 
 fn draw_panel(app: &App) -> Option<Panel> {
     let kind = app.tool.kind;
+    if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) {
+        return None;
+    }
     let modes: Vec<Cmd> = if app.sketch.is_some() && (kind == ToolKind::SketchLine || kind == ToolKind::Select) {
-        canvas_tools::modes_for(ToolKind::SketchLine).iter().map(|m| mode_cmd(*m)).collect()
+        let draw = canvas_tools::draw_modes(app);
+        let all = if draw.is_empty() { canvas_tools::modes_for(ToolKind::SketchLine) } else { draw };
+        all.iter().map(|m| mode_cmd(*m)).collect()
     } else {
         canvas_tools::modes_for(kind).iter().map(|m| mode_cmd(*m)).collect()
     };
@@ -366,6 +371,14 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if let Some(d) = draw_panel(app) {
             v.push(d);
         }
+        if sk.kind == SketchKind::Stair {
+            // The reference app's component-based stair: runs (straight here), landings, supports.
+            v.push(panel("Components", vec![Stack(vec![C::StairRun, C::StairLanding, C::StairSupport]), Icons(vec![C::StairStraight])]));
+            v.push(panel("Multistory Stairs", vec![Labeled("Connect\nLevels", C::ConnectLevels, vec![])]));
+        }
+        if sk.kind == SketchKind::Railing {
+            v.push(panel("Tools", vec![Labeled("Pick\nNew Host", C::RailingPickHost, vec![])]));
+        }
         if sk.kind == SketchKind::Ceiling {
             v.push(panel("Tools", vec![Labeled("Auto\nCeiling", C::AutoCeiling, vec![])]));
         }
@@ -373,6 +386,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
             v.push(panel("Tools", vec![Labeled("Align\nEaves", C::AlignEaves, vec![]), Stack(vec![C::AdjustHeight, C::AdjustOverhang])]));
         }
         v.push(work_plane_panel());
+        if sk.kind == SketchKind::Stair {
+            v.push(panel("Tools", vec![Labeled("Railing", C::StairRailing, vec![])]));
+        }
         return Some((sk.kind.title().to_string(), v));
     }
     if app.group_edit.is_some() {
@@ -512,6 +528,8 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::SketchBoundary => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::Boundary,
         C::SlopeArrow => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SlopeArrow,
         C::SpanDirection => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SpanDirection,
+        C::StairRun | C::StairStraight => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) && k == T::SketchLine,
+        C::RailingPickHost => app.opts.sketch_sub == crate::tools::SketchSub::PickHost,
         C::Wall => k == T::Wall && !app.opts.wall_structural,
         C::WallStructural => k == T::Wall && app.opts.wall_structural,
         C::Door => k == T::Door,

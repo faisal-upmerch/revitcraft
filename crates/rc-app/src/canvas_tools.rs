@@ -73,8 +73,19 @@ pub fn modes_for(kind: ToolKind) -> &'static [DrawMode] {
     }
 }
 
+/// The draw gallery for the current tool; sketches offer what their element accepts.
+pub fn draw_modes(app: &App) -> &'static [DrawMode] {
+    use DrawMode::*;
+    match app.sketch.as_ref().map(|s| s.kind) {
+        Some(SketchKind::Railing) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines],
+        Some(SketchKind::Stair) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line],
+        Some(_) if app.tool.kind == ToolKind::Select => modes_for(ToolKind::SketchLine),
+        _ => modes_for(app.tool.kind),
+    }
+}
+
 fn effective_mode(app: &App) -> DrawMode {
-    let allowed = modes_for(app.tool.kind);
+    let allowed = draw_modes(app);
     if allowed.contains(&app.opts.draw_mode) { app.opts.draw_mode } else { DrawMode::Line }
 }
 
@@ -87,6 +98,8 @@ pub fn prompt(app: &App) -> String {
     match t.kind {
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SlopeArrow => if n == 0 { "Click to enter the tail of the slope arrow.".into() } else { "Click to enter the head of the slope arrow.".into() },
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SpanDirection => "Pick a boundary line to set the span direction.".into(),
+        ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::PickHost => "Pick a stair to host the railing.".into(),
+        ToolKind::SketchLine if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) => if n == 0 { "Click to enter run start point.".into() } else { "Click to enter run end point.".into() },
         k if k.uses_draw_modes() => match mode {
             DrawMode::PickLines => "Pick a line, edge, wall or grid to create from it.".into(),
             DrawMode::PickWalls => "Pick walls to create lines.".into(),
@@ -483,8 +496,16 @@ pub fn enter(app: &mut App) {
 // ---------------------------------------------------------------- draw-mode tools
 
 fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, point: Option<DVec2>, clicked: bool) {
+    if app.sketch.as_ref().is_some_and(|s| s.view == view.id) && app.opts.sketch_sub == SketchSub::PickHost {
+        pick_host_tool(app, painter, xf, view, d, cursor, clicked);
+        return;
+    }
     if app.sketch.as_ref().is_some_and(|s| s.view == view.id) && app.opts.sketch_sub != SketchSub::Boundary {
         sketch_sub_tool(app, painter, xf, cursor, point, clicked);
+        return;
+    }
+    if app.sketch.as_ref().is_some_and(|s| s.view == view.id && s.kind == SketchKind::Stair) && app.tool.kind == ToolKind::SketchLine {
+        stair_run_tool(app, painter, xf, point, clicked);
         return;
     }
     let mode = effective_mode(app);
@@ -573,6 +594,97 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
     }
 }
 
+/// The stair being sketched as it would be created (for its riser numbers).
+pub fn sketch_stair(app: &App) -> Option<Stair> {
+    let sk = app.sketch.as_ref().filter(|s| s.kind == SketchKind::Stair)?;
+    let o = &app.opts;
+    let runs = sk
+        .segs
+        .iter()
+        .filter_map(|s| match s {
+            Seg::Line(a, b) => Some(StairRun { start: *a, end: *b, width: o.stair_width }),
+            _ => None,
+        })
+        .collect();
+    let top_level = o.stair_top.or_else(|| app.doc.data.level_above(sk.level).map(|l| l.0));
+    Some(Stair { base_level: sk.level, base_offset: o.stair_base_offset, top_level, top_offset: o.stair_top_offset, unconnected_height: 3000.0, runs, type_id: o.stair_type, desired_risers: o.stair_risers, railings: o.stair_railing.is_some() })
+}
+
+/// (desired risers, risers created so far, riser height, tread depth) of the stair sketch.
+pub fn sketch_stair_numbers(app: &App) -> Option<(u32, u32, f64, f64)> {
+    let s = sketch_stair(app)?;
+    let (n, rh, tread, _) = analysis::stair_numbers(&app.doc.data, &s);
+    let made = s.runs.iter().map(|r| analysis::run_risers(r.start.distance(r.end), tread)).sum();
+    Some((n, made, rh, tread))
+}
+
+/// The stair Run tool: click the run start, then its end; the run snaps to whole risers and
+/// reports the risers created and remaining, as in the reference app.
+fn stair_run_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, point: Option<DVec2>, clicked: bool) {
+    let Some(pt) = point else { return };
+    let Some((n, made, _rh, tread)) = sketch_stair_numbers(app) else { return };
+    let Some(a) = app.tool.pts.first().copied() else {
+        if clicked {
+            app.tool.pts.push(pt);
+        }
+        return;
+    };
+    let dir = (pt - a).normalize_or_zero();
+    if dir == DVec2::ZERO {
+        return;
+    }
+    let left = n as i64 - made as i64;
+    let k = analysis::run_risers(a.distance(pt), tread).clamp(2, (left.max(2)) as u32);
+    let len = (k - 1) as f64 * tread;
+    let w = app.opts.stair_width;
+    let nrm = geom::perp(dir);
+    let shift = nrm * (app.opts.stair_location.center_shift(w) + app.opts.offset);
+    let (cs, ce) = (a + shift, a + dir * len + shift);
+    let half = nrm * (w / 2.0);
+    // The run previews in grey with its treads, as in the reference app.
+    let grey = Color32::from_gray(120);
+    painter.add(egui::Shape::closed_line(vec![xf.s(cs - half), xf.s(ce - half), xf.s(ce + half), xf.s(cs + half)], Stroke::new(1.0, grey)));
+    for j in 0..k {
+        let q = cs + dir * (j as f64 * tread);
+        painter.line_segment([xf.s(q - half), xf.s(q + half)], Stroke::new(1.0, Color32::from_gray(170)));
+    }
+    canvas::reference_line(painter, xf.s(a - dir * xf.len(30.0)), xf.s(a + dir * (len + xf.len(30.0))));
+    let units = app.doc.data.units.clone();
+    // Length along the left edge of the run; angle from the horizontal at the start.
+    canvas::temp_dim_ex(painter, xf, cs + half, ce + half, &units.length(len), -18.0, true);
+    angle_arc(painter, xf, a, DVec2::X, a + dir * len.max(xf.len(60.0)), &units);
+    // "N RISERS CREATED, M REMAINING" in grey under the start of the run.
+    let msg = format!("{} RISERS CREATED, {} REMAINING", made + k, (left - k as i64).max(0));
+    let below = cs - dir * xf.len(14.0) + half;
+    painter.text(xf.s(below), egui::Align2::LEFT_TOP, msg, egui::FontId::proportional(11.0), Color32::from_gray(150));
+    if clicked {
+        if let Some(sk) = app.sketch.as_mut() {
+            sk.push(Seg::Line(cs, ce), true);
+        }
+        app.tool.pts.clear();
+    }
+}
+
+/// Railings: Pick New Host — the stair the railing follows.
+fn pick_host_tool(app: &mut App, _painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, clicked: bool) {
+    let Some(c) = cursor else { return };
+    let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Stair(_)));
+    app.interact.hover = hit;
+    if !clicked {
+        return;
+    }
+    match hit {
+        Some(id) => {
+            if let Some(sk) = app.sketch.as_mut() {
+                sk.host = Some(id);
+            }
+            app.opts.sketch_sub = SketchSub::Boundary;
+            app.tool = Tool::new(ToolKind::SketchLine);
+        }
+        None => app.error("Pick a stair to host the railing."),
+    }
+}
+
 /// Slope arrows and span direction in floor sketches.
 fn sketch_sub_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, cursor: Option<DVec2>, point: Option<DVec2>, clicked: bool) {
     match app.opts.sketch_sub {
@@ -611,7 +723,7 @@ fn sketch_sub_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, cursor: Opti
                 }
             }
         }
-        SketchSub::Boundary => {}
+        SketchSub::Boundary | SketchSub::PickHost => {}
     }
 }
 

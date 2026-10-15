@@ -136,6 +136,12 @@ pub enum Icon {
     SlopeArrow,
     SpanDirection,
     AlignEaves,
+    StairRun,
+    StairLanding,
+    StairSupport,
+    StairStraight,
+    ConnectLevels,
+    PickNewHost,
     AdjustHeight,
     AdjustOverhang,
     WorkPlaneShow,
@@ -1261,6 +1267,49 @@ fn draw(g: &Pen, icon: Icon) {
         SlopeArrow => {
             g.shade(&[(0.06, 0.66), (0.62, 0.42), (0.94, 0.56), (0.38, 0.8)], G0, G2, false);
             g.arrow((0.22, 0.68), (0.74, 0.46), MAGENTA);
+        }
+        StairRun => {
+            // A straight run in plan: outline and treads, with the walk arrow.
+            g.shade(&[(0.3, 0.06), (0.7, 0.06), (0.7, 0.94), (0.3, 0.94)], G0, G1, true);
+            for k in 1..6 {
+                let y = 0.06 + 0.88 * k as f32 / 6.0;
+                g.thin_line(&[(0.3, y), (0.7, y)], ink);
+            }
+            g.closed(&[(0.3, 0.06), (0.7, 0.06), (0.7, 0.94), (0.3, 0.94)], ink);
+            g.line(&[(0.5, 0.86), (0.5, 0.16)], BLUE);
+            g.arrow_head((0.5, 0.12), (0.5, 0.4), BLUE, 0.12);
+        }
+        StairLanding => {
+            g.shade(&[(0.06, 0.4), (0.62, 0.4), (0.94, 0.62), (0.38, 0.62)], G0, G2, false);
+            g.shade(&[(0.06, 0.4), (0.38, 0.62), (0.38, 0.72), (0.06, 0.5)], G2, G3, false);
+            g.shade(&[(0.38, 0.62), (0.94, 0.62), (0.94, 0.72), (0.38, 0.72)], G1, G2, false);
+        }
+        StairSupport => {
+            g.shade(&[(0.06, 0.86), (0.86, 0.14), (0.94, 0.22), (0.14, 0.94)], G1, G3, false);
+            g.line(&[(0.06, 0.86), (0.86, 0.14)], ink);
+        }
+        StairStraight => {
+            for k in 0..5 {
+                let y = 0.1 + 0.8 * k as f32 / 4.0;
+                g.thin_line(&[(0.28, y), (0.72, y)], ink);
+            }
+            g.closed(&[(0.28, 0.1), (0.72, 0.1), (0.72, 0.9), (0.28, 0.9)], ink);
+            g.line(&[(0.5, 0.84), (0.5, 0.2)], BLUE);
+            g.arrow_head((0.5, 0.14), (0.5, 0.4), BLUE, 0.12);
+        }
+        ConnectLevels => {
+            for (k, y) in [0.24f32, 0.5, 0.76].iter().enumerate() {
+                g.dashdot((0.04, *y), (0.96, *y), if k == 1 { BLUE } else { ink });
+            }
+            g.shade(&[(0.3, 0.76), (0.62, 0.24), (0.74, 0.24), (0.42, 0.76)], G1, G3, false);
+        }
+        PickNewHost => {
+            g.shade(&[(0.06, 0.62), (0.54, 0.62), (0.54, 0.9), (0.06, 0.9)], G0, G2, true);
+            g.line_w(&[(0.1, 0.34), (0.5, 0.34)], BLUE, g.w * 1.6);
+            for x in [0.14f32, 0.3, 0.46] {
+                g.line(&[(x, 0.34), (x, 0.62)], SKY);
+            }
+            g.arrow((0.92, 0.1), (0.6, 0.5), ink);
         }
         AlignEaves => {
             // A roof in elevation with its two eaves on one dashed line.

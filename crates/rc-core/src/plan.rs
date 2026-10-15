@@ -1345,9 +1345,9 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
             }
             let dir = (run.end - run.start) / len;
             let n = geom::perp(dir) * (run.width / 2.0);
-            let going = len / *risers as f64;
-            // Cut position along this run (base level only).
-            let cut_u = if base_level { ((c.cut_z - z0) / lay.riser) * going } else { f64::MAX };
+            let going = build3d::run_going(len, *risers);
+            // Cut position along this run (base level only): riser k stands at u = k * going.
+            let cut_u = if base_level { ((c.cut_z - z0) / lay.riser - 1.0) * going } else { f64::MAX };
             for side in [-1.0, 1.0] {
                 let a = run.start + n * side;
                 let b = run.end + n * side;
@@ -1359,16 +1359,22 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
                     d.line(Some(e.id), vec![a, b], false, MEDIUM);
                 }
             }
-            for r in 0..=*risers {
+            for r in 0..*risers {
                 let u = r as f64 * going;
                 let q = run.start + dir * u;
                 let stroke = if base_level && u > cut_u { HIDDEN } else { THIN };
                 d.line(Some(e.id), vec![q - n, q + n], false, stroke);
             }
             if base_level && cut_u > 0.0 && cut_u < len {
-                // Diagonal break line at the cut.
+                // The cut mark: a slanted line across the run with a single zigzag at its middle
+                // (the reference app's default "Single Zigzag" cut mark).
                 let m = run.start + dir * cut_u;
-                d.line(Some(e.id), vec![m - n * 1.1 - dir * 150.0, m - dir * 40.0, m + dir * 40.0, m + n * 1.1 + dir * 150.0], false, MEDIUM);
+                let (a, b) = (m - n * 1.1 - dir * 150.0, m + n * 1.1 + dir * 150.0);
+                let t = (b - a).normalize_or_zero();
+                let z = geom::perp(t);
+                let half = a.distance(b) / 2.0;
+                let g = (half * 0.12).min(150.0);
+                d.line(Some(e.id), vec![a, m - t * g, m - t * (g * 0.3) + z * g, m + t * (g * 0.3) - z * g, m + t * g, b], false, MEDIUM);
             }
             if k == 0 {
                 // Walk line with arrow.
@@ -1381,8 +1387,10 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
                 d.text(Some(e.id), run.start - dir * (3.0 * c.scale), label, 2.5, Anchor::Center);
             }
         }
-        for (poly, _) in &lay.landings {
-            d.line(Some(e.id), poly.clone(), true, MEDIUM);
+        for (poly, z) in &lay.landings {
+            // Landings above the cut plane show dashed, like the runs above it.
+            let above = base_level && *z > c.cut_z;
+            d.line(Some(e.id), poly.clone(), true, if above { HIDDEN } else { MEDIUM });
         }
         style_element(c, e, d, start);
     }

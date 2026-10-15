@@ -1114,7 +1114,48 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
 
     // ---- sketch overlay (magenta boundary lines)
     if let Some(sk) = app.sketch.as_ref().filter(|s| s.view == view_id) {
+        // Stair runs show as the stair they make: run outlines, risers and landings.
+        if let Some(st) = crate::canvas_tools::sketch_stair(app).filter(|s| !s.runs.is_empty()) {
+            let lay = rc_core::build3d::stair_layout(&app.doc.data, &st);
+            let ink = Stroke::new(1.5, style::SKETCH);
+            for (run, risers, first, _) in &lay.runs {
+                let len = run.start.distance(run.end);
+                let d = (run.end - run.start).normalize_or_zero();
+                let n = rc_core::geom::perp(d) * (run.width / 2.0);
+                painter.add(egui::Shape::closed_line(vec![xf.s(run.start - n), xf.s(run.end - n), xf.s(run.end + n), xf.s(run.start + n)], ink));
+                let going = rc_core::build3d::run_going(len, *risers);
+                for j in 0..*risers {
+                    let q = run.start + d * (j as f64 * going);
+                    painter.line_segment([xf.s(q - n), xf.s(q + n)], Stroke::new(1.0, style::SKETCH));
+                }
+                // Riser numbers at the run ends and the blue path with its arrow, as in the
+                // reference app's stair edit mode.
+                let font = egui::FontId::new(10.0, egui::FontFamily::Name("bold".into()));
+                let out = rc_core::geom::perp(d).normalize_or_zero() * xf.len(4.0);
+                painter.text(xf.s(run.start + n + out), egui::Align2::RIGHT_BOTTOM, (first + 1).to_string(), font.clone(), Color32::BLACK);
+                painter.text(xf.s(run.end + n + out), egui::Align2::RIGHT_BOTTOM, (first + risers).to_string(), font, Color32::BLACK);
+                let blue = Stroke::new(1.0, Color32::from_rgb(60, 60, 220));
+                let (pa, pb) = (xf.s(run.start), xf.s(run.end));
+                painter.line_segment([pa, pb], blue);
+                let u = (pb - pa).normalized();
+                let side = vec2(-u.y, u.x);
+                painter.line_segment([pb, pb - u * 8.0 + side * 4.0], blue);
+                painter.line_segment([pb, pb - u * 8.0 - side * 4.0], blue);
+            }
+            for (poly, _) in &lay.landings {
+                painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), ink));
+            }
+        }
+        let stair = sk.kind == crate::tools::SketchKind::Stair;
         for (k, s) in sk.segs.iter().enumerate() {
+            if stair {
+                // The run path is drawn above; picked or hovered runs highlight.
+                let color = if sk.selected.contains(&k) { Some(style::SELECT) } else if is_active && app.interact.hover_seg == Some(k) { Some(style::PRESELECT) } else { None };
+                if let Some(color) = color {
+                    painter.line_segment([xf.s(s.start()), xf.s(s.end())], Stroke::new(2.0, color));
+                }
+                continue;
+            }
             let pts: Vec<Pos2> = s.points().iter().map(|q| xf.s(*q)).collect();
             let selected = sk.selected.contains(&k);
             let hovered = is_active && app.interact.hover_seg == Some(k);
@@ -1189,7 +1230,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let tool_kind = app.tool.kind;
     // Hosted and click-inside tools work from the raw cursor and show no snaps.
     let cursor_tool = matches!(tool_kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto | ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag | ToolKind::TopoPoints)
-        || (tool_kind.uses_draw_modes() && app.opts.draw_mode.is_pick() && canvas_tools::modes_for(tool_kind).contains(&app.opts.draw_mode));
+        || (tool_kind.uses_draw_modes() && app.opts.draw_mode.is_pick() && canvas_tools::draw_modes(app).contains(&app.opts.draw_mode));
     let wants_snap = (!app.tool.is_select() && !cursor_tool) || matches!(app.interact.drag, Some(Drag::Move { .. }) | Some(Drag::Grip { .. }) | Some(Drag::SketchVertex { .. }));
     let reference = canvas_tools::reference_point(app);
     let mut snapped: Option<SnapResult> = None;

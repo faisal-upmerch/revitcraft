@@ -743,8 +743,8 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
 
 /// Creates a stair from runs, with railings on both sides when requested.
 pub fn add_stair(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRun>, railing_type: Option<Id>) -> Result<Id, String> {
-    if runs.is_empty() || runs.iter().any(|r| r.start.distance(r.end) < 200.0) {
-        return Err("A stair run must be at least 200 mm long.".into());
+    if runs.is_empty() || runs.iter().any(|r| r.start.distance(r.end) < 100.0) {
+        return Err("A stair run needs at least two risers.".into());
     }
     let top_level = p.level_above(base_level).map(|l| l.0);
     let id = push(

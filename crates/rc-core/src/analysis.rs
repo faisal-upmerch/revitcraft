@@ -339,6 +339,12 @@ pub fn stair_numbers(p: &Project, s: &Stair) -> (u32, f64, f64, f64) {
     (n, rise / n as f64, tread, rise)
 }
 
+/// Risers in a straight run of plan length `len`, as the reference app counts them: the
+/// run spans its treads, and one riser more than there are treads.
+pub fn run_risers(len: f64, tread: f64) -> u32 {
+    (len / tread.max(1.0)).round().max(0.0) as u32 + 1
+}
+
 pub fn stair_base_z(p: &Project, s: &Stair) -> f64 {
     p.level_elevation(s.base_level) + s.base_offset
 }

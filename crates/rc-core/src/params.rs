@@ -629,11 +629,11 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 "Top Offset" => num(s.top_offset),
                 "Desired Stair Height" => num(rise),
                 "Desired Number of Risers" => num(n as f64),
-                "Actual Number of Risers" => num(n as f64),
+                "Actual Number of Risers" => num(build3d::stair_layout(p, s).runs.iter().map(|r| r.1).sum::<u32>() as f64),
                 "Actual Riser Height" => num(rh),
                 "Actual Tread Depth" => {
                     let lay = build3d::stair_layout(p, s);
-                    let g = lay.runs.first().map(|(r, k, ..)| r.start.distance(r.end) / (*k).max(1) as f64).unwrap_or(tread);
+                    let g = lay.runs.first().map(|(r, k, ..)| build3d::run_going(r.start.distance(r.end), *k)).unwrap_or(tread);
                     num(g)
                 }
                 _ => sys_common(st, name),

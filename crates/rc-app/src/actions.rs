@@ -24,6 +24,9 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     match cmd {
         Undo => app.doc.can_undo() || in_sketch,
         AlignEaves => app.sketch.as_ref().is_some_and(|s| s.kind.is_roof()),
+        StairRun | StairStraight | StairRailing => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair),
+        StairLanding | StairSupport | ConnectLevels => false,
+        RailingPickHost => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing),
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
@@ -660,8 +663,13 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         FinishSketch => finish_sketch(app),
         CancelSketch => {
-            app.sketch = None;
-            app.tool = Tool::select();
+            // Like the reference app, abandoning drawn stair runs asks first.
+            if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair && !s.segs.is_empty()) {
+                app.dialogs.cancel_stair = true;
+            } else {
+                app.sketch = None;
+                app.tool = Tool::select();
+            }
         }
         SketchBoundary | SlopeArrow | SpanDirection => {
             app.opts.sketch_sub = match cmd {
@@ -676,6 +684,18 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         // Footprint lines here are the eaves themselves, all at the roof's base height, so
         // they are always aligned; the reference app needs this when plates differ.
+        StairRun | StairStraight => {
+            if app.sketch.is_some() {
+                app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
+                app.tool = Tool::new(ToolKind::SketchLine);
+            }
+        }
+        StairLanding | StairSupport | ConnectLevels => {}
+        StairRailing => app.dialogs.stair_railing = true,
+        RailingPickHost => {
+            app.opts.sketch_sub = crate::tools::SketchSub::PickHost;
+            app.tool = Tool::new(ToolKind::SketchLine);
+        }
         AlignEaves => app.info("The eaves are aligned: every footprint line is an eave at the roof's base height."),
         AdjustHeight | AdjustOverhang => {}
         WorkPlaneSet => app.dialogs.work_plane = true,
@@ -926,6 +946,10 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     let mut sk = Sketch::new(kind, view, level);
     sk.width = app.opts.stair_width;
     app.sketch = Some(sk);
+    if kind == SketchKind::Stair {
+        // A new stair runs from its level to the one above, as in the reference app.
+        app.opts.stair_top = app.doc.data.level_above(level).map(|l| l.0);
+    }
     // A footprint roof started on the lowest level offers to move up a level, as in the
     // reference app's Lowest Level Notice.
     if kind == SketchKind::Roof {
@@ -1010,7 +1034,15 @@ pub fn finish_sketch(app: &mut App) {
         match sk.kind {
             SketchKind::Railing => {
                 let path = sk.chain()?;
-                Ok(app.run("Create Railing", |p| edit::add_railing(p, level, o.railing_type, path)))
+                let host = sk.host;
+                Ok(app.run("Create Railing", |p| {
+                    let id = edit::add_railing(p, level, o.railing_type, path)?;
+                    if let Some(ElementKind::Railing(r)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        r.base_offset = o.railing_base_offset;
+                        r.host = host;
+                    }
+                    Ok(id)
+                }))
             }
             SketchKind::Stair => {
                 let runs: Vec<StairRun> = sk
@@ -1024,8 +1056,22 @@ pub fn finish_sketch(app: &mut App) {
                 if runs.is_empty() {
                     return Err("Sketch at least one straight run (click its start and end).".into());
                 }
-                let rt = Some(o.railing_type).filter(|t| app.doc.data.sys_type(*t).is_some());
-                Ok(app.run("Create Stair", |p| edit::add_stair(p, level, o.stair_type, runs, rt)))
+                let rt = o.stair_railing.filter(|t| app.doc.data.sys_type(*t).is_some());
+                if let Some((n, made, ..)) = canvas_tools::sketch_stair_numbers(app) {
+                    if made != n {
+                        app.info(format!("The runs have {made} risers; the stair needs {n}. The risers are shared out over the runs."));
+                    }
+                }
+                Ok(app.run("Create Stair", |p| {
+                    let id = edit::add_stair(p, level, o.stair_type, runs, rt)?;
+                    if let Some(ElementKind::Stair(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        s.base_offset = o.stair_base_offset;
+                        s.top_level = o.stair_top;
+                        s.top_offset = o.stair_top_offset;
+                        s.desired_risers = o.stair_risers;
+                    }
+                    Ok(id)
+                }))
             }
             SketchKind::RoofExtrusion => {
                 let prof = sk.chain()?;

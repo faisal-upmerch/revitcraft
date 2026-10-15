@@ -146,13 +146,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     sep(ui);
                 }
                 if sk_kind == Some(SketchKind::Stair) {
-                    ui.label("Location Line: Run: Center");
+                    // As in the reference app: Location Line, Offset, Actual Run Width, Automatic Landing.
+                    ui.label("Location Line:");
+                    let mut ll = app.opts.stair_location;
+                    egui::ComboBox::from_id_salt("stair-ll").selected_text(ll.label()).width(150.0).show_ui(ui, |ui| {
+                        for l in crate::tools::StairLocation::ALL {
+                            ui.selectable_value(&mut ll, l, l.label());
+                        }
+                    });
+                    app.opts.stair_location = ll;
+                    ui.label("Offset:");
+                    let mut off = app.opts.offset;
+                    if length_field(ui, app, "stair-off", &mut off, 70.0) {
+                        app.opts.offset = off;
+                    }
                     ui.label("Actual Run Width:");
                     let mut w = app.opts.stair_width;
                     if length_field(ui, app, "stair-w", &mut w, 70.0) {
                         app.opts.stair_width = w.max(300.0);
                     }
-                    sep(ui);
+                    // Landings are always added between runs here.
+                    ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, "Automatic Landing"));
+                    return;
                 }
                 if matches!(sk_kind, Some(SketchKind::Region { masking: false }) | Some(SketchKind::EditRegion(_))) {
                     ui.label("Pattern:");

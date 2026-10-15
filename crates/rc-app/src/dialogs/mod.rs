@@ -58,6 +58,10 @@ pub struct Dialogs {
     pub create_group: Option<String>,
     /// Work Plane > Set.
     pub work_plane: bool,
+    /// The stair sketch's Railing dialog.
+    pub stair_railing: bool,
+    /// "Cancel Editing Stair Element" confirmation.
+    pub cancel_stair: bool,
     /// Lowest Level Notice for a new footprint roof: the level offered.
     pub lowest_level: Option<Id>,
     pub tag_all: bool,
@@ -405,6 +409,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     create_group(app, ctx);
     work_plane(app, ctx);
     lowest_level_notice(app, ctx);
+    stair_railing_dialog(app, ctx);
+    cancel_stair_dialog(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -799,6 +805,75 @@ fn export_image(app: &mut App, id: Id) {
 }
 
 // ---------------------------------------------------------------- small dialogs
+
+fn cancel_stair_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.cancel_stair {
+        return;
+    }
+    let (mut open, mut yes, mut no) = (true, false, false);
+    window("Cancel Editing Stair Element").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        ui.label(egui::RichText::new("You have chosen to cancel editing a stair element. Cancelling cannot be undone. Are you sure you want to cancel?").color(egui::Color32::from_rgb(0, 51, 153)).size(13.0));
+        ui.add_space(10.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "No", false, true) {
+                no = true;
+            }
+            if dlg_button(ui, "Yes", true, true) {
+                yes = true;
+            }
+        });
+    });
+    if yes {
+        app.sketch = None;
+        app.tool = crate::tools::Tool::select();
+    }
+    if yes || no || !open {
+        app.dialogs.cancel_stair = false;
+    }
+}
+
+/// The stair's Railing dialog: railing type (or none) and its position.
+fn stair_railing_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.stair_railing {
+        return;
+    }
+    let types: Vec<(Id, String)> = app.doc.data.types_of(Category::Railings).map(|t| (t.id, t.name.clone())).collect();
+    let id = egui::Id::new("stair-railing-choice");
+    let mut choice: Option<Id> = ctx.data(|m| m.get_temp(id)).unwrap_or(app.opts.stair_railing);
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Railing").open(&mut open).resizable(false).default_width(300.0).show(ctx, |ui| {
+        let name = choice.and_then(|c| types.iter().find(|t| t.0 == c).map(|t| t.1.clone())).unwrap_or_else(|| "None".into());
+        egui::ComboBox::from_id_salt("sr-type").selected_text(name).width(260.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut choice, None, "None");
+            for (t, n) in &types {
+                ui.selectable_value(&mut choice, Some(*t), n);
+            }
+        });
+        ui.add_space(6.0);
+        ui.label("Position");
+        let _ = ui.radio(true, "Treads");
+        ui.add_enabled(false, egui::RadioButton::new(false, "Stringer"));
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(id, choice));
+    if ok {
+        app.opts.stair_railing = choice;
+    }
+    if ok || cancel || !open {
+        app.dialogs.stair_railing = false;
+        ctx.data_mut(|m| m.remove::<Option<Id>>(id));
+    }
+}
 
 /// "You have created the Roof on the lowest level. Would you like to move it to: [level] ?"
 fn lowest_level_notice(app: &mut App, ctx: &egui::Context) {
