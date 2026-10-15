@@ -595,6 +595,10 @@ pub struct ToolOptions {
     pub roof_extend_to_core: bool,
     /// New roofs: Base Offset From Level.
     pub roof_base_offset: f64,
+    /// New ceilings: Height Offset From Level.
+    pub ceiling_offset: f64,
+    /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
+    pub use_radius: bool,
     pub poly_sides: u32,
     /// Wall top: None = Unconnected (uses `wall_height`).
     pub wall_top: Option<Id>,
@@ -712,6 +716,8 @@ impl ToolOptions {
             extend_to_core: true,
             roof_extend_to_core: false,
             roof_base_offset: 0.0,
+            ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
+            use_radius: false,
             poly_sides: 6,
             wall_top: None,
             wall_depth: false,
@@ -1040,6 +1046,17 @@ pub fn preview(mode: DrawMode, pts: &[DVec2], cursor: DVec2, sides: u32, tangent
 }
 
 /// Fillet between two lines: trims them back and returns (new end of a, new end of b, arc).
+/// Rounds the corner where line `prev` ends and line `next` starts: (new end of `prev`,
+/// new start of `next`, the arc), or None when the lines are too short for the radius.
+pub fn chain_fillet(prev: (DVec2, DVec2), next: (DVec2, DVec2), radius: f64) -> Option<(DVec2, DVec2, Seg)> {
+    if prev.1.distance(next.0) > 0.5 {
+        return None;
+    }
+    let (pa, pb, arc) = fillet(prev, next, radius)?;
+    let inside = |p: DVec2, s: (DVec2, DVec2)| (p - s.0).dot(s.1 - s.0) > 1e-6 && (p - s.1).dot(s.0 - s.1) > 1e-6;
+    (inside(pa, prev) && inside(pb, next)).then_some((pa, pb, arc))
+}
+
 pub fn fillet(a: (DVec2, DVec2), b: (DVec2, DVec2), radius: f64) -> Option<(DVec2, DVec2, Seg)> {
     let da = (a.1 - a.0).normalize_or_zero();
     let db = (b.1 - b.0).normalize_or_zero();
@@ -1063,6 +1080,18 @@ pub fn fillet(a: (DVec2, DVec2), b: (DVec2, DVec2), radius: f64) -> Option<(DVec
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn chain_fillet_rounds_the_shared_corner() {
+        let (a, b, c) = (DVec2::ZERO, DVec2::new(4000.0, 0.0), DVec2::new(4000.0, 3000.0));
+        let (pa, pb, arc) = chain_fillet((a, b), (b, c), 500.0).unwrap();
+        assert!(pa.distance(DVec2::new(3500.0, 0.0)) < 1e-6);
+        assert!(pb.distance(DVec2::new(4000.0, 500.0)) < 1e-6);
+        let Seg::Arc(_, m, _) = arc else { panic!() };
+        assert!((m.distance(DVec2::new(3500.0, 500.0)) - 500.0).abs() < 1e-6);
+        assert!(chain_fillet((a, b), (b, c), 5000.0).is_none());
+        assert!(chain_fillet((a, b), (c, b), 500.0).is_none());
+    }
 
     #[test]
     fn rectangle_and_polygon_modes() {

@@ -121,7 +121,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Paint => format!("Click a face to paint it with {}. Esc to finish.", app.opts.paint_material),
         ToolKind::RemovePaint => "Click a painted face to remove its paint. Esc to finish.".into(),
         ToolKind::Room => "Click to place room".into(),
-        ToolKind::CeilingAuto => "Click inside a room bounded by walls to place a ceiling, or choose Sketch Ceiling.".into(),
+        ToolKind::CeilingAuto => "Click in an area bounded by walls to create ceiling".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
         ToolKind::RoomTag | ToolKind::AreaTag | ToolKind::Tag => "Click an element to tag it.".into(),
         ToolKind::Level => if n == 0 { "Click the start of the level line (in a section or elevation).".into() } else { "Click the end of the level line.".into() },
@@ -681,7 +681,19 @@ fn commit_segs(app: &mut App, view: &View, segs: &[Seg]) -> bool {
         ToolKind::SketchLine => {
             if let Some(sk) = app.sketch.as_mut() {
                 for s in segs {
-                    sk.push(s.offset(o.offset), o.defines_slope);
+                    let s = s.offset(o.offset);
+                    // "Radius": round the corner with the previous line of the chain.
+                    if let (true, Some(Seg::Line(p0, p1)), Seg::Line(q0, q1)) = (o.use_radius, sk.segs.last().copied(), s) {
+                        if let Some((pa, pb, arc)) = tools::chain_fillet((p0, p1), (q0, q1), o.radius) {
+                            if let Some(last) = sk.segs.last_mut() {
+                                *last = Seg::Line(p0, pa);
+                            }
+                            sk.push(arc, o.defines_slope);
+                            sk.push(Seg::Line(pb, q1), o.defines_slope);
+                            continue;
+                        }
+                    }
+                    sk.push(s, o.defines_slope);
                 }
                 return true;
             }
@@ -692,10 +704,30 @@ fn commit_segs(app: &mut App, view: &View, segs: &[Seg]) -> bool {
             let segs: Vec<Seg> = segs.iter().map(|s| s.offset(o.offset)).collect();
             app.run("Create Wall", |p| {
                 for s in &segs {
-                    let (a, b, m) = match *s {
+                    let (mut a, b, m) = match *s {
                         Seg::Line(a, b) => (a, b, None),
                         Seg::Arc(a, m, b) => (a, b, Some(m)),
                     };
+                    // "Radius": round the corner with the straight wall this one continues.
+                    if o.use_radius && m.is_none() {
+                        let prev = p.elements.iter().rev().find_map(|e| match &e.kind {
+                            ElementKind::Wall(w) if w.base_level == level && w.arc_mid.is_none() && w.end.distance(a) < 0.5 => Some((e.id, w.start, w.end)),
+                            _ => None,
+                        });
+                        if let Some((pid, ws, we)) = prev {
+                            if let Some((pa, pb, Seg::Arc(_, am, _))) = tools::chain_fillet((ws, we), (a, b), o.radius) {
+                                let base = p.wall(pid).cloned();
+                                if let Some(w) = p.element_mut(pid).and_then(Element::as_wall_mut) {
+                                    w.end = pa;
+                                }
+                                let aid = edit::add_wall_ex(p, level, o.wall_type, pa, pb, Some(am), o.wall_height, o.location_line, false)?;
+                                if let (Some(src), Some(w)) = (base, p.element_mut(aid).and_then(Element::as_wall_mut)) {
+                                    (w.structural, w.room_bounding, w.base_offset, w.top_level, w.top_offset, w.unconnected_height) = (src.structural, src.room_bounding, src.base_offset, src.top_level, src.top_offset, src.unconnected_height);
+                                }
+                                a = pb;
+                            }
+                        }
+                    }
                     let id = edit::add_wall_ex(p, level, o.wall_type, a, b, m, o.wall_height, o.location_line, false)?;
                     let w = p.element_mut(id).and_then(Element::as_wall_mut).unwrap();
                     w.structural = o.wall_structural;
@@ -1415,6 +1447,9 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
                 painter.galley(bx.center() - num.size() / 2.0, num, Color32::from_gray(60));
             }
             style::canvas_tooltip(painter, xf.s(c) + vec2(4.0, 22.0), "Click to place room");
+        } else if app.tool.kind == ToolKind::CeilingAuto {
+            // The boundary the ceiling would follow highlights in red, as in the reference app.
+            painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), Stroke::new(2.0, Color32::from_rgb(230, 30, 30))));
         } else {
             let tris = geom::triangulate(poly);
             let mut mesh = egui::Mesh::default();
@@ -1439,10 +1474,16 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
                 return;
             };
             let ty = app.opts.ceiling_type;
-            let h = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 2438.4 } else { 2600.0 };
-            if let Some(id) = app.run("Create Ceiling", |p| edit::add_ceiling(p, level, ty, poly, h)) {
-                app.select(vec![id]);
-            }
+            let (h, comments, mark) = (app.opts.ceiling_offset, app.opts.place_comments.clone(), app.opts.place_mark.clone());
+            // The tool stays active with nothing selected, as in the reference app.
+            app.run("Create Ceiling", |p| {
+                let id = edit::add_ceiling(p, level, ty, poly, h)?;
+                if let Some(e) = p.element_mut(id) {
+                    e.comments = comments;
+                    e.mark = mark;
+                }
+                Ok(id)
+            });
             return;
         }
         if is_area {

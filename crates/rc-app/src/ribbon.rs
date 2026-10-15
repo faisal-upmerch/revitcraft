@@ -366,6 +366,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if let Some(d) = draw_panel(app) {
             v.push(d);
         }
+        if sk.kind == SketchKind::Ceiling {
+            v.push(panel("Tools", vec![Labeled("Auto\nCeiling", C::AutoCeiling, vec![])]));
+        }
         if sk.kind.is_roof() {
             v.push(panel("Tools", vec![Labeled("Align\nEaves", C::AlignEaves, vec![]), Stack(vec![C::AdjustHeight, C::AdjustOverhang])]));
         }
@@ -405,6 +408,7 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
                 return None;
             }
             ToolKind::Dimension(_) => "Place Dimensions".to_string(),
+            ToolKind::CeilingAuto => "Place Ceiling".to_string(),
             k => format!("Place {}", k.name()),
         };
         return Some((title, v));

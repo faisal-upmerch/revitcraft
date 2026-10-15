@@ -57,7 +57,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         } else if app.tool.is_select() {
             if app.selection.is_empty() { None } else { Some(format!("Modify | {}", selection_label(app))) }
         } else {
-            Some(format!("Modify | Place {}", app.tool.kind.name()))
+            Some(if app.tool.kind == ToolKind::CeilingAuto { "Modify | Place Ceiling".to_string() } else { format!("Modify | Place {}", app.tool.kind.name()) })
         };
         if let Some(title) = title {
             ui.label(egui::RichText::new(title).color(style::text()));
@@ -499,6 +499,16 @@ fn draw_common(app: &mut App, ui: &mut egui::Ui, mode: DrawMode, with_offset: bo
     let floorish = app.sketch.as_ref().is_some_and(|s| matches!(s.kind, crate::tools::SketchKind::Floor { .. } | crate::tools::SketchKind::EditFloor(_) | crate::tools::SketchKind::Ceiling | crate::tools::SketchKind::EditCeiling(_)));
     if mode == DrawMode::PickWalls && floorish {
         crate::style::check(ui, &mut app.opts.extend_to_core, "Extend into wall (to core)");
+    }
+    if mode == DrawMode::Line {
+        // As in the reference app: a Radius check box rounds each corner of the chain.
+        crate::style::check(ui, &mut app.opts.use_radius, "Radius:");
+        let mut r = app.opts.radius;
+        ui.add_enabled_ui(app.opts.use_radius, |ui| {
+            if length_field(ui, app, "draw-rad", &mut r, 70.0) {
+                app.opts.radius = r.max(1.0);
+            }
+        });
     }
     if mode == DrawMode::Fillet {
         ui.label("Radius:");

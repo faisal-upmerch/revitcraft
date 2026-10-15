@@ -26,6 +26,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         AlignEaves => app.sketch.as_ref().is_some_and(|s| s.kind.is_roof()),
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
+        AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
         Door | Window | Component | Column | StructColumn | Beam | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
         | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Shaft | WallOpening | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
@@ -182,8 +183,14 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         Floor | FloorStructural => start_sketch(app, SketchKind::Floor { structural: cmd == FloorStructural }, DrawMode::PickWalls),
-        Ceiling | AutoCeiling => app.set_tool(ToolKind::CeilingAuto),
-        SketchCeiling => start_sketch(app, SketchKind::Ceiling, DrawMode::PickWalls),
+        Ceiling | AutoCeiling => {
+            // From a ceiling sketch, Auto Ceiling abandons the sketch, as in the reference app.
+            if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) {
+                app.sketch = None;
+            }
+            app.set_tool(ToolKind::CeilingAuto)
+        }
+        SketchCeiling => start_sketch(app, SketchKind::Ceiling, DrawMode::Line),
         RoofFootprint => start_sketch(app, SketchKind::Roof, DrawMode::PickWalls),
         RoofExtrusion => start_sketch(app, SketchKind::RoofExtrusion, DrawMode::Line),
         Shaft => start_sketch(app, SketchKind::Shaft, DrawMode::Rect),
@@ -1052,7 +1059,6 @@ pub fn finish_sketch(app: &mut App) {
                     }
                 }
                 let flags = loops[0].1.clone();
-                let imperial = app.doc.data.units.system == rc_core::units::UnitSystem::Imperial;
                 Ok(match sk.kind {
                     SketchKind::Floor { structural } => app.run("Create Floor", |p| {
                         let id = edit::add_floor(p, level, o.floor_type, outer)?;
@@ -1067,8 +1073,11 @@ pub fn finish_sketch(app: &mut App) {
                         Ok(id)
                     }),
                     SketchKind::Ceiling => app.run("Create Ceiling", |p| {
-                        let h = if imperial { 2438.4 } else { 2600.0 };
-                        let id = edit::add_ceiling(p, level, o.ceiling_type, outer, h)?;
+                        let id = edit::add_ceiling(p, level, o.ceiling_type, outer, o.ceiling_offset)?;
+                        if let Some(e) = p.element_mut(id) {
+                            e.comments = o.place_comments.clone();
+                            e.mark = o.place_mark.clone();
+                        }
                         if let Some(ElementKind::Ceiling(c)) = p.element_mut(id).map(|e| &mut e.kind) {
                             c.holes = holes;
                         }

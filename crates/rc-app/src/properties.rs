@@ -42,6 +42,7 @@ fn selector_target(app: &App) -> Option<(Category, Option<Id>)> {
         ToolKind::Column => (Category::Columns, o.column_type),
         ToolKind::StructColumn => (Category::StructuralColumns, o.struct_column_type),
         ToolKind::Beam => (Category::StructuralFraming, o.beam_type),
+        ToolKind::CeilingAuto => (Category::Ceilings, o.ceiling_type),
         ToolKind::IsolatedFooting => (Category::StructuralFoundations, o.footing_type),
         ToolKind::WallFoundation => (Category::StructuralFoundations, o.foundation_type),
         ToolKind::Component => (app.doc.data.family_type(o.component_type).map(|(f, _)| f.category)?, o.component_type),
@@ -288,6 +289,8 @@ fn new_label(app: &App) -> Option<&'static str> {
         ToolKind::Room => "New Rooms",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => "Floors",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Roof) => "Roofs",
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => "Ceilings",
+        ToolKind::CeilingAuto => "Ceilings (1)",
         _ => return None,
     })
 }
@@ -500,6 +503,51 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
             if let Some(SketchKind::Floor { structural: s }) = app.sketch.as_mut().map(|s| &mut s.kind) {
                 *s = structural;
             }
+        }
+        ToolKind::CeilingAuto | ToolKind::SketchLine | ToolKind::Select if app.tool.kind == ToolKind::CeilingAuto || app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => {
+            // A new ceiling's instance parameters (Automatic Ceiling or a ceiling sketch).
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-ceil").show(ui, |ui| {
+                prop_label(ui, "Level", true);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Height Offset From Level", false);
+                len_row(ui, "ceil-off", &mut o.ceiling_offset);
+                ui.end_row();
+                prop_label(ui, "Room Bounding", true);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, ""));
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Dimensions", true);
+            prop_grid(ui, "new-ceil-d").show(ui, |ui| {
+                for (name, value) in [("Slope", String::new()), ("Perimeter", String::new()), ("Area", String::new()), ("Volume", units.volume(0.0))] {
+                    prop_label(ui, name, true);
+                    ro(ui, &value);
+                    ui.end_row();
+                }
+            });
+            style::group_header_ui(ui, "Identity Data", true);
+            prop_grid(ui, "new-ceil-id").show(ui, |ui| {
+                prop_label(ui, "Image", true);
+                ro(ui, "");
+                ui.end_row();
+                prop_label(ui, "Comments", false);
+                ui.add(egui::TextEdit::singleline(&mut o.place_comments).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                prop_label(ui, "Mark", false);
+                ui.add(egui::TextEdit::singleline(&mut o.place_mark).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+            });
+            let phase = app.doc.data.phases.last().map(|p| p.name.clone()).unwrap_or_default();
+            style::group_header_ui(ui, "Phasing", true);
+            prop_grid(ui, "new-ceil-ph").show(ui, |ui| {
+                prop_label(ui, "Phase Created", true);
+                ro(ui, &phase);
+                ui.end_row();
+                prop_label(ui, "Phase Demolished", true);
+                ro(ui, "None");
+                ui.end_row();
+            });
         }
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Roof) => {
             // A new footprint roof's instance parameters while its footprint is sketched.
