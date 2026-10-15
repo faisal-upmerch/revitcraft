@@ -509,7 +509,7 @@ impl Cmd {
             NewFamily => ci("New Family", I::FamilyTypes, "Creates a new parametric family in the family editor.", ""),
             TagOnPlacement => ci("Tag on Placement", I::TagByCategory, "Tags each element as it is placed.", ""),
             VerticalColumn => ci("Vertical Column", I::StructColumn, "Places vertical columns.", ""),
-            SlantedColumn => ci("Slanted Column", I::Beam, "Places slanted columns (not available yet).", ""),
+            SlantedColumn => ci("Slanted Column", I::SlantedColumn, "Places slanted columns: click the base, then the top.", ""),
             ColumnsAtGrids => ci("At Grids", I::Grid, "Places structural columns at the intersections of the grids you select; click Finish when done.", ""),
             ColumnsAtColumns => ci("At Columns", I::Column, "Places structural columns inside the architectural columns you select; click Finish when done.", ""),
             MultipleFinish => ci("Finish", I::Finish, "Places the columns.", ""),

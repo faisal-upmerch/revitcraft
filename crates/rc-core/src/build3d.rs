@@ -591,6 +591,31 @@ pub fn roof_ccw(r: &Roof) -> (Vec<DVec2>, Vec<bool>) {
     (pts, f)
 }
 
+/// Skeleton speed of each footprint edge (counter-clockwise order): 1 for slope-defining edges
+/// at the roof slope, the roof slope over the arrow's for an edge carrying a
+/// slope arrow's tail, 0 otherwise.
+pub fn roof_speeds(r: &Roof, pts: &[DVec2], flags: &[bool]) -> Vec<f64> {
+    let tan = r.slope_deg.clamp(1.0, 85.0).to_radians().tan();
+    let n = pts.len();
+    (0..n)
+        .map(|i| {
+            if flags[i] {
+                return 1.0;
+            }
+            let (a, b) = (pts[i], pts[(i + 1) % n]);
+            r.slope_arrows
+                .iter()
+                .find(|(tail, _, _)| geom::seg_dist(*tail, a, b) < 300.0)
+                .map(|(tail, head, rise)| {
+                    let run = tail.distance(*head).max(1.0);
+                    let arrow_tan = if *rise > 0.0 { rise / run } else { tan };
+                    (tan / arrow_tan.max(1e-3)).min(50.0)
+                })
+                .unwrap_or(0.0)
+        })
+        .collect()
+}
+
 /// Roof underside triangles (absolute coordinates).
 pub fn roof_underside(p: &Project, r: &Roof) -> Vec<[DVec3; 3]> {
     if r.footprint.len() < 3 {
@@ -612,7 +637,8 @@ pub fn roof_underside(p: &Project, r: &Roof) -> Vec<[DVec3; 3]> {
         }
         RoofKind::Footprint => {
             let (pts, flags) = roof_ccw(r);
-            if !flags.iter().any(|f| *f) {
+            let speeds = roof_speeds(r, &pts, &flags);
+            if !speeds.iter().any(|s| *s > 0.0) {
                 let eave = geom::offset(&pts, r.overhang);
                 return geom::triangulate(&eave)
                     .into_iter()
@@ -621,7 +647,6 @@ pub fn roof_underside(p: &Project, r: &Roof) -> Vec<[DVec3; 3]> {
             }
             let tan = r.slope_deg.clamp(1.0, 85.0).to_radians().tan();
             let eave = geom::offset(&pts, r.overhang);
-            let speeds: Vec<f64> = flags.iter().map(|f| if *f { 1.0 } else { 0.0 }).collect();
             let s = skeleton::sweep(&eave, &speeds);
             let z_eave = base - r.overhang * tan;
             s.faces.iter().map(|(_, t)| t.map(|(q, time)| geom::at(q, z_eave + time * tan))).collect()
@@ -635,11 +660,11 @@ pub fn roof_ridges(r: &Roof) -> Vec<(DVec2, DVec2)> {
         return vec![];
     }
     let (pts, flags) = roof_ccw(r);
-    if !flags.iter().any(|f| *f) {
+    let speeds = roof_speeds(r, &pts, &flags);
+    if !speeds.iter().any(|s| *s > 0.0) {
         return vec![];
     }
     let eave = geom::offset(&pts, r.overhang);
-    let speeds: Vec<f64> = flags.iter().map(|f| if *f { 1.0 } else { 0.0 }).collect();
     let s = skeleton::sweep(&eave, &speeds);
     merge_collinear(s.arcs)
 }
@@ -1225,5 +1250,49 @@ mod multistory_tests {
         assert_eq!(storeys[1].top_level, Some(l3));
         let double = element_mesh(&p, p.element(id).unwrap(), &HashMap::new()).by_material.values().map(|m| m.indices.len()).sum::<usize>();
         assert_eq!(double, single * 2);
+    }
+}
+
+#[cfg(test)]
+mod slope_arrow_tests {
+    use super::*;
+
+    /// A flat footprint with one slope arrow becomes a single plane rising along the arrow.
+    #[test]
+    fn slope_arrow_makes_a_shed() {
+        let p = Project::empty();
+        let sq = vec![DVec2::new(0.0, 0.0), DVec2::new(4000.0, 0.0), DVec2::new(4000.0, 3000.0), DVec2::new(0.0, 3000.0)];
+        let mut r = Roof { footprint: sq, edge_slopes: vec![false; 4], slope_deg: 30.0, ..Default::default() };
+        assert!(roof_underside(&p, &r).iter().all(|t| t.iter().all(|v| v.z.abs() < 1e-6)));
+        // Arrow from the bottom edge to the top edge, rising 600 over 3000.
+        r.slope_arrows = vec![(DVec2::new(2000.0, 0.0), DVec2::new(2000.0, 3000.0), 600.0)];
+        let tris = roof_underside(&p, &r);
+        let top = tris.iter().flat_map(|t| t.iter()).map(|v| v.z).fold(f64::MIN, f64::max);
+        assert!((top - 600.0).abs() < 1.0, "top {top}");
+    }
+}
+
+#[cfg(test)]
+mod slanted_column_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// A slanted column's top lands on its top point; its base stays on the base point.
+    #[test]
+    fn slanted_column_leans_to_its_top() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let (fam, ty) = p.families.iter().find(|f| f.is_column() && f.category == Category::StructuralColumns).map(|f| (f.id, f.types[0].id)).unwrap();
+        let mut i = FamilyInstance { family_id: fam, type_id: ty, category: Category::StructuralColumns, level: l1, ..Default::default() };
+        i.top_location = Some(DVec2::new(2000.0, 0.0));
+        let m = crate::family_geom::instance_mesh(&p, &i);
+        let pts: Vec<DVec3> = m.by_material.values().flat_map(|x| x.positions.iter().copied()).collect();
+        let (zmin, zmax) = pts.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(v.z), b.max(v.z)));
+        let cx = |z: f64| {
+            let s: Vec<f64> = pts.iter().filter(|v| (v.z - z).abs() < 1.0).map(|v| v.x).collect();
+            (s.iter().cloned().fold(f64::MAX, f64::min) + s.iter().cloned().fold(f64::MIN, f64::max)) / 2.0
+        };
+        assert!(cx(zmin).abs() < 1.0, "base x {}", cx(zmin));
+        assert!((cx(zmax) - 2000.0).abs() < 1.0, "top x {}", cx(zmax));
     }
 }

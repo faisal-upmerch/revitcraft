@@ -39,6 +39,7 @@ pub enum Icon {
     WallOpening,
     VerticalOpening,
     Mullion,
+    SlantedColumn,
     MullionGridLine,
     MullionSegment,
     MullionAllLines,
@@ -760,6 +761,12 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.26, 0.08, 0.74, 0.92, Color32::WHITE, ink);
             g.thin_line(&[(0.26, 0.08), (0.74, 0.92)], ink);
             g.thin_line(&[(0.74, 0.08), (0.26, 0.92)], ink);
+        }
+        SlantedColumn => {
+            g.shade(&[(0.14, 0.92), (0.36, 0.92), (0.86, 0.08), (0.64, 0.08)], G1, G3, true);
+            g.closed(&[(0.14, 0.92), (0.36, 0.92), (0.86, 0.08), (0.64, 0.08)], ink);
+            g.line(&[(0.04, 0.92), (0.5, 0.92)], ink);
+            g.line(&[(0.5, 0.08), (0.96, 0.08)], ink);
         }
         Mullion => {
             g.rect(0.08, 0.08, 0.92, 0.92, LBLUE, ink);

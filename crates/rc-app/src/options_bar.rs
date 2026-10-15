@@ -217,6 +217,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::Component | ToolKind::IsolatedFooting => {
                 crate::style::check(ui, &mut app.opts.rotate_after_placement, "Rotate after placement");
             }
+            ToolKind::StructColumn if app.opts.column_slanted => {
+                // As in the reference app: the levels of the 1st (base) and 2nd (top) clicks.
+                ui.label("1st Click:");
+                let lv = app.active_level().map(|l| app.doc.data.level_name(l)).unwrap_or_default();
+                ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("sc-1").selected_text(lv).width(90.0).show_ui(ui, |_| {});
+                });
+                ui.label("2nd Click:");
+                let mut top = app.opts.column_top;
+                level_combo(ui, app, "sc-2", &mut top, "Unconnected");
+                app.opts.column_top = top;
+                if top.is_none() {
+                    let mut h = app.opts.column_height;
+                    if length_field(ui, app, "sc-h", &mut h, 70.0) {
+                        app.opts.column_height = h.max(100.0);
+                    }
+                }
+            }
             ToolKind::StructColumn => {
                 crate::style::check(ui, &mut app.opts.rotate_after_placement, "Rotate after placement");
                 sep(ui);

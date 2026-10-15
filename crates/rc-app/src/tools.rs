@@ -648,6 +648,8 @@ pub struct ToolOptions {
     pub roof_base_offset: f64,
     /// New ceilings: Height Offset From Level.
     pub ceiling_offset: f64,
+    /// Structural columns: Slanted Column placement (base click, then top click).
+    pub column_slanted: bool,
     /// Mullion placement: 0 = Grid Line, 1 = Grid Line Segment, 2 = All Grid Lines.
     pub mullion_mode: u8,
     /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
@@ -791,6 +793,7 @@ impl ToolOptions {
             ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
             use_radius: false,
             mullion_mode: 0,
+            column_slanted: false,
             stair_location: StairLocation::RunCenter,
             stair_base_offset: 0.0,
             stair_top: None,

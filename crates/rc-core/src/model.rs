@@ -722,6 +722,10 @@ pub struct Roof {
     pub fascia: bool,
     #[serde(default)]
     pub gutter: bool,
+    /// Slope arrows: (tail, head, height offset at the head). The footprint edge at the tail
+    /// slopes up to the head height, as the reference app's roof slope arrows do.
+    #[serde(default)]
+    pub slope_arrows: Vec<(DVec2, DVec2, f64)>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -753,6 +757,9 @@ pub struct Room {
 /// Instance of a loadable family (door, window, furniture, column, beam...).
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct FamilyInstance {
+    /// Slanted columns: the plan point at the column top (the base is `location`).
+    #[serde(default)]
+    pub top_location: Option<DVec2>,
     pub family_id: Id,
     pub type_id: Id,
     pub category: Category,

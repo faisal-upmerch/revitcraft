@@ -127,6 +127,7 @@ pub fn prompt(app: &App) -> String {
         },
         ToolKind::Door => "Click on Wall to place Door (Space Bar to flip the instance left/right)".into(),
         ToolKind::Window => "Click on Wall to place Window (Space Bar to flip the instance)".into(),
+        ToolKind::StructColumn if app.opts.column_slanted => if n == 0 { "Click to enter the column start point.".into() } else { "Click to enter the column end point.".into() },
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => "Click to place a free instance (Space Bar to Rotate)".into(),
         ToolKind::PlaceGroup | ToolKind::PlaceDetailGroup => "Click to place the group origin.".into(),
         ToolKind::RepeatingDetail => if n == 0 { "Click to enter the start of the repeating detail.".into() } else { "Click to enter the end of the repeating detail.".into() },
@@ -1571,7 +1572,20 @@ fn free_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, point
         }
         return;
     };
-    let inst = FamilyInstance { family_id: f.id, type_id: ty, category: f.category, level, location: pt, rotation_deg: app.opts.rotation, ..Default::default() };
+    // Slanted columns: the first click sets the base, the second the top.
+    let slanted = app.tool.kind == ToolKind::StructColumn && app.opts.column_slanted;
+    let base = if slanted { app.tool.pts.first().copied() } else { None };
+    if slanted && base.is_none() {
+        painter.circle_stroke(xf.s(pt), 6.0, preview_stroke());
+        if clicked {
+            app.tool.pts.push(pt);
+        }
+        return;
+    }
+    let inst = FamilyInstance { family_id: f.id, type_id: ty, category: f.category, level, location: base.unwrap_or(pt), top_location: base.map(|_| pt), rotation_deg: app.opts.rotation, ..Default::default() };
+    if let Some(b) = base {
+        painter.line_segment([xf.s(b), xf.s(pt)], preview_stroke());
+    }
     let outline = rc_core::family_geom::instance_outline(&app.doc.data, &inst);
     if outline.len() >= 2 {
         painter.add(egui::Shape::closed_line(outline.iter().map(|q| xf.s(*q)).collect(), preview_stroke()));
@@ -1593,8 +1607,16 @@ fn free_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, point
         let tag = app.tool.kind == ToolKind::StructColumn && app.opts.column_tag;
         let vid = view.id;
         let name = format!("Place {}", app.tool.kind.name());
+        let (at, top_at) = match base {
+            Some(b) => (b, Some(pt)),
+            None => (pt, None),
+        };
+        app.tool.pts.clear();
         if let Some(id) = app.run(&name, |p| {
-            let id = edit::place_free(p, ty, level, pt, rot)?;
+            let id = edit::place_free(p, ty, level, at, rot)?;
+            if let Some(i) = p.element_mut(id).and_then(Element::as_instance_mut) {
+                i.top_location = top_at;
+            }
             if let Some(e) = p.element_mut(id) {
                 e.comments = comments;
                 e.mark = mark;

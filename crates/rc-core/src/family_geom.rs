@@ -448,6 +448,10 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
             let (z0, z1) = analysis::column_extent(p, i, column_height(p, i));
             let (bz0, bz1) = (z0 - f.z0, z1 - f.z0);
             let m = txt("Material", "Concrete");
+            // Slanted columns: built vertical, then sheared so the top lands on its point.
+            let mut local = MeshSet::default();
+            let slant = i.top_location.map(|t| t - i.location);
+            let mut b = if slant.is_some() { B { set: &mut local, f } } else { b };
             match template {
                 RectColumn => {
                     let (w, d) = (num("Width", 400.0), num("Depth", 400.0));
@@ -458,6 +462,20 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
                     let sec = i_section(num("Section Depth", 300.0), num("Flange Width", 300.0), num("Web Thickness", 11.0), num("Flange Thickness", 19.0));
                     let rot: Vec<DVec2> = sec.iter().map(|q| DVec2::new(q.x, q.y)).collect();
                     b.prism(&m, &rot, bz0, bz1);
+                }
+            }
+            if let Some(s) = slant {
+                let h = (z1 - z0).max(1.0);
+                for (name, mesh) in local.by_material {
+                    let out = set.mesh(&name);
+                    for t in mesh.indices.chunks(3) {
+                        let q: Vec<DVec3> = t.iter().map(|k| {
+                            let v = mesh.positions[*k as usize];
+                            let k = ((v.z - z0) / h).clamp(0.0, 1.0);
+                            DVec3::new(v.x + s.x * k, v.y + s.y * k, v.z)
+                        }).collect();
+                        out.add_triangle(q[0], q[1], q[2]);
+                    }
                 }
             }
         }
@@ -633,6 +651,18 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
                 Some(if template == SteelColumn { [40, 40, 40] } else { [150, 150, 150] })
             } else {
                 None
+            };
+            // A slanted column is cut where it passes the cut plane; below it, the run to its
+            // top shows as a projection.
+            let shape = match i.top_location {
+                Some(top) => {
+                    let k = ((cut_z.clamp(z0, z1) - z0) / (z1 - z0).max(1.0)).clamp(0.0, 1.0);
+                    let s = (top - i.location) * k;
+                    let moved: Vec<DVec2> = shape.iter().map(|q| *q + s).collect();
+                    out.push(line(vec![i.location, top], false, SymStyle::Projection));
+                    moved
+                }
+                None => shape,
             };
             out.push(SymLine { pts: shape, closed: true, style: if cut { SymStyle::Cut } else { SymStyle::Projection }, fill });
         }

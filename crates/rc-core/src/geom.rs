@@ -8,6 +8,13 @@ pub fn rotate(v: DVec2, a: f64) -> DVec2 {
     DVec2::from_angle(a).rotate(v)
 }
 
+/// Distance from `q` to the segment `a`–`b`.
+pub fn seg_dist(q: DVec2, a: DVec2, b: DVec2) -> f64 {
+    let ab = b - a;
+    let t = if ab.length_squared() > 0.0 { ((q - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
+    q.distance(a + ab * t)
+}
+
 pub fn perp(v: DVec2) -> DVec2 {
     DVec2::new(-v.y, v.x)
 }

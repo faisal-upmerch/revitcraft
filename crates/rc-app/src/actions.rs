@@ -721,8 +721,20 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             ToolKind::StructColumn => app.opts.column_tag = !app.opts.column_tag,
             _ => app.opts.tag_on_placement = !app.opts.tag_on_placement,
         },
-        VerticalColumn => app.opts.column_multi = None,
-        SlantedColumn => app.info("Slanted columns are not available yet; place a vertical column and use a beam for bracing."),
+        VerticalColumn => {
+            app.opts.column_multi = None;
+            app.opts.column_slanted = false;
+            app.tool.reset();
+        }
+        SlantedColumn => {
+            app.opts.column_multi = None;
+            app.opts.column_slanted = true;
+            // A slanted column runs from this level to the one above by default.
+            if app.opts.column_top.is_none() {
+                app.opts.column_top = app.active_level().and_then(|l| app.doc.data.level_above(l)).map(|l| l.0);
+            }
+            app.tool.reset();
+        }
         ColumnsAtGrids | ColumnsAtColumns => {
             app.opts.column_multi = Some(if cmd == ColumnsAtGrids { crate::tools::ColumnMulti::AtGrids } else { crate::tools::ColumnMulti::AtColumns });
             app.tool.picked.clear();
@@ -1063,6 +1075,9 @@ fn edit_boundary(app: &mut App) {
     if let ElementKind::Floor(f) = &e.kind {
         sk.slope_arrow = f.slope.map(|(a, b, _)| (a, b));
     }
+    if let ElementKind::Roof(r) = &e.kind {
+        sk.slope_arrow = r.slope_arrows.first().map(|(a, b, _)| (*a, *b));
+    }
     for ring in &rings {
         let n = ring.len();
         for k in 0..n {
@@ -1260,6 +1275,7 @@ pub fn finish_sketch(app: &mut App) {
                                 r.slope_deg = o.roof_slope;
                                 r.edge_slopes = match_edge_flags(&r.footprint, &poly, &flags);
                                 r.shape = shape_from_flags(&r.edge_slopes);
+                                r.slope_arrows = sk.slope_arrow.map(|(a, b)| vec![(a, b, o.slope_head_offset)]).unwrap_or_default();
                             }
                             Ok(id)
                         })
@@ -1317,6 +1333,8 @@ pub fn finish_sketch(app: &mut App) {
                                 r.footprint = geom::clean(&outer, 1.0);
                                 r.edge_slopes = match_edge_flags(&r.footprint, &poly, &flags);
                                 r.shape = shape_from_flags(&r.edge_slopes);
+                                let rise = r.slope_arrows.first().map(|a| a.2).unwrap_or(o.slope_head_offset);
+                                r.slope_arrows = sk.slope_arrow.map(|(a, b)| vec![(a, b, rise)]).unwrap_or_default();
                             }
                             Ok(id)
                         })
