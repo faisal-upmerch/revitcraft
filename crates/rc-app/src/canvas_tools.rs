@@ -159,6 +159,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
         ToolKind::Mullion => "Select a grid line to create mullion.".into(),
         ToolKind::VerticalOpening => "Select a roof, floor, or ceiling.".into(),
+        ToolKind::DormerOpening => "Select the roof to be cut by the dormer opening.".into(),
         ToolKind::WallOpening => if n == 0 { "Click a wall at one side of the opening.".into() } else { "Click the other side of the opening.".into() },
         ToolKind::WallFoundation => "Pick a wall to add a wall foundation under it.".into(),
         ToolKind::Align => if n == 0 { "Please select line or point reference for alignment.".into() } else { "Select the entity to align.".into() },
@@ -309,10 +310,12 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Room | ToolKind::Area | ToolKind::CeilingAuto => room_tool(app, painter, xf, view, cursor, clicked),
-        ToolKind::VerticalOpening => {
-            // Pick the roof, floor or ceiling, then sketch the opening's boundary in it.
+        ToolKind::VerticalOpening | ToolKind::DormerOpening => {
+            // Pick the roof (floor or ceiling for vertical openings), then sketch the opening's
+            // boundary; a dormer's comes from picking its walls and edges.
             let Some(c) = cursor else { return };
-            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Floor(_) | ElementKind::Roof(_) | ElementKind::Ceiling(_)));
+            let dormer = app.tool.kind == ToolKind::DormerOpening;
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Roof(_)) || (!dormer && matches!(e.kind, ElementKind::Floor(_) | ElementKind::Ceiling(_))));
             app.interact.hover = hit;
             if clicked {
                 match hit {
@@ -321,12 +324,12 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                         let mut sk = tools::Sketch::new(SketchKind::Opening(host), view.id, level);
                         sk.width = 0.0;
                         app.sketch = Some(sk);
-                        app.opts.draw_mode = DrawMode::Line;
+                        app.opts.draw_mode = if dormer { DrawMode::PickWalls } else { DrawMode::Line };
                         app.opts.sketch_sub = SketchSub::Boundary;
                         app.tool = Tool::new(ToolKind::SketchLine);
                         app.select(vec![]);
                     }
-                    None => app.error("Select a roof, floor, or ceiling."),
+                    None => app.error(if dormer { "Select the roof to be cut by the dormer opening." } else { "Select a roof, floor, or ceiling." }),
                 }
             }
         }

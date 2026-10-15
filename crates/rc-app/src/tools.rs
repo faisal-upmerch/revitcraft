@@ -67,6 +67,7 @@ pub enum ToolKind {
     Mullion,
     WallOpening,
     VerticalOpening,
+    DormerOpening,
     PlaceGroup,
     Align,
     Offset,
@@ -153,6 +154,7 @@ impl ToolKind {
             ToolKind::Mullion => "Mullion",
             ToolKind::WallOpening => "Wall Opening",
             ToolKind::VerticalOpening => "Vertical Opening",
+            ToolKind::DormerOpening => "Dormer Opening",
             ToolKind::PlaceGroup => "Model Group",
             ToolKind::Align => "Align",
             ToolKind::Offset => "Offset",
@@ -247,6 +249,7 @@ impl ToolKind {
                 | ToolKind::ElevationMarker
                 | ToolKind::WallOpening
                 | ToolKind::VerticalOpening
+                | ToolKind::DormerOpening
                 | ToolKind::PlaceGroup
                 | ToolKind::CurtainGrid
                 | ToolKind::Mullion

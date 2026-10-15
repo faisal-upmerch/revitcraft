@@ -99,7 +99,7 @@ fn architecture() -> Vec<Panel> {
                 Labeled("Tag\nArea", C::AreaTag, vec![]),
             ],
         ),
-        panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![]), Labeled("Vertical", C::VerticalOpening, vec![])]),
+        panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![]), Labeled("Vertical", C::VerticalOpening, vec![]), Labeled("Dormer", C::DormerOpening, vec![])]),
         panel("Datum", vec![Big(C::Level), Big(C::Grid)]),
         work_plane_panel(),
     ]
@@ -114,7 +114,7 @@ fn structure() -> Vec<Panel> {
         ),
         panel("Foundation", vec![Labeled("Isolated", C::IsolatedFoundation, vec![]), Labeled("Wall", C::WallFoundation, vec![]), Labeled("Slab", C::FloorStructural, vec![])]),
         panel("Model", vec![Labeled("Component", C::Component, vec![]), Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
-        panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![]), Labeled("Vertical", C::VerticalOpening, vec![])]),
+        panel("Opening", vec![Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![]), Labeled("Vertical", C::VerticalOpening, vec![]), Labeled("Dormer", C::DormerOpening, vec![])]),
         panel("Datum", vec![Big(C::Level), Big(C::Grid)]),
         work_plane_panel(),
     ]
