@@ -1339,6 +1339,9 @@ pub fn split_element(p: &mut Project, id: Id, at: DVec2, gap: f64) -> Result<Id,
     if e.pinned {
         return Err("The element is pinned.".into());
     }
+    if matches!(e.kind, ElementKind::Grid(_) | ElementKind::RefPlane(_)) {
+        return Err("Grids and reference planes cannot be split.".into());
+    }
     let (a, b) = linear_axis(&e).ok_or("Only straight walls and lines can be split.")?;
     let (q, t) = geom::closest_on_segment(a, b, at);
     let len = a.distance(b);
@@ -2000,10 +2003,11 @@ pub fn new_sheet(p: &mut Project, size: SheetSize) -> Id {
     id
 }
 
+/// The default 3D view: orthographic, looking from the south-east corner (Top, Front, Right).
 pub fn new_3d_view(p: &mut Project) -> Id {
     let name = unique_name(p.views.iter().map(|v| v.name.clone()), "3D View");
     let id = p.new_id();
-    let mut v = View::new(id, name, 100.0, ViewKind::ThreeD { eye: DVec3::new(-12000.0, -16000.0, 12000.0), target: DVec3::new(5000.0, 4000.0, 1500.0), perspective: true });
+    let mut v = View::new(id, name, 100.0, ViewKind::ThreeD { eye: DVec3::new(20000.0, -11000.0, 16500.0), target: DVec3::new(5000.0, 4000.0, 1500.0), perspective: false });
     v.phase = p.phases.last().map(|ph| ph.id);
     p.views.push(v);
     id

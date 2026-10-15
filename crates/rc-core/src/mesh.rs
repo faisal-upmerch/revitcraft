@@ -106,6 +106,40 @@ impl MeshSet {
         self.by_material.entry(material.to_string()).or_default()
     }
 
+    /// The set without faces buried inside the element: back-to-back faces where two layers
+    /// of a compound wall meet (coplanar, opposite normals). Hidden-line drawings use the
+    /// outer surface only; section cuts use the full set, so every layer cuts as a region.
+    pub fn without_internal_faces(&self) -> MeshSet {
+        let key = |n: DVec3, p: DVec3| -> (i64, i64, i64, i64) { ((n.x * 1000.0).round() as i64, (n.y * 1000.0).round() as i64, (n.z * 1000.0).round() as i64, (n.dot(p) * 2.0).round() as i64) };
+        let plane = |m: &Mesh, t: &[u32]| -> Option<(DVec3, DVec3)> {
+            let (a, b, c) = (m.positions[t[0] as usize], m.positions[t[1] as usize], m.positions[t[2] as usize]);
+            let n = (b - a).cross(c - a);
+            (n.length() > 1e-9).then(|| (n.normalize(), a))
+        };
+        let mut planes = std::collections::HashSet::new();
+        for m in self.by_material.values() {
+            for t in m.indices.chunks(3) {
+                if let Some((n, a)) = plane(m, t) {
+                    planes.insert(key(n, a));
+                }
+            }
+        }
+        let mut out = MeshSet::default();
+        for (name, m) in &self.by_material {
+            let mut keep = Mesh { positions: m.positions.clone(), indices: Vec::with_capacity(m.indices.len()) };
+            for t in m.indices.chunks(3) {
+                let internal = plane(m, t).is_some_and(|(n, a)| planes.contains(&key(-n, a)));
+                if !internal {
+                    keep.indices.extend_from_slice(t);
+                }
+            }
+            if !keep.indices.is_empty() {
+                out.by_material.insert(name.clone(), keep);
+            }
+        }
+        out
+    }
+
     pub fn is_empty(&self) -> bool {
         self.by_material.values().all(|m| m.indices.is_empty())
     }

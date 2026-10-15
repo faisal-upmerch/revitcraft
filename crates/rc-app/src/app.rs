@@ -155,6 +155,8 @@ pub struct App {
     pub cams3d: HashMap<Id, Camera>,
     /// Earlier cameras of each 3D view (navigation wheel Rewind).
     pub cam3d_history: HashMap<Id, Vec<Camera>>,
+    /// ViewCube Home views set with "Set Current View as Home".
+    pub home3d: HashMap<Id, Camera>,
     pub cache: Cache,
     pub scenes: HashMap<Id, Scene>,
     pub toast: Option<Toast>,
@@ -212,6 +214,7 @@ impl App {
             nav_history: HashMap::new(),
             cams3d: HashMap::new(),
             cam3d_history: HashMap::new(),
+            home3d: HashMap::new(),
             cache: Cache::default(),
             scenes: HashMap::new(),
             toast: None,

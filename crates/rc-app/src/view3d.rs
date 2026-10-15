@@ -11,7 +11,115 @@ use std::collections::HashSet;
 
 /// Template eyes of never-navigated {3D} views (older and current templates): such views
 /// zoom to fit the model from their direction when first opened.
-const DEFAULT_EYES: [DVec3; 2] = [DVec3::new(-12000.0, -16000.0, 12000.0), DVec3::new(15000.0, -15000.0, 16500.0)];
+const DEFAULT_EYES: [DVec3; 3] = [DVec3::new(-12000.0, -16000.0, 12000.0), DVec3::new(15000.0, -15000.0, 16500.0), DVec3::new(20000.0, -11000.0, 16500.0)];
+
+/// The default view direction (from the eye towards nothing in particular): the south-east
+/// corner of the ViewCube, Top + Front + Right, an exact isometric.
+const HOME_DIR: DVec3 = DVec3::new(1.0, -1.0, 1.0);
+
+/// A ViewCube or Home transition, interpolated over a short time.
+#[derive(Clone, Copy)]
+struct CamAnim {
+    from: Camera,
+    to: Camera,
+    start: f64,
+}
+
+const ANIM_SECS: f64 = 0.4;
+
+fn anim_id(view: Id) -> egui::Id {
+    egui::Id::new(("cam-anim", view))
+}
+
+/// Starts an animated transition of a view's camera.
+fn animate_to(app: &mut App, ui: &egui::Ui, view_id: Id, to: Camera) {
+    let from = camera_of(app, view_id);
+    let start = ui.input(|i| i.time);
+    ui.memory_mut(|m| m.data.insert_temp(anim_id(view_id), CamAnim { from, to, start }));
+    ui.ctx().request_repaint();
+}
+
+/// Interpolates two cameras: the view direction turns on a great circle, distance, target and
+/// zoom ease in and out.
+fn lerp_cam(a: &Camera, b: &Camera, t: f64) -> Camera {
+    let s = t * t * (3.0 - 2.0 * t);
+    let (da, db) = (a.eye - a.target, b.eye - b.target);
+    let (ra, rb) = (da.length().max(1.0), db.length().max(1.0));
+    let (ua, ub) = (da / ra, db / rb);
+    let ang = ua.dot(ub).clamp(-1.0, 1.0).acos();
+    let axis = ua.cross(ub);
+    let axis = if axis.length() > 1e-9 { axis.normalize() } else if ua.z.abs() < 0.9 { DVec3::Z } else { DVec3::X };
+    let u = glam::DQuat::from_axis_angle(axis, ang * s) * ua;
+    let target = a.target.lerp(b.target, s);
+    Camera { eye: target + u * (ra + (rb - ra) * s), target, perspective: b.perspective, ortho_height: a.ortho_height + (b.ortho_height - a.ortho_height) * s }
+}
+
+/// The point orbits turn about: the centre of the selection, else of the section box or the
+/// model (when it is on screen), else the model point under the cursor.
+fn orbit_pivot(app: &mut App, view_id: Id, cam: &Camera, rect: Rect, at: Option<Pos2>) -> DVec3 {
+    if !app.selection.is_empty() {
+        let sel: HashSet<Id> = app.selection.iter().copied().collect();
+        let b = app.scenes.get(&view_id).and_then(|s| s.meshes.iter().filter(|(id, _)| sel.contains(id)).filter_map(|(_, m)| m.bounds()).reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1))));
+        if let Some((mn, mx)) = b {
+            return (mn + mx) / 2.0;
+        }
+    }
+    let section = app.doc.data.view(view_id).and_then(|v| v.section_box);
+    if let Some(c) = section.or_else(|| app.model_bounds()).map(|(a, b)| (a + b) / 2.0) {
+        if screen_of(cam, rect, c).is_some_and(|p| rect.contains(p)) {
+            return c;
+        }
+    }
+    if let Some(p) = at {
+        let aspect = rect.width() / rect.height().max(1.0);
+        let nx = ((p.x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
+        let ny = (1.0 - (p.y - rect.top()) / rect.height() * 2.0) as f64;
+        let (o, d) = cam.ray(nx, ny, aspect);
+        if let Some((_, hit)) = app.scenes.get(&view_id).and_then(|s| render3d::pick(s, o, d, section)) {
+            return hit;
+        }
+    }
+    cam.target
+}
+
+/// Orbits the camera about a pivot: horizontal drags turn about the vertical axis (the scene
+/// stays upright), vertical drags tilt about the screen's horizontal axis.
+fn orbit_about(cam: &mut Camera, pivot: DVec3, dx: f32, dy: f32) {
+    let off = (cam.eye - cam.target).normalize_or(DVec3::Z);
+    let elev = off.z.clamp(-1.0, 1.0).asin();
+    let lim = 1.5703f64.max(elev.abs());
+    let dp = (elev + dy as f64 * 0.006).clamp(-lim, lim) - elev;
+    let fwd = -off;
+    let right = fwd.cross(cam.up().as_dvec3()).normalize_or(DVec3::X);
+    let q = glam::DQuat::from_rotation_z(-dx as f64 * 0.006) * glam::DQuat::from_axis_angle(right, -dp);
+    cam.eye = pivot + q * (cam.eye - pivot);
+    cam.target = pivot + q * (cam.target - pivot);
+}
+
+/// Zooms by `f` (below 1 zooms in) keeping the model point under `at` in place.
+fn zoom_at(cam: &mut Camera, rect: Rect, at: Pos2, f: f64) {
+    let f = f.clamp(0.2, 5.0);
+    let aspect = rect.width() / rect.height().max(1.0);
+    let nx = ((at.x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
+    let ny = (1.0 - (at.y - rect.top()) / rect.height() * 2.0) as f64;
+    let fwd = (cam.target - cam.eye).normalize_or(DVec3::Y);
+    let dist = (cam.target - cam.eye).length();
+    if cam.perspective {
+        // Moving the eye along the cursor's ray keeps the point under the cursor in place.
+        let (_, d) = cam.ray(nx, ny, aspect);
+        let new_dist = (dist * f).max(300.0);
+        cam.eye += d * ((dist - new_dist) / d.dot(fwd).max(0.2));
+        cam.target = cam.eye + fwd * new_dist;
+    } else {
+        let new_h = (cam.ortho_height * f).clamp(50.0, 5.0e7);
+        let k = 1.0 - new_h / cam.ortho_height;
+        let (o, _) = cam.ray(nx, ny, aspect);
+        let (c, _) = cam.ray(0.0, 0.0, aspect);
+        cam.target += (o - c) * k;
+        cam.eye = cam.target - fwd * (new_h / 0.8);
+        cam.ortho_height = new_h;
+    }
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 pub enum NavMode {
@@ -126,7 +234,7 @@ pub fn camera_of(app: &mut App, view_id: Id) -> Camera {
             let b = app.model_bounds();
             render3d::frame_bounds(b, eye - target, perspective)
         }
-        _ => render3d::frame_bounds(None, DVec3::new(-0.6, -0.9, 0.55), false),
+        _ => render3d::frame_bounds(None, HOME_DIR, false),
     };
     app.cams3d.insert(view_id, cam);
     cam
@@ -134,20 +242,15 @@ pub fn camera_of(app: &mut App, view_id: Id) -> Camera {
 
 pub fn frame_all(app: &mut App, view_id: Id) {
     let cam = camera_of(app, view_id);
-    let dir = (cam.eye - cam.target).normalize_or(DVec3::new(-0.6, -0.9, 0.55));
+    let dir = (cam.eye - cam.target).normalize_or(HOME_DIR);
     let b = app.doc.data.view(view_id).and_then(|v| v.section_box).or_else(|| app.model_bounds());
     let framed = render3d::frame_bounds(b, dir, cam.perspective);
     app.cams3d.insert(view_id, framed);
 }
 
 fn orbit(cam: &mut Camera, dx: f32, dy: f32) {
-    let offset = cam.eye - cam.target;
-    let r = offset.length();
-    let mut yaw = offset.y.atan2(offset.x);
-    let mut pitch = (offset.z / r).clamp(-1.0, 1.0).asin();
-    yaw -= dx as f64 * 0.008;
-    pitch = (pitch + dy as f64 * 0.008).clamp(-1.55, 1.55);
-    cam.eye = cam.target + DVec3::new(yaw.cos() * pitch.cos(), yaw.sin() * pitch.cos(), pitch.sin()) * r;
+    let pivot = cam.target;
+    orbit_about(cam, pivot, dx, dy);
 }
 
 fn pan(cam: &mut Camera, d: egui::Vec2, rect: Rect) {
@@ -436,56 +539,75 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let press_origin = ui.input(|i| i.pointer.press_origin());
     let drag_from_cube = press_origin.is_some_and(|p| cube_rect.contains(p) && app.settings.show_viewcube);
 
-    // Navigation.
+    // Navigation, as in the reference app: wheel zooms about the cursor, middle drag pans,
+    // Shift+middle drag (or a drag on the ViewCube) orbits about the model or the selection,
+    // Ctrl+middle drag zooms, a middle double-click zooms to fit.
     let mut moved = false;
+    if let Some(a) = ui.memory(|m| m.data.get_temp::<CamAnim>(anim_id(view_id))) {
+        let t = ((ui.input(|i| i.time) - a.start) / ANIM_SECS).clamp(0.0, 1.0);
+        cam = lerp_cam(&a.from, &a.to, t);
+        if t >= 1.0 {
+            ui.memory_mut(|m| m.data.remove::<CamAnim>(anim_id(view_id)));
+        } else {
+            ui.ctx().request_repaint();
+        }
+    }
     let wheel_on = crate::wheel::load(ui, view_id).on;
     let left_drag = resp.dragged_by(egui::PointerButton::Primary) && !wheel_on;
+    let middle_drag = resp.dragged_by(egui::PointerButton::Middle);
     let section_drag: Option<(usize, Pos2)> = ui.memory(|m| m.data.get_temp(egui::Id::new(("sbox-drag", view_id))));
-    if left_drag && section_drag.is_none() && (drag_from_cube || shift || mode == NavMode::Orbit) {
+    let ring_drag = drag_from_cube && ui.memory(|m| m.data.get_temp::<bool>(egui::Id::new(("cube-ring-drag", view_id)))).unwrap_or(false);
+    let orbit_drag = (left_drag && section_drag.is_none() && (drag_from_cube || shift || mode == NavMode::Orbit)) || (middle_drag && shift);
+    let pivot_key = egui::Id::new(("orbit-pivot", view_id));
+    let mut pivot_shown: Option<DVec3> = None;
+    if orbit_drag {
+        let pv = match ui.memory(|m| m.data.get_temp::<DVec3>(pivot_key)) {
+            Some(p) => p,
+            None => {
+                let p = orbit_pivot(app, view_id, &cam, rect, press_origin);
+                ui.memory_mut(|m| m.data.insert_temp(pivot_key, p));
+                p
+            }
+        };
         let d = resp.drag_delta();
-        orbit(&mut cam, d.x, d.y);
+        orbit_about(&mut cam, pv, d.x, if ring_drag { 0.0 } else { d.y });
+        pivot_shown = Some(pv).filter(|_| !drag_from_cube);
         moved = true;
-    } else if left_drag && section_drag.is_none() && mode == NavMode::Pan {
-        pan(&mut cam, resp.drag_delta(), rect);
-        moved = true;
-    }
-    if resp.dragged_by(egui::PointerButton::Middle) {
-        let d = resp.drag_delta();
-        if shift {
-            orbit(&mut cam, d.x, d.y);
-        } else {
-            pan(&mut cam, d, rect);
+    } else {
+        ui.memory_mut(|m| m.data.remove::<DVec3>(pivot_key));
+        if left_drag && section_drag.is_none() && mode == NavMode::Pan {
+            pan(&mut cam, resp.drag_delta(), rect);
+            moved = true;
+        } else if middle_drag && ctrl {
+            let at = press_origin.unwrap_or(rect.center());
+            zoom_at(&mut cam, rect, at, (resp.drag_delta().y as f64 * 0.01).exp());
+            moved = true;
+        } else if middle_drag {
+            pan(&mut cam, resp.drag_delta(), rect);
+            moved = true;
         }
-        moved = true;
-    }
-    if resp.dragged_by(egui::PointerButton::Secondary) {
-        pan(&mut cam, resp.drag_delta(), rect);
-        moved = true;
     }
     if resp.hovered() {
         let scroll = ui.input(|i| i.smooth_scroll_delta.y) as f64;
         let zoom = ui.input(|i| i.zoom_delta()) as f64;
         let f = (-scroll * 0.0022).exp() / zoom;
         if (f - 1.0).abs() > 1e-6 {
-            // Zoom towards the cursor.
             if let Some(hp) = resp.hover_pos() {
-                let aspect = rect.width() / rect.height().max(1.0);
-                let nx = ((hp.x - rect.left()) / rect.width() * 2.0 - 1.0) as f64;
-                let ny = (1.0 - (hp.y - rect.top()) / rect.height() * 2.0) as f64;
-                let (o, d) = cam.ray(nx, ny, aspect);
-                let dist = (cam.target - cam.eye).length();
-                let toward = o + d * dist;
-                let k = 1.0 - f.clamp(0.2, 5.0);
-                cam.target += (toward - cam.target) * k * if cam.perspective { 0.6 } else { 1.0 };
-                cam.eye += (toward - cam.eye) * k * if cam.perspective { 0.6 } else { 0.0 };
-                if !cam.perspective {
-                    cam.ortho_height *= f.clamp(0.2, 5.0);
-                }
+                zoom_at(&mut cam, rect, hp, f);
             }
             moved = true;
         }
     }
-    let _ = moved;
+    if resp.double_clicked_by(egui::PointerButton::Middle) {
+        app.cams3d.insert(view_id, cam);
+        frame_all(app, view_id);
+        cam = camera_of(app, view_id);
+        moved = true;
+    }
+    if moved {
+        // Navigating interrupts a ViewCube transition.
+        ui.memory_mut(|m| m.data.remove::<CamAnim>(anim_id(view_id)));
+    }
     if wheel_on && !over_cube && !over_nav {
         wheel_3d(app, ui, &resp, rect, view_id, &mut cam, view.section_box);
     }
@@ -632,6 +754,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         }
     }
 
+    // The orbit pivot, while orbiting.
+    if let Some(p) = pivot_shown.and_then(|p| screen_of(&cam, rect, p)) {
+        painter.circle_filled(p, 7.0, Color32::from_rgba_unmultiplied(70, 170, 70, 200));
+        painter.circle_stroke(p, 7.0, Stroke::new(1.0, Color32::from_rgb(30, 90, 30)));
+        painter.circle_filled(p + vec2(-2.0, -2.0), 2.0, Color32::from_rgba_unmultiplied(230, 255, 230, 220));
+    }
     if app.settings.show_viewcube {
         view_cube(app, ui, &painter, cube_rect, view_id);
     }
@@ -643,8 +771,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             frame_all(app, view_id);
             ui.close();
         }
-        if ui.button("Orient to View... (Home)").clicked() {
-            go_home(app, view_id);
+        if ui.button("Go to Home").clicked() {
+            go_home(app, ui, view_id);
             ui.close();
         }
         if !app.selection.is_empty() {
@@ -674,11 +802,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     });
 }
 
-fn go_home(app: &mut App, view_id: Id) {
+/// Home: the view saved with "Set Current View as Home", else the south-east isometric
+/// framing the section box or the model.
+fn go_home(app: &mut App, ui: &egui::Ui, view_id: Id) {
     let cam = camera_of(app, view_id);
-    let b = app.model_bounds();
-    let framed = render3d::frame_bounds(b, DVec3::new(-0.6, -0.9, 0.55), cam.perspective);
-    app.cams3d.insert(view_id, framed);
+    let to = match app.home3d.get(&view_id) {
+        Some(h) => Camera { perspective: cam.perspective, ..*h },
+        None => {
+            let b = app.doc.data.view(view_id).and_then(|v| v.section_box).or_else(|| app.model_bounds());
+            render3d::frame_bounds(b, HOME_DIR, cam.perspective)
+        }
+    };
+    animate_to(app, ui, view_id, to);
 }
 
 fn section_box_to_selection(app: &mut App, view_id: Id) {
@@ -782,32 +917,32 @@ fn section_box_ui(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, resp: &
 }
 
 // ---------------------------------------------------------------- ViewCube
-
+/// The ViewCube: 26 clickable regions (6 faces, 12 edges, 8 corners) that highlight as one
+/// across the faces they span, the compass ring (click a letter, drag the ring to turn the
+/// view), arrows to the neighbouring faces in a face view, Home, and a right-click menu.
+/// The cube fades when the cursor is elsewhere.
 fn view_cube(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, area: Rect, view_id: Id) {
     let cam = camera_of(app, view_id);
     let view_m = cam.view_matrix();
     let rot = |v: DVec3| -> Vec3 { view_m.transform_vector3(v.as_vec3()) };
-    let center = area.center() + vec2(0.0, -6.0);
-    let s = 26.0f32;
+    let center = area.center() + vec2(4.0, -2.0);
+    let s = 27.0f32;
     let proj = |v: DVec3| -> Pos2 {
         let r = rot(v);
         center + vec2(r.x, -r.y) * s
     };
-    let pointer = ui.input(|i| i.pointer.hover_pos());
-    let clicked = ui.input(|i| i.pointer.primary_released()) && ui.input(|i| i.pointer.press_origin()).is_some_and(|p| area.contains(p)) && ui.input(|i| i.pointer.total_drag_delta().map(|d| d.length() < 3.0).unwrap_or(true));
-    // Compass ring.
-    let ring_c = center + vec2(0.0, 30.0);
-    let mut ring: Vec<Pos2> = Vec::new();
-    for k in 0..=48 {
-        let a = k as f64 / 48.0 * std::f64::consts::TAU;
-        ring.push(proj(DVec3::new(a.cos() * 1.9, a.sin() * 1.9, -1.0)));
-    }
-    painter.add(egui::Shape::line(ring, Stroke::new(5.0, Color32::from_rgba_unmultiplied(160, 166, 176, 120))));
-    for (label, d) in [("N", DVec3::Y), ("E", DVec3::X), ("S", DVec3::NEG_Y), ("W", DVec3::NEG_X)] {
-        let p = proj(d * 1.9 + DVec3::new(0.0, 0.0, -1.0));
-        painter.text(p, egui::Align2::CENTER_CENTER, label, egui::FontId::proportional(10.0), style::text_dim());
-    }
-    let _ = ring_c;
+    let cube_resp = ui.interact(area, egui::Id::new(("viewcube", view_id)), Sense::click());
+    let pointer = ui.input(|i| i.pointer.hover_pos()).filter(|p| area.contains(*p));
+    let pressed_here = ui.input(|i| i.pointer.press_origin()).is_some_and(|p| area.contains(p));
+    let down = ui.input(|i| i.pointer.any_down());
+    let active = pointer.is_some() || (down && pressed_here);
+    let alpha = if active { 1.0 } else { 0.5 };
+    let col = |r: u8, g: u8, b: u8| Color32::from_rgb(r, g, b).gamma_multiply(alpha);
+    let highlight = Color32::from_rgb(140, 196, 245);
+    let clicked = cube_resp.clicked();
+    let off = (cam.eye - cam.target).normalize_or(HOME_DIR);
+    let mut go: Option<DVec3> = None;
+
     // Faces: (normal, label, u, v) with u/v the face's in-plane axes.
     let faces: [(DVec3, &str, DVec3, DVec3); 6] = [
         (DVec3::Z, "TOP", DVec3::X, DVec3::Y),
@@ -817,57 +952,245 @@ fn view_cube(app: &mut App, ui: &egui::Ui, painter: &egui::Painter, area: Rect, 
         (DVec3::X, "RIGHT", DVec3::Y, DVec3::Z),
         (DVec3::NEG_X, "LEFT", DVec3::NEG_Y, DVec3::Z),
     ];
-    let mut order: Vec<usize> = (0..6).collect();
-    order.sort_by(|a, b| rot(faces[*a].0).z.total_cmp(&rot(faces[*b].0).z));
-    let mut target_dir: Option<DVec3> = None;
-    for k in order {
-        let (n, label, u, v) = faces[k];
-        if rot(n).z <= 0.02 {
-            continue;
+    let span = |k: i32| match k {
+        -1 => (-1.0, -0.62),
+        0 => (-0.62, 0.62),
+        _ => (0.62, 1.0),
+    };
+    let cell = |n: DVec3, u: DVec3, v: DVec3, i: i32, j: i32| -> [Pos2; 4] {
+        let ((a0, a1), (b0, b1)) = (span(i), span(j));
+        [n + u * a0 + v * b0, n + u * a1 + v * b0, n + u * a1 + v * b1, n + u * a0 + v * b1].map(proj)
+    };
+    let key = |d: DVec3| [d.x.round() as i32, d.y.round() as i32, d.z.round() as i32];
+    let visible: Vec<usize> = {
+        let mut o: Vec<usize> = (0..6).filter(|k| rot(faces[*k].0).z > 0.02).collect();
+        o.sort_by(|a, b| rot(faces[*a].0).z.total_cmp(&rot(faces[*b].0).z));
+        o
+    };
+    // The region under the cursor: a face, edge or corner, shared by every face it touches.
+    let mut hot: Option<[i32; 3]> = None;
+    if let Some(p) = pointer {
+        for &k in &visible {
+            let (n, _, u, v) = faces[k];
+            for i in -1..=1 {
+                for j in -1..=1 {
+                    if point_in_quad(p, &cell(n, u, v, i, j)) {
+                        hot = Some(key(n + u * i as f64 + v * j as f64));
+                    }
+                }
+            }
         }
-        // 3x3 grid on each face: centre = face, edges and corners = combined directions.
+    }
+
+    // Compass ring on the ground plane under the cube.
+    let ring_r = 1.85;
+    let ring: Vec<Pos2> = (0..=72).map(|k| {
+        let t = k as f64 / 72.0 * std::f64::consts::TAU;
+        proj(DVec3::new(t.cos() * ring_r, t.sin() * ring_r, -1.0))
+    }).collect();
+    let letters = [("N", DVec3::Y), ("E", DVec3::X), ("S", DVec3::NEG_Y), ("W", DVec3::NEG_X)];
+    let letter_pos = |d: DVec3| proj(d * ring_r + DVec3::new(0.0, 0.0, -1.0));
+    let mut hot_letter: Option<usize> = None;
+    let mut ring_hot = false;
+    if let (None, Some(p)) = (hot, pointer) {
+        hot_letter = letters.iter().position(|(_, d)| letter_pos(*d).distance(p) < 8.0);
+        ring_hot = hot_letter.is_none() && ring.windows(2).any(|w| seg_dist(p, w[0], w[1]) < 5.0);
+    }
+    let ring_key = egui::Id::new(("cube-ring-drag", view_id));
+    if (ring_hot || hot_letter.is_some()) && ui.input(|i| i.pointer.primary_pressed()) {
+        ui.memory_mut(|m| m.data.insert_temp(ring_key, true));
+    } else if !down {
+        ui.memory_mut(|m| m.data.remove::<bool>(ring_key));
+    }
+    let ring_dragging = ui.memory(|m| m.data.get_temp::<bool>(ring_key)).unwrap_or(false);
+    let ring_fill = if ring_hot || ring_dragging { highlight.gamma_multiply(alpha) } else { col(214, 218, 224) };
+    painter.add(egui::Shape::line(ring.clone(), Stroke::new(8.0, col(150, 156, 166))));
+    painter.add(egui::Shape::line(ring, Stroke::new(6.0, ring_fill)));
+    for (k, (label, d)) in letters.iter().enumerate() {
+        let p = letter_pos(*d);
+        let hl = hot_letter == Some(k);
+        painter.circle_filled(p, 6.5, if hl { highlight.gamma_multiply(alpha) } else { col(236, 238, 241) });
+        painter.circle_stroke(p, 6.5, Stroke::new(1.0, col(150, 156, 166)));
+        painter.text(p, egui::Align2::CENTER_CENTER, *label, egui::FontId::proportional(8.5), col(50, 54, 60));
+        if hl && clicked {
+            // Look from that side, keeping the current tilt.
+            let z = off.z.clamp(-0.98, 0.98);
+            go = Some(if off.z.abs() > 0.999 { *d * 1e-4 + DVec3::Z * off.z.signum() } else { *d * (1.0 - z * z).sqrt() + DVec3::Z * z });
+        }
+    }
+
+    // The cube.
+    let light = DVec3::new(-0.3, -0.5, 0.8).normalize();
+    for &k in &visible {
+        let (n, label, u, v) = faces[k];
+        let b = (0.9 + 0.1 * n.dot(light)) as f32;
+        let base = col((238.0 * b) as u8, (240.0 * b) as u8, (243.0 * b) as u8);
         for i in -1..=1 {
             for j in -1..=1 {
-                let (a0, a1) = (i as f64 / 1.5 - 1.0 / 3.0, i as f64 / 1.5 + 1.0 / 3.0);
-                let (b0, b1) = (j as f64 / 1.5 - 1.0 / 3.0, j as f64 / 1.5 + 1.0 / 3.0);
-                let quad = [n + u * a0 + v * b0, n + u * a1 + v * b0, n + u * a1 + v * b1, n + u * a0 + v * b1].map(proj);
-                let hovered = pointer.is_some_and(|p| point_in_quad(p, &quad));
-                let base = if i == 0 && j == 0 { Color32::from_rgb(236, 238, 242) } else { Color32::from_rgb(222, 225, 231) };
-                let fill = if hovered { Color32::from_rgb(150, 200, 250) } else { base };
-                painter.add(egui::Shape::convex_polygon(quad.to_vec(), fill, Stroke::NONE));
-                if hovered && clicked {
-                    target_dir = Some((n + u * i as f64 + v * j as f64).normalize());
+                let q = cell(n, u, v, i, j);
+                let d = n + u * i as f64 + v * j as f64;
+                let lit = hot == Some(key(d));
+                painter.add(egui::Shape::convex_polygon(q.to_vec(), if lit { highlight.gamma_multiply(alpha) } else { base }, Stroke::NONE));
+                if lit && clicked {
+                    go = Some(d);
                 }
             }
         }
         let outline = [n - u - v, n + u - v, n + u + v, n - u + v].map(proj);
-        painter.add(egui::Shape::closed_line(outline.to_vec(), Stroke::new(1.0, Color32::from_rgb(120, 124, 132))));
-        // Label oriented roughly along the face's u axis.
+        painter.add(egui::Shape::closed_line(outline.to_vec(), Stroke::new(1.0, col(112, 118, 128))));
+        // Label along the face's u axis.
         let pu = proj(n + u * 0.5) - proj(n - u * 0.5);
-        let angle = pu.y.atan2(pu.x);
-        let font = egui::FontId::proportional(9.5);
-        let galley = painter.layout_no_wrap(label.to_string(), font, Color32::from_rgb(60, 64, 72));
-        let c = proj(n);
-        let shape = egui::epaint::TextShape::new(c - galley.size() / 2.0, galley, Color32::from_rgb(60, 64, 72)).with_angle_and_anchor(angle, egui::Align2::CENTER_CENTER);
-        painter.add(shape);
+        if pu.length() > 6.0 {
+            let angle = pu.y.atan2(pu.x);
+            let galley = painter.layout_no_wrap(label.to_string(), egui::FontId::proportional(8.5), col(58, 62, 70));
+            let c = proj(n);
+            painter.add(egui::epaint::TextShape::new(c - galley.size() / 2.0, galley, col(58, 62, 70)).with_angle_and_anchor(angle, egui::Align2::CENTER_CENTER));
+        }
     }
-    // Home button.
-    let home = Rect::from_center_size(area.left_top() + vec2(12.0, 10.0), vec2(18.0, 18.0));
-    let hovered_home = pointer.is_some_and(|p| home.contains(p));
-    if hovered_home {
-        painter.rect_filled(home, 2.0, style::hover());
+
+    // In a face view, arrows lead to the four neighbouring faces.
+    if faces.iter().any(|f| off.dot(f.0) > 0.9995) {
+        let fwd = -off;
+        let right = fwd.cross(cam.up().as_dvec3()).normalize_or(DVec3::X);
+        let up = right.cross(fwd);
+        for (w, sv) in [(up, vec2(0.0, -1.0)), (-up, vec2(0.0, 1.0)), (right, vec2(1.0, 0.0)), (-right, vec2(-1.0, 0.0))] {
+            let tip = center + sv * (s + 7.0);
+            let bc = center + sv * (s + 16.0);
+            let perp = vec2(-sv.y, sv.x) * 6.0;
+            let tri = [tip, bc + perp, bc - perp];
+            let lit = pointer.is_some_and(|p| point_in_tri(p, &tri));
+            painter.add(egui::Shape::convex_polygon(tri.to_vec(), if lit { highlight.gamma_multiply(alpha) } else { col(214, 218, 224) }, Stroke::new(1.0, col(112, 118, 128))));
+            if lit && clicked {
+                go = Some(axis_of(w));
+            }
+        }
     }
-    crate::icons::paint(painter, home.shrink(1.0), crate::icons::Icon::Home, true);
-    if hovered_home && clicked {
-        go_home(app, view_id);
+
+    // Home.
+    let home = Rect::from_center_size(area.left_top() + vec2(11.0, 10.0), vec2(18.0, 18.0));
+    let home_hot = pointer.is_some_and(|p| home.contains(p));
+    if active {
+        if home_hot {
+            painter.rect_filled(home, 2.0, style::hover());
+        }
+        crate::icons::paint(painter, home.shrink(1.0), crate::icons::Icon::Home, true);
+    }
+    if home_hot && clicked {
+        go_home(app, ui, view_id);
         return;
     }
-    if let Some(dir) = target_dir {
-        let dist = (cam.eye - cam.target).length();
-        // Straight down needs a tiny tilt so "up" stays well defined.
-        let d = if dir.z.abs() > 0.999 { DVec3::new(0.0, -0.0001, dir.z.signum()).normalize() } else { dir };
-        app.cams3d.insert(view_id, Camera { eye: cam.target + d * dist, ..cam });
+    let tip = if home_hot {
+        Some("Home")
+    } else if hot_letter.is_some() || ring_hot {
+        Some("Click a letter to look from that side; drag the ring to turn the view")
+    } else if hot.is_some() {
+        Some("Click to orient the view; drag to orbit")
+    } else {
+        None
+    };
+    let cube_resp = match tip {
+        Some(t) => cube_resp.on_hover_text(t),
+        None => cube_resp,
+    };
+    if let Some(dir) = go {
+        orient_to(app, ui, view_id, dir);
     }
+    cube_resp.context_menu(|ui| {
+        if ui.button("Go to Home").clicked() {
+            go_home(app, ui, view_id);
+            ui.close();
+        }
+        ui.separator();
+        let persp = cam.perspective;
+        for (label, want) in [("Orthographic", false), ("Perspective", true)] {
+            if ui.radio(persp == want, label).clicked() {
+                if persp != want {
+                    app.run(label, |p| {
+                        if let Some(ViewKind::ThreeD { perspective, .. }) = p.view_mut(view_id).map(|v| &mut v.kind) {
+                            *perspective = want;
+                        }
+                        Ok(())
+                    });
+                }
+                ui.close();
+            }
+        }
+        ui.separator();
+        if ui.button("Set Current View as Home").clicked() {
+            let here = camera_of(app, view_id);
+            app.home3d.insert(view_id, here);
+            ui.close();
+        }
+        ui.menu_button("Orient to a Direction", |ui| {
+            let dirs: [(&str, DVec3); 10] = [
+                ("Top", DVec3::Z),
+                ("Bottom", DVec3::NEG_Z),
+                ("Front", DVec3::NEG_Y),
+                ("Back", DVec3::Y),
+                ("Left", DVec3::NEG_X),
+                ("Right", DVec3::X),
+                ("Southeast Isometric", DVec3::new(1.0, -1.0, 1.0)),
+                ("Southwest Isometric", DVec3::new(-1.0, -1.0, 1.0)),
+                ("Northeast Isometric", DVec3::new(1.0, 1.0, 1.0)),
+                ("Northwest Isometric", DVec3::new(-1.0, 1.0, 1.0)),
+            ];
+            for (label, d) in dirs {
+                if ui.button(label).clicked() {
+                    orient_to(app, ui, view_id, d);
+                    ui.close();
+                }
+            }
+        });
+        if ui.button("Zoom To Fit").clicked() {
+            frame_all(app, view_id);
+            ui.close();
+        }
+    });
+}
+
+/// Turns the view to look from `dir` (towards the model), framing the selection, the section
+/// box or the model.
+fn orient_to(app: &mut App, ui: &egui::Ui, view_id: Id, dir: DVec3) {
+    let cam = camera_of(app, view_id);
+    let mut d = dir.normalize_or(HOME_DIR);
+    if d.z.abs() > 0.999 && DVec3::new(d.x, d.y, 0.0).length() < 1e-6 {
+        // Straight down (or up) keeps north at the top of the screen.
+        d = DVec3::new(0.0, -1e-4, d.z.signum()).normalize();
+    }
+    let b = selection_bounds(app, view_id).or_else(|| app.doc.data.view(view_id).and_then(|v| v.section_box)).or_else(|| app.model_bounds());
+    animate_to(app, ui, view_id, render3d::frame_bounds(b, d, cam.perspective));
+}
+
+fn selection_bounds(app: &App, view_id: Id) -> Option<(DVec3, DVec3)> {
+    let sel: HashSet<Id> = app.selection.iter().copied().collect();
+    if sel.is_empty() {
+        return None;
+    }
+    app.scenes.get(&view_id)?.meshes.iter().filter(|(id, _)| sel.contains(id)).filter_map(|(_, m)| m.bounds()).reduce(|(a0, a1), (b0, b1)| (a0.min(b0), a1.max(b1)))
+}
+
+/// The world axis nearest a direction.
+fn axis_of(v: DVec3) -> DVec3 {
+    let a = v.abs();
+    if a.x >= a.y && a.x >= a.z {
+        DVec3::X * v.x.signum()
+    } else if a.y >= a.z {
+        DVec3::Y * v.y.signum()
+    } else {
+        DVec3::Z * v.z.signum()
+    }
+}
+
+fn seg_dist(p: Pos2, a: Pos2, b: Pos2) -> f32 {
+    let ab = b - a;
+    let t = ((p - a).dot(ab) / ab.length_sq().max(1e-6)).clamp(0.0, 1.0);
+    p.distance(a + ab * t)
+}
+
+fn point_in_tri(p: Pos2, t: &[Pos2; 3]) -> bool {
+    let side = |a: Pos2, b: Pos2| (b.x - a.x) * (p.y - a.y) - (b.y - a.y) * (p.x - a.x);
+    let (d0, d1, d2) = (side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0]));
+    (d0 >= 0.0 && d1 >= 0.0 && d2 >= 0.0) || (d0 <= 0.0 && d1 <= 0.0 && d2 <= 0.0)
 }
 
 fn point_in_quad(p: Pos2, q: &[Pos2; 4]) -> bool {

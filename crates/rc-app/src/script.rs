@@ -1,6 +1,8 @@
 //! Scripted input for automated screenshots: `RC_INPUT` holds `;`-separated steps
 //! `FRAME ACTION ARGS`, e.g. `20 move 800 400; 22 click 800 400; 30 type 40; 32 key Enter`.
-//! Actions: move X Y, click X Y, text STRING (text input), drag X0 Y0 X1 Y1, rclick X Y, dblclick X Y, key NAME, type TEXT, scroll X Y DY.
+//! Actions: move X Y, click X Y, text STRING (text input), drag X0 Y0 X1 Y1, mdrag X0 Y0 X1 Y1
+//! (middle button), rclick X Y, dblclick X Y, mdblclick X Y, key NAME, type TEXT, scroll X Y DY,
+//! mods NONE|SHIFT|CTRL (held from that frame on).
 //! `RC_SHOT_FRAME` sets the frame of the screenshot (default 14).
 
 use eframe::egui::{self, Event, Key, Modifiers, PointerButton, pos2, vec2};
@@ -36,17 +38,30 @@ impl InputScript {
                     click(&mut events, f, PointerButton::Primary, num(2), num(3));
                     click(&mut events, f + 2, PointerButton::Primary, num(2), num(3));
                 }
-                "drag" => {
+                "drag" | "mdrag" => {
                     // drag X0 Y0 X1 Y1: press, move over 8 frames, release.
+                    let button = if parts[1] == "mdrag" { PointerButton::Middle } else { PointerButton::Primary };
                     let (a, b) = (pos2(num(2), num(3)), pos2(num(4), num(5)));
                     events.push((f, Event::PointerMoved(a)));
-                    events.push((f, Event::PointerButton { pos: a, button: PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }));
+                    events.push((f, Event::PointerButton { pos: a, button, pressed: true, modifiers: Modifiers::NONE }));
                     for k in 1..=8u32 {
                         let t = k as f32 / 8.0;
                         events.push((f + k, Event::PointerMoved(a + (b - a) * t)));
                     }
-                    events.push((f + 9, Event::PointerButton { pos: b, button: PointerButton::Primary, pressed: false, modifiers: Modifiers::NONE }));
+                    events.push((f + 9, Event::PointerButton { pos: b, button, pressed: false, modifiers: Modifiers::NONE }));
                 }
+                "mdblclick" => {
+                    click(&mut events, f, PointerButton::Middle, num(2), num(3));
+                    click(&mut events, f + 2, PointerButton::Middle, num(2), num(3));
+                }
+                "mods" => events.push((
+                    f,
+                    Event::ModifiersChanged(match parts.get(2).copied().unwrap_or("") {
+                        "SHIFT" => Modifiers::SHIFT,
+                        "CTRL" => Modifiers::CTRL | Modifiers::COMMAND,
+                        _ => Modifiers::NONE,
+                    }),
+                )),
                 "scroll" => {
                     events.push((f, Event::PointerMoved(pos2(num(2), num(3)))));
                     events.push((f, Event::MouseWheel { unit: egui::MouseWheelUnit::Line, delta: vec2(0.0, num(4)), modifiers: Modifiers::NONE, phase: egui::TouchPhase::Move }));

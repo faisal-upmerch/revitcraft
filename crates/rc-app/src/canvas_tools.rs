@@ -2183,7 +2183,15 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
             }
         }
         ToolKind::Split | ToolKind::SplitGap => {
-            let target = hover_of(app, view, d, c, xf, &|e| matches!(element_curve(e), Some(Seg::Line(..))));
+            // As in the reference app: walls, lines, beams and railings split; grids and
+            // reference planes do not. Walls win when several elements overlap.
+            let splittable = |e: &Element| matches!(element_curve(e), Some(Seg::Line(..))) && !matches!(e.kind, ElementKind::Grid(_) | ElementKind::RefPlane(_));
+            let cands = canvas::pick_candidates(app, view, d, c, xf.len(8.0));
+            let target = cands
+                .iter()
+                .copied()
+                .find(|id| app.el(*id).is_some_and(|e| matches!(e.kind, ElementKind::Wall(_)) && splittable(e)))
+                .or_else(|| cands.iter().copied().find(|id| app.el(*id).is_some_and(splittable)));
             if let Some(s) = target.and_then(|id| app.el(id).and_then(element_curve)) {
                 let (q, _) = geom::closest_on_segment(s.start(), s.end(), point.unwrap_or(c));
                 let dir = (s.end() - s.start()).normalize_or_zero();

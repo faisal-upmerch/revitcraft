@@ -254,6 +254,21 @@ const LBROWN: Color32 = Color32::from_rgb(226, 196, 160);
 const PURPLE: Color32 = Color32::from_rgb(132, 82, 176);
 const MAGENTA: Color32 = Color32::from_rgb(200, 40, 160);
 const CYAN: Color32 = Color32::from_rgb(0, 160, 170);
+// Shaded "solid" palette of the building tools: soft greys with blue accents.
+const OUTLINE: Color32 = Color32::from_rgb(104, 107, 112);
+const G0: Color32 = Color32::from_rgb(248, 248, 249);
+const G1: Color32 = Color32::from_rgb(226, 227, 230);
+const G2: Color32 = Color32::from_rgb(196, 198, 202);
+const G3: Color32 = Color32::from_rgb(160, 162, 168);
+const G4: Color32 = Color32::from_rgb(120, 123, 130);
+const SKY: Color32 = Color32::from_rgb(92, 166, 236);
+const LSKY: Color32 = Color32::from_rgb(170, 210, 246);
+
+fn mix(a: Color32, b: Color32, t: f32) -> Color32 {
+    let t = t.clamp(0.0, 1.0);
+    let f = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round() as u8;
+    Color32::from_rgb(f(a.r(), b.r()), f(a.g(), b.g()), f(a.b(), b.b()))
+}
 
 struct Pen<'a> {
     p: &'a Painter,
@@ -396,6 +411,66 @@ impl Pen<'_> {
         self.line_w(&[a, b], ORANGE, self.w * 1.8);
         self.dot(a, 0.035, self.ink);
     }
+    /// A convex face shaded from c0 at the top to c1 at the bottom (or left to right when
+    /// horizontal), with a soft outline.
+    fn shade(&self, pts: &[Pt], c0: Color32, c1: Color32, horizontal: bool) {
+        let v: Vec<Pos2> = pts.iter().map(|q| self.at(*q)).collect();
+        let key = |p: &Pos2| if horizontal { p.x } else { p.y };
+        let lo = v.iter().map(key).fold(f32::MAX, f32::min);
+        let hi = v.iter().map(key).fold(f32::MIN, f32::max);
+        let mut m = egui::Mesh::default();
+        for p in &v {
+            m.colored_vertex(*p, mix(c0, c1, (key(p) - lo) / (hi - lo).max(1e-3)));
+        }
+        for k in 1..v.len().saturating_sub(1) {
+            m.add_triangle(0, k as u32, k as u32 + 1);
+        }
+        self.p.add(m);
+        self.outline(&v);
+    }
+    /// Edges drawn one by one: sharp corners would otherwise grow long miter spikes.
+    fn outline(&self, v: &[Pos2]) {
+        for k in 0..v.len() {
+            self.p.line_segment([v[k], v[(k + 1) % v.len()]], self.thin(OUTLINE));
+        }
+    }
+    /// A curved band between two polylines, shaded along its length.
+    fn band(&self, top: &[Pt], bot: &[Pt], c0: Color32, c1: Color32) {
+        let n = top.len();
+        let mut m = egui::Mesh::default();
+        for k in 0..n {
+            let c = mix(c0, c1, k as f32 / (n - 1).max(1) as f32);
+            m.colored_vertex(self.at(top[k]), c);
+            m.colored_vertex(self.at(bot[k]), c);
+        }
+        for k in 0..n as u32 - 1 {
+            m.add_triangle(2 * k, 2 * k + 1, 2 * k + 2);
+            m.add_triangle(2 * k + 1, 2 * k + 3, 2 * k + 2);
+        }
+        self.p.add(m);
+        let mut outline: Vec<Pos2> = top.iter().map(|q| self.at(*q)).collect();
+        outline.extend(bot.iter().rev().map(|q| self.at(*q)));
+        self.outline(&outline);
+    }
+    /// An isometric box from its front bottom corner: w runs right-up, d left-up.
+    fn solid_box(&self, ox: f32, oy: f32, w: f32, d: f32, h: f32) {
+        let f = (ox, oy);
+        let r = (ox + w * 0.87, oy - w * 0.5);
+        let l = (ox - d * 0.87, oy - d * 0.5);
+        let back = (r.0 + l.0 - ox, r.1 + l.1 - oy);
+        let up = |p: Pt| (p.0, p.1 - h);
+        self.shade(&[l, f, up(f), up(l)], G1, G2, false);
+        self.shade(&[f, r, up(r), up(f)], G2, G3, false);
+        self.shade(&[up(f), up(r), up(back), up(l)], G0, G1, false);
+    }
+    fn ellipse_pts(&self, c: Pt, rx: f32, ry: f32, a0: f32, a1: f32, n: usize) -> Vec<Pt> {
+        (0..=n)
+            .map(|k| {
+                let a = a0 + (a1 - a0) * k as f32 / n as f32;
+                (c.0 + rx * a.cos(), c.1 + ry * a.sin())
+            })
+            .collect()
+    }
     fn star(&self, c: Pt, r: f32, col: Color32) {
         let pts: Vec<Pt> = (0..10)
             .map(|k| {
@@ -432,43 +507,76 @@ fn draw(g: &Pen, icon: Icon) {
             g.poly(&[(0.3, 0.1), (0.3, 0.8), (0.45, 0.64), (0.57, 0.9), (0.67, 0.85), (0.55, 0.6), (0.76, 0.6)], Color32::WHITE, ink);
         }
         Wall => {
-            g.poly(&[(0.12, 0.4), (0.62, 0.2), (0.62, 0.62), (0.12, 0.82)], LGREY, ink);
-            g.poly(&[(0.62, 0.2), (0.88, 0.32), (0.88, 0.74), (0.62, 0.62)], GREY, ink);
-            g.poly(&[(0.12, 0.4), (0.62, 0.2), (0.88, 0.32), (0.38, 0.52)], Color32::WHITE, ink);
+            // A gently curved wall: shaded face, lit top, darker end.
+            let n = 10;
+            let front: Vec<Pt> = (0..=n)
+                .map(|k| {
+                    let t = k as f32 / n as f32;
+                    (0.1 + 0.62 * t, 0.36 - 0.16 * t + 0.16 * t * (1.0 - t))
+                })
+                .collect();
+            let back: Vec<Pt> = front.iter().map(|p| (p.0 + 0.14, p.1 - 0.08)).collect();
+            let bottom: Vec<Pt> = front.iter().map(|p| (p.0, p.1 + 0.46)).collect();
+            g.band(&back, &front, G0, G1);
+            let (e, eb) = (front[n], back[n]);
+            g.shade(&[e, eb, (eb.0, eb.1 + 0.46), (e.0, e.1 + 0.46)], G3, G4, false);
+            g.band(&front, &bottom, G1, G3);
         }
         WallStructural => {
             draw(g, Wall);
             g.line_w(&[(0.2, 0.62), (0.52, 0.49)], BLUE, g.w * 1.6);
         }
         CurtainWall => {
-            g.rect(0.14, 0.14, 0.86, 0.86, LBLUE, ink);
-            for x in [0.38, 0.62] {
-                g.line(&[(x, 0.14), (x, 0.86)], ink);
+            // A curved glazed wall with a mullion grid.
+            let n = 12;
+            let curve = |t: f32| (0.1 + 0.8 * t, 0.26 - 0.08 * t + 0.2 * t * (1.0 - t));
+            let top: Vec<Pt> = (0..=n).map(|k| curve(k as f32 / n as f32)).collect();
+            let bot: Vec<Pt> = top.iter().map(|p| (p.0, p.1 + 0.56)).collect();
+            g.band(&top, &bot, LSKY, SKY);
+            for k in [3, 6, 9] {
+                g.thin_line(&[top[k], bot[k]], BLUE);
             }
-            g.line(&[(0.14, 0.5), (0.86, 0.5)], ink);
+            let mid: Vec<Pt> = top.iter().map(|p| (p.0, p.1 + 0.28)).collect();
+            g.thin_line(&mid, BLUE);
+            g.line(&top, BLUE);
+            g.line(&bot, BLUE);
         }
         Door => {
-            g.rect(0.22, 0.1, 0.78, 0.9, LBROWN, ink);
-            g.rect_thin(0.3, 0.2, 0.7, 0.46, BROWN, ink);
-            g.rect_thin(0.3, 0.52, 0.7, 0.82, BROWN, ink);
-            g.dot((0.68, 0.5), 0.035, ink);
+            // Frame, dark opening and a leaf swung towards the viewer.
+            g.shade(&[(0.24, 0.08), (0.74, 0.08), (0.74, 0.92), (0.24, 0.92)], G1, G2, false);
+            g.shade(&[(0.3, 0.14), (0.68, 0.14), (0.68, 0.92), (0.3, 0.92)], G3, G4, false);
+            g.shade(&[(0.3, 0.14), (0.54, 0.22), (0.54, 0.98), (0.3, 0.92)], G0, G2, true);
+            g.dot((0.5, 0.58), 0.03, G4);
         }
         Window => {
-            g.rect(0.14, 0.18, 0.86, 0.82, LBLUE, ink);
-            g.line(&[(0.5, 0.18), (0.5, 0.82)], ink);
-            g.line(&[(0.14, 0.5), (0.86, 0.5)], ink);
-            g.thin_line(&[(0.2, 0.42), (0.32, 0.26)], Color32::WHITE);
+            // Frame with four lights over a projecting sill.
+            g.shade(&[(0.16, 0.1), (0.84, 0.1), (0.84, 0.8), (0.16, 0.8)], G2, G3, false);
+            for (x0, x1) in [(0.23, 0.47), (0.53, 0.77)] {
+                for (y0, y1) in [(0.17, 0.42), (0.48, 0.74)] {
+                    g.shade(&[(x0, y0), (x1, y0), (x1, y1), (x0, y1)], G0, G1, false);
+                }
+            }
+            g.shade(&[(0.08, 0.8), (0.92, 0.8), (0.88, 0.9), (0.12, 0.9)], G1, G3, false);
         }
         Component => {
-            g.rect(0.14, 0.32, 0.86, 0.44, LBROWN, ink);
-            g.line(&[(0.22, 0.44), (0.22, 0.84)], ink);
-            g.line(&[(0.78, 0.44), (0.78, 0.84)], ink);
-            g.rect_thin(0.3, 0.12, 0.5, 0.32, LGREEN, ink);
+            // Two stacked blocks: a loadable "thing".
+            g.solid_box(0.5, 0.92, 0.42, 0.42, 0.26);
+            g.solid_box(0.6, 0.55, 0.22, 0.22, 0.3);
         }
         Column => {
-            g.rect(0.36, 0.2, 0.64, 0.84, LGREY, ink);
-            g.rect(0.28, 0.1, 0.72, 0.2, GREY, ink);
-            g.rect(0.28, 0.84, 0.72, 0.92, GREY, ink);
+            // A round column: shaft shaded across, lit top.
+            let (cx, rx, ry, y0, y1) = (0.5, 0.17, 0.06, 0.16, 0.86);
+            let xs: Vec<f32> = (0..=12).map(|k| cx - rx + 2.0 * rx * k as f32 / 12.0).collect();
+            let top: Vec<Pt> = xs.iter().map(|x| (*x, y0)).collect();
+            let bot: Vec<Pt> = xs
+                .iter()
+                .map(|x| {
+                    let u = (x - cx) / rx;
+                    (*x, y1 + ry * (1.0 - u * u).max(0.0).sqrt())
+                })
+                .collect();
+            g.band(&top, &bot, G1, G4);
+            g.shade(&g.ellipse_pts((cx, y0), rx, ry, 0.0, TAU, 24), G0, G1, false);
         }
         StructColumn => {
             g.rect(0.3, 0.1, 0.7, 0.18, BLUE, ink);
@@ -476,47 +584,107 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect(0.45, 0.18, 0.55, 0.82, BLUE, ink);
         }
         RoofFootprint => {
-            g.poly(&[(0.5, 0.16), (0.92, 0.56), (0.08, 0.56)], Color32::from_rgb(196, 90, 60), ink);
-            g.rect(0.2, 0.56, 0.8, 0.88, LGREY, ink);
-            g.dashed((0.08, 0.72), (0.92, 0.72), BLUE);
+            // A hip roof over its eaves.
+            let (a, b, c, d) = ((0.06, 0.6), (0.54, 0.84), (0.94, 0.62), (0.46, 0.38));
+            let (r1, r2) = ((0.36, 0.24), (0.62, 0.34));
+            let low = |p: Pt| (p.0, p.1 + 0.06);
+            g.shade(&[d, r1, r2, c], G2, G2, false);
+            g.shade(&[a, b, low(b), low(a)], G3, G4, false);
+            g.shade(&[b, c, low(c), low(b)], G4, G4, false);
+            g.shade(&[a, r1, d], G0, G1, false);
+            g.shade(&[a, b, r2, r1], G1, G2, false);
+            g.shade(&[b, c, r2], G2, G3, false);
         }
         RoofExtrusion => {
-            g.poly(&[(0.12, 0.6), (0.4, 0.22), (0.86, 0.36), (0.58, 0.74)], Color32::from_rgb(196, 90, 60), ink);
-            g.line(&[(0.12, 0.6), (0.12, 0.86), (0.58, 0.9), (0.58, 0.74)], ink);
+            // A gable roof: lit slope, shaded slope and fascia.
+            let (a, b, ridge0, c, d, ridge1) = ((0.08, 0.66), (0.4, 0.82), (0.24, 0.36), (0.92, 0.56), (0.6, 0.4), (0.76, 0.1));
+            let low = |p: Pt| (p.0, p.1 + 0.07);
+            g.shade(&[ridge0, ridge1, d, a], G0, G1, false);
+            g.shade(&[a, b, low(b), low(a)], G3, G4, false);
+            g.shade(&[ridge0, b, a], G1, G2, false);
+            g.shade(&[ridge0, ridge1, c, b], G1, G3, false);
+            g.shade(&[b, c, low(c), low(b)], G4, G4, false);
         }
         Ceiling => {
-            g.poly(&[(0.22, 0.2), (0.92, 0.2), (0.78, 0.42), (0.08, 0.42)], Color32::WHITE, ink);
-            for x in [0.32, 0.5, 0.68] {
-                g.thin_line(&[(x + 0.08, 0.2), (x - 0.06, 0.42)], GREY);
+            // A thin slab with a blue gridded patch and a light below.
+            let (a, b, c, d) = ((0.18, 0.2), (0.94, 0.2), (0.82, 0.5), (0.06, 0.5));
+            let low = |p: Pt| (p.0, p.1 + 0.06);
+            g.shade(&[d, c, low(c), low(d)], G2, G3, false);
+            g.shade(&[c, b, low(b), low(c)], G3, G3, false);
+            g.shade(&[a, b, c, d], G0, G1, false);
+            let p = |u: f32, v: f32| (a.0 + (b.0 - a.0) * u + (d.0 - a.0) * v, a.1 + (d.1 - a.1) * v);
+            g.shade(&[p(0.3, 0.3), p(0.9, 0.3), p(0.9, 0.9), p(0.3, 0.9)], LSKY, SKY, false);
+            for k in 1..4 {
+                let t = 0.3 + 0.6 * k as f32 / 4.0;
+                g.thin_line(&[p(t, 0.3), p(t, 0.9)], Color32::WHITE);
             }
-            g.line(&[(0.2, 0.86), (0.8, 0.86)], GREY);
-            g.thin_line(&[(0.5, 0.42), (0.5, 0.62)], GREY);
-            g.circle((0.5, 0.66), 0.05, YELLOW, ink);
+            g.thin_line(&[p(0.3, 0.6), p(0.9, 0.6)], Color32::WHITE);
+            g.thin_line(&[(0.5, 0.56), (0.5, 0.74)], G3);
+            g.circle((0.5, 0.79), 0.05, YELLOW, OUTLINE);
         }
         Floor => {
-            g.poly(&[(0.26, 0.36), (0.94, 0.36), (0.74, 0.64), (0.06, 0.64)], LBROWN, ink);
-            g.poly(&[(0.06, 0.64), (0.74, 0.64), (0.74, 0.74), (0.06, 0.74)], BROWN, ink);
-            g.poly(&[(0.74, 0.64), (0.94, 0.36), (0.94, 0.46), (0.74, 0.74)], BROWN, ink);
+            // A slab with a blue hatched patch on top.
+            let (a, b, c, d) = ((0.26, 0.34), (0.96, 0.34), (0.76, 0.64), (0.04, 0.64));
+            let low = |p: Pt| (p.0, p.1 + 0.1);
+            g.shade(&[d, c, low(c), low(d)], G2, G3, false);
+            g.shade(&[c, b, low(b), low(c)], G3, G4, false);
+            g.shade(&[a, b, c, d], G0, G1, false);
+            let p = |u: f32, v: f32| (a.0 + (b.0 - a.0) * u + (d.0 - a.0) * v, a.1 + (d.1 - a.1) * v);
+            g.shade(&[p(0.3, 0.35), p(0.85, 0.35), p(0.85, 0.85), p(0.3, 0.85)], LSKY, SKY, false);
+            for k in 0..4 {
+                let u = 0.36 + 0.13 * k as f32;
+                g.thin_line(&[p(u, 0.82), p(u + 0.1, 0.38)], Color32::WHITE);
+            }
         }
         FloorStructural => {
             draw(g, Floor);
             g.line_w(&[(0.12, 0.69), (0.7, 0.69)], BLUE, g.w * 1.6);
         }
         CurtainGrid => {
-            g.rect(0.14, 0.14, 0.86, 0.86, LBLUE, ink);
-            g.dashed((0.5, 0.1), (0.5, 0.9), RED);
-            g.line(&[(0.14, 0.5), (0.86, 0.5)], ink);
+            // A panel divided by blue grid lines.
+            g.shade(&[(0.14, 0.1), (0.86, 0.1), (0.86, 0.9), (0.14, 0.9)], G0, G1, false);
+            for x in [0.38, 0.62] {
+                g.line(&[(x, 0.1), (x, 0.9)], SKY);
+            }
+            g.line(&[(0.14, 0.5), (0.86, 0.5)], SKY);
+            g.closed(&[(0.14, 0.1), (0.86, 0.1), (0.86, 0.9), (0.14, 0.9)], BLUE);
         }
         Railing => {
-            g.line(&[(0.08, 0.28), (0.92, 0.28)], ink);
-            g.line(&[(0.08, 0.84), (0.92, 0.84)], ink);
-            for x in [0.14, 0.32, 0.5, 0.68, 0.86] {
-                g.line(&[(x, 0.28), (x, 0.84)], BROWN);
+            // Blue rails and balusters in slight perspective.
+            let top = |t: f32| (0.08 + 0.84 * t, 0.3 - 0.1 * t);
+            let bot = |t: f32| (0.08 + 0.84 * t, 0.84 - 0.1 * t);
+            for k in 0..=6 {
+                let t = k as f32 / 6.0;
+                g.line(&[top(t), bot(t)], SKY);
             }
+            g.line_w(&[top(0.0), top(1.0)], BLUE, g.w * 1.6);
+            g.line(&[bot(0.0), bot(1.0)], BLUE);
         }
         Stair => {
-            g.poly(&[(0.1, 0.88), (0.1, 0.72), (0.3, 0.72), (0.3, 0.56), (0.5, 0.56), (0.5, 0.4), (0.7, 0.4), (0.7, 0.24), (0.9, 0.24), (0.9, 0.88)], LGREY, ink);
-            g.line(&[(0.1, 0.88), (0.1, 0.72), (0.3, 0.72), (0.3, 0.56), (0.5, 0.56), (0.5, 0.4), (0.7, 0.4), (0.7, 0.24), (0.9, 0.24), (0.9, 0.88), (0.1, 0.88)], ink);
+            // Four steps: lit treads, light risers, shaded side.
+            let (dx, dy) = (0.14, -0.1);
+            let steps = 4;
+            let (x0, y0, run, rise) = (0.06, 0.9, 0.17, 0.16);
+            for k in 0..steps {
+                let x = x0 + run * k as f32;
+                let y = y0 - rise * (k + 1) as f32;
+                g.shade(&[(x, y + rise), (x, y), (x + dx, y + dy), (x + dx, y + rise + dy)], G1, G2, false);
+                g.shade(&[(x, y), (x + run, y), (x + run + dx, y + dy), (x + dx, y + dy)], G0, G0, false);
+            }
+            let xe = x0 + run * steps as f32;
+            let ye = y0 - rise * steps as f32;
+            g.shade(&[(xe, ye), (xe + dx, ye + dy), (xe + dx, y0 + dy), (xe, y0)], G3, G4, false);
+            // The side profile is concave: fill it as columns under each tread.
+            let mut side: Vec<Pt> = vec![(x0, y0)];
+            for k in 0..steps {
+                let x = x0 + run * k as f32;
+                let y = y0 - rise * (k + 1) as f32;
+                g.poly_fill(&[(x, y), (x + run, y), (x + run, y0), (x, y0)], mix(G2, G3, k as f32 / steps as f32));
+                side.push((x, y));
+                side.push((x + run, y));
+            }
+            side.push((xe, y0));
+            g.closed(&side, OUTLINE);
         }
         ModelLine => {
             g.line(&[(0.12, 0.8), (0.78, 0.2)], GREEN);

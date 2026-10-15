@@ -47,6 +47,8 @@ pub const GRID: Stroke = Stroke::new(0.13, [0, 0, 0], Dash::DashDot);
 pub const REFPLANE: Stroke = Stroke::new(0.13, [30, 140, 60], Dash::DashDot);
 pub const ANNO: Stroke = Stroke::new(0.18, [0, 0, 0], Dash::Solid);
 pub const HALFTONE: [u8; 3] = [165, 165, 165];
+/// Fill pattern lines: the thinnest pen, black.
+pub const PATTERN: Stroke = Stroke::new(0.1, [0, 0, 0], Dash::Solid);
 
 /// Stroke of a line style, with Manage > Additional Settings > Line Styles edits applied.
 pub fn line_style_stroke(p: &Project, s: LineStyle) -> Stroke {
@@ -342,7 +344,12 @@ pub fn hatch(poly: &[DVec2], angle: f64, spacing: f64) -> Vec<(DVec2, DVec2)> {
 pub fn pattern_lines(poly: &[DVec2], pattern: FillPattern, scale: f64) -> Vec<(DVec2, DVec2)> {
     let s = scale;
     match pattern {
-        FillPattern::Solid | FillPattern::Masking => vec![],
+        FillPattern::Solid | FillPattern::Masking | FillPattern::None => vec![],
+        FillPattern::Grid => {
+            let mut v = hatch(poly, 0.0, 1.2 * s);
+            v.extend(hatch(poly, std::f64::consts::FRAC_PI_2, 1.2 * s));
+            v
+        }
         FillPattern::Diagonal => hatch(poly, std::f64::consts::FRAC_PI_4, 1.5 * s),
         FillPattern::CrossHatch => {
             let mut v = hatch(poly, std::f64::consts::FRAC_PI_4, 1.5 * s);
@@ -350,17 +357,103 @@ pub fn pattern_lines(poly: &[DVec2], pattern: FillPattern, scale: f64) -> Vec<(D
             v
         }
         FillPattern::Brick => hatch(poly, std::f64::consts::FRAC_PI_4, 0.8 * s),
-        FillPattern::Concrete => {
-            let mut v = hatch(poly, 0.6, 2.4 * s);
-            v.extend(hatch(poly, 2.2, 3.1 * s));
-            v
-        }
+        FillPattern::Concrete => concrete_stipple(poly, s),
+        FillPattern::Sand => stipple(poly, s, 1.6, false, 2),
+        FillPattern::Earth => earth_lines(poly, s),
         FillPattern::Insulation => {
             let mut v = hatch(poly, 1.2, 1.0 * s);
             v.extend(hatch(poly, -1.2, 1.0 * s));
             v
         }
     }
+}
+
+/// The concrete aggregate pattern: small triangles and dots scattered in a repeating tile
+/// (paper sizes, so the pattern reads the same at any scale).
+pub fn concrete_stipple(poly: &[DVec2], scale: f64) -> Vec<(DVec2, DVec2)> {
+    stipple(poly, scale, 2.6, true, 3)
+}
+
+/// The earth pattern: blocks of three short lines alternating direction, at 45°.
+pub fn earth_lines(poly: &[DVec2], scale: f64) -> Vec<(DVec2, DVec2)> {
+    if poly.len() < 3 {
+        return vec![];
+    }
+    let (mn, mx) = geom::bounds(poly.iter().copied());
+    let cell = 2.4 * scale;
+    let (u, v) = (DVec2::new(1.0, 1.0).normalize(), DVec2::new(-1.0, 1.0).normalize());
+    // Cover the bounds in the rotated grid.
+    let corners = [mn, DVec2::new(mx.x, mn.y), mx, DVec2::new(mn.x, mx.y)];
+    let (u0, u1) = corners.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.dot(u)), b.max(q.dot(u))));
+    let (v0, v1) = corners.iter().fold((f64::MAX, f64::MIN), |(a, b), q| (a.min(q.dot(v)), b.max(q.dot(v))));
+    let (i0, i1, j0, j1) = ((u0 / cell).floor() as i64, (u1 / cell).ceil() as i64, (v0 / cell).floor() as i64, (v1 / cell).ceil() as i64);
+    if (i1 - i0) * (j1 - j0) > 40_000 {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    for i in i0..i1 {
+        for j in j0..j1 {
+            let base = u * (i as f64 * cell) + v * (j as f64 * cell);
+            let (along, across) = if (i + j) % 2 == 0 { (u, v) } else { (v, u) };
+            for k in 0..3 {
+                let off = cell * (0.2 + 0.3 * k as f64);
+                let a = base + across * off + along * (cell * 0.1);
+                let b = a + along * (cell * 0.8);
+                if geom::contains(poly, a) && geom::contains(poly, b) {
+                    out.push((a, b));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Scattered marks: per paper cell (mm) an optional small triangle and `dots` dots.
+pub fn stipple(poly: &[DVec2], scale: f64, cell_mm: f64, triangles: bool, dots: u64) -> Vec<(DVec2, DVec2)> {
+    if poly.len() < 3 {
+        return vec![];
+    }
+    let (mn, mx) = geom::bounds(poly.iter().copied());
+    let cell = cell_mm * scale;
+    let (nx, ny) = (((mx.x - mn.x) / cell).ceil() as i64, ((mx.y - mn.y) / cell).ceil() as i64);
+    if nx * ny > 40_000 {
+        return vec![];
+    }
+    // Deterministic per world cell, so neighbouring regions continue the same texture.
+    let hash = |i: i64, j: i64, k: u64| -> f64 {
+        let mut h = (i as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (j as u64).wrapping_mul(0xC2B2_AE3D_27D4_EB4F) ^ k.wrapping_mul(0x1656_67B1_9E37_79F9);
+        h ^= h >> 29;
+        h = h.wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        h ^= h >> 32;
+        (h % 10_000) as f64 / 10_000.0
+    };
+    let (i0, j0) = ((mn.x / cell).floor() as i64, (mn.y / cell).floor() as i64);
+    let mut out = Vec::new();
+    for i in i0..=i0 + nx {
+        for j in j0..=j0 + ny {
+            let base = DVec2::new(i as f64 * cell, j as f64 * cell);
+            // One small triangle per cell...
+            if triangles {
+                let c = base + DVec2::new(hash(i, j, 1), hash(i, j, 2)) * cell;
+                let r = (0.28 + 0.18 * hash(i, j, 3)) * scale;
+                let a0 = hash(i, j, 4) * std::f64::consts::TAU;
+                let tri: Vec<DVec2> = (0..3).map(|k| c + DVec2::from_angle(a0 + k as f64 * std::f64::consts::TAU / 3.0) * r).collect();
+                if tri.iter().all(|q| geom::contains(poly, *q)) {
+                    for k in 0..3 {
+                        out.push((tri[k], tri[(k + 1) % 3]));
+                    }
+                }
+            }
+            // ...and a few dots.
+            for k in 0..dots {
+                let q = base + DVec2::new(hash(i, j, 10 + k), hash(i, j, 20 + k)) * cell;
+                if geom::contains(poly, q) {
+                    out.push((q, q + DVec2::new(0.12 * scale, 0.0)));
+                }
+            }
+        }
+    }
+    out
 }
 
 struct Ctx<'a> {
@@ -577,11 +670,12 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         style_element(c, e, d, start);
     }
 
-    // Wall foundations below.
+    // Wall foundations below: only when the view depth reaches below the level (the
+    // default view range stops at the level, so footings are not drawn).
     for e in &p.elements {
         let ElementKind::WallFoundation(f) = &e.kind else { continue };
         let Some(w) = p.wall(f.wall) else { continue };
-        if !visible(e) || w.base_level != c.level {
+        if !visible(e) || w.base_level != c.level || c.bottom_z >= analysis::wall_base_z(p, w) - 1.0 {
             continue;
         }
         let width = p.sys_type(f.type_id).map(|t| t.prop("Width", 600.0)).unwrap_or(600.0) / 2.0;
@@ -911,11 +1005,32 @@ fn walls_graphics(c: &Ctx, d: &mut Drawing) {
 fn wall_layers(c: &Ctx, id: Id, w: &Wall, fp: &Footprint, d: &mut Drawing) {
     let p = c.p;
     let Some(t) = p.sys_type(w.type_id) else { return };
-    if t.layers.len() < 2 && c.view.detail != DetailLevel::Fine {
+    if t.layers.is_empty() {
         return;
     }
     let thick = t.thickness();
     let path = analysis::wall_path(w);
+    // Other cut walls this one runs into (T-junctions): layer lines and patterns stop at
+    // their faces, as joined walls clean up.
+    let own = fp.polygon();
+    let (omn, omx) = geom::bounds(own.iter().copied());
+    let others: Vec<Vec<DVec2>> = p
+        .walls()
+        .filter(|(e, ow)| e.id != id && analysis::wall_base_z(p, ow) <= c.cut_z && build3d::wall_top_extent(p, ow) >= c.cut_z && !analysis::is_curtain(p, ow))
+        .filter_map(|(e, _)| c.footprints.get(&e.id))
+        .map(|f| f.polygon())
+        .filter(|poly| {
+            let (mn, mx) = geom::bounds(poly.iter().copied());
+            mn.x <= omx.x && mx.x >= omn.x && mn.y <= omx.y && mx.y >= omn.y
+        })
+        // Only walls this one ends into; a wall running past keeps its own layers.
+        .filter(|poly| [path[0], path[path.len() - 1]].iter().any(|q| geom::contains(poly, *q)))
+        .collect();
+    let emit = |d: &mut Drawing, pts: Vec<DVec2>, stroke: Stroke| {
+        for piece in clip_outside(&pts, &others) {
+            d.line(Some(id), piece, false, stroke);
+        }
+    };
     let openings: Vec<(f64, f64)> = build3d::wall_openings(p, id, w)
         .into_iter()
         .filter(|(_, _, z0, z1)| *z0 <= c.cut_z && c.cut_z <= *z1)
@@ -944,47 +1059,118 @@ fn wall_layers(c: &Ctx, id: Id, w: &Wall, fp: &Footprint, d: &mut Drawing) {
     for &b in &bounds[1..bounds.len() - 1] {
         let pts = offset_line(b);
         for seg in split_by_openings(w, &pts, &openings) {
-            d.line(Some(id), seg, false, THIN);
+            emit(d, seg, THIN);
         }
     }
-    if c.view.detail == DetailLevel::Fine {
+    // Material cut patterns show at Medium and Fine (Coarse uses the type's coarse fill).
+    if c.view.detail != DetailLevel::Coarse {
         for (k, l) in t.layers.iter().enumerate() {
             let (outer, inner) = (offset_line(bounds[k]), offset_line(bounds[k + 1]));
             let mut poly = outer.clone();
             poly.extend(inner.iter().rev());
             let pattern = p.material(&l.material).map(|m| m.cut_pattern).unwrap_or_default();
+            if pattern == FillPattern::Solid {
+                d.fill(Some(id), &poly, [0, 0, 0, 255]);
+            }
             for (a, b) in pattern_lines(&poly, pattern, c.scale) {
-                // Skip hatch segments inside openings.
-                let mid = (a + b) / 2.0;
-                let (u, _) = analysis::wall_project(w, mid);
-                if openings.iter().any(|(u0, u1)| u > *u0 && u < *u1) {
-                    continue;
+                // Clipped exactly at the jambs of openings.
+                for seg in split_by_openings(w, &[a, b], &openings) {
+                    emit(d, seg, PATTERN);
                 }
-                d.line(Some(id), vec![a, b], false, Stroke::new(0.09, [80, 80, 80], Dash::Solid));
             }
         }
     }
 }
 
-fn split_by_openings(w: &Wall, pts: &[DVec2], openings: &[(f64, f64)]) -> Vec<Vec<DVec2>> {
-    if openings.is_empty() {
+/// The parts of a polyline outside every polygon.
+fn clip_outside(pts: &[DVec2], polys: &[Vec<DVec2>]) -> Vec<Vec<DVec2>> {
+    if polys.is_empty() {
         return vec![pts.to_vec()];
     }
+    let inside = |q: DVec2| polys.iter().any(|poly| geom::contains(poly, q));
     let mut out = Vec::new();
     let mut cur: Vec<DVec2> = Vec::new();
     for s in pts.windows(2) {
-        // Sample each segment finely enough to break at openings.
-        let steps = ((s[0].distance(s[1]) / 50.0).ceil() as usize).max(1);
-        for k in 0..=steps {
-            let q = s[0].lerp(s[1], k as f64 / steps as f64);
-            let (u, _) = analysis::wall_project(w, q);
-            if openings.iter().any(|(u0, u1)| u > *u0 + 1.0 && u < *u1 - 1.0) {
+        let (a, b) = (s[0], s[1]);
+        let mut ts = vec![0.0, 1.0];
+        for poly in polys {
+            for k in 0..poly.len() {
+                if let Some((t, _)) = geom::segment_intersection(a, b, poly[k], poly[(k + 1) % poly.len()]) {
+                    ts.push(t);
+                }
+            }
+        }
+        ts.sort_by(f64::total_cmp);
+        for w in ts.windows(2) {
+            if w[1] - w[0] < 1e-9 {
+                continue;
+            }
+            let (p0, p1) = (a.lerp(b, w[0]), a.lerp(b, w[1]));
+            if inside((p0 + p1) / 2.0) {
                 if cur.len() >= 2 {
                     out.push(std::mem::take(&mut cur));
                 }
                 cur.clear();
             } else {
-                cur.push(q);
+                if cur.last().is_none_or(|q| q.distance(p0) > 1e-6) {
+                    if cur.len() >= 2 {
+                        out.push(std::mem::take(&mut cur));
+                    }
+                    cur = vec![p0];
+                }
+                cur.push(p1);
+            }
+        }
+    }
+    if cur.len() >= 2 {
+        out.push(cur);
+    }
+    out
+}
+
+/// Breaks a line running along a wall where openings cut it, exactly at the jambs (the
+/// position along the wall varies linearly over each segment).
+fn split_by_openings(w: &Wall, pts: &[DVec2], openings: &[(f64, f64)]) -> Vec<Vec<DVec2>> {
+    if openings.is_empty() {
+        return vec![pts.to_vec()];
+    }
+    let inside = |u: f64| openings.iter().any(|(u0, u1)| u > *u0 + 0.5 && u < *u1 - 0.5);
+    let mut out = Vec::new();
+    let mut cur: Vec<DVec2> = Vec::new();
+    for s in pts.windows(2) {
+        let (ua, ub) = (analysis::wall_project(w, s[0]).0, analysis::wall_project(w, s[1]).0);
+        // Parameters along the segment where it enters or leaves an opening.
+        let mut ts = vec![0.0, 1.0];
+        if (ub - ua).abs() > 1e-9 {
+            for (u0, u1) in openings {
+                for u in [*u0, *u1] {
+                    let t = (u - ua) / (ub - ua);
+                    if t > 0.0 && t < 1.0 {
+                        ts.push(t);
+                    }
+                }
+            }
+        }
+        ts.sort_by(f64::total_cmp);
+        for k in 0..ts.len() - 1 {
+            let (t0, t1) = (ts[k], ts[k + 1]);
+            if t1 - t0 < 1e-9 {
+                continue;
+            }
+            let (p0, p1) = (s[0].lerp(s[1], t0), s[0].lerp(s[1], t1));
+            if inside(ua + (ub - ua) * (t0 + t1) / 2.0) {
+                if cur.len() >= 2 {
+                    out.push(std::mem::take(&mut cur));
+                }
+                cur.clear();
+            } else {
+                if cur.last().is_none_or(|q| q.distance(p0) > 1e-6) {
+                    if cur.len() >= 2 {
+                        out.push(std::mem::take(&mut cur));
+                    }
+                    cur = vec![p0];
+                }
+                cur.push(p1);
             }
         }
     }

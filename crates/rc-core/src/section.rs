@@ -259,9 +259,9 @@ fn clip_front(t: [(DVec2, f64); 3]) -> Vec<[(DVec2, f64); 3]> {
 }
 
 /// Section cut segments of a mesh at depth 0 (view space).
-fn cut_segments(set: &MeshSet, f: &ViewFrame) -> Vec<(DVec2, DVec2)> {
+fn mesh_cut_segments(m: &crate::mesh::Mesh, f: &ViewFrame) -> Vec<(DVec2, DVec2)> {
     let mut out = Vec::new();
-    for m in set.by_material.values() {
+    {
         for tri in m.indices.chunks(3) {
             let v: Vec<(DVec2, f64)> = tri.iter().map(|k| f.to_view(m.positions[*k as usize])).collect();
             let mut pts = Vec::new();
@@ -304,6 +304,121 @@ fn chain(mut segs: Vec<(DVec2, DVec2)>) -> Vec<Vec<DVec2>> {
     loops
 }
 
+/// Depth at a view point inside a view-space triangle (plane through its corners).
+fn bary_depth(t: &[(DVec2, f64); 3], q: DVec2) -> Option<f64> {
+    let (a, b, c) = (t[0].0, t[1].0, t[2].0);
+    let den = (b.y - c.y) * (a.x - c.x) + (c.x - b.x) * (a.y - c.y);
+    if den.abs() < 1e-9 {
+        return None;
+    }
+    let l0 = ((b.y - c.y) * (q.x - c.x) + (c.x - b.x) * (q.y - c.y)) / den;
+    let l1 = ((c.y - a.y) * (q.x - c.x) + (a.x - c.x) * (q.y - c.y)) / den;
+    Some(l0 * t[0].1 + l1 * t[1].1 + (1.0 - l0 - l1) * t[2].1)
+}
+
+/// The parameter interval where the line o + t·d crosses a triangle (2D, convex).
+fn line_in_tri(o: DVec2, d: DVec2, t: &[DVec2; 3]) -> Option<(f64, f64)> {
+    let (mut lo, mut hi) = (f64::MIN, f64::MAX);
+    let ccw = (t[1] - t[0]).perp_dot(t[2] - t[0]) > 0.0;
+    for k in 0..3 {
+        let (a, b) = (t[k], t[(k + 1) % 3]);
+        let e = b - a;
+        // Inside: cross(e, p - a) >= 0 for a CCW triangle.
+        let s = if ccw { 1.0 } else { -1.0 };
+        let c0 = s * e.perp_dot(o - a);
+        let c1 = s * e.perp_dot(d);
+        if c1.abs() < 1e-12 {
+            if c0 < 0.0 {
+                return None;
+            }
+            continue;
+        }
+        let tt = -c0 / c1;
+        if c1 > 0.0 {
+            lo = lo.max(tt);
+        } else {
+            hi = hi.min(tt);
+        }
+    }
+    (hi - lo > 1e-6).then_some((lo, hi))
+}
+
+/// Running-bond coursing on a vertical face: horizontal bed joints every `course`, head
+/// joints every `unit`, offset by half a unit on alternate courses. Model units, aligned to
+/// the world so neighbouring faces line up.
+fn coursing(w: &[DVec3; 3], n: DVec3, course: f64, unit: f64) -> Vec<(DVec3, DVec3)> {
+    if n.z.abs() > 0.05 {
+        return vec![];
+    }
+    let h = DVec3::Z.cross(n).normalize_or_zero();
+    if h == DVec3::ZERO {
+        return vec![];
+    }
+    let t2 = [DVec2::new(w[0].dot(h), w[0].z), DVec2::new(w[1].dot(h), w[1].z), DVec2::new(w[2].dot(h), w[2].z)];
+    let at = |q: DVec2| w[0] + h * (q.x - t2[0].x) + DVec3::Z * (q.y - t2[0].y);
+    let (smin, smax) = (t2.iter().map(|q| q.x).fold(f64::MAX, f64::min), t2.iter().map(|q| q.x).fold(f64::MIN, f64::max));
+    let (zmin, zmax) = (t2.iter().map(|q| q.y).fold(f64::MAX, f64::min), t2.iter().map(|q| q.y).fold(f64::MIN, f64::max));
+    if (zmax - zmin) / course * (smax - smin) / unit > 200_000.0 {
+        return vec![];
+    }
+    let mut out = Vec::new();
+    let k0 = (zmin / course).floor() as i64;
+    let k1 = (zmax / course).ceil() as i64;
+    for k in k0..=k1 {
+        let z = k as f64 * course;
+        if z > zmin + 0.5 && z < zmax - 0.5 {
+            if let Some((a, b)) = line_in_tri(DVec2::new(0.0, z), DVec2::X, &t2) {
+                out.push((at(DVec2::new(a, z)), at(DVec2::new(b, z))));
+            }
+        }
+        // Head joints in the course above this bed joint.
+        let shift = if k.rem_euclid(2) == 0 { 0.0 } else { unit / 2.0 };
+        let j0 = ((smin - shift) / unit).floor() as i64;
+        let j1 = ((smax - shift) / unit).ceil() as i64;
+        for j in j0..=j1 {
+            let s = j as f64 * unit + shift;
+            if let Some((a, b)) = line_in_tri(DVec2::new(s, 0.0), DVec2::Y, &t2) {
+                let (a, b) = (a.max(z), b.min(z + course));
+                if b - a > 0.5 {
+                    out.push((at(DVec2::new(s, a)), at(DVec2::new(s, b))));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// The visible parts of a view-space segment (depth-buffer test), honouring the cut plane and
+/// the far clip.
+fn visible_runs(zb: &ZBuf, f: &ViewFrame, va: DVec2, da: f64, vb: DVec2, db: f64) -> Vec<(DVec2, DVec2)> {
+    let mut out = Vec::new();
+    let steps = ((va.distance(vb) / (zb.px * 0.7)).ceil() as usize).clamp(1, 4000);
+    let mut run: Option<(DVec2, DVec2)> = None;
+    for s in 0..=steps {
+        let t = s as f64 / steps as f64;
+        let q = va.lerp(vb, t);
+        let dep = da + (db - da) * t;
+        let ok = (!f.cuts || dep >= -1.0) && f.far.is_none_or(|far| dep <= far) && zb.visible(q, dep);
+        match (&mut run, ok) {
+            (Some(r), true) => r.1 = q,
+            (None, true) => run = Some((q, q)),
+            (Some(r), false) => {
+                if r.0.distance(r.1) > 1e-6 {
+                    out.push(*r);
+                }
+                run = None;
+            }
+            (None, false) => {}
+        }
+    }
+    if let Some(r) = run {
+        if r.0.distance(r.1) > 1e-6 {
+            out.push(r);
+        }
+    }
+    out
+}
+
 /// Feature edges of a mesh in world space.
 fn feature_edges(set: &MeshSet) -> Vec<(DVec3, DVec3)> {
     let q = |v: DVec3| ((v.x * 2.0).round() as i64, (v.y * 2.0).round() as i64, (v.z * 2.0).round() as i64);
@@ -334,6 +449,9 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
     // Gather geometry in view space.
     struct Item {
         id: Id,
+        /// Every face, for section cuts (each layer is a closed solid).
+        full: MeshSet,
+        /// The outer surface, for hidden-line edges, depth and surface patterns.
         set: MeshSet,
         status: analysis::PhaseStatus,
     }
@@ -356,7 +474,7 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
                 continue;
             }
         }
-        items.push(Item { id: e.id, set, status: analysis::phase_status(p, view, e) });
+        items.push(Item { id: e.id, set: set.without_internal_faces(), full: set, status: analysis::phase_status(p, view, e) });
     }
     // View-space triangles (behind the cut plane).
     let mut tris: Vec<(Id, [(DVec2, f64); 3], [u8; 4])> = Vec::new();
@@ -456,13 +574,77 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
         }
     }
 
-    // Cut poché and heavy outlines at the section plane. Joined elements share one outline.
+    // Material surface patterns on the faces seen (brick and block coursing, sand).
+    for it in &items {
+        for (mat, m) in &it.set.by_material {
+            let sp = p.material(mat).map(|m| m.surface_pattern).unwrap_or_default();
+            if sp == SurfacePattern::None {
+                continue;
+            }
+            for tri in m.indices.chunks(3) {
+                let w = [m.positions[tri[0] as usize], m.positions[tri[1] as usize], m.positions[tri[2] as usize]];
+                let n = (w[1] - w[0]).cross(w[2] - w[0]).normalize_or_zero();
+                // Faces turned towards the viewer only.
+                if n.dot(-f.look) < 0.15 {
+                    continue;
+                }
+                let segs: Vec<(DVec3, DVec3)> = match sp {
+                    SurfacePattern::Brick => coursing(&w, n, 75.0, 225.0),
+                    SurfacePattern::Block => coursing(&w, n, 200.0, 400.0),
+                    SurfacePattern::Sand => {
+                        let v = [f.to_view(w[0]), f.to_view(w[1]), f.to_view(w[2])];
+                        let poly = [v[0].0, v[1].0, v[2].0];
+                        plan::stipple(&poly, view.scale, 1.6, false, 2)
+                            .into_iter()
+                            .filter_map(|(a, b)| Some((f.to_world(a, bary_depth(&v, a)?), f.to_world(b, bary_depth(&v, b)?))))
+                            .collect()
+                    }
+                    SurfacePattern::None => vec![],
+                };
+                for (a, b) in segs {
+                    let (va, da) = f.to_view(a);
+                    let (vb, db) = f.to_view(b);
+                    for (p0, p1) in visible_runs(&zb, &f, va, da, vb, db) {
+                        d.line(Some(it.id), vec![p0, p1], false, plan::PATTERN);
+                    }
+                }
+            }
+        }
+    }
+
+    // Cut elements at the section plane: at Medium and Fine each layer shows its material's
+    // cut pattern with thin lines between layers; Coarse cuts are hollow (no coarse fill
+    // pattern in the default types). Heavy outlines go round each element, or round a whole
+    // group of joined elements.
     if f.cuts {
-        let fill_of = |id: Id| match p.element(id).map(|e| e.category()) {
-            Some(Category::Walls | Category::Floors | Category::Roofs | Category::Stairs | Category::StructuralFraming | Category::StructuralColumns | Category::Columns | Category::StructuralFoundations) => [60, 60, 60, 255],
-            _ => [140, 140, 140, 255],
+        let detailed = view.detail != DetailLevel::Coarse;
+        let host = |id: Id| {
+            matches!(
+                p.element(id).map(|e| e.category()),
+                Some(Category::Walls | Category::Floors | Category::Roofs | Category::Ceilings | Category::Stairs | Category::StructuralFraming | Category::StructuralColumns | Category::Columns | Category::StructuralFoundations | Category::Toposolid)
+            )
         };
-        let cuts: Vec<(Id, Vec<Vec<DVec2>>)> = items.iter().map(|it| (it.id, chain(cut_segments(&it.set, &f)))).filter(|c| !c.1.is_empty()).collect();
+        for it in &items {
+            for (mat, m) in &it.full.by_material {
+                let loops = chain(mesh_cut_segments(m, &f));
+                let pattern = if detailed && host(it.id) { p.material(mat).map(|m| m.cut_pattern).unwrap_or_default() } else { FillPattern::Solid };
+                for lp in loops.iter().filter(|lp| lp.len() >= 3) {
+                    // Opaque, so edges beyond never show through the cut.
+                    d.fill(Some(it.id), lp, if pattern == FillPattern::Solid { [0, 0, 0, 255] } else { [255, 255, 255, 255] });
+                    for (a, b) in plan::pattern_lines(lp, pattern, view.scale) {
+                        d.line(Some(it.id), vec![a, b], false, plan::PATTERN);
+                    }
+                    if detailed {
+                        d.line(Some(it.id), lp.clone(), true, plan::THIN);
+                    }
+                }
+            }
+        }
+        let cuts: Vec<(Id, Vec<Vec<DVec2>>)> = items
+            .iter()
+            .map(|it| (it.id, it.full.by_material.values().flat_map(|m| chain(mesh_cut_segments(m, &f))).collect::<Vec<_>>()))
+            .filter(|c| !c.1.is_empty())
+            .collect();
         // Groups of joined elements (union-find over the join pairs).
         let mut group: Vec<usize> = (0..cuts.len()).collect();
         fn root(g: &mut Vec<usize>, k: usize) -> usize {
@@ -489,20 +671,12 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
             for m in &members {
                 done[*m] = true;
             }
-            if members.len() == 1 {
-                let (id, loops) = &cuts[k];
-                for lp in loops {
-                    d.fill(Some(*id), lp, fill_of(*id));
-                    d.line(Some(*id), lp.clone(), true, plan::HEAVY);
-                }
-                continue;
-            }
-            // Fill each member, then outline the union so no line runs between them.
+            // Outline the union of the members' layers so no heavy line runs between layers
+            // or between joined elements.
             let mut union: Option<geo::MultiPolygon<f64>> = None;
             for m in &members {
-                let (id, loops) = &cuts[*m];
-                for lp in loops {
-                    d.fill(Some(*id), lp, fill_of(*id));
+                let (_, loops) = &cuts[*m];
+                for lp in loops.iter().filter(|lp| lp.len() >= 3) {
                     let poly = geo::MultiPolygon::new(vec![geo::Polygon::new(geo::LineString::from(lp.iter().map(|q| geo::Coord { x: q.x, y: q.y }).collect::<Vec<_>>()), vec![])]);
                     union = Some(match union {
                         None => poly,
@@ -627,8 +801,11 @@ mod tests {
         let mut v = View::new(0, "S", 100.0, ViewKind::Section { start: DVec2::new(-2000.0, 3000.0), end: DVec2::new(14000.0, 3000.0), depth: 20000.0, z_min: -1000.0, z_max: 9000.0 });
         v.style = VisualStyle::HiddenLine;
         let d = drawing(&p, &v, &fp);
-        let fills = d.prims.iter().filter(|(_, pr)| matches!(pr, Prim::Fill { color, .. } if color[0] == 60)).count();
+        // Cut regions are opaque white with material patterns at Medium detail.
+        let fills = d.prims.iter().filter(|(_, pr)| matches!(pr, Prim::Fill { color, .. } if *color == [255, 255, 255, 255])).count();
         assert!(fills >= 3, "expected cut walls and slab, got {fills}");
+        let pattern = d.prims.iter().filter(|(_, pr)| matches!(pr, Prim::Line { stroke, .. } if *stroke == plan::PATTERN)).count();
+        assert!(pattern > 20, "expected cut patterns, got {pattern}");
         let lines = d.prims.iter().filter(|(_, pr)| matches!(pr, Prim::Line { .. })).count();
         assert!(lines > 50, "{lines}");
         let e = View::new(0, "N", 100.0, ViewKind::Elevation { dir: ElevationDir::North });

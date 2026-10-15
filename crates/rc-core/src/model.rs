@@ -1102,27 +1102,43 @@ pub enum FillPattern {
     Concrete,
     Insulation,
     Masking,
+    /// Sand / gypsum plaster stipple.
+    Sand,
+    /// Earth: alternating groups of short lines.
+    Earth,
+    /// No pattern (materials such as glass, metal and timber cut without hatching).
+    None,
+    /// Orthogonal crosshatch (rigid insulation).
+    Grid,
 }
 
 impl FillPattern {
-    pub const ALL: [FillPattern; 7] = [
+    pub const ALL: [FillPattern; 11] = [
+        FillPattern::None,
         FillPattern::Solid,
         FillPattern::Diagonal,
         FillPattern::CrossHatch,
+        FillPattern::Grid,
         FillPattern::Brick,
         FillPattern::Concrete,
         FillPattern::Insulation,
+        FillPattern::Sand,
+        FillPattern::Earth,
         FillPattern::Masking,
     ];
     pub fn label(self) -> &'static str {
         match self {
+            FillPattern::None => "<none>",
+            FillPattern::Grid => "Crosshatch",
             FillPattern::Solid => "Solid fill",
             FillPattern::Diagonal => "Diagonal up",
-            FillPattern::CrossHatch => "Crosshatch",
+            FillPattern::CrossHatch => "Diagonal crosshatch",
             FillPattern::Brick => "Brick",
             FillPattern::Concrete => "Concrete",
             FillPattern::Insulation => "Insulation (batt)",
             FillPattern::Masking => "Masking region",
+            FillPattern::Sand => "Sand",
+            FillPattern::Earth => "Earth",
         }
     }
 }
@@ -1239,14 +1255,42 @@ pub struct Material {
     pub opacity: f64,
     #[serde(default)]
     pub class: String,
-    /// Cut pattern drawn in plans and sections at fine detail.
+    /// Cut pattern drawn in plans and sections at medium and fine detail.
     #[serde(default)]
     pub cut_pattern: FillPattern,
+    /// Surface (model) pattern drawn on faces in elevations and sections.
+    #[serde(default)]
+    pub surface_pattern: SurfacePattern,
     /// Shininess 0..1 for the realistic style.
     #[serde(default)]
     pub shininess: f64,
     #[serde(default)]
     pub keynote: String,
+}
+
+/// Model patterns drawn on surfaces, in model units (they scale with the model).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SurfacePattern {
+    #[default]
+    None,
+    /// Running bond, 75 mm courses, 225 mm bricks.
+    Brick,
+    /// Running bond, 200 mm courses, 400 mm blocks.
+    Block,
+    /// Sand stipple (a drafting pattern, constant on paper).
+    Sand,
+}
+
+impl SurfacePattern {
+    pub const ALL: [SurfacePattern; 4] = [SurfacePattern::None, SurfacePattern::Brick, SurfacePattern::Block, SurfacePattern::Sand];
+    pub fn label(self) -> &'static str {
+        match self {
+            SurfacePattern::None => "<none>",
+            SurfacePattern::Brick => "Brick",
+            SurfacePattern::Block => "Block 200x400",
+            SurfacePattern::Sand => "Sand",
+        }
+    }
 }
 
 /// One row of the keynote table.
@@ -2460,7 +2504,7 @@ pub struct ObjectStyle {
 impl Project {
     pub fn empty() -> Project {
         Project {
-            format: 2,
+            format: 3,
             next_id: 1,
             info: ProjectInfo::default(),
             materials: Vec::new(),
@@ -2669,6 +2713,15 @@ impl Project {
             ElementKind::RefPlane(r) => format!("Reference Plane {}", r.name),
             _ if self.type_of(e).is_none() => e.category().singular().to_string(),
             _ => format!("{}: {}", self.family_name_of(e), self.type_name_of(e)),
+        }
+    }
+
+    /// Index of the phase an element was created in. Elements without one belong to the
+    /// newest phase (New Construction), as elements placed in a view take that view's phase.
+    pub fn created_phase_index(&self, e: &Element) -> usize {
+        match e.phase_created {
+            None => self.phases.len().saturating_sub(1),
+            id => self.phase_index(id),
         }
     }
 

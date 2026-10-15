@@ -515,7 +515,7 @@ fn yn(b: bool) -> Option<Value> {
 fn phase_name(p: &Project, id: Option<Id>, none: &str) -> String {
     match id {
         Some(id) => p.phases.iter().find(|ph| ph.id == id).map(|ph| ph.name.clone()).unwrap_or_default(),
-        None if none.is_empty() => p.phases.first().map(|ph| ph.name.clone()).unwrap_or_default(),
+        None if none.is_empty() => p.phases.last().map(|ph| ph.name.clone()).unwrap_or_default(),
         None => none.to_string(),
     }
 }
@@ -928,7 +928,7 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
         "Phase Demolished" => {
             let ph = if t() == "None" { None } else { phase_by_name(p, &t()) };
             if let Some(dm) = ph {
-                if p.phase_index(Some(dm)) < p.phase_index(e.phase_created) {
+                if p.phase_index(Some(dm)) < p.created_phase_index(&e) {
                     return Err("An element cannot be demolished before it is created.".into());
                 }
             }

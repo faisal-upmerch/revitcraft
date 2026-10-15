@@ -288,11 +288,9 @@ fn build_segment(s: &SegCtx, layers: &[Layer], zb: f64, zt: f64, openings: &[Ope
     for layer in layers {
         let o0 = o1 - layer.thickness;
         let m = set.mesh(&layer.material);
-        // Exterior and interior faces with rectangular holes.
-        for (o, normal, outer) in [(o1, n3, (o1 - t / 2.0).abs() < 1e-6), (o0, -n3, (o0 + t / 2.0).abs() < 1e-6)] {
-            if !outer {
-                continue;
-            }
+        // Both faces of every layer (with rectangular holes), so each layer is a closed solid:
+        // section cuts then show every layer as its own region with its material's pattern.
+        for (o, normal) in [(o1, n3), (o0, -n3)] {
             let u_start = if s.first { s.along(s.start_at(o)) } else { seg0 };
             let u_end = if s.last { s.along(s.end_at(o)) } else { seg1 };
             let mut us = vec![u_start, u_end];

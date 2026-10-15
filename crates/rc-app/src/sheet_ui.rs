@@ -33,7 +33,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             cam.center += before - xf2.w(h);
         }
     }
-    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) {
+    if resp.dragged_by(egui::PointerButton::Middle) {
         let d = resp.drag_delta();
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
     }

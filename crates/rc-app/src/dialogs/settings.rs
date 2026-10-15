@@ -181,6 +181,13 @@ fn materials(app: &mut App, ctx: &egui::Context) {
                         }
                     });
                     ui.end_row();
+                    ui.label("Surface pattern");
+                    egui::ComboBox::from_id_salt("mat-surface").selected_text(mm.surface_pattern.label()).show_ui(ui, |ui| {
+                        for f in SurfacePattern::ALL {
+                            ui.selectable_value(&mut mm.surface_pattern, f, f.label());
+                        }
+                    });
+                    ui.end_row();
                     ui.label(egui::RichText::new("Appearance").strong());
                     ui.end_row();
                     ui.label("Glossiness");

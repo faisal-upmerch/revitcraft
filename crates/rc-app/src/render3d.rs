@@ -188,8 +188,15 @@ pub struct Camera {
 
 impl Camera {
     pub fn up(&self) -> Vec3 {
-        let dir = (self.target - self.eye).normalize_or(DVec3::Y).as_vec3();
-        if dir.z.abs() > 0.999 { Vec3::Y } else { Vec3::Z }
+        let dir = (self.target - self.eye).normalize_or(DVec3::Y);
+        if dir.z.abs() > 0.999 {
+            // Looking straight down or up: the screen's up follows the view's heading, so a
+            // plan-like view keeps the rotation it was orbited to.
+            let h = DVec3::new(dir.x, dir.y, 0.0);
+            if h.length() > 1e-12 { h.normalize().as_vec3() } else { Vec3::Y }
+        } else {
+            Vec3::Z
+        }
     }
 
     pub fn view_matrix(&self) -> Mat4 {
@@ -862,8 +869,23 @@ pub fn frame_bounds(bounds: Option<(DVec3, DVec3)>, dir: DVec3, perspective: boo
     let (mn, mx) = bounds.unwrap_or((DVec3::ZERO, DVec3::new(10000.0, 8000.0, 6000.0)));
     let c = (mn + mx) / 2.0;
     let r = (mx - mn).length().max(3000.0);
-    let dir = dir.normalize_or(DVec3::new(-0.6, -0.9, 0.55));
-    Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 0.9 }
+    let dir = dir.normalize_or(DVec3::new(1.0, -1.0, 1.0));
+    let mut cam = Camera { eye: c + dir * r * 1.25, target: c, perspective, ortho_height: r * 0.9 };
+    if !perspective {
+        // Fit the box's projected extents with a small margin, as Zoom To Fit does. The eye
+        // distance follows the visible height so saved views reopen at the same zoom.
+        let m = cam.view_matrix();
+        let (mut w, mut h) = (0f64, 0f64);
+        for k in 0..8 {
+            let p = DVec3::new(if k & 1 == 0 { mn.x } else { mx.x }, if k & 2 == 0 { mn.y } else { mx.y }, if k & 4 == 0 { mn.z } else { mx.z });
+            let v = m.transform_vector3(((p - c) * 0.001).as_vec3());
+            w = w.max(v.x.abs() as f64 * 2000.0);
+            h = h.max(v.y.abs() as f64 * 2000.0);
+        }
+        cam.ortho_height = (h.max(w / 1.6) * 1.12).max(1000.0);
+        cam.eye = c + dir * (cam.ortho_height / 0.8);
+    }
+    cam
 }
 
 /// Sun direction (towards the sun) from azimuth (clockwise from north) and altitude in degrees.

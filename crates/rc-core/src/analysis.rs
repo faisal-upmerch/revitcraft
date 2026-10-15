@@ -683,7 +683,7 @@ pub fn phase_status(p: &Project, view: &View, e: &Element) -> PhaseStatus {
         return PhaseStatus::New;
     }
     let vp = p.phase_index(view.phase.or_else(|| p.phases.last().map(|x| x.id)));
-    let created = p.phase_index(e.phase_created);
+    let created = p.created_phase_index(e);
     if created > vp {
         return PhaseStatus::Future;
     }

@@ -5,7 +5,7 @@ use std::path::Path;
 
 pub const EXTENSION: &str = "rcx";
 pub const FAMILY_EXTENSION: &str = "rcfa";
-pub const FORMAT_VERSION: u32 = 2;
+pub const FORMAT_VERSION: u32 = 3;
 
 pub fn to_json(p: &Project) -> String {
     serde_json::to_string_pretty(p).expect("project serialises")
@@ -40,6 +40,15 @@ fn migrate(p: &mut Project) {
             p.area_schemes.push(crate::model::AreaScheme { id, name: "Gross Building".into() });
         }
         p.format = 2;
+    }
+    if p.format < 3 {
+        // Format 2 used "Solid fill" on materials to mean no cut pattern.
+        for m in &mut p.materials {
+            if m.cut_pattern == crate::model::FillPattern::Solid {
+                m.cut_pattern = crate::model::FillPattern::None;
+            }
+        }
+        p.format = 3;
     }
 }
 

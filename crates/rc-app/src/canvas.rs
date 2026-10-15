@@ -459,7 +459,7 @@ fn navigate(app: &mut App, ui: &egui::Ui, resp: &egui::Response, rect: Rect, vie
             cam.center += before - xf2.w(hover);
         }
     }
-    if resp.dragged_by(egui::PointerButton::Middle) || resp.dragged_by(egui::PointerButton::Secondary) {
+    if resp.dragged_by(egui::PointerButton::Middle) {
         let d = resp.drag_delta();
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
     }

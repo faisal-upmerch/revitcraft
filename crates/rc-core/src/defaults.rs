@@ -8,38 +8,46 @@ use crate::units::{UnitSystem, Units};
 use std::collections::BTreeMap;
 
 fn mat(name: &str, rgb: [u8; 3], opacity: f64, class: &str, cut: FillPattern) -> Material {
-    Material { name: name.into(), color: rgb, opacity, class: class.into(), cut_pattern: cut, shininess: if class == "Metal" || class == "Glass" { 0.8 } else { 0.1 }, keynote: String::new() }
+    // Surface patterns as in the reference template: brick and block coursing, sand on
+    // cast concrete.
+    let surface_pattern = match name {
+        "Brick" => SurfacePattern::Brick,
+        "Concrete Masonry Units" => SurfacePattern::Block,
+        "Concrete" => SurfacePattern::Sand,
+        _ => SurfacePattern::None,
+    };
+    Material { name: name.into(), color: rgb, opacity, class: class.into(), cut_pattern: cut, surface_pattern, shininess: if class == "Metal" || class == "Glass" { 0.8 } else { 0.1 }, keynote: String::new() }
 }
 
 pub fn materials() -> Vec<Material> {
     use FillPattern::*;
     vec![
-        mat("Default", [200, 200, 200], 1.0, "Generic", Diagonal),
+        mat("Default", [200, 200, 200], 1.0, "Generic", None),
         mat("Concrete", [172, 172, 166], 1.0, "Concrete", Concrete),
         mat("Concrete Masonry Units", [184, 180, 170], 1.0, "Masonry", CrossHatch),
-        mat("Brick", [168, 84, 62], 1.0, "Masonry", Brick),
-        mat("Insulation", [236, 214, 120], 1.0, "Insulation", Insulation),
-        mat("Plasterboard", [242, 240, 234], 1.0, "Finish", Solid),
+        mat("Brick", [168, 84, 62], 1.0, "Masonry", Diagonal),
+        mat("Insulation", [236, 214, 120], 1.0, "Insulation", Grid),
+        mat("Plasterboard", [242, 240, 234], 1.0, "Finish", Sand),
         mat("Stud Layer", [214, 204, 184], 1.0, "Generic", Diagonal),
-        mat("Timber Flooring", [178, 128, 82], 1.0, "Wood", Diagonal),
-        mat("Wood", [150, 105, 66], 1.0, "Wood", Diagonal),
-        mat("Wood - Painted White", [246, 246, 240], 1.0, "Paint", Diagonal),
-        mat("Glass", [150, 200, 230], 0.35, "Glass", Solid),
-        mat("Aluminum", [192, 194, 198], 1.0, "Metal", Solid),
+        mat("Timber Flooring", [178, 128, 82], 1.0, "Wood", None),
+        mat("Wood", [150, 105, 66], 1.0, "Wood", None),
+        mat("Wood - Painted White", [246, 246, 240], 1.0, "Paint", None),
+        mat("Glass", [150, 200, 230], 0.35, "Glass", None),
+        mat("Aluminum", [192, 194, 198], 1.0, "Metal", None),
         mat("Steel", [122, 127, 132], 1.0, "Metal", CrossHatch),
-        mat("Steel - Stainless", [210, 212, 215], 1.0, "Metal", Solid),
+        mat("Steel - Stainless", [210, 212, 215], 1.0, "Metal", None),
         mat("Roof Tiles", [142, 62, 46], 1.0, "Ceramic", Diagonal),
-        mat("Metal Roofing", [70, 78, 90], 1.0, "Metal", Solid),
-        mat("Fabric", [96, 110, 140], 1.0, "Textile", Solid),
-        mat("Porcelain", [250, 250, 250], 1.0, "Ceramic", Solid),
+        mat("Metal Roofing", [70, 78, 90], 1.0, "Metal", None),
+        mat("Fabric", [96, 110, 140], 1.0, "Textile", None),
+        mat("Porcelain", [250, 250, 250], 1.0, "Ceramic", None),
         mat("Stone", [120, 116, 110], 1.0, "Stone", Diagonal),
-        mat("Acoustic Tile", [236, 236, 232], 1.0, "Finish", CrossHatch),
+        mat("Acoustic Tile", [236, 236, 232], 1.0, "Finish", None),
         mat("Gravel", [150, 145, 135], 1.0, "Earth", Concrete),
-        mat("Grass", [96, 150, 72], 1.0, "Earth", Solid),
-        mat("Site - Earth", [176, 160, 132], 1.0, "Earth", Concrete),
-        mat("Foliage", [92, 140, 70], 1.0, "Earth", Solid),
-        mat("Paint - White", [248, 248, 248], 1.0, "Paint", Solid),
-        mat("Default Mass", [196, 206, 222], 0.45, "Generic", Solid),
+        mat("Grass", [96, 150, 72], 1.0, "Earth", None),
+        mat("Site - Earth", [176, 160, 132], 1.0, "Earth", Earth),
+        mat("Foliage", [92, 140, 70], 1.0, "Earth", None),
+        mat("Paint - White", [248, 248, 248], 1.0, "Paint", None),
+        mat("Default Mass", [196, 206, 222], 0.45, "Generic", None),
     ]
 }
 

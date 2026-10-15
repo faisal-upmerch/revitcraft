@@ -557,7 +557,10 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
             let swing = |out: &mut Vec<SymLine>, hinge_x: f64, leaf: f64, dir: f64| {
                 let hinge = f.plan(hinge_x, -t);
                 let open_end = f.plan(hinge_x, -t - leaf);
-                out.push(line(vec![hinge, open_end], false, SymStyle::Projection));
+                // The open leaf: a thin panel standing at the jamb, inside the opening.
+                let pt = num("Thickness", 45.0).clamp(20.0, 80.0);
+                let (x0, x1) = if dir > 0.0 { (hinge_x, hinge_x + pt) } else { (hinge_x - pt, hinge_x) };
+                out.push(line(rect(x0, x1, -t - leaf, -t), true, SymStyle::Projection));
                 let a_open = (open_end - hinge).y.atan2((open_end - hinge).x);
                 let closed = f.plan(hinge_x + dir * leaf, -t);
                 let a_closed = (closed - hinge).y.atan2((closed - hinge).x);
