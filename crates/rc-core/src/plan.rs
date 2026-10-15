@@ -1365,12 +1365,11 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
         if !analysis::visible_in(p, c.view, e) {
             continue;
         }
+        // Multistory stairs show the storey that starts on this level (or ends on it).
+        let storeys = build3d::stair_storeys(p, s);
+        let Some(s) = storeys.iter().find(|x| x.base_level == c.level).or_else(|| storeys.iter().find(|x| x.top_level == Some(c.level))) else { continue };
         let lay = build3d::stair_layout(p, s);
         let base_level = s.base_level == c.level;
-        let top_level = s.top_level == Some(c.level);
-        if !base_level && !top_level {
-            continue;
-        }
         let start = d.prims.len();
         for (k, (run, risers, _, z0)) in lay.runs.iter().enumerate() {
             let len = run.start.distance(run.end);

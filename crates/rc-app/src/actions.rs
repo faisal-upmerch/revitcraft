@@ -30,7 +30,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         RampBoundary | RampRiser => false,
         PlaceRoomsAuto | HighlightBoundaries => plan && !in_sketch,
         MullionGridLine | MullionSegment | MullionAllLines => app.tool.kind == ToolKind::Mullion,
-        StairLanding | StairSupport | ConnectLevels => false,
+        StairLanding | StairSupport => false,
+        ConnectLevels => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair),
         RailingPickHost => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing),
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
@@ -767,7 +768,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 app.tool = Tool::new(ToolKind::SketchLine);
             }
         }
-        StairLanding | StairSupport | ConnectLevels => {}
+        StairLanding | StairSupport => {}
+        ConnectLevels => app.dialogs.connect_levels = true,
         StairRailing => app.dialogs.stair_railing = true,
         RailingPickHost => {
             app.opts.sketch_sub = crate::tools::SketchSub::PickHost;
@@ -1026,6 +1028,7 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     if kind == SketchKind::Stair {
         // A new stair runs from its level to the one above, as in the reference app.
         app.opts.stair_top = app.doc.data.level_above(level).map(|l| l.0);
+        app.opts.stair_multistory_top = None;
     }
     if kind == SketchKind::Ramp {
         app.opts.ramp.base_level = level;
@@ -1186,6 +1189,7 @@ pub fn finish_sketch(app: &mut App) {
                         s.top_level = o.stair_top;
                         s.top_offset = o.stair_top_offset;
                         s.desired_risers = o.stair_risers;
+                        s.multistory_top = o.stair_multistory_top;
                     }
                     Ok(id)
                 }))

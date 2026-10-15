@@ -654,7 +654,7 @@ pub fn sketch_stair(app: &App) -> Option<Stair> {
         })
         .collect();
     let top_level = o.stair_top.or_else(|| app.doc.data.level_above(sk.level).map(|l| l.0));
-    Some(Stair { base_level: sk.level, base_offset: o.stair_base_offset, top_level, top_offset: o.stair_top_offset, unconnected_height: 3000.0, runs, type_id: o.stair_type, desired_risers: o.stair_risers, railings: o.stair_railing.is_some() })
+    Some(Stair { base_level: sk.level, base_offset: o.stair_base_offset, top_level, top_offset: o.stair_top_offset, unconnected_height: 3000.0, runs, type_id: o.stair_type, desired_risers: o.stair_risers, railings: o.stair_railing.is_some(), multistory_top: o.stair_multistory_top })
 }
 
 /// (desired risers, risers created so far, riser height, tread depth) of the stair sketch.

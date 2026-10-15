@@ -948,8 +948,30 @@ fn convex_hull(pts: &[DVec2]) -> Vec<DVec2> {
     lower
 }
 
+/// The storeys of a stair: itself, then one copy per level up to its Multistory Top Level
+/// (each from a level to the next, as the reference app repeats a multistory stair).
+pub fn stair_storeys(p: &Project, s: &Stair) -> Vec<Stair> {
+    let mut first = s.clone();
+    first.multistory_top = None;
+    let mut out = vec![first.clone()];
+    let (Some(mt), Some(mut cur)) = (s.multistory_top, s.top_level) else { return out };
+    let top_z = p.level_elevation(mt);
+    while p.level_elevation(cur) < top_z - 1.0 {
+        let Some((next, _)) = p.level_above(cur) else { break };
+        out.push(Stair { base_level: cur, base_offset: 0.0, top_level: Some(next), top_offset: 0.0, ..first.clone() });
+        cur = next;
+    }
+    out
+}
+
 fn stair(p: &Project, s: &Stair) -> MeshSet {
     let mut set = MeshSet::default();
+    if s.multistory_top.is_some() {
+        for st in stair_storeys(p, s) {
+            set.merge(stair(p, &st));
+        }
+        return set;
+    }
     let ty = p.sys_type(s.type_id);
     let mat = ty.map(|t| t.primary_material()).unwrap_or_else(|| "Concrete".into());
     let waist = ty.map(|t| t.prop("Structural Depth", 150.0)).unwrap_or(150.0);
@@ -1036,8 +1058,13 @@ fn railing(p: &Project, r: &Railing) -> MeshSet {
     let rail_w = ty.map(|t| t.prop("Rail Width", 50.0)).unwrap_or(50.0);
     let bal = ty.map(|t| t.prop("Baluster Size", 20.0)).unwrap_or(20.0);
     let mat = ty.map(|t| t.text("Material", "Steel")).unwrap_or_else(|| "Steel".into());
-    let host = r.host.and_then(|h| p.element(h)).map(|e| e.kind.clone());
+    // A railing on a multistory stair repeats on every storey.
+    let hosts: Vec<Option<ElementKind>> = match r.host.and_then(|h| p.element(h)).map(|e| e.kind.clone()) {
+        Some(ElementKind::Stair(s)) => stair_storeys(p, &s).into_iter().map(|x| Some(ElementKind::Stair(x))).collect(),
+        other => vec![other],
+    };
     let base = p.level_elevation(r.level) + r.base_offset;
+    for host in hosts {
     let z_at = |q: DVec2| {
         match &host {
             Some(ElementKind::Stair(s)) => stair_height_at(p, s, q),
@@ -1067,6 +1094,7 @@ fn railing(p: &Project, r: &Railing) -> MeshSet {
             let o = geom::at(q - d * (bal / 2.0) - n * (bal / 2.0), z);
             set.add_box(&mat, o, geom::at(d * bal, 0.0), geom::at(n * bal, 0.0), DVec3::Z * (h - rail_w));
         }
+    }
     }
     set
 }
@@ -1168,5 +1196,34 @@ mod mullion_tests {
         assert!(has_mullion(&w, "v1:0", auto) && !has_mullion(&w, "h0:0", auto));
         let with = curtain_wall(&p, &w, p.sys_type(ty).unwrap(), 0.0, 3000.0);
         assert!(with.by_material.contains_key("Aluminum"));
+    }
+}
+
+#[cfg(test)]
+mod multistory_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// Connect Levels: a stair up to Level 3 repeats once per storey.
+    #[test]
+    fn multistory_stair_repeats_per_storey() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l3 = p.new_id();
+        let top = p.levels().last().unwrap().1.elevation + 3000.0;
+        p.elements.push(Element::new(l3, ElementKind::Level(Level { name: "Level 3".into(), elevation: top, building_story: true })));
+        let l1 = p.levels()[0].0;
+        let ty = p.types_of(Category::Stairs).next().unwrap().id;
+        let runs = vec![StairRun { start: DVec2::ZERO, end: DVec2::new(0.0, 4480.0), width: 1200.0 }];
+        let id = crate::edit::add_stair(&mut p, l1, ty, runs, None).unwrap();
+        let single = element_mesh(&p, p.element(id).unwrap(), &HashMap::new()).by_material.values().map(|m| m.indices.len()).sum::<usize>();
+        if let Some(ElementKind::Stair(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+            s.multistory_top = Some(l3);
+        }
+        let ElementKind::Stair(s) = &p.element(id).unwrap().kind else { panic!() };
+        let storeys = stair_storeys(&p, s);
+        assert_eq!(storeys.len(), 2);
+        assert_eq!(storeys[1].top_level, Some(l3));
+        let double = element_mesh(&p, p.element(id).unwrap(), &HashMap::new()).by_material.values().map(|m| m.indices.len()).sum::<usize>();
+        assert_eq!(double, single * 2);
     }
 }

@@ -828,6 +828,9 @@ pub struct Stair {
     pub desired_risers: u32,
     #[serde(default = "yes")]
     pub railings: bool,
+    /// Multistory Top Level: the stair repeats storey by storey up to this level.
+    #[serde(default)]
+    pub multistory_top: Option<Id>,
 }
 
 /// A ramp: straight runs at one slope from its base to its top, with landings between runs.

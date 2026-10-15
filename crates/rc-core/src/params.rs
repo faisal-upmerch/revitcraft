@@ -181,6 +181,7 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Top Level", CONSTRAINTS, top_choices(p), false, false));
             d.push(def("Top Offset", CONSTRAINTS, v(Length), false, false));
             d.push(def("Desired Stair Height", CONSTRAINTS, v(Length), true, false));
+            d.push(def("Multistory Top Level", CONSTRAINTS, top_choices(p), false, false));
             d.push(def("Desired Number of Risers", DIMENSIONS, v(Integer), false, false));
             d.push(def("Actual Number of Risers", DIMENSIONS, v(Integer), true, false));
             d.push(def("Actual Riser Height", DIMENSIONS, v(Length), true, false));
@@ -652,6 +653,7 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 "Top Level" => text(top_name(p, s.top_level)),
                 "Top Offset" => num(s.top_offset),
                 "Desired Stair Height" => num(rise),
+                "Multistory Top Level" => text(top_name(p, s.multistory_top)),
                 "Desired Number of Risers" => num(n as f64),
                 "Actual Number of Risers" => num(build3d::stair_layout(p, s).runs.iter().map(|r| r.1).sum::<u32>() as f64),
                 "Actual Riser Height" => num(rh),
@@ -1099,6 +1101,7 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
             "Base Offset" => s.base_offset = n(),
             "Top Level" => s.top_level = top_choice.unwrap(),
             "Top Offset" => s.top_offset = n(),
+            "Multistory Top Level" => s.multistory_top = top_choice.unwrap(),
             "Desired Number of Risers" => {
                 let r = n().round();
                 if !(2.0..=200.0).contains(&r) {

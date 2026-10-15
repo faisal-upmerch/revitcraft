@@ -62,6 +62,8 @@ pub struct Dialogs {
     pub stair_railing: bool,
     /// "Cancel Editing Stair Element" confirmation.
     pub cancel_stair: bool,
+    /// Connect Levels for the stair being sketched.
+    pub connect_levels: bool,
     /// Lowest Level Notice for a new footprint roof: the level offered.
     pub lowest_level: Option<Id>,
     pub tag_all: bool,
@@ -411,6 +413,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     lowest_level_notice(app, ctx);
     stair_railing_dialog(app, ctx);
     cancel_stair_dialog(app, ctx);
+    connect_levels_dialog(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -805,6 +808,52 @@ fn export_image(app: &mut App, id: Id) {
 }
 
 // ---------------------------------------------------------------- small dialogs
+
+/// Connect Levels: the stair repeats storey by storey up to the chosen level.
+fn connect_levels_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.connect_levels {
+        return;
+    }
+    let p = &app.doc.data;
+    let from = app.opts.stair_top.or_else(|| app.sketch.as_ref().and_then(|s| p.level_above(s.level).map(|l| l.0)));
+    let from_z = from.map(|l| p.level_elevation(l)).unwrap_or(f64::MAX);
+    let above: Vec<(Id, String)> = p.levels().iter().filter(|(_, l)| l.elevation > from_z + 1.0).map(|(id, l)| (*id, l.name.clone())).collect();
+    let id = egui::Id::new("connect-levels");
+    let mut pick: Option<Id> = ctx.data(|m| m.get_temp(id)).unwrap_or(app.opts.stair_multistory_top);
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Connect Levels").open(&mut open).resizable(false).default_width(320.0).show(ctx, |ui| {
+        if above.is_empty() {
+            ui.label("There are no levels above the stair's top level to connect.");
+        } else {
+            ui.label("Repeat the stair up to:");
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+                ui.set_min_width(280.0);
+                ui.selectable_value(&mut pick, None, "None (single storey)");
+                for (l, n) in &above {
+                    ui.selectable_value(&mut pick, Some(*l), n);
+                }
+            });
+        }
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(id, pick));
+    if ok {
+        app.opts.stair_multistory_top = pick;
+    }
+    if ok || cancel || !open {
+        app.dialogs.connect_levels = false;
+        ctx.data_mut(|m| m.remove::<Option<Id>>(id));
+    }
+}
 
 fn cancel_stair_dialog(app: &mut App, ctx: &egui::Context) {
     if !app.dialogs.cancel_stair {

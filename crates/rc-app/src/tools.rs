@@ -657,6 +657,8 @@ pub struct ToolOptions {
     pub stair_base_offset: f64,
     pub stair_top: Option<Id>,
     pub stair_top_offset: f64,
+    /// Connect Levels: the stair repeats up to this level.
+    pub stair_multistory_top: Option<Id>,
     /// Desired Number of Risers; 0 = from the type's maximum riser height.
     pub stair_risers: u32,
     /// The stair's Railing setting (None = no railings).
@@ -793,6 +795,7 @@ impl ToolOptions {
             stair_base_offset: 0.0,
             stair_top: None,
             stair_top_offset: 0.0,
+            stair_multistory_top: None,
             stair_risers: 0,
             stair_railing: Some(first_sys(Category::Railings)),
             railing_base_offset: 0.0,
