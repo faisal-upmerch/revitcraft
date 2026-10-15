@@ -1615,19 +1615,30 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
     };
     if let Some(poly) = &region {
         if app.tool.kind == ToolKind::Room {
-            canvas::paint_room_reference(painter, xf, poly, Color32::from_rgb(80, 170, 220));
-            // The room tag follows the cursor.
+            // The region fills light blue with its reference cross, as in the reference app.
+            let mut mesh = egui::Mesh::default();
+            for [a, b, cc] in geom::triangulate(poly) {
+                let i = mesh.vertices.len() as u32;
+                for q in [poly[a], poly[b], poly[cc]] {
+                    mesh.colored_vertex(xf.s(q), Color32::from_rgba_unmultiplied(150, 205, 230, 110));
+                }
+                mesh.add_triangle(i, i + 1, i + 2);
+            }
+            painter.add(egui::Shape::mesh(mesh));
+            let (mn, mx) = geom::bounds(poly.iter().copied());
+            let thin = Stroke::new(1.0, Color32::from_gray(70));
+            painter.line_segment([xf.s(mn), xf.s(mx)], thin);
+            painter.line_segment([xf.s(DVec2::new(mn.x, mx.y)), xf.s(DVec2::new(mx.x, mn.y))], thin);
+            // The room tag follows the cursor: its label and an empty number box.
             if app.opts.room_tag {
-                // Same size as the placed tag (paper-scaled text).
                 let p0 = xf.s(c);
                 let (hn, hb) = (xf.text_px(3.0).max(6.0), xf.text_px(2.5).max(5.0));
-                let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, "Room", style::font(hn), Color32::from_gray(60));
-                let num = painter.layout_no_wrap(rc_core::edit::next_room_number(&app.doc.data), style::font(hb), Color32::from_gray(60));
-                let bx = egui::Rect::from_center_size(p0 + vec2(0.0, hb * 0.75), vec2(num.size().x.max(name.width() * 0.5) + hb, hb * 1.3));
-                painter.rect_stroke(bx, 0.0, Stroke::new(1.0, Color32::from_gray(90)), egui::StrokeKind::Inside);
-                painter.galley(bx.center() - num.size() / 2.0, num, Color32::from_gray(60));
+                let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, "Room Name", style::bold(hn), Color32::from_gray(110));
+                let bx = egui::Rect::from_center_size(p0 + vec2(0.0, hb * 0.75), vec2(name.width() * 0.5 + hb, hb * 1.3));
+                painter.rect_stroke(bx, 0.0, Stroke::new(1.0, Color32::from_gray(110)), egui::StrokeKind::Inside);
+                painter.line_segment([p0 - vec2(4.0, 0.0), p0 + vec2(4.0, 0.0)], Stroke::new(1.0, style::PREVIEW));
+                painter.line_segment([p0 - vec2(0.0, 4.0), p0 + vec2(0.0, 4.0)], Stroke::new(1.0, style::PREVIEW));
             }
-            style::canvas_tooltip(painter, xf.s(c) + vec2(4.0, 22.0), "Click to place room");
         } else if app.tool.kind == ToolKind::CeilingAuto {
             // The boundary the ceiling would follow highlights in red, as in the reference app.
             painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), Stroke::new(2.0, Color32::from_rgb(230, 30, 30))));
@@ -1681,17 +1692,27 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
             }) {
                 app.select(vec![id]);
             }
-        } else if let Some(id) = app.run("Place Room", |p| {
-            let id = edit::add_room(p, level, c)?;
-            if let Some(ElementKind::Room(r)) = p.element_mut(id).map(|e| &mut e.kind) {
-                r.upper_offset = upper;
-            }
-            if tag {
-                edit::add_tag(p, vid, id, c, false)?;
-            }
-            Ok(id)
-        }) {
-            app.select(vec![id]);
+        } else {
+            // The tool stays active with nothing selected, as in the reference app.
+            let (upper_level, base_offset) = (app.opts.room_upper_level, app.opts.room_base_offset);
+            let (horizontal, leader) = (app.opts.tag_horizontal, app.opts.tag_leader);
+            app.run("Place Room", |p| {
+                let id = edit::add_room(p, level, c)?;
+                if let Some(ElementKind::Room(r)) = p.element_mut(id).map(|e| &mut e.kind) {
+                    r.upper_offset = upper;
+                    r.upper_level = upper_level.filter(|l| *l != level);
+                    r.base_offset = base_offset;
+                }
+                if tag {
+                    let t = edit::add_tag(p, vid, id, c, leader)?;
+                    if !horizontal {
+                        if let Some(ElementKind::Tag(tg)) = p.element_mut(t).map(|e| &mut e.kind) {
+                            tg.vertical = true;
+                        }
+                    }
+                }
+                Ok(id)
+            });
         }
     }
 }
@@ -1735,7 +1756,11 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
                     t.leader_end = Some(hp);
                 }
             }
-            let _ = horizontal;
+            if !horizontal {
+                if let Some(ElementKind::Tag(t)) = p.element_mut(id).map(|e| &mut e.kind) {
+                    t.vertical = true;
+                }
+            }
             Ok(id)
         }) {
             app.select(vec![id]);

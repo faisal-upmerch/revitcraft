@@ -3,6 +3,11 @@
 pub use glam::{DVec2, DVec3};
 
 /// Left-hand perpendicular (rotated +90°).
+/// `v` turned by `a` radians counter-clockwise.
+pub fn rotate(v: DVec2, a: f64) -> DVec2 {
+    DVec2::from_angle(a).rotate(v)
+}
+
 pub fn perp(v: DVec2) -> DVec2 {
     DVec2::new(-v.y, v.x)
 }

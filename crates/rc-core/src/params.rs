@@ -279,9 +279,12 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Number", IDENTITY, v(Text), false, false));
             d.push(def("Name", IDENTITY, v(Text), false, false));
             d.push(def("Level", CONSTRAINTS, PKind::Level, true, false));
+            d.push(def("Upper Limit", CONSTRAINTS, PKind::Level, false, false));
             d.push(def("Limit Offset", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Base Offset", CONSTRAINTS, v(Length), false, false));
             d.push(def("Area", DIMENSIONS, v(Area), true, false));
             d.push(def("Perimeter", DIMENSIONS, v(Length), true, false));
+            d.push(def("Unbounded Height", DIMENSIONS, v(Length), true, false));
             d.push(def("Volume", DIMENSIONS, v(Volume), true, false));
             d.push(def("Department", IDENTITY, v(Text), false, false));
             d.push(def("Occupancy", IDENTITY, v(Text), false, false));
@@ -757,10 +760,13 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 "Number" => text(r.number.clone()),
                 "Name" => text(r.name.clone()),
                 "Level" => text(p.level_name(r.level)),
+                "Upper Limit" => text(p.level_name(r.upper_level.unwrap_or(r.level))),
                 "Limit Offset" => num(r.upper_offset),
+                "Base Offset" => num(r.base_offset),
                 "Area" => num(boundary().map(|b| b.area()).unwrap_or(0.0)),
                 "Perimeter" => num(boundary().map(|b| b.perimeter()).unwrap_or(0.0)),
-                "Volume" => num(boundary().map(|b| b.area() * r.upper_offset).unwrap_or(0.0)),
+                "Unbounded Height" => num(analysis::room_height(p, r)),
+                "Volume" => num(boundary().map(|b| b.area() * analysis::room_height(p, r)).unwrap_or(0.0)),
                 "Department" => text(r.department.clone()),
                 "Occupancy" => text(r.occupancy.clone()),
                 "Floor Finish" => text(r.floor_finish.clone()),
@@ -1171,7 +1177,9 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
         ElementKind::Room(r) => match name {
             "Number" => r.number = t(),
             "Name" => r.name = t(),
-            "Limit Offset" => r.upper_offset = positive(n(), "Limit offset")?,
+            "Limit Offset" => r.upper_offset = n(),
+            "Upper Limit" => r.upper_level = level_id.filter(|l| *l != r.level),
+            "Base Offset" => r.base_offset = n(),
             "Department" => r.department = t(),
             "Occupancy" => r.occupancy = t(),
             "Floor Finish" => r.floor_finish = t(),

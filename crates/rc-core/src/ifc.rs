@@ -479,7 +479,7 @@ pub fn export(p: &Project, file_name: &str, timestamp: &str) -> String {
                 let profile = w.add(format!("IFCARBITRARYCLOSEDPROFILEDEF(.AREA.,$,#{outline})"));
                 let pos = w.axis3(DVec3::ZERO, None, None);
                 let up = w.dir3(DVec3::Z);
-                let solid = w.add(format!("IFCEXTRUDEDAREASOLID(#{profile},#{pos},#{up},{})", real(room.upper_offset)));
+                let solid = w.add(format!("IFCEXTRUDEDAREASOLID(#{profile},#{pos},#{up},{})", real(analysis::room_height(p, room))));
                 let body = w.add(format!("IFCSHAPEREPRESENTATION(#{body_ctx},'Body','SweptSolid',(#{solid}))"));
                 let shape = w.add(format!("IFCPRODUCTDEFINITIONSHAPE($,$,(#{body}))"));
                 let ent = w.add(format!(
@@ -1875,6 +1875,8 @@ pub fn import(text: &str) -> Result<ImportResult, String> {
                 level,
                 location: loc,
                 upper_offset: body.as_ref().map(|b| b.2).unwrap_or(2700.0),
+                upper_level: None,
+                base_offset: 0.0,
                 department: text_of(&props, "Department").unwrap_or_default(),
                 floor_finish: text_of(&props, "FloorFinish").unwrap_or_default(),
                 wall_finish: text_of(&props, "WallFinish").unwrap_or_default(),

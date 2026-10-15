@@ -1093,6 +1093,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             }
         }
     }
+    if !app.boundary_highlight.is_empty() {
+        paint_highlight(&painter, &drawing, &app.boundary_highlight, &xf, Color32::from_rgb(255, 150, 40), DVec2::ZERO);
+    }
     if is_active {
         if let Some(h) = app.interact.hover.filter(|h| !sel.contains(h)) {
             let mut ids: HashSet<Id> = [h].into_iter().collect();

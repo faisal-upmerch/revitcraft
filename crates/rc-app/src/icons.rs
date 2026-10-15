@@ -138,6 +138,8 @@ pub enum Icon {
     AlignEaves,
     StairRun,
     Ramp,
+    PlaceRoomsAuto,
+    HighlightBoundaries,
     RampRiser,
     StairLanding,
     StairSupport,
@@ -1277,6 +1279,22 @@ fn draw(g: &Pen, icon: Icon) {
             g.shade(&[(0.34, 0.96), (0.94, 0.42), (0.94, 0.52), (0.34, 1.0)], G3, G4, false);
             g.line(&[(0.26, 0.86), (0.66, 0.5)], BLUE);
             g.arrow_head((0.7, 0.46), (0.26, 0.86), BLUE, 0.12);
+        }
+        PlaceRoomsAuto => {
+            g.shade(&[(0.06, 0.1), (0.94, 0.1), (0.94, 0.9), (0.06, 0.9)], LBLUE, LBLUE, true);
+            g.closed(&[(0.06, 0.1), (0.94, 0.1), (0.94, 0.9), (0.06, 0.9)], ink);
+            g.line(&[(0.5, 0.1), (0.5, 0.9)], ink);
+            for (x0, x1) in [(0.06f32, 0.5f32), (0.5, 0.94)] {
+                g.thin_line(&[(x0, 0.1), (x1, 0.9)], ink);
+                g.thin_line(&[(x0, 0.9), (x1, 0.1)], ink);
+            }
+            g.dot((0.78, 0.26), 0.09, BLUE);
+        }
+        HighlightBoundaries => {
+            let o = Color32::from_rgb(240, 140, 40);
+            g.line_w(&[(0.08, 0.12), (0.92, 0.12), (0.92, 0.88), (0.08, 0.88), (0.08, 0.12)], o, g.w * 2.2);
+            g.thin_line(&[(0.08, 0.12), (0.92, 0.88)], ink);
+            g.thin_line(&[(0.08, 0.88), (0.92, 0.12)], ink);
         }
         RampRiser => {
             g.thin_line(&[(0.3, 0.08), (0.3, 0.92)], ink);

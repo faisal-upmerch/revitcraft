@@ -181,6 +181,23 @@ impl Drawing {
     pub fn text_rot(&mut self, id: Option<Id>, pos: DVec2, text: impl Into<String>, size: f32, angle: f32) {
         self.prims.push((id, Prim::Text { pos, text: text.into(), size, color: [0, 0, 0], anchor: Anchor::Center, angle, bold: false }));
     }
+    /// Turns the primitives from index `start` on by `angle` (radians, counter-clockwise) about `c`.
+    pub fn rotate_from(&mut self, start: usize, c: DVec2, angle: f64) {
+        if angle == 0.0 {
+            return;
+        }
+        let r = |q: DVec2| c + geom::rotate(q - c, angle);
+        for (_, prim) in self.prims.iter_mut().skip(start) {
+            match prim {
+                Prim::Line { pts, .. } => pts.iter_mut().for_each(|q| *q = r(*q)),
+                Prim::Fill { tris, .. } => tris.iter_mut().flatten().for_each(|q| *q = r(*q)),
+                Prim::Text { pos, angle: a, .. } => {
+                    *pos = r(*pos);
+                    *a += angle as f32;
+                }
+            }
+        }
+    }
     pub fn fill(&mut self, id: Option<Id>, poly: &[DVec2], color: [u8; 4]) {
         if poly.len() < 3 {
             return;
@@ -1551,6 +1568,8 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
             ElementKind::Line(l) => d.line(Some(e.id), line_points(l), l.closed, line_style_stroke(p, l.style)),
             ElementKind::Dimension(dim) => dimension_graphics(p, e.id, dim, scale, d),
             ElementKind::Tag(t) => {
+                let body = d.prims.len();
+                let turn = if t.vertical { std::f64::consts::FRAC_PI_2 } else { 0.0 };
                 let text = annotation::tag_text(p, t);
                 let lines: Vec<&str> = text.lines().collect();
                 let h = 2.5 * scale;
@@ -1566,6 +1585,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     let c = t.position;
                     d.line(Some(e.id), vec![c + DVec2::new(-nw, y0), c + DVec2::new(nw, y0), c + DVec2::new(nw, y1), c + DVec2::new(-nw, y1)], true, ANNO);
                     d.text(Some(e.id), c + DVec2::new(0.0, (y0 + y1) / 2.0), number.to_string(), 2.5, Anchor::Center);
+                    d.rotate_from(body, t.position, turn);
                     if t.leader {
                         let host = p.element(t.host).map(|hh| annotation::host_point(p, hh)).unwrap_or(t.position);
                         d.line(Some(e.id), vec![t.position, t.leader_end.unwrap_or(host)], false, ANNO);
@@ -1609,6 +1629,8 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     let y = (lines.len() as f64 - 1.0) / 2.0 - k as f64;
                     d.text(Some(e.id), t.position + DVec2::new(0.0, y * h * 1.3), l.to_string(), 2.5, Anchor::Center);
                 }
+                d.rotate_from(body, t.position, turn);
+                let outline: Vec<DVec2> = outline.iter().map(|q| t.position + geom::rotate(*q - t.position, turn)).collect();
                 if t.leader {
                     let host = p.element(t.host).map(|h| annotation::host_point(p, h)).unwrap_or(t.position);
                     let end = t.leader_end.unwrap_or(host);

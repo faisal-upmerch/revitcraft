@@ -87,6 +87,11 @@ fn set_tool_type(app: &mut App, cat: Category, t: Id) {
 }
 
 fn type_selector(app: &mut App, ui: &mut egui::Ui) {
+    if app.tool.kind == ToolKind::Room && app.opts.room_tag {
+        // The Room tool shows the tag it places, as in the reference app.
+        selector_box(ui, Icon::RoomTag, "Room Tag", "", true);
+        return;
+    }
     let Some((cat, current)) = selector_target(app) else {
         // No type: a plain header naming what is shown.
         let label = if app.selection.is_empty() {
@@ -599,6 +604,47 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                 }
                 ui.end_row();
                 for (name, value) in [("Actual Number of Risers", made.to_string()), ("Actual Riser Height", units.length(rh)), ("Actual Tread Depth", units.length(tread)), ("Tread/Riser Start Number", "1".to_string())] {
+                    prop_label(ui, name, true);
+                    ro(ui, &value);
+                    ui.end_row();
+                }
+            });
+        }
+        ToolKind::Room => {
+            // A new room's instance parameters.
+            let p = &app.doc.data;
+            let levels: Vec<(Id, String)> = p.levels().iter().map(|(id, l)| (*id, l.name.clone())).collect();
+            let base = level.unwrap_or_default();
+            let top = p.level_elevation(o.room_upper_level.unwrap_or(base)) + o.room_upper;
+            let height = (top - p.level_elevation(base) - o.room_base_offset).max(0.0);
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-room").show(ui, |ui| {
+                prop_label(ui, "Level", true);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Upper Limit", false);
+                let cur = o.room_upper_level.unwrap_or(base);
+                let mut pick = cur;
+                let name = levels.iter().find(|l| l.0 == cur).map(|l| l.1.clone()).unwrap_or_default();
+                egui::ComboBox::from_id_salt("nroom-ul").selected_text(name).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                    for (id, n) in &levels {
+                        ui.selectable_value(&mut pick, *id, n);
+                    }
+                });
+                if pick != cur {
+                    o.room_upper_level = Some(pick).filter(|l| *l != base);
+                }
+                ui.end_row();
+                prop_label(ui, "Limit Offset", false);
+                len_row(ui, "room-lim", &mut o.room_upper);
+                ui.end_row();
+                prop_label(ui, "Base Offset", false);
+                len_row(ui, "room-base", &mut o.room_base_offset);
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Dimensions", true);
+            prop_grid(ui, "new-room-d").show(ui, |ui| {
+                for (name, value) in [("Area", "Not Enclosed".to_string()), ("Perimeter", "Not Enclosed".to_string()), ("Unbounded Height", units.length(height)), ("Volume", "Not Enclosed".to_string()), ("Computation Height", units.length(0.0))] {
                     prop_label(ui, name, true);
                     ro(ui, &value);
                     ui.end_row();

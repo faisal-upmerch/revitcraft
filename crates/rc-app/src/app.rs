@@ -166,6 +166,8 @@ pub struct App {
     pub home3d: HashMap<Id, Camera>,
     /// Work Plane > Show: views showing their work plane grid.
     pub show_work_plane: std::collections::HashSet<Id>,
+    /// Highlight Boundaries: room-bounding elements shown highlighted until the next click.
+    pub boundary_highlight: std::collections::HashSet<Id>,
     /// Work Plane > Set: each view's work plane (a level, or a named reference plane).
     pub work_planes: HashMap<Id, WorkPlaneRef>,
     /// Work Plane > Viewer: the view whose work plane the floating viewer shows.
@@ -229,6 +231,7 @@ impl App {
             cam3d_history: HashMap::new(),
             home3d: HashMap::new(),
             show_work_plane: Default::default(),
+            boundary_highlight: Default::default(),
             work_planes: HashMap::new(),
             work_plane_viewer: None,
             cache: Cache::default(),

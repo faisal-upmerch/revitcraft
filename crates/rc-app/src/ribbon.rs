@@ -420,6 +420,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
                 v.push(panel("Multiple", vec![Labeled("At\nGrids", C::ColumnsAtGrids, vec![]), Labeled("At\nColumns", C::ColumnsAtColumns, vec![])]));
             }
         }
+        if kind == ToolKind::Room {
+            v.push(panel("Room", vec![Labeled("Place Rooms\nAutomatically", C::PlaceRoomsAuto, vec![]), Labeled("Highlight\nBoundaries", C::HighlightBoundaries, vec![])]));
+        }
         if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::StructColumn) {
             v.push(panel("Tag", vec![Labeled("Tag on\nPlacement", C::TagOnPlacement, vec![])]));
         }

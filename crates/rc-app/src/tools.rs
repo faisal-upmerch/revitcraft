@@ -715,6 +715,9 @@ pub struct ToolOptions {
     pub stair_width: f64,
     pub room_tag: bool,
     pub room_upper: f64,
+    /// New rooms: Upper Limit (None = the room's level) and Base Offset.
+    pub room_upper_level: Option<Id>,
+    pub room_base_offset: f64,
     pub mass_height: f64,
     pub topo_height: f64,
     pub topo_thickness: f64,
@@ -835,7 +838,10 @@ impl ToolOptions {
             symbol_kind: SymbolKind::NorthArrow,
             stair_width: if imperial { 1066.8 } else { 1200.0 },
             room_tag: true,
-            room_upper: if imperial { 2438.4 } else { 2500.0 },
+            // The reference app's templates: Limit Offset 10'-0" (2500 mm in metric).
+            room_upper: if imperial { 3048.0 } else { 2500.0 },
+            room_upper_level: None,
+            room_base_offset: 0.0,
             mass_height: if imperial { 9144.0 } else { 10000.0 },
             topo_height: 0.0,
             topo_thickness: if imperial { 3048.0 } else { 3000.0 },

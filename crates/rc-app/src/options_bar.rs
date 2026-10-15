@@ -254,12 +254,39 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 number_field(ui, &mut app.opts.rotation, 1.0, 0.0..=360.0, "°");
             }
             ToolKind::Room => {
-                ui.label("Upper Offset:");
+                // As in the reference app: Upper Limit, Offset, tag orientation, Leader, Room.
+                let level = app.active_level();
+                let levels: Vec<(Id, String)> = app.doc.data.levels().iter().map(|(id, l)| (*id, l.name.clone())).collect();
+                ui.label("Upper Limit:");
+                let cur = app.opts.room_upper_level.or(level);
+                let mut pick = cur;
+                let name = cur.and_then(|c| levels.iter().find(|l| l.0 == c).map(|l| l.1.clone())).unwrap_or_default();
+                egui::ComboBox::from_id_salt("room-ul").selected_text(name).width(110.0).show_ui(ui, |ui| {
+                    for (id, n) in &levels {
+                        ui.selectable_value(&mut pick, Some(*id), n);
+                    }
+                });
+                if pick != cur {
+                    app.opts.room_upper_level = pick.filter(|p| Some(*p) != level);
+                }
+                ui.label("Offset:");
                 let mut h = app.opts.room_upper;
                 if length_field(ui, app, "room-up", &mut h, 70.0) {
-                    app.opts.room_upper = h.max(100.0);
+                    app.opts.room_upper = h;
                 }
-                crate::style::check(ui, &mut app.opts.room_tag, "Tag on placement");
+                let mut hz = app.opts.tag_horizontal;
+                ui.add_enabled_ui(app.opts.room_tag, |ui| {
+                    egui::ComboBox::from_id_salt("room-tag-or").selected_text(if hz { "Horizontal" } else { "Vertical" }).width(90.0).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut hz, true, "Horizontal");
+                        ui.selectable_value(&mut hz, false, "Vertical");
+                    });
+                    crate::style::check(ui, &mut app.opts.tag_leader, "Leader");
+                });
+                app.opts.tag_horizontal = hz;
+                ui.label("Room:");
+                egui::ComboBox::from_id_salt("room-which").selected_text("New").width(110.0).show_ui(ui, |ui| {
+                    let _ = ui.selectable_label(true, "New");
+                });
             }
             ToolKind::Area | ToolKind::AreaTag | ToolKind::RoomTag | ToolKind::Tag => {
                 let mut hz = app.opts.tag_horizontal;

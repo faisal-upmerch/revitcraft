@@ -252,7 +252,7 @@ pub fn add_tag(p: &mut Project, view: Id, host: Id, at: DVec2, leader: bool) -> 
     if p.element(host).is_none() {
         return Err("Nothing to tag.".into());
     }
-    Ok(push_in_view(p, view, ElementKind::Tag(Tag { host, position: at, leader, leader_end: None, parameter: String::new(), key: String::new() })))
+    Ok(push_in_view(p, view, ElementKind::Tag(Tag { host, position: at, leader, leader_end: None, parameter: String::new(), vertical: false, key: String::new() })))
 }
 
 /// Tags every untagged element of the given categories visible in a plan view.
@@ -769,6 +769,41 @@ pub fn add_stair(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRu
         }
     }
     Ok(id)
+}
+
+/// Rooms in every enclosed region of a level that has none (Place Rooms Automatically).
+pub fn place_rooms_automatically(p: &mut Project, level: Id) -> Vec<Id> {
+    let regions = analysis::enclosed_regions(p, level);
+    let taken: Vec<DVec2> = p.elements.iter().filter_map(|e| match &e.kind {
+        ElementKind::Room(r) if r.level == level => Some(r.location),
+        _ => None,
+    }).collect();
+    let mut out = Vec::new();
+    for reg in regions {
+        if taken.iter().any(|q| geom::contains(&reg.centerline, *q)) {
+            continue;
+        }
+        // A point inside: the centroid, or the centre of the largest triangle for odd shapes.
+        let c = geom::centroid(&reg.interior);
+        let at = if geom::contains(&reg.interior, c) {
+            c
+        } else {
+            let poly = &reg.interior;
+            geom::triangulate(poly)
+                .into_iter()
+                .max_by(|a, b| tri_area(poly, *a).total_cmp(&tri_area(poly, *b)))
+                .map(|[a, b, k]| (poly[a] + poly[b] + poly[k]) / 3.0)
+                .unwrap_or(c)
+        };
+        if let Ok(id) = add_room(p, level, at) {
+            out.push(id);
+        }
+    }
+    out
+}
+
+fn tri_area(poly: &[DVec2], [a, b, c]: [usize; 3]) -> f64 {
+    geom::cross2(poly[b] - poly[a], poly[c] - poly[a]).abs() / 2.0
 }
 
 /// Creates a ramp from its runs (from the base level to the level above), with railings along

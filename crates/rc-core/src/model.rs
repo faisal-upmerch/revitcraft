@@ -727,7 +727,13 @@ pub struct Room {
     pub level: Id,
     /// Where the room was placed; the boundary is found from surrounding walls.
     pub location: DVec2,
+    /// Limit Offset, above `upper_level` (the room's own level when None).
     pub upper_offset: f64,
+    /// Upper Limit.
+    #[serde(default)]
+    pub upper_level: Option<Id>,
+    #[serde(default)]
+    pub base_offset: f64,
     #[serde(default)]
     pub department: String,
     #[serde(default)]
@@ -1123,6 +1129,9 @@ pub struct Tag {
     /// User keynotes: the key chosen for this tag.
     #[serde(default)]
     pub key: String,
+    /// Vertical orientation (the tag reads bottom to top).
+    #[serde(default)]
+    pub vertical: bool,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]

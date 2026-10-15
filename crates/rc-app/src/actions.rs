@@ -28,6 +28,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         StairRailing => app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Stair | SketchKind::Ramp)),
         RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp),
         RampBoundary | RampRiser => false,
+        PlaceRoomsAuto | HighlightBoundaries => plan && !in_sketch,
         StairLanding | StairSupport | ConnectLevels => false,
         RailingPickHost => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing),
         AdjustHeight | AdjustOverhang => false,
@@ -278,6 +279,49 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         RampBoundary | RampRiser => {}
+        PlaceRoomsAuto => {
+            if let Some(level) = app.active_level() {
+                let (vid, tag) = (app.active.unwrap_or(0), app.opts.room_tag);
+                let (upper, upper_level) = (app.opts.room_upper, app.opts.room_upper_level);
+                let mut n = 0;
+                app.run("Place Rooms Automatically", |p| {
+                    let ids = edit::place_rooms_automatically(p, level);
+                    n = ids.len();
+                    for id in ids {
+                        let at = match p.element_mut(id).map(|e| &mut e.kind) {
+                            Some(ElementKind::Room(r)) => {
+                                r.upper_offset = upper;
+                                r.upper_level = upper_level.filter(|l| *l != level);
+                                r.location
+                            }
+                            _ => continue,
+                        };
+                        if tag {
+                            edit::add_tag(p, vid, id, at, false)?;
+                        }
+                    }
+                    Ok(())
+                });
+                app.info(format!("{n} rooms were automatically created."));
+            }
+        }
+        HighlightBoundaries => {
+            if let Some(level) = app.active_level() {
+                app.boundary_highlight = app
+                    .doc
+                    .data
+                    .elements
+                    .iter()
+                    .filter(|e| match &e.kind {
+                        ElementKind::Wall(w) => w.room_bounding && w.base_level == level,
+                        ElementKind::RoomSeparation(s) => s.level == level,
+                        _ => false,
+                    })
+                    .map(|e| e.id)
+                    .collect();
+                app.info("Room Bounding elements are highlighted.");
+            }
+        }
         FilledRegion => start_sketch(app, SketchKind::Region { masking: false }, DrawMode::Rect),
         MaskingRegion => start_sketch(app, SketchKind::Region { masking: true }, DrawMode::Rect),
         RevisionCloud => start_sketch(app, SketchKind::RevisionCloud, DrawMode::Rect),

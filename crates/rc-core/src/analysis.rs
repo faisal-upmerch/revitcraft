@@ -523,6 +523,12 @@ pub fn find_enclosure(p: &Project, level: Id, point: DVec2) -> Option<RoomBounda
         .min_by(|a, b| geom::area(&a.centerline).total_cmp(&geom::area(&b.centerline)))
 }
 
+/// A room's Unbounded Height: from its base to its upper limit plus the limit offset.
+pub fn room_height(p: &Project, r: &Room) -> f64 {
+    let top = p.level_elevation(r.upper_level.unwrap_or(r.level)) + r.upper_offset;
+    (top - p.level_elevation(r.level) - r.base_offset).max(0.0)
+}
+
 pub fn room_boundary(p: &Project, room: &Room) -> Option<RoomBoundary> {
     find_enclosure(p, room.level, room.location)
 }
