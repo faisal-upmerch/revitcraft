@@ -591,6 +591,10 @@ pub struct ToolOptions {
     pub slope_head_offset: f64,
     /// Pick Walls in floor sketches: boundary on the core face.
     pub extend_to_core: bool,
+    /// Pick Walls in roof sketches: the overhang is measured from the core face.
+    pub roof_extend_to_core: bool,
+    /// New roofs: Base Offset From Level.
+    pub roof_base_offset: f64,
     pub poly_sides: u32,
     /// Wall top: None = Unconnected (uses `wall_height`).
     pub wall_top: Option<Id>,
@@ -706,6 +710,8 @@ impl ToolOptions {
             floor_room_bounding: true,
             slope_head_offset: 304.8,
             extend_to_core: true,
+            roof_extend_to_core: false,
+            roof_base_offset: 0.0,
             poly_sides: 6,
             wall_top: None,
             wall_depth: false,
@@ -724,8 +730,9 @@ impl ToolOptions {
             column_top: None,
             column_height: if imperial { 3048.0 } else { 3000.0 },
             defines_slope: true,
-            overhang: if imperial { 609.6 } else { 600.0 },
-            roof_slope: 30.0,
+            // The reference app's templates: no overhang; 9" / 12" (imperial) or 30° slopes.
+            overhang: 0.0,
+            roof_slope: if imperial { 9f64.atan2(12.0).to_degrees() } else { 30.0 },
             make_plan: true,
             constrain: false,
             copy_multiple: false,

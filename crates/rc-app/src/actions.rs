@@ -23,6 +23,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     let on_sheet = view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_)));
     match cmd {
         Undo => app.doc.can_undo() || in_sketch,
+        AlignEaves => app.sketch.as_ref().is_some_and(|s| s.kind.is_roof()),
+        AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         Door | Window | Component | Column | StructColumn | Beam | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
         | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Shaft | WallOpening | CurtainGrid | Section | Callout | ElevationView
@@ -665,6 +667,10 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
             app.tool.reset();
         }
+        // Footprint lines here are the eaves themselves, all at the roof's base height, so
+        // they are always aligned; the reference app needs this when plates differ.
+        AlignEaves => app.info("The eaves are aligned: every footprint line is an eave at the roof's base height."),
+        AdjustHeight | AdjustOverhang => {}
         WorkPlaneSet => app.dialogs.work_plane = true,
         WorkPlaneShow => {
             if let Some(v) = app.active {
@@ -913,6 +919,14 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     let mut sk = Sketch::new(kind, view, level);
     sk.width = app.opts.stair_width;
     app.sketch = Some(sk);
+    // A footprint roof started on the lowest level offers to move up a level, as in the
+    // reference app's Lowest Level Notice.
+    if kind == SketchKind::Roof {
+        let levels = app.doc.data.levels();
+        if levels.len() > 1 && levels.first().is_some_and(|l| l.0 == level) {
+            app.dialogs.lowest_level = Some(levels[1].0);
+        }
+    }
     app.opts.draw_mode = mode;
     app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
     app.tool = Tool::new(ToolKind::SketchLine);
@@ -1066,6 +1080,7 @@ pub fn finish_sketch(app: &mut App) {
                             let id = edit::add_roof(p, level, o.roof_type, outer, RoofShape::Hip, 0.0)?;
                             if let Some(ElementKind::Roof(r)) = p.element_mut(id).map(|e| &mut e.kind) {
                                 r.overhang = 0.0;
+                                r.base_offset = o.roof_base_offset;
                                 r.slope_deg = o.roof_slope;
                                 r.edge_slopes = match_edge_flags(&r.footprint, &poly, &flags);
                                 r.shape = shape_from_flags(&r.edge_slopes);

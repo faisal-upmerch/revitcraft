@@ -135,6 +135,9 @@ pub enum Icon {
     BoundaryLine,
     SlopeArrow,
     SpanDirection,
+    AlignEaves,
+    AdjustHeight,
+    AdjustOverhang,
     WorkPlaneShow,
     WorkPlaneViewer,
     DrawEllipse,
@@ -1258,6 +1261,25 @@ fn draw(g: &Pen, icon: Icon) {
         SlopeArrow => {
             g.shade(&[(0.06, 0.66), (0.62, 0.42), (0.94, 0.56), (0.38, 0.8)], G0, G2, false);
             g.arrow((0.22, 0.68), (0.74, 0.46), MAGENTA);
+        }
+        AlignEaves => {
+            // A roof in elevation with its two eaves on one dashed line.
+            g.shade(&[(0.08, 0.66), (0.5, 0.26), (0.92, 0.66), (0.82, 0.66), (0.5, 0.38), (0.18, 0.66)], G0, G2, false);
+            g.line_w(&[(0.04, 0.8), (0.96, 0.8)], BLUE, g.w * 1.4);
+            g.line(&[(0.13, 0.66), (0.13, 0.8)], ink);
+            g.line(&[(0.87, 0.66), (0.87, 0.8)], ink);
+        }
+        AdjustHeight => {
+            g.shade(&[(0.1, 0.7), (0.5, 0.34), (0.9, 0.7), (0.8, 0.7), (0.5, 0.46), (0.2, 0.7)], G0, G2, false);
+            g.line(&[(0.5, 0.06), (0.5, 0.28)], ink);
+            g.arrow_head((0.5, 0.28), (0.5, 0.06), ink, 0.12);
+            g.arrow_head((0.5, 0.06), (0.5, 0.28), ink, 0.12);
+        }
+        AdjustOverhang => {
+            g.shade(&[(0.1, 0.62), (0.5, 0.26), (0.9, 0.62), (0.8, 0.62), (0.5, 0.38), (0.2, 0.62)], G0, G2, false);
+            g.line(&[(0.06, 0.84), (0.34, 0.84)], ink);
+            g.arrow_head((0.34, 0.84), (0.06, 0.84), ink, 0.12);
+            g.arrow_head((0.06, 0.84), (0.34, 0.84), ink, 0.12);
         }
         SpanDirection => {
             g.shade(&[(0.06, 0.62), (0.6, 0.38), (0.94, 0.52), (0.4, 0.76)], G0, G2, false);

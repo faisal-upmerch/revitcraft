@@ -1123,7 +1123,7 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
         let kind = fe.family.param(&n).map(|p| p.kind).unwrap_or(ParamKind::Text);
         let stored = match kind {
             ParamKind::Length => units.parse(&v, ParamKind::Length).map(rc_core::units::to_stored).ok_or_else(|| format!("'{v}' is not a valid length.")),
-            ParamKind::Angle | ParamKind::Number | ParamKind::Integer | ParamKind::Currency => v.trim().parse::<f64>().map(rc_core::units::to_stored).map_err(|e| e.to_string()),
+            ParamKind::Angle | ParamKind::Slope | ParamKind::Number | ParamKind::Integer | ParamKind::Currency => v.trim().parse::<f64>().map(rc_core::units::to_stored).map_err(|e| e.to_string()),
             _ => Ok(v),
         };
         match stored {

@@ -111,15 +111,18 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ToolKind::SketchLine => {
                 let sk_kind = app.sketch.as_ref().map(|s| s.kind);
                 if sk_kind.is_some_and(|k| k.is_roof()) {
+                    // As in the reference app: Defines slope, then Overhang and Extend to wall
+                    // core when picking walls (the slope itself is a roof property).
                     crate::style::check(ui, &mut app.opts.defines_slope, "Defines slope");
-                    ui.label("Overhang:");
-                    let mut o = app.opts.overhang;
-                    if length_field(ui, app, "roof-oh", &mut o, 60.0) {
-                        app.opts.overhang = o.max(0.0);
+                    if mode == DrawMode::PickWalls {
+                        ui.label("Overhang:");
+                        let mut o = app.opts.overhang;
+                        if length_field(ui, app, "roof-oh", &mut o, 70.0) {
+                            app.opts.overhang = o;
+                        }
+                        crate::style::check(ui, &mut app.opts.roof_extend_to_core, "Extend to wall core");
+                        return;
                     }
-                    ui.label("Slope:");
-                    number_field(ui, &mut app.opts.roof_slope, 0.5, 1.0..=80.0, "°");
-                    sep(ui);
                 }
                 if sk_kind == Some(SketchKind::Mass) {
                     ui.label("Height:");

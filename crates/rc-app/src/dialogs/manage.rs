@@ -45,7 +45,7 @@ fn guide_grid(app: &mut App, ctx: &egui::Context) {
         });
         ui.memory_mut(|m| m.data.insert_temp(key, spacing));
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 done = true;
@@ -89,7 +89,7 @@ fn title_block(app: &mut App, ctx: &egui::Context) {
         });
         ui.memory_mut(|m| m.data.insert_temp(key, size));
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 done = true;
@@ -160,7 +160,7 @@ fn keynote_pick(app: &mut App, ctx: &egui::Context) {
             }
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -456,7 +456,7 @@ fn global_new(app: &mut App, ctx: &egui::Context) {
             ui.end_row();
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -697,7 +697,7 @@ fn param_edit(app: &mut App, ctx: &egui::Context) {
             });
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -1258,7 +1258,7 @@ fn save_selection(app: &mut App, ctx: &egui::Context) {
             }
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -1348,7 +1348,7 @@ fn selection_sets(app: &mut App, ctx: &egui::Context) {
             }
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if edit {
                 if dlg_button(ui, "Close", true, true) {

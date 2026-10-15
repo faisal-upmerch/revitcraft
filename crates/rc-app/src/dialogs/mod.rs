@@ -58,6 +58,8 @@ pub struct Dialogs {
     pub create_group: Option<String>,
     /// Work Plane > Set.
     pub work_plane: bool,
+    /// Lowest Level Notice for a new footprint roof: the level offered.
+    pub lowest_level: Option<Id>,
     pub tag_all: bool,
     pub tag_all_cats: BTreeSet<Category>,
     pub view_templates: bool,
@@ -402,6 +404,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     export_dialog(app, ctx);
     create_group(app, ctx);
     work_plane(app, ctx);
+    lowest_level_notice(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -797,6 +800,46 @@ fn export_image(app: &mut App, id: Id) {
 
 // ---------------------------------------------------------------- small dialogs
 
+/// "You have created the Roof on the lowest level. Would you like to move it to: [level] ?"
+fn lowest_level_notice(app: &mut App, ctx: &egui::Context) {
+    let Some(mut target) = app.dialogs.lowest_level else { return };
+    if app.sketch.as_ref().is_none_or(|s| s.kind != crate::tools::SketchKind::Roof) {
+        app.dialogs.lowest_level = None;
+        return;
+    }
+    let levels: Vec<(Id, String)> = app.doc.data.levels().iter().skip(1).map(|(id, l)| (*id, l.name.clone())).collect();
+    let (mut open, mut yes, mut no) = (true, false, false);
+    window("Lowest Level Notice").open(&mut open).resizable(false).default_width(360.0).show(ctx, |ui| {
+        ui.label("You have created the Roof on the lowest level.");
+        ui.horizontal(|ui| {
+            ui.label("Would you like to move it to:");
+            let name = levels.iter().find(|l| l.0 == target).map(|l| l.1.clone()).unwrap_or_default();
+            egui::ComboBox::from_id_salt("lln-level").selected_text(name).width(110.0).show_ui(ui, |ui| {
+                for (id, n) in &levels {
+                    ui.selectable_value(&mut target, *id, n);
+                }
+            });
+            ui.label("?");
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "No", false, true) {
+                no = true;
+            }
+            if dlg_button(ui, "Yes", true, true) {
+                yes = true;
+            }
+        });
+    });
+    if yes {
+        if let Some(sk) = app.sketch.as_mut() {
+            sk.level = target;
+        }
+    }
+    app.dialogs.lowest_level = if yes || no || !open { None } else { Some(target) };
+}
+
 /// Family templates offered by New Family (all start from the generic template).
 const FAMILY_TEMPLATES: [(&str, Category); 6] = [
     ("Generic Model", Category::GenericModels),
@@ -831,7 +874,7 @@ fn new_family_dialog(app: &mut App, ctx: &egui::Context) {
             }
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -872,7 +915,7 @@ fn in_place_dialog(app: &mut App, ctx: &egui::Context) {
                 }
             });
             ui.add_space(8.0);
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.spacing_mut().item_spacing.x = 8.0;
                 if dlg_button(ui, "Cancel", false, true) {
                     cancel = true;
@@ -891,7 +934,7 @@ fn in_place_dialog(app: &mut App, ctx: &egui::Context) {
             ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
         });
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -962,7 +1005,7 @@ fn work_plane(app: &mut App, ctx: &egui::Context) {
         ui.add_enabled(false, egui::RadioButton::new(false, "Pick a plane"));
         ui.add_enabled(false, egui::RadioButton::new(false, "Pick a line and use the work plane it was sketched in"));
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -1036,7 +1079,7 @@ fn create_group(app: &mut App, ctx: &egui::Context) {
         crate::style::check(ui, &mut open_editor, "Open in group editor");
         ui.memory_mut(|m| m.data.insert_temp(edit_id, open_editor));
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             ui.spacing_mut().item_spacing.x = 8.0;
             if dlg_button(ui, "Cancel", false, true) {
                 cancel = true;
@@ -1400,7 +1443,7 @@ fn save_reminder(app: &mut App, ctx: &egui::Context) {
             }
         }
         ui.add_space(8.0);
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
             if dlg_button(ui, "Cancel", false, true) {
                 choice = 4;
             }

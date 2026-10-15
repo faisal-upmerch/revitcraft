@@ -153,7 +153,7 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Base Level", CONSTRAINTS, PKind::Level, false, false));
             d.push(def("Base Offset From Level", CONSTRAINTS, v(Length), false, false));
             d.push(def("Roof Shape", CONSTRUCTION, choice(&RoofShape::ALL, RoofShape::label), false, false));
-            d.push(def("Slope", CONSTRUCTION, v(Angle), false, false));
+            d.push(def("Slope", DIMENSIONS, v(Slope), false, false));
             d.push(def("Overhang", CONSTRUCTION, v(Length), false, false));
             d.push(def("Fascia", CONSTRUCTION, v(YesNo), false, false));
             d.push(def("Gutter", CONSTRUCTION, v(YesNo), false, false));

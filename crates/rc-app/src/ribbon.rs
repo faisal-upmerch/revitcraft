@@ -366,6 +366,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if let Some(d) = draw_panel(app) {
             v.push(d);
         }
+        if sk.kind.is_roof() {
+            v.push(panel("Tools", vec![Labeled("Align\nEaves", C::AlignEaves, vec![]), Stack(vec![C::AdjustHeight, C::AdjustOverhang])]));
+        }
         v.push(work_plane_panel());
         return Some((sk.kind.title().to_string(), v));
     }

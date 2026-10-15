@@ -287,6 +287,7 @@ fn new_label(app: &App) -> Option<&'static str> {
         ToolKind::Beam => "New Structural Framing",
         ToolKind::Room => "New Rooms",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. })) => "Floors",
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Roof) => "Roofs",
         _ => return None,
     })
 }
@@ -498,6 +499,75 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
             });
             if let Some(SketchKind::Floor { structural: s }) = app.sketch.as_mut().map(|s| &mut s.kind) {
                 *s = structural;
+            }
+        }
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Roof) => {
+            // A new footprint roof's instance parameters while its footprint is sketched.
+            let mut base = app.sketch.as_ref().map(|s| s.level).unwrap_or_default();
+            let thick = app.doc.data.sys_type(o.roof_type).map(|t| t.thickness()).unwrap_or(0.0);
+            let levels: Vec<(Id, String)> = app.doc.data.levels().iter().map(|(id, l)| (*id, l.name.clone())).collect();
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-roof").show(ui, |ui| {
+                prop_label(ui, "Base Level", false);
+                let name = levels.iter().find(|l| l.0 == base).map(|l| l.1.clone()).unwrap_or_default();
+                egui::ComboBox::from_id_salt("nr-base").selected_text(name).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                    for (id, n) in &levels {
+                        ui.selectable_value(&mut base, *id, n);
+                    }
+                });
+                ui.end_row();
+                prop_label(ui, "Room Bounding", true);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, ""));
+                ui.end_row();
+                prop_label(ui, "Related to Mass", true);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
+                ui.end_row();
+                prop_label(ui, "Base Offset From Level", false);
+                len_row(ui, "roof-base", &mut o.roof_base_offset);
+                ui.end_row();
+                prop_label(ui, "Cutoff Level", true);
+                ro(ui, "None");
+                ui.end_row();
+                prop_label(ui, "Cutoff Offset", true);
+                ro(ui, &units.length(0.0));
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Construction", true);
+            prop_grid(ui, "new-roof-c").show(ui, |ui| {
+                prop_label(ui, "Rafter Cut", true);
+                ro(ui, "Plumb Cut");
+                ui.end_row();
+                prop_label(ui, "Fascia Depth", true);
+                ro(ui, "");
+                ui.end_row();
+                prop_label(ui, "Maximum Ridge Height", true);
+                ro(ui, "");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Dimensions", true);
+            prop_grid(ui, "new-roof-d").show(ui, |ui| {
+                prop_label(ui, "Slope", false);
+                let id = egui::Id::new("new-prop-roof-slope");
+                let mut s: String = ui.memory(|m| m.data.get_temp(id)).unwrap_or_else(|| units.slope(o.roof_slope));
+                let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(ui.available_width() - 4.0));
+                if r.has_focus() {
+                    ui.memory_mut(|m| m.data.insert_temp(id, s.clone()));
+                }
+                if r.lost_focus() {
+                    ui.memory_mut(|m| m.data.remove::<String>(id));
+                    if let Some(x) = units.parse_slope(&s).filter(|x| (0.0..=80.0).contains(x)) {
+                        o.roof_slope = x;
+                    }
+                }
+                ui.end_row();
+                for (name, value) in [("Thickness", units.length(thick)), ("Volume", String::new()), ("Area", String::new())] {
+                    prop_label(ui, name, true);
+                    ro(ui, &value);
+                    ui.end_row();
+                }
+            });
+            if let Some(sk) = app.sketch.as_mut() {
+                sk.level = base;
             }
         }
         _ => {

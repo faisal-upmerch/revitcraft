@@ -89,7 +89,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SpanDirection => "Pick a boundary line to set the span direction.".into(),
         k if k.uses_draw_modes() => match mode {
             DrawMode::PickLines => "Pick a line, edge, wall or grid to create from it.".into(),
-            DrawMode::PickWalls => "Pick walls to create the boundary (the face on the cursor side is used).".into(),
+            DrawMode::PickWalls => "Pick walls to create lines.".into(),
             DrawMode::Fillet => if t.picked.is_empty() { "Pick the first element for the fillet.".into() } else { "Pick the second element.".into() },
             DrawMode::Rect => if n == 0 { "Click to enter the first corner of the rectangle.".into() } else { "Click to enter the opposite corner.".into() },
             DrawMode::PolyIn | DrawMode::PolyCirc | DrawMode::Circle => if n == 0 { "Click to enter the center.".into() } else { "Click to enter the radius (or type it).".into() },
@@ -850,17 +850,15 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
         let centroid = mids.iter().fold(DVec2::ZERO, |a, b| a + *b) / mids.len().max(1) as f64;
         let w0 = p.wall(id).cloned();
         let inside = w0.is_some_and(|w0| (c - w0.start).dot(w0.normal()) * (centroid - w0.start).dot(w0.normal()) > 0.0);
-        let roof = app.sketch.as_ref().is_some_and(|s| s.kind.is_roof());
         let segs: Vec<Seg> = walls
             .iter()
             .filter_map(|wid| {
                 let w = p.wall(*wid)?;
                 let e = p.element(*wid)?;
                 let seg = element_curve(e)?;
-                let t = analysis::wall_thickness(p, w);
                 let toward = if (centroid - w.start).dot(w.normal()) >= 0.0 { 1.0 } else { -1.0 };
                 let side = if inside { toward } else { -toward };
-                Some(seg.offset(side * (t / 2.0 + if roof { app.opts.overhang } else { 0.0 })))
+                Some(seg.offset(pick_wall_offset(app, w, side)))
             })
             .collect();
         draw_segs(painter, xf, &segs, Stroke::new(2.5, style::PRESELECT));
@@ -879,17 +877,8 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
     let Some(mut seg) = element_curve(&e) else { return };
     let mut extra = app.opts.offset;
     if let (DrawMode::PickWalls, ElementKind::Wall(w)) = (mode, &e.kind) {
-        let t = analysis::wall_thickness(&app.doc.data, w);
         let side = if (c - w.start).dot(w.normal()) >= 0.0 { 1.0 } else { -1.0 };
-        let roof = app.sketch.as_ref().is_some_and(|s| s.kind.is_roof());
-        let floorish = app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Floor { .. } | SketchKind::EditFloor(_) | SketchKind::Ceiling | SketchKind::EditCeiling(_)));
-        extra = if floorish && app.opts.extend_to_core {
-            // "Extend into wall (to core)": the boundary follows the core face on the cursor side.
-            let (plus, minus) = analysis::wall_core_offsets(&app.doc.data, w);
-            if side > 0.0 { plus } else { minus }
-        } else {
-            side * (t / 2.0 + if roof { app.opts.overhang } else { 0.0 })
-        };
+        extra = pick_wall_offset(app, w, side);
         let _ = &mut seg;
     }
     // The wall being picked highlights and its name follows the cursor, as in the reference app.
@@ -914,6 +903,24 @@ fn pick_draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, 
             app.opts.offset = saved;
         }
     }
+}
+
+/// Offset from a picked wall's centreline to the sketch line on `side` (+1 = along the wall
+/// normal): the finish face, or the core face with "Extend into wall (to core)"; roofs add
+/// their overhang beyond it ("Extend to wall core" measures it from the core face).
+fn pick_wall_offset(app: &App, w: &rc_core::model::Wall, side: f64) -> f64 {
+    let p = &app.doc.data;
+    let kind = app.sketch.as_ref().map(|s| s.kind);
+    let roof = kind.is_some_and(|k| k.is_roof());
+    let floorish = matches!(kind, Some(SketchKind::Floor { .. } | SketchKind::EditFloor(_) | SketchKind::Ceiling | SketchKind::EditCeiling(_)));
+    let core = (floorish && app.opts.extend_to_core) || (roof && app.opts.roof_extend_to_core);
+    let face = if core {
+        let (plus, minus) = analysis::wall_core_offsets(p, w);
+        if side > 0.0 { plus } else { minus }
+    } else {
+        side * analysis::wall_thickness(p, w) / 2.0
+    };
+    face + if roof { side * app.opts.overhang } else { 0.0 }
 }
 
 /// Walls joined end to end with `start` (same base level), in no particular order.

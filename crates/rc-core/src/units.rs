@@ -134,6 +134,38 @@ impl Units {
         }
     }
 
+    /// A slope stored in degrees: "30.00°" in metric, rise over 12" ("9\" / 12\"") in imperial,
+    /// as the reference app's templates show it.
+    pub fn slope(&self, deg: f64) -> String {
+        if self.system == UnitSystem::Imperial && deg.abs() < 89.99 {
+            let (neg, whole, num, den) = fraction_parts(12.0 * deg.to_radians().tan(), self.fraction.min(32));
+            format!("{}{}\" / 12\"", if neg { "-" } else { "" }, frac_text(whole, num, den))
+        } else {
+            format!("{deg:.*}°", self.angle_decimals as usize)
+        }
+    }
+
+    /// Parses a slope: "30°" is an angle; "9/12" or "9\" / 12\"" is rise over run; a bare
+    /// number is the rise over 12" in imperial projects and degrees otherwise.
+    pub fn parse_slope(&self, input: &str) -> Option<f64> {
+        let s = input.trim();
+        if s.contains('°') {
+            return parse_input(s, ParamKind::Angle);
+        }
+        let inches = |t: &str| parse_number(t.trim().trim_end_matches('"').trim());
+        let parts = match s.split_once(" / ") {
+            Some(x) => Some(x),
+            None if s.matches('/').count() == 1 && !s.contains(' ') => s.split_once('/'),
+            None => None,
+        };
+        if let Some((rise, run)) = parts {
+            let (r, n) = (inches(rise)?, inches(run)?);
+            return (n.abs() > 1e-9).then(|| r.atan2(n).to_degrees());
+        }
+        let v = parse_number(s.trim_end_matches('"'))?;
+        Some(if self.system == UnitSystem::Imperial { v.atan2(12.0).to_degrees() } else { v })
+    }
+
     pub fn area(&self, mm2: f64) -> String {
         let d = self.area_decimals as usize;
         match self.area {
@@ -154,7 +186,9 @@ impl Units {
             ParamKind::Length => self.length(value),
             ParamKind::Area => self.area(value),
             ParamKind::Volume => self.volume(value),
-            ParamKind::Angle => format!("{}°", trim(format!("{value:.*}", self.angle_decimals as usize))),
+            // Angles keep their decimals ("30.00°"), as in the reference app.
+            ParamKind::Angle => format!("{value:.*}°", self.angle_decimals as usize),
+            ParamKind::Slope => self.slope(value),
             ParamKind::Integer => format!("{}", value.round() as i64),
             ParamKind::YesNo => if value != 0.0 { "Yes" } else { "No" }.into(),
             ParamKind::Currency => format!("{}{value:.2}", self.currency),
@@ -188,6 +222,7 @@ impl Units {
                 };
                 num.trim().parse::<f64>().ok().map(|v| v * factor)
             }
+            ParamKind::Slope => self.parse_slope(input),
             ParamKind::Currency => input.trim().trim_start_matches(|c: char| !c.is_ascii_digit() && c != '-' && c != '.').replace(',', "").parse().ok(),
             _ => parse_input(input, kind),
         }
@@ -376,5 +411,22 @@ mod tests {
         assert!(close(u.parse("10", ParamKind::Length), 3048.0));
         assert!(close(u.parse("2400mm", ParamKind::Length), 2400.0));
         assert_eq!(u.area(MM_PER_FOOT * MM_PER_FOOT * 120.0), "120 SF");
+    }
+
+    #[test]
+    fn slopes() {
+        let (m, i) = (Units::metric(), Units::imperial());
+        assert_eq!(m.format(30.0, ParamKind::Slope), "30.00°");
+        assert_eq!(m.format(30.0, ParamKind::Angle), "30.00°");
+        let nine = 9f64.atan2(12.0).to_degrees();
+        assert_eq!(i.format(nine, ParamKind::Slope), "9\" / 12\"");
+        assert_eq!(i.slope(6.5f64.atan2(12.0).to_degrees()), "6 1/2\" / 12\"");
+        let close = |a: Option<f64>, b: f64| (a.unwrap() - b).abs() < 1e-9;
+        assert!(close(i.parse_slope("9\" / 12\""), nine));
+        assert!(close(i.parse_slope("9/12"), nine));
+        assert!(close(i.parse_slope("9"), nine));
+        assert!(close(i.parse_slope("30°"), 30.0));
+        assert!(close(m.parse_slope("30"), 30.0));
+        assert!(close(i.parse_slope("6 1/2\" / 12\""), 6.5f64.atan2(12.0).to_degrees()));
     }
 }

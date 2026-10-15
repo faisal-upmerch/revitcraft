@@ -1629,6 +1629,8 @@ pub enum ParamKind {
     YesNo,
     Material,
     Currency,
+    /// Stored in degrees; shown as rise over run in imperial projects.
+    Slope,
 }
 
 impl ParamKind {
@@ -1654,6 +1656,7 @@ impl ParamKind {
             ParamKind::YesNo => "Yes/No",
             ParamKind::Material => "Material",
             ParamKind::Currency => "Currency",
+            ParamKind::Slope => "Slope",
         }
     }
     pub fn is_numeric(self) -> bool {
