@@ -672,6 +672,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
 
     walls_graphics(c, d);
     stairs_graphics(c, d);
+    ramps_graphics(c, d);
 
     // Roofs: overhead (dashed) when above the cut on this level, projection when below.
     for e in &p.elements {
@@ -1396,6 +1397,58 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
     }
 }
 
+// ---------------------------------------------------------------- ramps
+
+/// Ramps in plan: run and landing outlines, the slope arrow along the path from the bottom
+/// with the up text at its start (down text on the top level), as in the reference app.
+fn ramps_graphics(c: &Ctx, d: &mut Drawing) {
+    let p = c.p;
+    for e in &p.elements {
+        let ElementKind::Ramp(r) = &e.kind else { continue };
+        if !analysis::visible_in(p, c.view, e) {
+            continue;
+        }
+        let base_level = r.base_level == c.level;
+        let top_level = r.top_level == Some(c.level);
+        if !base_level && !top_level {
+            continue;
+        }
+        let lay = build3d::ramp_layout(p, r);
+        let start = d.prims.len();
+        let mut path = Vec::new();
+        for (run, ..) in &lay.runs {
+            let dir = (run.end - run.start).normalize_or_zero();
+            let n = geom::perp(dir) * (run.width / 2.0);
+            d.line(Some(e.id), vec![run.start - n, run.end - n, run.end + n, run.start + n], true, MEDIUM);
+            if path.last().is_none_or(|q: &DVec2| q.distance(run.start) > 1.0) {
+                path.push(run.start);
+            }
+            path.push(run.end);
+        }
+        for (poly, _) in &lay.landings {
+            d.line(Some(e.id), poly.clone(), true, MEDIUM);
+        }
+        if path.len() >= 2 && (base_level || r.up_arrow_all_views) {
+            d.line(Some(e.id), path.clone(), false, THIN);
+            let (a, b) = (path[path.len() - 2], path[path.len() - 1]);
+            let dir = (b - a).normalize_or_zero();
+            let side = geom::perp(dir) * 90.0;
+            d.line(Some(e.id), vec![b - dir * 250.0 + side, b, b - dir * 250.0 - side], true, THIN);
+        }
+        let first = lay.runs.first().map(|q| q.0.clone());
+        if let Some(run) = first {
+            let dir = (run.end - run.start).normalize_or_zero();
+            let at = run.start - dir * (3.0 * c.scale);
+            if base_level && r.up_label {
+                d.text(Some(e.id), at, &r.up_text, 2.5, Anchor::Center);
+            } else if top_level && r.down_label {
+                d.text(Some(e.id), at, &r.down_text, 2.5, Anchor::Center);
+            }
+        }
+        style_element(c, e, d, start);
+    }
+}
+
 // ---------------------------------------------------------------- ceiling plans
 
 fn ceiling_plan_graphics(c: &Ctx, d: &mut Drawing) {
@@ -2090,6 +2143,19 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             v.extend(lay.landings.into_iter().map(|(poly, _)| poly));
             v
         }
+        ElementKind::Ramp(r) => {
+            let lay = build3d::ramp_layout(p, r);
+            let mut v: Vec<Vec<DVec2>> = lay
+                .runs
+                .iter()
+                .map(|(q, ..)| {
+                    let n = geom::perp((q.end - q.start).normalize_or_zero()) * (q.width / 2.0);
+                    vec![q.start - n, q.end - n, q.end + n, q.start + n]
+                })
+                .collect();
+            v.extend(lay.landings.into_iter().map(|(poly, _)| poly));
+            v
+        }
         ElementKind::Railing(r) => vec![r.path.clone()],
         ElementKind::WallFoundation(f) => p.wall(f.wall).map(|w| vec![analysis::wall_path(w)]).unwrap_or_default(),
         ElementKind::Dimension(dim) => {
@@ -2156,6 +2222,7 @@ pub fn in_plan(p: &Project, view: &View, e: &Element) -> bool {
         ElementKind::Cad(c) => c.level.is_none_or(|l| l == level),
         ElementKind::Line(l) => l.level.is_none_or(|lv| lv == level),
         ElementKind::Stair(s) => s.base_level == level || s.top_level == Some(level),
+        ElementKind::Ramp(r) => r.base_level == level || r.top_level == Some(level),
         ElementKind::Ceiling(c) => c.level == level && matches!(view.kind, ViewKind::CeilingPlan { .. }),
         ElementKind::Area(a) => a.level == level && matches!(view.kind, ViewKind::AreaPlan { .. }),
         ElementKind::AreaBoundary(s) => s.level == level && matches!(view.kind, ViewKind::AreaPlan { .. }),

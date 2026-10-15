@@ -497,7 +497,7 @@ pub fn export(p: &Project, file_name: &str, timestamp: &str) -> String {
                     ("Occupancy", label(&room.occupancy)),
                 ]);
             }
-            ElementKind::Ceiling(_) | ElementKind::Stair(_) | ElementKind::Railing(_) | ElementKind::WallFoundation(_) => {
+            ElementKind::Ceiling(_) | ElementKind::Stair(_) | ElementKind::Ramp(_) | ElementKind::Railing(_) | ElementKind::WallFoundation(_) => {
                 let level = match &e.kind {
                     ElementKind::WallFoundation(f) => p.wall(f.wall).map(|w| w.base_level),
                     _ => e.level(),
@@ -515,6 +515,7 @@ pub fn export(p: &Project, file_name: &str, timestamp: &str) -> String {
                 let type_id = match &e.kind {
                     ElementKind::Ceiling(c) => c.type_id,
                     ElementKind::Stair(s) => s.type_id,
+                    ElementKind::Ramp(r) => r.type_id,
                     ElementKind::Railing(r) => r.type_id,
                     ElementKind::WallFoundation(f) => f.type_id,
                     _ => unreachable!(),
@@ -540,6 +541,12 @@ pub fn export(p: &Project, file_name: &str, timestamp: &str) -> String {
                         }
                         props.push(("DesiredRisers", number(s.desired_risers as f64)));
                         w.add(format!("IFCSTAIR('{guid}',$,{name},{desc},{object_type},#{pl},#{shape},{tag},.NOTDEFINED.)"))
+                    }
+                    ElementKind::Ramp(r) => {
+                        let runs: Vec<String> = r.runs.iter().map(|q| format!("{};{:.3}", points_text(&[q.start, q.end]), q.width)).collect();
+                        props.push(("Runs", label(&runs.join("|"))));
+                        props.push(("BaseOffset", length(r.base_offset)));
+                        w.add(format!("IFCRAMP('{guid}',$,{name},{desc},{object_type},#{pl},#{shape},{tag},.NOTDEFINED.)"))
                     }
                     ElementKind::Railing(r) => {
                         props.push(("Path", label(&points_text(&r.path))));

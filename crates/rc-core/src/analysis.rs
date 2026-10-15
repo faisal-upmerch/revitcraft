@@ -345,6 +345,17 @@ pub fn run_risers(len: f64, tread: f64) -> u32 {
     (len / tread.max(1.0)).round().max(0.0) as u32 + 1
 }
 
+/// (base z, top z, required sloped length) of a ramp: the rise at the type's maximum slope.
+pub fn ramp_numbers(p: &Project, r: &Ramp) -> (f64, f64, f64) {
+    let base = p.level_elevation(r.base_level) + r.base_offset;
+    let top = match r.top_level.and_then(|l| p.level(l)) {
+        Some(l) => l.elevation + r.top_offset,
+        None => base + r.unconnected_height.max(10.0),
+    };
+    let x = p.sys_type(r.type_id).map(|t| t.prop("Ramp Max Slope (1/x)", 12.0)).unwrap_or(12.0).max(1.0);
+    (base, top, (top - base).abs() * x)
+}
+
 pub fn stair_base_z(p: &Project, s: &Stair) -> f64 {
     p.level_elevation(s.base_level) + s.base_offset
 }

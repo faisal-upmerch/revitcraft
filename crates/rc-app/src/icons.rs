@@ -137,6 +137,8 @@ pub enum Icon {
     SpanDirection,
     AlignEaves,
     StairRun,
+    Ramp,
+    RampRiser,
     StairLanding,
     StairSupport,
     StairStraight,
@@ -1267,6 +1269,20 @@ fn draw(g: &Pen, icon: Icon) {
         SlopeArrow => {
             g.shade(&[(0.06, 0.66), (0.62, 0.42), (0.94, 0.56), (0.38, 0.8)], G0, G2, false);
             g.arrow((0.22, 0.68), (0.74, 0.46), MAGENTA);
+        }
+        Ramp => {
+            // A sloped slab in perspective with its thickness shaded.
+            g.shade(&[(0.06, 0.84), (0.66, 0.3), (0.94, 0.42), (0.34, 0.96)], G0, G2, false);
+            g.shade(&[(0.66, 0.3), (0.94, 0.42), (0.94, 0.52), (0.66, 0.4)], G2, G3, false);
+            g.shade(&[(0.34, 0.96), (0.94, 0.42), (0.94, 0.52), (0.34, 1.0)], G3, G4, false);
+            g.line(&[(0.26, 0.86), (0.66, 0.5)], BLUE);
+            g.arrow_head((0.7, 0.46), (0.26, 0.86), BLUE, 0.12);
+        }
+        RampRiser => {
+            g.thin_line(&[(0.3, 0.08), (0.3, 0.92)], ink);
+            g.thin_line(&[(0.7, 0.08), (0.7, 0.92)], ink);
+            g.line_w(&[(0.3, 0.08), (0.7, 0.08)], BLUE, g.w * 1.6);
+            g.line_w(&[(0.3, 0.92), (0.7, 0.92)], BLUE, g.w * 1.6);
         }
         StairRun => {
             // A straight run in plan: outline and treads, with the walk arrow.

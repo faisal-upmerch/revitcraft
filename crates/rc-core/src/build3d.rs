@@ -44,6 +44,7 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         ElementKind::Roof(r) => roof(p, r),
         ElementKind::Ceiling(c) => ceiling(p, c),
         ElementKind::Stair(s) => stair(p, s),
+        ElementKind::Ramp(r) => ramp(p, r),
         ElementKind::Railing(r) => railing(p, r),
         ElementKind::WallFoundation(f) => wall_foundation(p, f),
         ElementKind::Instance(i) => family_geom::instance_mesh(p, i),
@@ -766,7 +767,16 @@ pub fn stair_layout(p: &Project, s: &Stair) -> StairLayout {
         runs.push((r.clone(), counts[k], first, z0));
         first += counts[k];
         if k + 1 < s.runs.len() {
-            let nxt = &s.runs[k + 1];
+            landings.push((run_landing(r, &s.runs[k + 1]), base + first as f64 * rh));
+        }
+    }
+    StairLayout { runs, riser: rh, base, landings }
+}
+
+/// The landing joining run `r` to the next run `nxt` (stairs and ramps alike).
+pub fn run_landing(r: &StairRun, nxt: &StairRun) -> Vec<DVec2> {
+    {
+        {
             let d0 = (r.end - r.start).normalize_or_zero();
             let d1 = (nxt.end - nxt.start).normalize_or_zero();
             let (n0, n1) = (geom::perp(d0) * (r.width / 2.0), geom::perp(d1) * (nxt.width / 2.0));
@@ -790,11 +800,91 @@ pub fn stair_layout(p: &Project, s: &Stair) -> StairLayout {
                 (u0, u1, v0, v1) = (u0.min(u), u1.max(u), v0.min(v), v1.max(v));
             }
             let at = |u: f64, v: f64| r.end + d0 * u + side * v;
-            let rect = if turning || u1 - u0 > 1.0 { vec![at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] } else { convex_hull(&pts) };
-            landings.push((rect, base + first as f64 * rh));
+            if turning || u1 - u0 > 1.0 { vec![at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] } else { convex_hull(&pts) }
         }
     }
-    StairLayout { runs, riser: rh, base, landings }
+}
+
+/// A ramp's runs with the heights at their ends, and its landings with their heights.
+pub struct RampLayout {
+    pub runs: Vec<(StairRun, f64, f64)>,
+    pub landings: Vec<(Vec<DVec2>, f64)>,
+    pub base: f64,
+}
+
+/// One slope over all runs from the base to the top; landings are flat between runs.
+pub fn ramp_layout(p: &Project, r: &Ramp) -> RampLayout {
+    let (base, top, _) = analysis::ramp_numbers(p, r);
+    let total: f64 = r.runs.iter().map(|q| q.start.distance(q.end)).sum::<f64>().max(1.0);
+    let mut z = base;
+    let (mut runs, mut landings) = (Vec::new(), Vec::new());
+    for (k, q) in r.runs.iter().enumerate() {
+        let z1 = z + (top - base) * q.start.distance(q.end) / total;
+        runs.push((q.clone(), z, z1));
+        if let Some(nxt) = r.runs.get(k + 1) {
+            landings.push((run_landing(q, nxt), z1));
+        }
+        z = z1;
+    }
+    RampLayout { runs, landings, base }
+}
+
+/// Height of a ramp's walking surface at a plan point (None if off the ramp).
+pub fn ramp_height_at(p: &Project, r: &Ramp, q: DVec2) -> Option<f64> {
+    let lay = ramp_layout(p, r);
+    for (run, z0, z1) in &lay.runs {
+        let len = run.start.distance(run.end).max(1e-9);
+        let d = (run.end - run.start) / len;
+        let u = (q - run.start).dot(d);
+        let o = (q - run.start).dot(geom::perp(d));
+        if u >= -1.0 && u <= len + 1.0 && o.abs() <= run.width / 2.0 + 200.0 {
+            return Some(z0 + (z1 - z0) * (u / len).clamp(0.0, 1.0));
+        }
+    }
+    lay.landings.iter().find(|(poly, _)| geom::contains(poly, q) || poly.iter().any(|v| v.distance(q) < 250.0)).map(|l| l.1)
+}
+
+fn ramp(p: &Project, r: &Ramp) -> MeshSet {
+    let mut set = MeshSet::default();
+    let ty = p.sys_type(r.type_id);
+    let mat = ty.map(|t| t.text("Material", "Concrete")).unwrap_or_else(|| "Concrete".into());
+    let thick = ty.map(|t| t.prop("Thickness", 300.0)).unwrap_or(300.0);
+    // "Solid" ramps fill down to their base; "Thick" ones are a slab of the type's thickness.
+    let solid = ty.is_some_and(|t| t.text("Shape", "Thick") == "Solid");
+    let lay = ramp_layout(p, r);
+    for (run, z0, z1) in &lay.runs {
+        let len = run.start.distance(run.end);
+        if len < 1.0 {
+            continue;
+        }
+        let d = (run.end - run.start) / len;
+        let n = geom::perp(d);
+        let prof = if solid {
+            vec![DVec2::new(0.0, *z0), DVec2::new(len, *z1), DVec2::new(len, lay.base), DVec2::new(0.0, lay.base)]
+        } else {
+            vec![DVec2::new(0.0, *z0), DVec2::new(len, *z1), DVec2::new(len, z1 - thick), DVec2::new(0.0, z0 - thick)]
+        };
+        let prof = geom::clean(&prof, 0.1);
+        if prof.len() < 3 {
+            continue;
+        }
+        let mut local = MeshSet::default();
+        local.add_extrusion(&mat, &prof, -run.width / 2.0, run.width / 2.0);
+        for (name, m) in local.by_material {
+            let out = set.mesh(&name);
+            for t in m.indices.chunks(3) {
+                let q: Vec<DVec3> = t.iter().map(|k| {
+                    let v = m.positions[*k as usize];
+                    geom::at(run.start + d * v.x + n * v.z, v.y)
+                }).collect();
+                out.add_triangle(q[0], q[2], q[1]);
+            }
+        }
+    }
+    for (poly, z) in &lay.landings {
+        set.add_extrusion(&mat, poly, if solid { lay.base } else { z - thick }, *z);
+    }
+    set
 }
 
 /// Tread depth of a run of `risers` risers over plan length `len`.
@@ -917,12 +1007,16 @@ fn railing(p: &Project, r: &Railing) -> MeshSet {
     let rail_w = ty.map(|t| t.prop("Rail Width", 50.0)).unwrap_or(50.0);
     let bal = ty.map(|t| t.prop("Baluster Size", 20.0)).unwrap_or(20.0);
     let mat = ty.map(|t| t.text("Material", "Steel")).unwrap_or_else(|| "Steel".into());
-    let host = r.host.and_then(|h| p.element(h)).and_then(|e| match &e.kind {
-        ElementKind::Stair(s) => Some(s.clone()),
-        _ => None,
-    });
+    let host = r.host.and_then(|h| p.element(h)).map(|e| e.kind.clone());
     let base = p.level_elevation(r.level) + r.base_offset;
-    let z_at = |q: DVec2| host.as_ref().and_then(|s| stair_height_at(p, s, q)).unwrap_or(base);
+    let z_at = |q: DVec2| {
+        match &host {
+            Some(ElementKind::Stair(s)) => stair_height_at(p, s, q),
+            Some(ElementKind::Ramp(rm)) => ramp_height_at(p, rm, q),
+            _ => None,
+        }
+        .unwrap_or(base)
+    };
     for seg in r.path.windows(2) {
         let (a, b) = (seg[0], seg[1]);
         let len = a.distance(b);

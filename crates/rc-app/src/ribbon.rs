@@ -85,7 +85,7 @@ fn architecture() -> Vec<Panel> {
                 Labeled("Curtain\nGrid", C::CurtainGrid, vec![]),
             ],
         ),
-        panel("Circulation", vec![Big(C::Railing), Big(C::Stair)]),
+        panel("Circulation", vec![Big(C::Railing), Big(C::Ramp), Big(C::Stair)]),
         panel("Model", vec![Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
         panel(
             "Room & Area",
@@ -302,6 +302,10 @@ fn draw_panel(app: &App) -> Option<Panel> {
     if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) {
         return None;
     }
+    if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) {
+        // Ramps: Run (straight runs here), Boundary and Riser beside the line tool.
+        return Some(panel("Draw", vec![Stack(vec![C::RampRun, C::RampBoundary, C::RampRiser]), Icons(vec![C::DrawLine])]));
+    }
     let modes: Vec<Cmd> = if app.sketch.is_some() && (kind == ToolKind::SketchLine || kind == ToolKind::Select) {
         let draw = canvas_tools::draw_modes(app);
         let all = if draw.is_empty() { canvas_tools::modes_for(ToolKind::SketchLine) } else { draw };
@@ -386,7 +390,7 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
             v.push(panel("Tools", vec![Labeled("Align\nEaves", C::AlignEaves, vec![]), Stack(vec![C::AdjustHeight, C::AdjustOverhang])]));
         }
         v.push(work_plane_panel());
-        if sk.kind == SketchKind::Stair {
+        if matches!(sk.kind, SketchKind::Stair | SketchKind::Ramp) {
             v.push(panel("Tools", vec![Labeled("Railing", C::StairRailing, vec![])]));
         }
         return Some((sk.kind.title().to_string(), v));
@@ -528,6 +532,7 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::SketchBoundary => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::Boundary,
         C::SlopeArrow => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SlopeArrow,
         C::SpanDirection => app.sketch.is_some() && k == T::SketchLine && app.opts.sketch_sub == crate::tools::SketchSub::SpanDirection,
+        C::RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) && k == T::SketchLine,
         C::StairRun | C::StairStraight => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) && k == T::SketchLine,
         C::RailingPickHost => app.opts.sketch_sub == crate::tools::SketchSub::PickHost,
         C::Wall => k == T::Wall && !app.opts.wall_structural,

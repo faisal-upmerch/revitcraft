@@ -340,6 +340,7 @@ pub enum SketchKind {
     Shaft,
     Railing,
     Stair,
+    Ramp,
     RevisionCloud,
     Mass,
     Toposolid,
@@ -361,6 +362,7 @@ impl SketchKind {
             SketchKind::Shaft => "Create Shaft Opening Sketch",
             SketchKind::Railing => "Create Railing Path",
             SketchKind::Stair => "Create Stair",
+            SketchKind::Ramp => "Create Ramp Sketch",
             SketchKind::RevisionCloud => "Create Revision Cloud Sketch",
             SketchKind::Mass => "Create Mass",
             SketchKind::Toposolid => "Create Toposolid Boundary",
@@ -593,6 +595,10 @@ pub struct ToolOptions {
     pub roof_type: Id,
     pub ceiling_type: Id,
     pub stair_type: Id,
+    pub ramp_type: Id,
+    /// A new ramp's instance values (its runs are drawn); `ramp_width` is the run width.
+    pub ramp: rc_core::model::Ramp,
+    pub ramp_width: f64,
     pub railing_type: Id,
     pub foundation_type: Id,
     pub door_type: Id,
@@ -735,6 +741,9 @@ impl ToolOptions {
             roof_type: first_sys(Category::Roofs),
             ceiling_type: first_sys(Category::Ceilings),
             stair_type: first_sys(Category::Stairs),
+            ramp_type: first_sys(Category::Ramps),
+            ramp: rc_core::model::Ramp::default(),
+            ramp_width: if imperial { 914.4 } else { 1000.0 },
             railing_type: first_sys(Category::Railings),
             foundation_type: first_sys(Category::StructuralFoundations),
             door_type: first_fam(Category::Doors),
@@ -852,8 +861,9 @@ impl ToolOptions {
         sys(&mut self.roof_type, fresh.roof_type);
         sys(&mut self.ceiling_type, fresh.ceiling_type);
         sys(&mut self.stair_type, fresh.stair_type);
+        sys(&mut self.ramp_type, fresh.ramp_type);
         sys(&mut self.railing_type, fresh.railing_type);
-        if self.stair_railing.is_some() {
+        if self.stair_railing.is_some_and(|t| p.sys_type(t).is_none()) {
             self.stair_railing = fresh.stair_railing;
         }
         sys(&mut self.foundation_type, fresh.foundation_type);

@@ -1146,7 +1146,19 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), ink));
             }
         }
-        let stair = sk.kind == crate::tools::SketchKind::Stair;
+        // Ramp runs show as the ramp they make: run outlines and landings.
+        if let Some(rm) = crate::canvas_tools::sketch_ramp(app).filter(|r| !r.runs.is_empty()) {
+            let lay = rc_core::build3d::ramp_layout(&app.doc.data, &rm);
+            let ink = Stroke::new(1.5, style::SKETCH);
+            for (run, ..) in &lay.runs {
+                let n = rc_core::geom::perp((run.end - run.start).normalize_or_zero()) * (run.width / 2.0);
+                painter.add(egui::Shape::closed_line(vec![xf.s(run.start - n), xf.s(run.end - n), xf.s(run.end + n), xf.s(run.start + n)], ink));
+            }
+            for (poly, _) in &lay.landings {
+                painter.add(egui::Shape::closed_line(poly.iter().map(|q| xf.s(*q)).collect(), ink));
+            }
+        }
+        let stair = matches!(sk.kind, crate::tools::SketchKind::Stair | crate::tools::SketchKind::Ramp);
         for (k, s) in sk.segs.iter().enumerate() {
             if stair {
                 // The run path is drawn above; picked or hovered runs highlight.

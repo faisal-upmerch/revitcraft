@@ -191,6 +191,26 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::Ramp(_) => {
+            type_identity(&mut d);
+            d.push(def("Base Level", CONSTRAINTS, PKind::Level, false, false));
+            d.push(def("Base Offset", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Top Level", CONSTRAINTS, top_choices(p), false, false));
+            d.push(def("Top Offset", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Multistory Top Level", CONSTRAINTS, v(Text), true, false));
+            d.push(def("Up text", GRAPHICS, v(Text), false, false));
+            d.push(def("Down text", GRAPHICS, v(Text), false, false));
+            d.push(def("Up label", GRAPHICS, v(YesNo), false, false));
+            d.push(def("Down label", GRAPHICS, v(YesNo), false, false));
+            d.push(def("Show Up arrow in all views", GRAPHICS, v(YesNo), false, false));
+            d.push(def("Width", DIMENSIONS, v(Length), false, false));
+            d.push(def("Ramp Max Slope (1/x)", CONSTRUCTION, v(Number), false, true));
+            d.push(def("Maximum Incline Length", CONSTRUCTION, v(Length), false, true));
+            d.push(def("Thickness", CONSTRUCTION, v(Length), false, true));
+            system_type_params(&mut d);
+            mark_comments(&mut d);
+            phasing(p, &mut d);
+        }
         ElementKind::Railing(_) => {
             type_identity(&mut d);
             d.push(def("Base Level", CONSTRAINTS, PKind::Level, false, false));
@@ -473,6 +493,7 @@ fn prototype(p: &Project, c: Category) -> Vec<Element> {
         Category::Roofs => Some(ElementKind::Roof(Roof { level: lvl, ..Default::default() })),
         Category::Ceilings => Some(ElementKind::Ceiling(Ceiling { level: lvl, ..Default::default() })),
         Category::Stairs => Some(ElementKind::Stair(Stair { base_level: lvl, ..Default::default() })),
+        Category::Ramps => Some(ElementKind::Ramp(Ramp { base_level: lvl, ..Default::default() })),
         Category::Railings => Some(ElementKind::Railing(Railing { level: lvl, ..Default::default() })),
         Category::Rooms => Some(ElementKind::Room(Room { level: lvl, ..Default::default() })),
         Category::Areas => Some(ElementKind::Area(Area { name: String::new(), number: String::new(), level: lvl, scheme: 0, location: DVec2::ZERO, area_type: String::new() })),
@@ -639,6 +660,23 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 _ => sys_common(st, name),
             }
         }
+        ElementKind::Ramp(r) => match name {
+            "Base Level" => text(p.level_name(r.base_level)),
+            "Base Offset" => num(r.base_offset),
+            "Top Level" => text(top_name(p, r.top_level)),
+            "Top Offset" => num(r.top_offset),
+            "Multistory Top Level" => text("None"),
+            "Up text" => text(r.up_text.clone()),
+            "Down text" => text(r.down_text.clone()),
+            "Up label" => yn(r.up_label),
+            "Down label" => yn(r.down_label),
+            "Show Up arrow in all views" => yn(r.up_arrow_all_views),
+            "Width" => num(r.runs.first().map(|q| q.width).unwrap_or(0.0)),
+            "Ramp Max Slope (1/x)" => st.map(|t| Value::Num(t.prop("Ramp Max Slope (1/x)", 12.0))),
+            "Maximum Incline Length" => st.map(|t| Value::Num(t.prop("Maximum Incline Length", 9000.0))),
+            "Thickness" => st.map(|t| Value::Num(t.prop("Thickness", 300.0))),
+            _ => sys_common(st, name),
+        },
         ElementKind::Railing(r) => match name {
             "Base Level" => text(p.level_name(r.level)),
             "Base Offset" => num(r.base_offset),
@@ -1061,6 +1099,24 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
                     return Err("The number of risers must be between 2 and 200.".into());
                 }
                 s.desired_risers = r as u32;
+            }
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::Ramp(r) => match name {
+            "Base Level" => r.base_level = level_id.unwrap(),
+            "Base Offset" => r.base_offset = n(),
+            "Top Level" => r.top_level = top_choice.unwrap(),
+            "Top Offset" => r.top_offset = n(),
+            "Up text" => r.up_text = t(),
+            "Down text" => r.down_text = t(),
+            "Up label" => r.up_label = n() != 0.0,
+            "Down label" => r.down_label = n() != 0.0,
+            "Show Up arrow in all views" => r.up_arrow_all_views = n() != 0.0,
+            "Width" => {
+                let w = positive(n(), "Width")?;
+                for q in &mut r.runs {
+                    q.width = w;
+                }
             }
             _ => return Err(format!("'{name}' cannot be set.")),
         },

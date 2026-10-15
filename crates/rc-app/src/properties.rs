@@ -51,6 +51,7 @@ fn selector_target(app: &App) -> Option<(Category, Option<Id>)> {
             SketchKind::Ceiling | SketchKind::EditCeiling(_) => (Category::Ceilings, o.ceiling_type),
             SketchKind::Roof | SketchKind::RoofExtrusion | SketchKind::EditRoof(_) => (Category::Roofs, o.roof_type),
             SketchKind::Stair => (Category::Stairs, o.stair_type),
+            SketchKind::Ramp => (Category::Ramps, o.ramp_type),
             SketchKind::Railing => (Category::Railings, o.railing_type),
             _ => return None,
         },
@@ -79,6 +80,7 @@ fn set_tool_type(app: &mut App, cat: Category, t: Id) {
         Category::Ceilings => o.ceiling_type = t,
         Category::Roofs => o.roof_type = t,
         Category::Stairs => o.stair_type = t,
+        Category::Ramps => o.ramp_type = t,
         Category::Railings => o.railing_type = t,
         _ => o.component_type = t,
     }
@@ -127,6 +129,7 @@ fn type_selector(app: &mut App, ui: &mut egui::Ui) {
         Category::Roofs => Icon::RoofFootprint,
         Category::Ceilings => Icon::Ceiling,
         Category::Stairs => Icon::Stair,
+        Category::Ramps => Icon::Ramp,
         Category::Railings => Icon::Railing,
         Category::Columns => Icon::Column,
         Category::StructuralColumns => Icon::StructColumn,
@@ -292,6 +295,7 @@ fn new_label(app: &App) -> Option<&'static str> {
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => "Ceilings",
         ToolKind::CeilingAuto => "Ceilings (1)",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) => "Stair",
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) => "Ramps",
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing) => "Railings",
         _ => return None,
     })
@@ -599,6 +603,59 @@ fn new_element_properties(app: &mut App, ui: &mut egui::Ui) -> bool {
                     ro(ui, &value);
                     ui.end_row();
                 }
+            });
+        }
+        ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) => {
+            // A new ramp's instance parameters while its runs are drawn.
+            let levels: Vec<(Id, String)> = app.doc.data.levels().iter().map(|(id, l)| (*id, l.name.clone())).collect();
+            let r = &mut o.ramp;
+            style::group_header_ui(ui, "Constraints", true);
+            prop_grid(ui, "new-ramp").show(ui, |ui| {
+                prop_label(ui, "Base Level", true);
+                ro(ui, &level_name);
+                ui.end_row();
+                prop_label(ui, "Base Offset", false);
+                len_row(ui, "ramp-base", &mut r.base_offset);
+                ui.end_row();
+                prop_label(ui, "Top Level", false);
+                let name = r.top_level.and_then(|t| levels.iter().find(|l| l.0 == t).map(|l| l.1.clone())).unwrap_or_else(|| "None".into());
+                egui::ComboBox::from_id_salt("nr-top").selected_text(name).width(ui.available_width() - 4.0).icon(chevron).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut r.top_level, None, "None");
+                    for (id, n) in &levels {
+                        ui.selectable_value(&mut r.top_level, Some(*id), n);
+                    }
+                });
+                ui.end_row();
+                prop_label(ui, "Top Offset", false);
+                len_row(ui, "ramp-top", &mut r.top_offset);
+                ui.end_row();
+                prop_label(ui, "Multistory Top Level", true);
+                ro(ui, "None");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Graphics", true);
+            prop_grid(ui, "new-ramp-g").show(ui, |ui| {
+                prop_label(ui, "Up text", false);
+                ui.add(egui::TextEdit::singleline(&mut r.up_text).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                prop_label(ui, "Down text", false);
+                ui.add(egui::TextEdit::singleline(&mut r.down_text).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                prop_label(ui, "Up label", false);
+                crate::style::check(ui, &mut r.up_label, "");
+                ui.end_row();
+                prop_label(ui, "Down label", false);
+                crate::style::check(ui, &mut r.down_label, "");
+                ui.end_row();
+                prop_label(ui, "Show Up arrow in all views", false);
+                crate::style::check(ui, &mut r.up_arrow_all_views, "");
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Dimensions", true);
+            prop_grid(ui, "new-ramp-d").show(ui, |ui| {
+                prop_label(ui, "Width", false);
+                len_row(ui, "ramp-w", &mut o.ramp_width);
+                ui.end_row();
             });
         }
         ToolKind::SketchLine | ToolKind::Select if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing) => {

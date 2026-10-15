@@ -24,14 +24,17 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     match cmd {
         Undo => app.doc.can_undo() || in_sketch,
         AlignEaves => app.sketch.as_ref().is_some_and(|s| s.kind.is_roof()),
-        StairRun | StairStraight | StairRailing => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair),
+        StairRun | StairStraight => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair),
+        StairRailing => app.sketch.as_ref().is_some_and(|s| matches!(s.kind, SketchKind::Stair | SketchKind::Ramp)),
+        RampRun => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp),
+        RampBoundary | RampRiser => false,
         StairLanding | StairSupport | ConnectLevels => false,
         RailingPickHost => app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Railing),
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
         Door | Window | Component | Column | StructColumn | Beam | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
-        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Shaft | WallOpening | CurtainGrid | Section | Callout | ElevationView
+        | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | Shaft | WallOpening | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
         RoofExtrusion => view.is_some_and(|v| matches!(v.kind, ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
@@ -252,6 +255,29 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ColorFillLegend => app.set_tool(ToolKind::ColorLegend),
         Railing => start_sketch(app, SketchKind::Railing, DrawMode::Line),
         Stair => start_sketch(app, SketchKind::Stair, DrawMode::Line),
+        Ramp => {
+            // Projects from before ramps get the template's ramp type.
+            if app.doc.data.sys_type(app.opts.ramp_type).is_none() {
+                let mut ty = 0;
+                app.run("Ramp Type", |p| {
+                    let found = p.types_of(Category::Ramps).next().map(|t| t.id);
+                    ty = match found {
+                        Some(t) => t,
+                        None => rc_core::defaults::add_ramp_type(p),
+                    };
+                    Ok(())
+                });
+                app.opts.ramp_type = ty;
+            }
+            start_sketch(app, SketchKind::Ramp, DrawMode::Line)
+        }
+        RampRun => {
+            if app.sketch.is_some() {
+                app.opts.sketch_sub = crate::tools::SketchSub::Boundary;
+                app.tool = Tool::new(ToolKind::SketchLine);
+            }
+        }
+        RampBoundary | RampRiser => {}
         FilledRegion => start_sketch(app, SketchKind::Region { masking: false }, DrawMode::Rect),
         MaskingRegion => start_sketch(app, SketchKind::Region { masking: true }, DrawMode::Rect),
         RevisionCloud => start_sketch(app, SketchKind::RevisionCloud, DrawMode::Rect),
@@ -664,6 +690,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         FinishSketch => finish_sketch(app),
         CancelSketch => {
             // Like the reference app, abandoning drawn stair runs asks first.
+            app.tool.pts.clear();
             if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair && !s.segs.is_empty()) {
                 app.dialogs.cancel_stair = true;
             } else {
@@ -898,7 +925,7 @@ fn is_tool_cmd(c: Cmd) -> bool {
     matches!(
         c,
         Wall | WallStructural | Door | Window | Component | Column | StructColumn | RoofFootprint | RoofExtrusion | Ceiling | Floor | FloorStructural | CurtainGrid
-            | Railing | Stair | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
+            | Railing | Stair | Ramp | ModelLine | PlaceGroup | Room | RoomSeparator | RoomTag | Area | AreaBoundary | AreaTag | Shaft | WallOpening | Level | Grid | RefPlane
             | Beam | WallFoundation | IsolatedFoundation | DimAligned | DimLinear | DimAngular | DimRadial | DimDiameter | DimArcLength | SpotElevation | SpotCoordinate | SpotSlope | DetailLine | ScopeBox | Insulation | DetailComponent | MultiCategoryTag | MaterialTag | JoinGeometry | UnjoinGeometry | ShowHiddenLines | RemoveHiddenLines | PlaceDetailGroup | Matchline | ViewReference | Paint | RemovePaint | RepeatingDetail | ElementKeynote | MaterialKeynote | UserKeynote
             | FilledRegion | MaskingRegion | RevisionCloud | Text | TagByCategory | Symbol | Section | Callout | ElevationView | Align | Offset | MirrorPick
             | MirrorDraw | Move | Copy | Rotate | TrimCorner | Split | SplitGap | Array | Scale | TrimSingle | TrimMulti | MatchType | Measure
@@ -949,6 +976,10 @@ fn start_sketch(app: &mut App, kind: SketchKind, mode: DrawMode) {
     if kind == SketchKind::Stair {
         // A new stair runs from its level to the one above, as in the reference app.
         app.opts.stair_top = app.doc.data.level_above(level).map(|l| l.0);
+    }
+    if kind == SketchKind::Ramp {
+        app.opts.ramp.base_level = level;
+        app.opts.ramp.top_level = app.doc.data.level_above(level).map(|l| l.0);
     }
     // A footprint roof started on the lowest level offers to move up a level, as in the
     // reference app's Lowest Level Notice.
@@ -1040,6 +1071,42 @@ pub fn finish_sketch(app: &mut App) {
                     if let Some(ElementKind::Railing(r)) = p.element_mut(id).map(|e| &mut e.kind) {
                         r.base_offset = o.railing_base_offset;
                         r.host = host;
+                    }
+                    Ok(id)
+                }))
+            }
+            SketchKind::Ramp => {
+                let runs: Vec<StairRun> = sk
+                    .segs
+                    .iter()
+                    .filter_map(|s| match s {
+                        Seg::Line(a, b) => Some(StairRun { start: *a, end: *b, width: o.ramp_width }),
+                        _ => None,
+                    })
+                    .collect();
+                if runs.is_empty() {
+                    return Err("Draw at least one ramp run (click its start and end).".into());
+                }
+                if let Some((made, need, max_run)) = canvas_tools::sketch_ramp_numbers(app) {
+                    if (made - need).abs() > 1.0 {
+                        app.info(format!("The runs are {} long; the ramp needs {} at its maximum slope.", app.doc.data.units.length(made), app.doc.data.units.length(need)));
+                    } else if runs.iter().any(|r| r.start.distance(r.end) > max_run + 1.0) {
+                        app.info(format!("A run is longer than the type's Maximum Incline Length ({}).", app.doc.data.units.length(max_run)));
+                    }
+                }
+                let rt = o.stair_railing.filter(|t| app.doc.data.sys_type(*t).is_some());
+                let tmpl = o.ramp.clone();
+                Ok(app.run("Create Ramp", |p| {
+                    let id = edit::add_ramp(p, level, o.ramp_type, runs, rt)?;
+                    if let Some(ElementKind::Ramp(r)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        r.base_offset = tmpl.base_offset;
+                        r.top_level = tmpl.top_level;
+                        r.top_offset = tmpl.top_offset;
+                        r.up_text = tmpl.up_text;
+                        r.down_text = tmpl.down_text;
+                        r.up_label = tmpl.up_label;
+                        r.down_label = tmpl.down_label;
+                        r.up_arrow_all_views = tmpl.up_arrow_all_views;
                     }
                     Ok(id)
                 }))
@@ -1493,6 +1560,10 @@ fn create_similar(app: &mut App) {
         ElementKind::Stair(s) => {
             app.opts.stair_type = s.type_id;
             exec(app, Cmd::Stair);
+        }
+        ElementKind::Ramp(r) => {
+            app.opts.ramp_type = r.type_id;
+            exec(app, Cmd::Ramp);
         }
         ElementKind::Railing(r) => {
             app.opts.railing_type = r.type_id;

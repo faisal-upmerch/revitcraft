@@ -78,7 +78,7 @@ pub fn draw_modes(app: &App) -> &'static [DrawMode] {
     use DrawMode::*;
     match app.sketch.as_ref().map(|s| s.kind) {
         Some(SketchKind::Railing) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines],
-        Some(SketchKind::Stair) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line],
+        Some(SketchKind::Stair | SketchKind::Ramp) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line],
         Some(_) if app.tool.kind == ToolKind::Select => modes_for(ToolKind::SketchLine),
         _ => modes_for(app.tool.kind),
     }
@@ -99,6 +99,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SlopeArrow => if n == 0 { "Click to enter the tail of the slope arrow.".into() } else { "Click to enter the head of the slope arrow.".into() },
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::SpanDirection => "Pick a boundary line to set the span direction.".into(),
         ToolKind::SketchLine if app.opts.sketch_sub == SketchSub::PickHost => "Pick a stair to host the railing.".into(),
+        ToolKind::SketchLine if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ramp) => if n == 0 { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
         ToolKind::SketchLine if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Stair) => if n == 0 { "Click to enter run start point.".into() } else { "Click to enter run end point.".into() },
         k if k.uses_draw_modes() => match mode {
             DrawMode::PickLines => "Pick a line, edge, wall or grid to create from it.".into(),
@@ -508,6 +509,10 @@ fn draw_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &D
         stair_run_tool(app, painter, xf, point, clicked);
         return;
     }
+    if app.sketch.as_ref().is_some_and(|s| s.view == view.id && s.kind == SketchKind::Ramp) && app.tool.kind == ToolKind::SketchLine {
+        ramp_run_tool(app, painter, xf, point, clicked);
+        return;
+    }
     let mode = effective_mode(app);
     if mode.is_pick() {
         pick_draw_tool(app, painter, xf, view, d, mode, cursor, clicked);
@@ -665,10 +670,74 @@ fn stair_run_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, point: Option
     }
 }
 
+/// The ramp being sketched as it would be created.
+pub fn sketch_ramp(app: &App) -> Option<Ramp> {
+    let sk = app.sketch.as_ref().filter(|s| s.kind == SketchKind::Ramp)?;
+    let o = &app.opts;
+    let runs = sk
+        .segs
+        .iter()
+        .filter_map(|s| match s {
+            Seg::Line(a, b) => Some(StairRun { start: *a, end: *b, width: o.ramp_width }),
+            _ => None,
+        })
+        .collect();
+    Some(Ramp { base_level: sk.level, runs, type_id: o.ramp_type, ..o.ramp.clone() })
+}
+
+/// (sloped length drawn, sloped length needed, maximum incline length) of the ramp sketch.
+pub fn sketch_ramp_numbers(app: &App) -> Option<(f64, f64, f64)> {
+    let r = sketch_ramp(app)?;
+    let (_, _, need) = analysis::ramp_numbers(&app.doc.data, &r);
+    let made = r.runs.iter().map(|q| q.start.distance(q.end)).sum::<f64>().max(0.0);
+    let max_run = app.doc.data.sys_type(r.type_id).map(|t| t.prop("Maximum Incline Length", 9000.0)).unwrap_or(9000.0);
+    Some((made, need, max_run))
+}
+
+/// Ramp lengths in the reference app's run prompt: whole feet in imperial projects.
+fn ramp_len_text(app: &App, mm: f64) -> String {
+    if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { format!("{}'", (mm / 304.8).round() as i64) } else { app.doc.data.units.length(mm.round()) }
+}
+
+/// The ramp Run tool: click the run start, then its end. The full length still needed shows
+/// in grey ahead of the start, with the inclined length created and remaining, as in the
+/// reference app.
+fn ramp_run_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, point: Option<DVec2>, clicked: bool) {
+    let Some(pt) = point else { return };
+    let Some((made, need, _)) = sketch_ramp_numbers(app) else { return };
+    let Some(a) = app.tool.pts.first().copied() else {
+        if clicked {
+            app.tool.pts.push(pt);
+        }
+        return;
+    };
+    let dir = (pt - a).normalize_or_zero();
+    if dir == DVec2::ZERO {
+        return;
+    }
+    let left = (need - made).max(0.0);
+    let len = if left > 1.0 { a.distance(pt).min(left) } else { a.distance(pt) };
+    let half = geom::perp(dir) * (app.opts.ramp_width / 2.0);
+    let grey = Stroke::new(1.0, Color32::from_gray(120));
+    let full = a + dir * left.max(len);
+    painter.add(egui::Shape::closed_line(vec![xf.s(a - half), xf.s(full - half), xf.s(full + half), xf.s(a + half)], grey));
+    let e = a + dir * len;
+    canvas::reference_line(painter, xf.s(a - dir * xf.len(30.0)), xf.s(e + dir * xf.len(30.0)));
+    canvas::temp_dim_ex(painter, xf, a + half, e + half, &app.doc.data.units.length(len), -18.0, true);
+    let msg = format!("{} of inclined ramp created, {} remaining", ramp_len_text(app, made), ramp_len_text(app, left));
+    painter.text(xf.s(a - dir * xf.len(14.0) - half), egui::Align2::LEFT_TOP, msg, egui::FontId::proportional(11.0), Color32::from_gray(150));
+    if clicked && len > 1.0 {
+        if let Some(sk) = app.sketch.as_mut() {
+            sk.push(Seg::Line(a, e), true);
+        }
+        app.tool.pts.clear();
+    }
+}
+
 /// Railings: Pick New Host — the stair the railing follows.
 fn pick_host_tool(app: &mut App, _painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, clicked: bool) {
     let Some(c) = cursor else { return };
-    let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Stair(_)));
+    let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Stair(_) | ElementKind::Ramp(_)));
     app.interact.hover = hit;
     if !clicked {
         return;
@@ -681,7 +750,7 @@ fn pick_host_tool(app: &mut App, _painter: &egui::Painter, xf: &Xf, view: &View,
             app.opts.sketch_sub = SketchSub::Boundary;
             app.tool = Tool::new(ToolKind::SketchLine);
         }
-        None => app.error("Pick a stair to host the railing."),
+        None => app.error("Pick a stair or ramp to host the railing."),
     }
 }
 

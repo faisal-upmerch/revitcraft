@@ -341,6 +341,7 @@ pub enum ElementKind {
     Instance(FamilyInstance),
     Ceiling(Ceiling),
     Stair(Stair),
+    Ramp(Ramp),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -400,6 +401,7 @@ impl Element {
             ElementKind::Instance(i) => i.category,
             ElementKind::Ceiling(_) => Category::Ceilings,
             ElementKind::Stair(_) => Category::Stairs,
+            ElementKind::Ramp(_) => Category::Ramps,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -434,6 +436,7 @@ impl Element {
             ElementKind::Instance(i) => Some(i.level),
             ElementKind::Ceiling(c) => Some(c.level),
             ElementKind::Stair(s) => Some(s.base_level),
+            ElementKind::Ramp(r) => Some(r.base_level),
             ElementKind::Railing(r) => Some(r.level),
             ElementKind::Shaft(s) => Some(s.base_level),
             ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => Some(s.level),
@@ -815,6 +818,46 @@ pub struct Stair {
     pub desired_risers: u32,
     #[serde(default = "yes")]
     pub railings: bool,
+}
+
+/// A ramp: straight runs at one slope from its base to its top, with landings between runs.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Ramp {
+    pub base_level: Id,
+    #[serde(default)]
+    pub base_offset: f64,
+    pub top_level: Option<Id>,
+    #[serde(default)]
+    pub top_offset: f64,
+    /// Used when there is no top level.
+    #[serde(default)]
+    pub unconnected_height: f64,
+    pub runs: Vec<StairRun>,
+    pub type_id: Id,
+    #[serde(default = "ramp_up")]
+    pub up_text: String,
+    #[serde(default = "ramp_down")]
+    pub down_text: String,
+    #[serde(default = "yes")]
+    pub up_label: bool,
+    #[serde(default = "yes")]
+    pub down_label: bool,
+    #[serde(default)]
+    pub up_arrow_all_views: bool,
+}
+
+fn ramp_up() -> String {
+    "UP".into()
+}
+
+fn ramp_down() -> String {
+    "DN".into()
+}
+
+impl Default for Ramp {
+    fn default() -> Self {
+        Ramp { base_level: 0, base_offset: 0.0, top_level: None, top_offset: 0.0, unconnected_height: 1000.0, runs: Vec::new(), type_id: 0, up_text: ramp_up(), down_text: ramp_down(), up_label: true, down_label: true, up_arrow_all_views: false }
+    }
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -1438,6 +1481,7 @@ impl SystemType {
             (Category::Roofs, _) => "Basic Roof",
             (Category::Ceilings, _) => "Compound Ceiling",
             (Category::Stairs, _) => "Assembled Stair",
+            (Category::Ramps, _) => "Ramp",
             (Category::Railings, _) => "Railing",
             (Category::StructuralFoundations, _) => "Wall Foundation",
             _ => "System Family",
@@ -2683,6 +2727,7 @@ impl Project {
             ElementKind::Instance(i) => Some(i.type_id),
             ElementKind::Ceiling(c) => Some(c.type_id),
             ElementKind::Stair(s) => Some(s.type_id),
+            ElementKind::Ramp(r) => Some(r.type_id),
             ElementKind::Railing(r) => Some(r.type_id),
             ElementKind::WallFoundation(f) => Some(f.type_id),
             ElementKind::GroupInstance(g) => Some(g.type_id),

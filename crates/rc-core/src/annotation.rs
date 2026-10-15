@@ -179,6 +179,7 @@ pub fn host_point(p: &Project, host: &Element) -> DVec2 {
         ElementKind::Ceiling(c) => geom::centroid(&c.boundary),
         ElementKind::Roof(r) => geom::centroid(&r.footprint),
         ElementKind::Stair(s) => s.runs.first().map(|r| (r.start + r.end) / 2.0).unwrap_or_default(),
+        ElementKind::Ramp(r) => r.runs.first().map(|q| (q.start + q.end) / 2.0).unwrap_or_default(),
         _ => DVec2::ZERO,
     }
 }

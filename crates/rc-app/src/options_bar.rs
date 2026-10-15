@@ -145,6 +145,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     }
                     sep(ui);
                 }
+                if sk_kind == Some(SketchKind::Ramp) {
+                    // The reference app's ramp sketch has no options.
+                    return;
+                }
                 if sk_kind == Some(SketchKind::Stair) {
                     // As in the reference app: Location Line, Offset, Actual Run Width, Automatic Landing.
                     ui.label("Location Line:");

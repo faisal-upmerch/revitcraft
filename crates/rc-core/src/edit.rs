@@ -771,6 +771,28 @@ pub fn add_stair(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRu
     Ok(id)
 }
 
+/// Creates a ramp from its runs (from the base level to the level above), with railings along
+/// both sides when requested.
+pub fn add_ramp(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRun>, railing_type: Option<Id>) -> Result<Id, String> {
+    if runs.is_empty() || runs.iter().any(|r| r.start.distance(r.end) < 100.0) {
+        return Err("Draw at least one ramp run.".into());
+    }
+    let top_level = p.level_above(base_level).map(|l| l.0);
+    let id = push(p, ElementKind::Ramp(Ramp { base_level, top_level, runs: runs.clone(), type_id, ..Default::default() }));
+    if let Some(rt) = railing_type {
+        for side in [-1.0, 1.0] {
+            let mut path = Vec::new();
+            for r in &runs {
+                let n = geom::perp((r.end - r.start).normalize_or_zero()) * (r.width / 2.0 - 50.0) * side;
+                path.push(r.start + n);
+                path.push(r.end + n);
+            }
+            push(p, ElementKind::Railing(Railing { path, level: base_level, base_offset: 0.0, type_id: rt, host: Some(id) }));
+        }
+    }
+    Ok(id)
+}
+
 pub fn add_railing(p: &mut Project, level: Id, type_id: Id, path: Vec<DVec2>) -> Result<Id, String> {
     if path.len() < 2 {
         return Err("A railing needs a path of at least two points.".into());
@@ -852,6 +874,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
             }
             ElementKind::Instance(i) if i.top_level.is_some_and(|t| doomed.contains(&t)) => i.top_level = None,
             ElementKind::Stair(s) if s.top_level.is_some_and(|t| doomed.contains(&t)) => s.top_level = None,
+            ElementKind::Ramp(r) if r.top_level.is_some_and(|t| doomed.contains(&t)) => r.top_level = None,
             ElementKind::Shaft(s) if s.top_level.is_some_and(|t| doomed.contains(&t)) => s.top_level = None,
             _ => {}
         }
@@ -958,6 +981,12 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
         }
         ElementKind::Stair(s) => {
             for r in &mut s.runs {
+                r.start = f(r.start);
+                r.end = f(r.end);
+            }
+        }
+        ElementKind::Ramp(rm) => {
+            for r in &mut rm.runs {
                 r.start = f(r.start);
                 r.end = f(r.end);
             }
@@ -1517,6 +1546,10 @@ pub fn copy_to_levels(p: &mut Project, ids: &[Id], levels: &[Id]) -> Result<Vec<
                         s.base_level = lv;
                         s.top_level = above_dst;
                     }
+                    ElementKind::Ramp(r) => {
+                        r.base_level = lv;
+                        r.top_level = above_dst;
+                    }
                     ElementKind::Railing(r) => r.level = lv,
                     ElementKind::Shaft(s) => s.base_level = lv,
                     ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => s.level = lv,
@@ -1542,6 +1575,7 @@ pub fn change_type(p: &mut Project, ids: &[Id], new_type: Id) -> Result<(), Stri
             (ElementKind::Roof(r), Some(Category::Roofs), _) => r.type_id = new_type,
             (ElementKind::Ceiling(c), Some(Category::Ceilings), _) => c.type_id = new_type,
             (ElementKind::Stair(s), Some(Category::Stairs), _) => s.type_id = new_type,
+            (ElementKind::Ramp(r), Some(Category::Ramps), _) => r.type_id = new_type,
             (ElementKind::Railing(r), Some(Category::Railings), _) => r.type_id = new_type,
             (ElementKind::WallFoundation(f), Some(Category::StructuralFoundations), _) => f.type_id = new_type,
             (ElementKind::Instance(i), _, Some((fid, cat, hosted))) if cat == i.category && hosted == i.host.is_some() => {

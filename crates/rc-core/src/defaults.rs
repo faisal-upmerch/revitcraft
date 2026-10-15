@@ -56,6 +56,13 @@ fn layer(function: LayerFunction, material: &str, thickness: f64, core: bool) ->
 }
 
 #[allow(clippy::too_many_arguments)]
+/// The template's ramp type ("Ramp 1": 1:12 maximum slope, thick concrete).
+pub fn add_ramp_type(p: &mut Project) -> Id {
+    let imp = p.units.system == UnitSystem::Imperial;
+    let t = |mm: f64, inch: f64| if imp { inch * 25.4 } else { mm };
+    sys(p, Category::Ramps, "Ramp 1", WallFunction::Interior, 900.0, vec![], &[("Ramp Max Slope (1/x)", 12.0), ("Maximum Incline Length", t(9000.0, 360.0)), ("Thickness", t(300.0, 12.0))], &[("Shape", "Thick"), ("Material", "Concrete")])
+}
+
 fn sys(p: &mut Project, category: Category, name: &str, function: WallFunction, cost: f64, layers: Vec<Layer>, props: &[(&str, f64)], texts: &[(&str, &str)]) -> Id {
     let id = p.new_id();
     p.types.push(SystemType {
@@ -252,6 +259,7 @@ pub fn new_project(system: UnitSystem) -> Project {
         &[("Maximum Riser Height", t(180.0, 7.0)), ("Minimum Tread Depth", t(280.0, 11.0)), ("Minimum Run Width", t(1000.0, 36.0)), ("Structural Depth", t(150.0, 6.0)), ("Landing Thickness", t(200.0, 8.0))],
         &[("Material", "Concrete")],
     );
+    add_ramp_type(&mut p);
     sys(
         &mut p,
         Category::Railings,
