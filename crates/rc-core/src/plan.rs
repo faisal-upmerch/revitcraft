@@ -920,19 +920,11 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 d.line(Some(e.id), pts, l.closed, line_style_stroke(p, l.style));
             }
             ElementKind::AreaReinforcement(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
-                // Boundary (dashed), the area reinforcement symbol along the major direction and
-                // its tag.
+                // Boundary (dashed); the symbol is its own element (older projects draw it here).
                 d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
-                let ctr = geom::centroid(&a.boundary);
-                let dir = a.major.normalize_or(DVec2::X);
-                let n = geom::perp(dir);
-                let (half, head) = (8.0 * c.scale, 2.0 * c.scale);
-                let (s0, s1) = (ctr - dir * half, ctr + dir * half);
-                d.line(Some(e.id), vec![s0, s1], false, ANNO);
-                for (tip, back) in [(s1, -dir), (s0, dir)] {
-                    d.fill(Some(e.id), &[tip, tip + back * head + n * head * 0.4, tip + back * head - n * head * 0.4], [0, 0, 0, 255]);
+                if a.own_symbol {
+                    area_symbol(p, e.id, a, geom::centroid(&a.boundary), c.scale, d);
                 }
-                d.text(Some(e.id), ctr - n * 2.5 * c.scale, crate::rebar::area_tag(p, a), 2.0, Anchor::Center);
             }
             ElementKind::PathReinforcement(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) => {
                 // The path, the strips it reinforces (dashed) and the symbol with its tag.
@@ -940,16 +932,8 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 for strip in crate::rebar::path_region(p, r) {
                     d.line(Some(e.id), strip, true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
                 }
-                if r.path.len() >= 2 {
-                    let (a, b) = (r.path[0], r.path[1]);
-                    let dir = (b - a).normalize_or_zero();
-                    let n = geom::perp(dir) * crate::rebar::path_side(p, r);
-                    let (s0, s1) = ((a + b) / 2.0, (a + b) / 2.0 + n * r.length);
-                    let head = 2.0 * c.scale;
-                    d.line(Some(e.id), vec![s0, s1], false, ANNO);
-                    d.fill(Some(e.id), &[s1, s1 - n * head + dir * head * 0.4, s1 - n * head - dir * head * 0.4], [0, 0, 0, 255]);
-                    d.line(Some(e.id), vec![s0 - dir * head * 0.6, s0 + dir * head * 0.6], false, ANNO);
-                    d.text(Some(e.id), (s0 + s1) / 2.0 + dir * 2.5 * c.scale, crate::rebar::path_tag(p, r), 2.0, Anchor::Center);
+                if r.own_symbol && r.path.len() >= 2 {
+                    path_symbol(p, e.id, r, (r.path[0] + r.path[1]) / 2.0, c.scale, d);
                 }
             }
             ElementKind::FabricArea(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
@@ -1542,6 +1526,8 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
         let Some(s) = storeys.iter().find(|x| x.base_level == c.level).or_else(|| storeys.iter().find(|x| x.top_level == Some(c.level))) else { continue };
         let lay = build3d::stair_layout(p, s);
         let base_level = s.base_level == c.level;
+        // A Stair Path symbol in this view draws the walk line instead.
+        let has_path_symbol = p.elements.iter().any(|x| x.view == Some(c.view.id) && matches!(&x.kind, ElementKind::Symbol(sy) if sy.kind == SymbolKind::StairPath && sy.value == e.id.to_string()));
         let start = d.prims.len();
         for (k, (run, risers, _, z0)) in lay.runs.iter().enumerate() {
             let len = run.start.distance(run.end);
@@ -1581,7 +1567,7 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
                 let g = (half * 0.12).min(150.0);
                 d.line(Some(e.id), vec![a, m - t * g, m - t * (g * 0.3) + z * g, m + t * (g * 0.3) - z * g, m + t * g, b], false, MEDIUM);
             }
-            if k == 0 {
+            if k == 0 && !has_path_symbol {
                 // Walk line with arrow.
                 let arrow_end = if base_level { run.start + dir * (cut_u.min(len) - 100.0).max(200.0) } else { run.start + dir * len * 0.8 };
                 d.line(Some(e.id), vec![run.start + dir * 80.0, arrow_end], false, THIN);
@@ -1971,6 +1957,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     d.fill(Some(e.id), &[b, b - dir * head + n * wing, b - dir * head], [0, 0, 0, 255]);
                     d.fill(Some(e.id), &[a, a + dir * head - n * wing, a + dir * head], [0, 0, 0, 255]);
                 }
+                SymbolKind::BeamSystem | SymbolKind::StairPath | SymbolKind::AreaReinforcement | SymbolKind::PathReinforcement | SymbolKind::RebarSet | SymbolKind::Fabric => host_symbol(p, e, s, scale, d),
                 SymbolKind::TreadNumber => {
                     // Numbers at the middle of each tread, a quarter of the run width to its left,
                     // counted through the stair.
@@ -2307,6 +2294,103 @@ fn special_dimension(p: &Project, id: Id, dim: &Dimension, scale: f64, d: &mut D
             let t = off.tangent(0.5);
             let a = upright(t.y.atan2(t.x));
             d.text_rot(Some(id), m + (m - arc.center).normalize_or_zero() * (1.6 * scale), fmt(format!("⌒ {}", p.units.length(arc.length()))), 2.5, a as f32);
+        }
+        _ => {}
+    }
+}
+
+/// The area reinforcement symbol: a double arrow along the major direction and the tag.
+fn area_symbol(p: &Project, id: Id, a: &AreaReinforcement, at: DVec2, scale: f64, d: &mut Drawing) {
+    let dir = a.major.normalize_or(DVec2::X);
+    let n = geom::perp(dir);
+    let (half, head) = (8.0 * scale, 2.0 * scale);
+    let (s0, s1) = (at - dir * half, at + dir * half);
+    d.line(Some(id), vec![s0, s1], false, ANNO);
+    for (tip, back) in [(s1, -dir), (s0, dir)] {
+        d.fill(Some(id), &[tip, tip + back * head + n * head * 0.4, tip + back * head - n * head * 0.4], [0, 0, 0, 255]);
+    }
+    d.text(Some(id), at - n * 2.5 * scale, crate::rebar::area_tag(p, a), 2.0, Anchor::Center);
+}
+
+/// The path reinforcement symbol: a bar's extent from the path with an arrow, and the tag.
+fn path_symbol(p: &Project, id: Id, r: &PathReinforcement, at: DVec2, scale: f64, d: &mut Drawing) {
+    let (a, b) = (r.path[0], r.path[1]);
+    let dir = (b - a).normalize_or_zero();
+    let n = geom::perp(dir) * crate::rebar::path_side(p, r);
+    let (s0, s1) = (at, at + n * r.length);
+    let head = 2.0 * scale;
+    d.line(Some(id), vec![s0, s1], false, ANNO);
+    d.fill(Some(id), &[s1, s1 - n * head + dir * head * 0.4, s1 - n * head - dir * head * 0.4], [0, 0, 0, 255]);
+    d.line(Some(id), vec![s0 - dir * head * 0.6, s0 + dir * head * 0.6], false, ANNO);
+    d.text(Some(id), (s0 + s1) / 2.0 + dir * 2.5 * scale, crate::rebar::path_tag(p, r), 2.0, Anchor::Center);
+}
+
+/// A span line with ticks at both ends and a label above it.
+fn tick_span(id: Id, at: DVec2, dir: DVec2, half: f64, scale: f64, label: String, d: &mut Drawing) {
+    let n = geom::perp(dir);
+    let (a, b) = (at - dir * half, at + dir * half);
+    d.line(Some(id), vec![a, b], false, ANNO);
+    let t = (dir + n).normalize() * 1.3 * scale;
+    for q in [a, b] {
+        d.line(Some(id), vec![q - t, q + t], false, Stroke::new(0.35, [0, 0, 0], Dash::Solid));
+    }
+    d.text(Some(id), at + n * 2.0 * scale, label, 2.0, Anchor::Center);
+}
+
+/// Symbols of host elements (Annotate > Symbol): beam, stair path, reinforcement and fabric.
+fn host_symbol(p: &Project, e: &Element, s: &Symbol, scale: f64, d: &mut Drawing) {
+    let Some(host) = s.value.parse::<Id>().ok().and_then(|h| p.element(h)) else { return };
+    match (s.kind, &host.kind) {
+        (SymbolKind::AreaReinforcement, ElementKind::AreaReinforcement(a)) => area_symbol(p, e.id, a, s.position, scale, d),
+        (SymbolKind::PathReinforcement, ElementKind::PathReinforcement(r)) if r.path.len() >= 2 => path_symbol(p, e.id, r, s.position, scale, d),
+        (SymbolKind::Fabric, ElementKind::FabricArea(a)) => {
+            let label = p.sys_type(a.type_id).map(|t| t.name.clone()).unwrap_or_default();
+            tick_span(e.id, s.position, a.major.normalize_or(DVec2::X), 8.0 * scale, scale, label, d);
+        }
+        (SymbolKind::Fabric, ElementKind::FabricSheet(f)) => {
+            let label = p.sys_type(f.type_id).map(|t| t.name.clone()).unwrap_or_default();
+            tick_span(e.id, s.position, DVec2::from_angle(f.angle.to_radians()), 8.0 * scale, scale, label, d);
+        }
+        (SymbolKind::RebarSet, ElementKind::Rebar(r)) => {
+            // Across the set, as wide as its bars are spread.
+            let along = (r.end - r.start).normalize_or(DVec2::X);
+            let across = geom::perp(along);
+            let half = (r.spacing * (r.count.max(1) - 1) as f64 / 2.0).max(4.0 * scale);
+            let label = format!("{} {} @ {}", r.count, crate::rebar::bar_name(p, r.bar_type), p.units.length(r.spacing));
+            tick_span(e.id, s.position, across, half, scale, label, d);
+        }
+        (SymbolKind::BeamSystem, ElementKind::Instance(i)) => {
+            // A span arrow along the beam with its type.
+            let Some(end) = i.end else { return };
+            let dir = (end - i.location).normalize_or(DVec2::X);
+            let n = geom::perp(dir);
+            let (half, head, wing) = (10.0 * scale, 3.5 * scale, 1.6 * scale);
+            let (a, b) = (s.position - dir * half, s.position + dir * half);
+            d.line(Some(e.id), vec![a, b], false, ANNO);
+            d.fill(Some(e.id), &[b, b - dir * head + n * wing, b - dir * head], [0, 0, 0, 255]);
+            d.fill(Some(e.id), &[a, a + dir * head - n * wing, a + dir * head], [0, 0, 0, 255]);
+            let label = p.family_type(i.type_id).map(|(_, t)| t.name.clone()).unwrap_or_default();
+            d.text(Some(e.id), s.position + n * 2.2 * scale, label, 2.0, Anchor::Center);
+        }
+        (SymbolKind::StairPath, ElementKind::Stair(st)) => {
+            // The walk line through every run, an arrow at its top and UP at its start.
+            let lay = crate::build3d::stair_layout(p, st);
+            let mut pts: Vec<DVec2> = Vec::new();
+            for (run, ..) in &lay.runs {
+                let dir = (run.end - run.start).normalize_or_zero();
+                pts.push(run.start + dir * 80.0);
+                pts.push(run.end - dir * 80.0);
+            }
+            if pts.len() < 2 {
+                return;
+            }
+            d.line(Some(e.id), pts.clone(), false, THIN);
+            let (tip, prev) = (pts[pts.len() - 1], pts[pts.len() - 2]);
+            let dir = (tip - prev).normalize_or_zero();
+            let side = geom::perp(dir) * 90.0;
+            d.line(Some(e.id), vec![tip - dir * 200.0 + side, tip, tip - dir * 200.0 - side], false, THIN);
+            let first = (pts[1] - pts[0]).normalize_or_zero();
+            d.text(Some(e.id), pts[0] - first * (3.0 * scale), "UP", 2.5, Anchor::Center);
         }
         _ => {}
     }

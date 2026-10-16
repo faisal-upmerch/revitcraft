@@ -89,6 +89,7 @@ pub enum ToolKind {
     PlaceGroup,
     PlaceImage,
     SpanSymbol,
+    HostSymbol,
     TreadNumber,
     Align,
     Offset,
@@ -197,6 +198,7 @@ impl ToolKind {
             ToolKind::PlaceGroup => "Model Group",
             ToolKind::PlaceImage => "Image",
             ToolKind::SpanSymbol => "Span Direction",
+            ToolKind::HostSymbol => "Symbol",
             ToolKind::TreadNumber => "Tread Number",
             ToolKind::Align => "Align",
             ToolKind::Offset => "Offset",
@@ -696,6 +698,8 @@ pub struct ToolOptions {
     pub image_asset: Id,
     /// Place Decal: the decal type.
     pub decal_type: Id,
+    /// Annotate > Symbol: the host symbol being placed.
+    pub host_symbol: SymbolKind,
     /// Rebar Coupler: Place between Two Bars (else Place on Bar End).
     pub coupler_between: bool,
     pub draw_mode: DrawMode,
@@ -868,6 +872,7 @@ impl ToolOptions {
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
             image_asset: 0,
             decal_type: 0,
+            host_symbol: SymbolKind::AreaReinforcement,
             coupler_between: true,
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,

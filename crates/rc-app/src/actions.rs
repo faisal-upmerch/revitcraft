@@ -59,7 +59,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
-        Door | Window | Component | Column | StructColumn | Beam | RebarTool | AreaReinforcementTool | PathReinforcementTool | FabricAreaTool | FabricSheetTool | RebarCouplerTool | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
+        BeamSymbol | StairPathSymbol | AreaSymbol | PathSymbol | RebarSymbol | FabricSymbol | Door | Window | Component | Column | StructColumn | Beam | RebarTool | AreaReinforcementTool | PathReinforcementTool | FabricAreaTool | FabricSheetTool | RebarCouplerTool | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
         | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | ModelText | Shaft | WallOpening | VerticalOpening | FaceOpening | DormerOpening | Mullion | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
@@ -551,6 +551,17 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         SpanSymbol => app.set_tool(ToolKind::SpanSymbol),
+        BeamSymbol | StairPathSymbol | AreaSymbol | PathSymbol | RebarSymbol | FabricSymbol => {
+            app.opts.host_symbol = match cmd {
+                BeamSymbol => SymbolKind::BeamSystem,
+                StairPathSymbol => SymbolKind::StairPath,
+                AreaSymbol => SymbolKind::AreaReinforcement,
+                PathSymbol => SymbolKind::PathReinforcement,
+                RebarSymbol => SymbolKind::RebarSet,
+                _ => SymbolKind::Fabric,
+            };
+            app.set_tool(ToolKind::HostSymbol);
+        }
         TreadNumber => app.set_tool(ToolKind::TreadNumber),
         ImportImage | LinkImage => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("Image Files", &["bmp", "jpg", "jpeg", "png"]).pick_file() {
@@ -1538,7 +1549,11 @@ pub fn finish_sketch(app: &mut App) {
                 Ok(app.run("Create Path Reinforcement", |p| {
                     let types = rc_core::rebar::ensure_bar_types(p);
                     let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
-                    edit::add_path_reinforcement(p, host, path, bt, spacing, length)
+                    let at = (path[0] + path[1]) / 2.0;
+                    let id = edit::add_path_reinforcement(p, host, path, bt, spacing, length)?;
+                    // Its symbol and tag, as the reference app places them.
+                    edit::add_host_symbol(p, vid, SymbolKind::PathReinforcement, id, at)?;
+                    Ok(id)
                 }))
             }
             SketchKind::Railing => {
@@ -1699,7 +1714,10 @@ pub fn finish_sketch(app: &mut App) {
                         app.run("Create Area Reinforcement", |p| {
                             let types = rc_core::rebar::ensure_bar_types(p);
                             let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
-                            edit::add_area_reinforcement(p, host, outer, bt, spacing)
+                            let at = rc_core::geom::centroid(&outer);
+                            let id = edit::add_area_reinforcement(p, host, outer, bt, spacing)?;
+                            edit::add_host_symbol(p, vid, SymbolKind::AreaReinforcement, id, at)?;
+                            Ok(id)
                         })
                     }
                     SketchKind::BeamSystem => {

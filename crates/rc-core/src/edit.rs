@@ -511,6 +511,27 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
     Ok(out)
 }
 
+/// Annotate > Symbol: a symbol of `host` (a beam, stair, reinforcement or fabric) at `at`.
+pub fn add_host_symbol(p: &mut Project, view: Id, kind: SymbolKind, host: Id, at: DVec2) -> Result<Id, String> {
+    let ok = match (kind, p.element(host).map(|e| &e.kind)) {
+        (SymbolKind::BeamSystem, Some(ElementKind::Instance(i))) => i.category == Category::StructuralFraming && i.end.is_some(),
+        (SymbolKind::StairPath, Some(ElementKind::Stair(_))) => true,
+        (SymbolKind::AreaReinforcement, Some(ElementKind::AreaReinforcement(_))) => true,
+        (SymbolKind::PathReinforcement, Some(ElementKind::PathReinforcement(_))) => true,
+        (SymbolKind::RebarSet, Some(ElementKind::Rebar(_))) => true,
+        (SymbolKind::Fabric, Some(ElementKind::FabricArea(_) | ElementKind::FabricSheet(_))) => true,
+        _ => false,
+    };
+    if !ok {
+        return Err("Select an element this symbol can annotate.".into());
+    }
+    let id = add_symbol(p, view, kind, at);
+    if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+        s.value = host.to_string();
+    }
+    Ok(id)
+}
+
 pub fn add_symbol(p: &mut Project, view: Id, kind: SymbolKind, at: DVec2) -> Id {
     push_in_view(p, view, ElementKind::Symbol(Symbol { kind, position: at, rotation_deg: 0.0, points: vec![], value: String::new(), size: 0.0 }))
 }
@@ -846,7 +867,7 @@ pub fn add_area_reinforcement(p: &mut Project, host: Id, boundary: Vec<DVec2>, b
     }
     let major = (b[1] - b[0]).normalize_or_zero();
     let layer = RebarLayer { on: true, bar_type, spacing };
-    Ok(push(p, ElementKind::AreaReinforcement(AreaReinforcement { host, boundary: geom::ensure_ccw(&b), major, layers: [layer.clone(), layer.clone(), layer.clone(), layer] })))
+    Ok(push(p, ElementKind::AreaReinforcement(AreaReinforcement { host, boundary: geom::ensure_ccw(&b), major, layers: [layer.clone(), layer.clone(), layer.clone(), layer], own_symbol: false })))
 }
 
 /// Structure > Path: bars across a sketched path (one or more connected lines) in a floor.
@@ -866,7 +887,7 @@ pub fn add_path_reinforcement(p: &mut Project, host: Id, path: Vec<DVec2>, bar_t
     if spacing < 25.0 || length < 25.0 {
         return Err("The bar spacing or length is too small.".into());
     }
-    Ok(push(p, ElementKind::PathReinforcement(PathReinforcement { host, path: pts, bar_type, spacing, length, top: true, flip: false })))
+    Ok(push(p, ElementKind::PathReinforcement(PathReinforcement { host, path: pts, bar_type, spacing, length, top: true, flip: false, own_symbol: false })))
 }
 
 /// Structure > Fabric Area: fabric sheets laid over a sketched area of a floor, the major
@@ -3016,6 +3037,30 @@ mod tests {
         assert!(t.distance(e) > 900.0);
         set_walk_frame(&mut p, v, 300);
         assert!((eye(&p).0 - DVec3::new(10000.0, 10000.0, 1750.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn host_symbols_draw_their_reinforcement() {
+        let (mut p, lvl, _) = project();
+        let ft = p.types_of(Category::Floors).next().unwrap().id;
+        let sq = vec![DVec2::ZERO, DVec2::new(3000.0, 0.0), DVec2::new(3000.0, 2000.0), DVec2::new(0.0, 2000.0)];
+        let floor = add_floor(&mut p, lvl, ft, sq.clone()).unwrap();
+        let bt = crate::rebar::ensure_bar_types(&mut p)[1];
+        let ar = add_area_reinforcement(&mut p, floor, sq, bt, 300.0).unwrap();
+        let plan = p.views.iter().find(|v| v.plan_level() == Some(lvl)).unwrap().id;
+        let fp = analysis::wall_footprints(&p);
+        let texts = |p: &Project, id: Id| -> Vec<String> {
+            let d = crate::plan::floor_plan(p, p.view(plan).unwrap(), &fp);
+            d.prims.iter().filter(|(i, _)| *i == Some(id)).filter_map(|(_, pr)| match pr {
+                crate::plan::Prim::Text { text, .. } => Some(text.clone()),
+                _ => None,
+            }).collect()
+        };
+        // New area reinforcement draws no symbol of its own; its symbol element does.
+        assert!(texts(&p, ar).is_empty());
+        let sym = add_host_symbol(&mut p, plan, SymbolKind::AreaReinforcement, ar, DVec2::new(1500.0, 1000.0)).unwrap();
+        assert!(texts(&p, sym).iter().any(|t| t.contains("EW")), "{:?}", texts(&p, sym));
+        assert!(add_host_symbol(&mut p, plan, SymbolKind::StairPath, ar, DVec2::ZERO).is_err());
     }
 
     #[test]

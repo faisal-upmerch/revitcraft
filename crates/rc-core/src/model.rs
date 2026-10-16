@@ -1373,6 +1373,13 @@ pub enum SymbolKind {
     SpanDirection,
     /// Tread numbers of a stair run: "stair id:run index" in `value`.
     TreadNumber,
+    /// Annotate > Symbol: symbols of a host element (its id in `value`).
+    BeamSystem,
+    StairPath,
+    AreaReinforcement,
+    PathReinforcement,
+    RebarSet,
+    Fabric,
 }
 
 /// Built-in 2D detail components (Annotate > Component > Detail Component).
@@ -3034,6 +3041,9 @@ pub struct PathReinforcement {
     /// The bars run to the other side of the path.
     #[serde(default)]
     pub flip: bool,
+    /// Drawn with its own symbol (projects made before symbols were separate elements).
+    #[serde(default = "yes")]
+    pub own_symbol: bool,
 }
 
 /// A fabric area: sheets of `type_id` tiled over the boundary along `major`, lapped.
@@ -3084,6 +3094,9 @@ pub struct AreaReinforcement {
     pub major: DVec2,
     /// Top major, top minor, bottom major, bottom minor.
     pub layers: [RebarLayer; 4],
+    /// Drawn with its own symbol (projects made before symbols were separate elements).
+    #[serde(default = "yes")]
+    pub own_symbol: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

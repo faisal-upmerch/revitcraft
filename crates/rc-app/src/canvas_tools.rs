@@ -159,6 +159,15 @@ pub fn prompt(app: &App) -> String {
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
         ToolKind::PlaceImage => "Click to place the image.".into(),
         ToolKind::SpanSymbol => "Select a floor to place the span direction symbol.".into(),
+        ToolKind::HostSymbol => match app.opts.host_symbol {
+            SymbolKind::BeamSystem => "Select a beam to place the beam system symbol.",
+            SymbolKind::StairPath => "Select a stair to place the stair path.",
+            SymbolKind::AreaReinforcement => "Select an area reinforcement to place its symbol.",
+            SymbolKind::PathReinforcement => "Select a path reinforcement to place its symbol.",
+            SymbolKind::RebarSet => "Select a rebar set to place its symbol.",
+            _ => "Select a fabric area or fabric sheet to place its symbol.",
+        }
+        .into(),
         ToolKind::TreadNumber => "Select a stair run to number its treads.".into(),
         ToolKind::FramingElevation => "Click near a grid, on the side to look from.".into(),
         ToolKind::RebarSet => if n == 0 { "Click inside a floor or slab to start the bar.".into() } else { "Click to end the bar.".into() },
@@ -233,6 +242,41 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::StructColumn if app.opts.column_multi.is_some() => column_multi_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::HostSymbol => {
+            let Some(c) = cursor else { return };
+            let kind = app.opts.host_symbol;
+            let fits = move |e: &Element| match (&e.kind, kind) {
+                (ElementKind::Instance(i), SymbolKind::BeamSystem) => i.category == Category::StructuralFraming && i.end.is_some(),
+                (ElementKind::Stair(_), SymbolKind::StairPath) => true,
+                (ElementKind::AreaReinforcement(_), SymbolKind::AreaReinforcement) => true,
+                (ElementKind::PathReinforcement(_), SymbolKind::PathReinforcement) => true,
+                (ElementKind::Rebar(_), SymbolKind::RebarSet) => true,
+                (ElementKind::FabricArea(_) | ElementKind::FabricSheet(_), SymbolKind::Fabric) => true,
+                _ => false,
+            };
+            // Areas are picked by their edges or by a click inside them.
+            let hit = hover_of(app, view, d, c, xf, &fits).or_else(|| {
+                app.doc.data.elements.iter().rev().find(|e| {
+                    fits(e) && match &e.kind {
+                        ElementKind::AreaReinforcement(a) => rc_core::geom::contains(&a.boundary, c),
+                        ElementKind::FabricArea(a) => rc_core::geom::contains(&a.boundary, c),
+                        _ => false,
+                    }
+                }).map(|e| e.id)
+            });
+            app.interact.hover = hit;
+            if clicked {
+                match hit {
+                    Some(host) => {
+                        let vid = view.id;
+                        if let Some(id) = app.run("Place Symbol", |p| edit::add_host_symbol(p, vid, kind, host, c)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    None => app.error(prompt(app)),
+                }
+            }
+        }
         ToolKind::SpanSymbol | ToolKind::TreadNumber => {
             let Some(c) = cursor else { return };
             let span = app.tool.kind == ToolKind::SpanSymbol;
