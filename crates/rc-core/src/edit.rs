@@ -767,6 +767,18 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
     Ok(push(p, ElementKind::Instance(inst)))
 }
 
+/// Insert > Link Revit: links `model` (read from `path`), placed internal origin to internal
+/// origin. Returns the link instance.
+pub fn add_link(p: &mut Project, name: &str, path: &str, model: Project) -> Result<Id, String> {
+    if model.elements.iter().all(|e| e.view.is_some()) {
+        return Err("The file has no model elements to link.".into());
+    }
+    let id = p.new_id();
+    let name = unique_name(p.links.iter().map(|l| l.name.clone()), name);
+    p.links.push(LinkedModel { id, name, path: path.into(), data: Some(std::sync::Arc::new(model)) });
+    Ok(push(p, ElementKind::Link(LinkInstance { link: id, origin: DVec2::ZERO, rotation_deg: 0.0 })))
+}
+
 /// View > Elevation > Framing Elevation: an elevation beside `grid`, on the side of `side_pt`,
 /// looking at the grid and cropped to its length and the levels.
 pub fn new_framing_elevation(p: &mut Project, grid: Id, side_pt: DVec2, scale: f64) -> Result<Id, String> {
@@ -1175,6 +1187,10 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
                     o.u1 = b;
                 }
             }
+        }
+        ElementKind::Link(l) => {
+            l.origin = f(l.origin);
+            l.rotation_deg += rot;
         }
         ElementKind::Grid(g) => {
             g.start = f(g.start);
@@ -2539,6 +2555,31 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn linked_models_draw_in_plans_and_3d() {
+        let (mut src, lvl, wt) = project();
+        add_wall(&mut src, lvl, wt, DVec2::ZERO, DVec2::new(5000.0, 0.0), 3000.0).unwrap();
+        let (mut p, ..) = project();
+        let link = add_link(&mut p, "Structure", "structure.rcx", src).unwrap();
+        // Moved 10 m east: the linked wall draws there in the plan, tagged as the link.
+        move_elements(&mut p, &[link], DVec2::new(10000.0, 0.0));
+        let plan = p.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap().clone();
+        let fp = analysis::wall_footprints(&p);
+        let d = crate::plan::floor_plan(&p, &plan, &fp);
+        let pts: Vec<DVec2> = d.prims.iter().filter(|(id, _)| *id == Some(link)).flat_map(|(_, pr)| match pr {
+            crate::plan::Prim::Line { pts, .. } => pts.clone(),
+            _ => vec![],
+        }).collect();
+        assert!(!pts.is_empty() && pts.iter().all(|q| q.x > 9000.0), "{pts:?}");
+        let e = p.element(link).unwrap().clone();
+        let (mn, _) = build3d::element_mesh(&p, &e, &fp).bounds().unwrap();
+        assert!(mn.x > 9000.0);
+        // Saved projects do not carry the linked model.
+        let json = serde_json::to_string(&p).unwrap();
+        let back: Project = serde_json::from_str(&json).unwrap();
+        assert!(back.links[0].data.is_none() && back.links[0].path == "structure.rcx");
     }
 
     #[test]

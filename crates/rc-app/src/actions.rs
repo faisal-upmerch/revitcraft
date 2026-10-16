@@ -524,6 +524,24 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 }
             }
         }
+        LinkRevit => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
+                if app.doc.path.as_deref() == Some(path.as_path()) {
+                    app.error("A project cannot link itself.");
+                } else {
+                    match io::load(&path) {
+                        Ok(model) => {
+                            let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                            let file = path.display().to_string();
+                            if let Some(id) = app.run("Link Revit", |p| edit::add_link(p, &name, &file, model)) {
+                                app.select(vec![id]);
+                            }
+                        }
+                        Err(e) => app.error(e),
+                    }
+                }
+            }
+        }
         LoadAsGroup => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
                 match io::load(&path) {

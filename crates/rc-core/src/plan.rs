@@ -622,10 +622,54 @@ pub fn floor_plan(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>)
             ceiling_plan_graphics(&ctx, &mut d);
         } else {
             model_graphics(&ctx, &mut d);
+            link_graphics(&ctx, &mut d);
         }
     }
     annotation_graphics(p, view, footprints, &mut d);
     d
+}
+
+/// Linked models (By Host View): each drawn as its own plan cut at this view's cut plane, from
+/// its level at or below that height, placed by the link instance and selectable as the link.
+fn link_graphics(c: &Ctx, d: &mut Drawing) {
+    for e in &c.p.elements {
+        let ElementKind::Link(l) = &e.kind else { continue };
+        if !analysis::visible_in(c.p, c.view, e) {
+            continue;
+        }
+        let Some(lp) = c.p.link_model(l.link) else { continue };
+        let levels = lp.levels();
+        let Some((lid, lz)) = levels.iter().rev().find(|(_, lv)| lv.elevation <= c.cut_z + 1e-6).or(levels.first()).map(|(id, lv)| (*id, lv.elevation)) else { continue };
+        let mut v = View::new(0, "link", c.scale, ViewKind::FloorPlan { level: lid, cut_height: c.cut_z - lz, room_colors: false });
+        v.view_range = ViewRange { top: c.top_z - lz, cut: c.cut_z - lz, bottom: c.level_z - lz + c.view.view_range.bottom, depth: c.view.view_range.depth };
+        v.detail = c.view.detail;
+        let fp = analysis::wall_footprints(lp);
+        let ld = floor_plan(lp, &v, &fp);
+        let start = d.prims.len();
+        // Only the linked model: its view markers and annotation stay in the linked project.
+        for (id, prim) in ld.prims {
+            let keep = match id {
+                None => true,
+                Some(i) => lp.view(i).is_none() && lp.element(i).is_none_or(|x| x.view.is_none()),
+            };
+            if keep {
+                d.prims.push((Some(e.id), prim));
+            }
+        }
+        let (angle, origin) = (l.rotation_deg.to_radians(), l.origin);
+        d.rotate_from(start, DVec2::ZERO, angle);
+        for (_, prim) in d.prims.iter_mut().skip(start) {
+            match prim {
+                Prim::Line { pts, .. } => pts.iter_mut().for_each(|q| *q += origin),
+                Prim::Fill { tris, .. } => tris.iter_mut().flatten().for_each(|q| *q += origin),
+                Prim::Text { pos, .. } => *pos += origin,
+                Prim::Image { min, max, .. } => {
+                    *min += origin;
+                    *max += origin;
+                }
+            }
+        }
+    }
 }
 
 fn model_graphics(c: &Ctx, d: &mut Drawing) {
@@ -2248,6 +2292,19 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         }
         ElementKind::Grid(g) => vec![g.polyline()],
         ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
+        ElementKind::Link(l) => match p.link_model(l.link) {
+            // The linked model's extents, placed.
+            Some(lp) => {
+                let fp = analysis::wall_footprints(lp);
+                let pts: Vec<DVec2> = lp.elements.iter().filter(|x| x.view.is_none()).flat_map(|x| element_outline(lp, x, &fp).into_iter().flatten()).collect();
+                if pts.is_empty() {
+                    return vec![];
+                }
+                let (mn, mx) = geom::bounds(pts);
+                vec![[mn, DVec2::new(mx.x, mn.y), mx, DVec2::new(mn.x, mx.y)].iter().map(|q| l.place(*q)).collect()]
+            }
+            None => vec![],
+        },
         ElementKind::RefPlane(r) => vec![vec![r.start, r.end]],
         ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => vec![vec![s.start, s.end]],
         ElementKind::Line(l) => vec![line_points(l)],

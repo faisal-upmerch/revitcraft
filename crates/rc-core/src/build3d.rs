@@ -17,6 +17,29 @@ pub fn element_mesh(p: &Project, e: &Element, footprints: &HashMap<Id, Footprint
     if e.painted.is_empty() { set } else { apply_paint(set, &e.painted) }
 }
 
+/// A linked model's elements as one mesh, placed by the link instance.
+pub fn link_mesh(p: &Project, l: &LinkInstance) -> MeshSet {
+    let mut out = MeshSet::default();
+    let Some(lp) = p.link_model(l.link) else { return out };
+    let fp = analysis::wall_footprints(lp);
+    let (c, s) = (l.rotation_deg.to_radians().cos(), l.rotation_deg.to_radians().sin());
+    let place = |v: DVec3| DVec3::new(l.origin.x + v.x * c - v.y * s, l.origin.y + v.x * s + v.y * c, v.z);
+    for le in &lp.elements {
+        if le.view.is_some() || matches!(le.kind, ElementKind::Link(_)) {
+            continue;
+        }
+        let m = element_mesh(lp, le, &fp);
+        for (mat, mesh) in m.by_material {
+            // Materials the host lacks render with the linked colour name.
+            let dst = out.mesh(&mat);
+            for t in mesh.indices.chunks(3) {
+                dst.add_triangle(place(mesh.positions[t[0] as usize]), place(mesh.positions[t[1] as usize]), place(mesh.positions[t[2] as usize]));
+            }
+        }
+    }
+    out
+}
+
 /// Moves the triangles of painted faces into the painted material.
 fn apply_paint(set: MeshSet, painted: &[PaintedFace]) -> MeshSet {
     let mut out = MeshSet::default();
@@ -36,6 +59,7 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         return MeshSet::default();
     }
     match &e.kind {
+        ElementKind::Link(l) => link_mesh(p, l),
         ElementKind::Wall(w) => match footprints.get(&e.id) {
             Some(fp) => wall(p, e.id, w, fp),
             None => MeshSet::default(),

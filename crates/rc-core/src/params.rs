@@ -192,6 +192,10 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::Link(_) => {
+            d.push(def("Name", IDENTITY, v(Text), true, false));
+            d.push(def("Shared Site", OTHER, v(Text), true, false));
+        }
         ElementKind::RasterImage(_) => {
             d.push(def("Width", DIMENSIONS, v(Length), false, false));
             d.push(def("Height", DIMENSIONS, v(Length), false, false));
@@ -682,6 +686,11 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 _ => sys_common(st, name),
             }
         }
+        ElementKind::Link(l) => match name {
+            "Name" => text(p.links.iter().find(|x| x.id == l.link).map(|x| x.name.clone()).unwrap_or_default()),
+            "Shared Site" => text("<Not Shared>".to_string()),
+            _ => None,
+        },
         ElementKind::RasterImage(im) => match name {
             "Width" => num(im.max.x - im.min.x),
             "Height" => num(im.max.y - im.min.y),

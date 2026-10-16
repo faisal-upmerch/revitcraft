@@ -45,6 +45,7 @@ pub enum Category {
     Groups,
     ImportedCad,
     RasterImages,
+    Links,
     Mass,
     Toposolid,
     Site,
@@ -218,6 +219,7 @@ impl Category {
             Category::Groups => "Model Groups",
             Category::ImportedCad => "Imported CAD",
             Category::RasterImages => "Raster Images",
+            Category::Links => "RVT Links",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site",
@@ -267,6 +269,7 @@ impl Category {
             Category::Groups => "Model Group",
             Category::ImportedCad => "Imported CAD",
             Category::RasterImages => "Raster Images",
+            Category::Links => "RVT Links",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site Component",
@@ -348,6 +351,8 @@ pub enum ElementKind {
     ModelText(ModelText),
     /// An imported or linked raster image placed in a view or on a sheet.
     RasterImage(RasterImage),
+    /// An instance of a linked project (Insert > Link Revit).
+    Link(LinkInstance),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -410,6 +415,7 @@ impl Element {
             ElementKind::Ramp(_) => Category::Ramps,
             ElementKind::ModelText(_) => Category::GenericModels,
             ElementKind::RasterImage(_) => Category::RasterImages,
+            ElementKind::Link(_) => Category::Links,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -2644,6 +2650,40 @@ pub struct Project {
     /// Images imported into the project (Manage Images).
     #[serde(default)]
     pub images: Vec<ImageAsset>,
+    /// Linked project files (Manage Links).
+    #[serde(default)]
+    pub links: Vec<LinkedModel>,
+}
+
+/// A linked project file. Its model is read from `path` when the project opens and is never
+/// saved with this project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LinkedModel {
+    pub id: Id,
+    pub name: String,
+    pub path: String,
+    #[serde(skip)]
+    pub data: Option<std::sync::Arc<Project>>,
+}
+
+/// Where a linked model sits: its internal origin at `origin`, turned `rotation_deg`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LinkInstance {
+    pub link: Id,
+    pub origin: DVec2,
+    #[serde(default)]
+    pub rotation_deg: f64,
+}
+
+impl LinkInstance {
+    /// A point of the linked model in this project.
+    pub fn place(&self, q: DVec2) -> DVec2 {
+        self.origin + crate::geom::rotate(q, self.rotation_deg.to_radians())
+    }
+    /// A point of this project in the linked model.
+    pub fn unplace(&self, q: DVec2) -> DVec2 {
+        crate::geom::rotate(q - self.origin, -self.rotation_deg.to_radians())
+    }
 }
 
 /// A raster image stored once in the project.
@@ -2744,6 +2784,7 @@ impl Project {
             shared: SharedCoordinates::default(),
             starting_view: None,
             images: Vec::new(),
+            links: Vec::new(),
         }
     }
 
@@ -2855,6 +2896,11 @@ impl Project {
         self.shared = SharedCoordinates::default();
         let (n0, e0, z0) = self.to_shared(pt);
         self.shared = SharedCoordinates { north: n - n0, east: e - e0, elevation: z - z0 };
+    }
+
+    /// The loaded model of a linked project.
+    pub fn link_model(&self, link: Id) -> Option<&Project> {
+        self.links.iter().find(|l| l.id == link).and_then(|l| l.data.as_deref())
     }
 
     pub fn level_above(&self, id: Id) -> Option<(Id, &Level)> {

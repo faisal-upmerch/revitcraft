@@ -115,6 +115,7 @@ pub enum Icon {
     DesignOptions,
     Sun,
     LinkCad,
+    LinkRevit,
     ImportCad,
     ImportIfc,
     LoadFamily,
@@ -916,6 +917,15 @@ fn draw(g: &Pen, icon: Icon) {
             g.thin_line(&[(0.14, 0.36), (0.38, 0.36)], ink);
             g.line(&[(0.3, 0.72), (0.3, 0.8), (0.5, 0.8)], BLUE);
             g.poly(&[(0.46, 0.73), (0.54, 0.8), (0.46, 0.87)], BLUE, BLUE);
+        }
+        LinkRevit => {
+            // A building block with a chain link.
+            g.poly(&[(0.1, 0.36), (0.44, 0.18), (0.78, 0.36), (0.44, 0.54)], LBLUE, ink);
+            g.poly(&[(0.1, 0.36), (0.44, 0.54), (0.44, 0.86), (0.1, 0.68)], BLUE, ink);
+            g.poly(&[(0.44, 0.54), (0.78, 0.36), (0.78, 0.68), (0.44, 0.86)], Color32::from_rgb(90, 150, 220), ink);
+            let link = Color32::from_rgb(40, 110, 200);
+            g.arc((0.74, 0.8), 0.1, 0.0, TAU, link);
+            g.arc((0.88, 0.8), 0.1, 0.0, TAU, link);
         }
         Picture => {
             // A framed picture: sky, sun and hills.

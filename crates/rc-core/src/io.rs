@@ -71,7 +71,18 @@ pub fn save(p: &Project, path: &Path) -> Result<(), String> {
 
 pub fn load(path: &Path) -> Result<Project, String> {
     let s = std::fs::read_to_string(path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
-    from_json(&s)
+    let mut p = from_json(&s)?;
+    // Linked models come from their files (a missing file leaves the link unloaded).
+    for l in p.links.iter_mut() {
+        l.data = load_link(Path::new(&l.path)).ok();
+    }
+    Ok(p)
+}
+
+/// Reads a linked project file (its own links are not followed).
+pub fn load_link(path: &Path) -> Result<std::sync::Arc<Project>, String> {
+    let s = std::fs::read_to_string(path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+    from_json(&s).map(std::sync::Arc::new)
 }
 
 /// Family files carry the family and the materials it references.

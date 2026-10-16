@@ -904,7 +904,41 @@ fn links(app: &mut App, ctx: &egui::Context) {
     }
     let mut open = true;
     let mut remove: Option<Id> = None;
+    let mut reload: Option<Id> = None;
+    let mut remove_link: Option<Id> = None;
     window("Manage Links").open(&mut open).default_width(460.0).show(ctx, |ui| {
+        // Linked models.
+        ui.label(egui::RichText::new("Revit").strong());
+        let links: Vec<(Id, String, String, bool, usize)> = app
+            .doc
+            .data
+            .links
+            .iter()
+            .map(|l| (l.id, l.name.clone(), l.path.clone(), l.data.is_some(), app.doc.data.elements.iter().filter(|e| matches!(&e.kind, ElementKind::Link(x) if x.link == l.id)).count()))
+            .collect();
+        if links.is_empty() {
+            ui.label("No models are linked. Use Insert > Link Revit.");
+        }
+        egui::Grid::new("rvt-links").num_columns(5).striped(true).show(ui, |ui| {
+            for h in ["Link Name", "Status", "Instances", "", ""] {
+                ui.label(egui::RichText::new(h).strong());
+            }
+            ui.end_row();
+            for (id, name, path, loaded, n) in links {
+                ui.label(name).on_hover_text(path);
+                ui.label(if loaded { "Loaded" } else { "Not Found" });
+                ui.label(n.to_string());
+                if ui.button("Reload").clicked() {
+                    reload = Some(id);
+                }
+                if ui.button("Remove").clicked() {
+                    remove_link = Some(id);
+                }
+                ui.end_row();
+            }
+        });
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new("CAD Formats").strong());
         let cads: Vec<(Id, String, usize, Option<Id>)> = app.doc.data.elements.iter().filter_map(|e| match &e.kind {
             ElementKind::Cad(c) => Some((e.id, c.name.clone(), c.polylines.len(), e.view)),
             _ => None,
@@ -930,6 +964,28 @@ fn links(app: &mut App, ctx: &egui::Context) {
     });
     if let Some(id) = remove {
         app.run("Remove Link", |p| rc_core::edit::delete_elements(p, &[id]).map(|_| ()));
+    }
+    if let Some(id) = reload {
+        let path = app.doc.data.links.iter().find(|l| l.id == id).map(|l| l.path.clone()).unwrap_or_default();
+        match rc_core::io::load_link(std::path::Path::new(&path)) {
+            Ok(model) => {
+                app.run("Reload Link", |p| {
+                    if let Some(l) = p.links.iter_mut().find(|l| l.id == id) {
+                        l.data = Some(model);
+                    }
+                    Ok(())
+                });
+            }
+            Err(e) => app.error(e),
+        }
+    }
+    if let Some(id) = remove_link {
+        app.run("Remove Link", |p| {
+            let ids: Vec<Id> = p.elements.iter().filter(|e| matches!(&e.kind, ElementKind::Link(x) if x.link == id)).map(|e| e.id).collect();
+            rc_core::edit::delete_elements(p, &ids)?;
+            p.links.retain(|l| l.id != id);
+            Ok(())
+        });
     }
     if !open {
         app.dialogs.links = false;
