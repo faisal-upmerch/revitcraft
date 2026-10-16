@@ -13,6 +13,8 @@ use rc_core::model::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Tab {
+    /// The family editor's Create tab.
+    Create,
     Architecture,
     Structure,
     Insert,
@@ -28,6 +30,7 @@ impl Tab {
     const ALL: [Tab; 9] = [Tab::Architecture, Tab::Structure, Tab::Insert, Tab::Annotate, Tab::Analyze, Tab::MassingSite, Tab::View, Tab::Manage, Tab::Modify];
     fn label(self) -> &'static str {
         match self {
+            Tab::Create => "Create",
             Tab::Architecture => "Architecture",
             Tab::Structure => "Structure",
             Tab::Insert => "Insert",
@@ -56,6 +59,8 @@ enum Item {
     Labeled(&'static str, Cmd, Vec<Cmd>),
     /// Tool options shown in the ribbon (the reference app's Align panel).
     AlignOptions,
+    /// The family editor's Extrusion Depth, in the ribbon as the reference app shows it.
+    FeDepth,
 }
 
 struct Panel {
@@ -535,7 +540,15 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         return (k.uses_draw_modes() || app.sketch.is_some()) && app.opts.draw_mode == m && !(app.sketch.is_some() && k == T::Select) && app.opts.sketch_sub == crate::tools::SketchSub::Boundary;
     }
     match cmd {
+        C::Modify if app.family_editor.is_some() => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Select),
         C::Modify => k == T::Select,
+        C::FeExtrusion => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Extrusion && !fe.void_mode),
+        C::FeBlend => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Blend && !fe.void_mode),
+        C::FeRevolve => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Revolve && !fe.void_mode),
+        C::FeSweep => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Sweep && !fe.void_mode),
+        C::FeRefPlane => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::RefPlane),
+        C::FeDimension => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Dimension),
+        C::FeSymbolicLine => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::SymbolicLine),
         C::TagOnPlacement => match k {
             T::Room => app.opts.room_tag,
             T::StructColumn => app.opts.column_tag,
@@ -766,6 +779,25 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                                         small_button(ui, app, *c, w);
                                     }
                                 }
+                                FeDepth => {
+                                    ui.add_space(6.0);
+                                    let units = app.doc.data.units.clone();
+                                    if let Some(fe) = app.family_editor.as_mut() {
+                                        ui.label("Depth:");
+                                        let id = egui::Id::new("fe-depth");
+                                        let mut s: String = ui.memory(|m| m.data.get_temp(id)).unwrap_or_else(|| units.length(fe.depth));
+                                        let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(80.0));
+                                        if r.has_focus() {
+                                            ui.memory_mut(|m| m.data.insert_temp(id, s.clone()));
+                                        }
+                                        if r.lost_focus() {
+                                            ui.memory_mut(|m| m.data.remove::<String>(id));
+                                            if let Some(v) = units.parse(&s, ParamKind::Length) {
+                                                fe.depth = v;
+                                            }
+                                        }
+                                    }
+                                }
                                 AlignOptions => {
                                     // Two rows: Multiple Alignment + Prefer, Lock + Pattern.
                                     ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
@@ -873,6 +905,10 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                             close = true;
                             actions::exec(app, c);
                         }
+                        (None, "Close") if app.family_editor.is_some() => {
+                            close = true;
+                            crate::family_editor::close(app);
+                        }
                         (None, "Close") => {
                             close = true;
                             if app.confirm_discard(crate::dialogs::Pending::New) {
@@ -979,8 +1015,66 @@ fn qat(ui: &mut egui::Ui, app: &mut App) {
 
 // ---------------------------------------------------------------- the ribbon
 
+/// The family editor's tabs, as in the reference app.
+const FAMILY_TABS: [Tab; 6] = [Tab::Create, Tab::Insert, Tab::Annotate, Tab::View, Tab::Manage, Tab::Modify];
+
+fn family_create(app: &App) -> Vec<Panel> {
+    let custom = app.family_editor.as_ref().is_some_and(|fe| fe.family.definition.is_some());
+    let _ = custom;
+    vec![
+        panel("Select", vec![Big(C::Modify)]),
+        panel("Properties", vec![Stack(vec![C::ToggleProperties, C::FeFamilyCategory, C::FeFamilyTypes])]),
+        panel(
+            "Forms",
+            vec![Big(C::FeExtrusion), Big(C::FeBlend), Big(C::FeRevolve), Big(C::FeSweep), Labeled("Swept\nBlend", C::FeSweptBlend, vec![]), Labeled("Void\nForms", C::FeVoidExtrusion, vec![C::FeVoidExtrusion, C::FeVoidBlend, C::FeVoidRevolve, C::FeVoidSweep])],
+        ),
+        panel("Model", vec![Labeled("Model\nLine", C::FeModelLine, vec![]), Big(C::FeComponent), Labeled("Model\nText", C::FeModelText, vec![]), Big(C::FeOpening), Labeled("Model\nGroup", C::FeModelGroup, vec![])]),
+        panel("Control", vec![Big(C::FeControl)]),
+        panel("Datum", vec![Labeled("Reference\nLine", C::FeRefLine, vec![]), Labeled("Reference\nPlane", C::FeRefPlane, vec![])]),
+        panel("Work Plane", vec![Labeled("Set", C::WorkPlaneSet, vec![]), Labeled("Show", C::WorkPlaneShow, vec![]), Labeled("Viewer", C::WorkPlaneViewer, vec![])]),
+        panel("Family Editor", vec![Labeled("Load into\nProject", C::FeLoadIntoProject, vec![]), Labeled("Load into\nProject and Close", C::FeLoadAndClose, vec![])]),
+    ]
+}
+
+fn family_tab(tab: Tab, app: &App) -> Vec<Panel> {
+    match tab {
+        Tab::Create => family_create(app),
+        Tab::Insert => vec![panel("Import", vec![Labeled("Import\nCAD", C::ImportCad, vec![])]), panel("Load from Library", vec![Labeled("Load\nFamily", C::LoadFamily, vec![])])],
+        Tab::Annotate => vec![panel("Dimension", vec![Big(C::FeDimension)]), panel("Detail", vec![Labeled("Symbolic\nLine", C::FeSymbolicLine, vec![])])],
+        Tab::View => vec![panel("Graphics", vec![Labeled("Thin\nLines", C::ThinLines, vec![])]), panel("Create", vec![Labeled("Default\n3D View", C::FeDefault3D, vec![])])],
+        Tab::Manage => vec![panel("Settings", vec![Labeled("Family Category\nand Parameters", C::FeFamilyCategory, vec![])])],
+        _ => vec![],
+    }
+}
+
+/// The family editor's contextual tab: sketch mode for forms, placing planes or dimensions.
+fn family_contextual(app: &App) -> Option<(String, Vec<Panel>)> {
+    use crate::family_editor::FeTool as F;
+    let fe = app.family_editor.as_ref()?;
+    let draw = || panel("Draw", vec![Icons(vec![C::DrawLine, C::DrawRect, C::DrawCircle])]);
+    let mode = || panel("Mode", vec![Column(vec![C::FeCancelSketch, C::FeFinishSketch])]);
+    let wp = || panel("Work Plane", vec![Labeled("Set", C::WorkPlaneSet, vec![]), Labeled("Show", C::WorkPlaneShow, vec![]), Labeled("Viewer", C::WorkPlaneViewer, vec![])]);
+    Some(match fe.tool {
+        F::Extrusion => ("Create Extrusion".into(), vec![mode(), draw(), wp(), panel("Extrusion", vec![FeDepth])]),
+        F::Blend => (if fe.blend_bottom.is_none() { "Create Blend Base Boundary" } else { "Create Blend Top Boundary" }.into(), vec![mode(), draw(), wp()]),
+        F::Revolve => ("Create Revolve".into(), vec![mode(), draw(), wp()]),
+        F::Sweep => ("Sweep".into(), vec![mode(), panel("Draw", vec![Icons(vec![C::DrawLine])]), wp()]),
+        F::RefPlane => ("Place Reference Plane".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])])]),
+        F::Dimension => ("Place Dimensions".into(), vec![]),
+        F::SymbolicLine => ("Place Symbolic Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])])]),
+        F::Select => match fe.sel {
+            crate::family_editor::FeSel::Form(k) => (fe.family.definition.as_ref().and_then(|d| d.forms.get(k)).map(|f| f.form.kind_label().to_string()).unwrap_or_else(|| "Form".into()), vec![]),
+            crate::family_editor::FeSel::Plane(_) => ("Reference Planes".into(), vec![]),
+            crate::family_editor::FeSel::Dim(_) => ("Dimensions".into(), vec![]),
+            crate::family_editor::FeSel::Sym(_) => ("Lines".into(), vec![]),
+            crate::family_editor::FeSel::None => return None,
+        },
+    })
+}
+
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
-    let ctx = contextual(app);
+    let family = app.family_editor.is_some();
+    let ctx = if family { family_contextual(app) } else { contextual(app) };
     // The contextual tab opens when a tool, selection or sketch begins and the previous tab
     // comes back when it ends.
     let key = ctx.as_ref().map(|(t, _)| t.clone());
@@ -994,10 +1088,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         }
         app.ribbon_tab = Tab::Modify;
     } else if key.is_none() && prev.is_some() && app.ribbon_tab == Tab::Modify {
-        app.ribbon_tab = ui.memory(|m| m.data.get_temp(ret_id)).unwrap_or(Tab::Architecture);
+        app.ribbon_tab = ui.memory(|m| m.data.get_temp(ret_id)).unwrap_or(if family { Tab::Create } else { Tab::Architecture });
     }
+    // The family editor and projects have their own tab sets.
+    if family && !FAMILY_TABS.contains(&app.ribbon_tab) {
+        app.ribbon_tab = Tab::Create;
+    } else if !family && app.ribbon_tab == Tab::Create {
+        app.ribbon_tab = Tab::Architecture;
+    }
+    let sketch = app.sketch.is_some() || app.family_editor.as_ref().is_some_and(|fe| !matches!(fe.tool, crate::family_editor::FeTool::Select | crate::family_editor::FeTool::Dimension));
     ui.memory_mut(|m| m.data.insert_temp(mem_id, key.clone()));
-    let sketch = app.sketch.is_some();
 
     // Row 1: Quick Access Toolbar.
     egui::Frame::new().inner_margin(egui::Margin { left: 4, right: 4, top: 1, bottom: 1 }).show(ui, |ui| {
@@ -1017,7 +1117,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             if resp.clicked() {
                 app.file_menu = !app.file_menu;
             }
-            for t in Tab::ALL {
+            let tabs: &[Tab] = if family { &FAMILY_TABS } else { &Tab::ALL };
+            for &t in tabs {
                 match (&ctx, t) {
                     (Some((title, _)), Tab::Modify) => tab_button(ui, app, t, &format!("Modify | {title}"), Some(if sketch { style::SKETCH_TAB } else { style::CONTEXT })),
                     _ => tab_button(ui, app, t, t.label(), None),
@@ -1044,7 +1145,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             ui.set_width(ui.available_width());
             egui::ScrollArea::horizontal().id_salt("ribbon-scroll").scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden).show(ui, |ui| {
                 ui.set_min_height(BIG_H + 17.0);
+                if family && app.ribbon_tab != Tab::Modify {
+                    let p = family_tab(app.ribbon_tab, app);
+                    show_panels(ui, app, p);
+                    return;
+                }
                 match app.ribbon_tab {
+                    Tab::Create => {}
                     Tab::Architecture => show_panels(ui, app, architecture()),
                     Tab::Structure => show_panels(ui, app, structure()),
                     Tab::Insert => show_panels(ui, app, insert()),
@@ -1058,7 +1165,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     Tab::Manage => show_panels(ui, app, manage()),
                     Tab::Modify => {
                         let mut panels = modify_panels();
-                        if let Some((_, extra)) = contextual(app) {
+                        if let Some((_, extra)) = if family { family_contextual(app) } else { contextual(app) } {
                             // Tool- and element-specific panels follow the standard Modify panels.
                             panels.extend(extra);
                         }

@@ -48,6 +48,10 @@ fn sep(ui: &mut egui::Ui) {
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
+    if app.family_editor.is_some() {
+        crate::family_editor::options_bar(app, ui);
+        return;
+    }
     ui.horizontal_centered(|ui| {
         ui.spacing_mut().item_spacing.x = 6.0;
         // Like the reference layout: the bar names the tool or selection, and stays empty when idle

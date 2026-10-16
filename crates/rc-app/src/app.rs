@@ -284,6 +284,7 @@ impl App {
             match args[k].as_str() {
                 "--sample" => self.open_sample(),
                 "--selftest" => self.selftest = Some(crate::selftest::SelfTest::new(self)),
+                "--new-family" => crate::family_editor::new_family(self, "Family1", Category::GenericModels, None),
                 "--sample-site" => self.replace_document(rc_core::sample::sample_site(), None),
                 "--imperial" => self.replace_document(defaults::new_project(UnitSystem::Imperial), None),
                 "--view" => {
@@ -1098,15 +1099,6 @@ impl App {
         self.refresh_cache();
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(self.title()));
 
-        if let Some(fe) = self.family_editor.take() {
-            let keep = crate::family_editor::show(self, fe, ui);
-            self.family_editor = keep;
-            self.show_toast(&ctx);
-            crate::dialogs::show(self, &ctx);
-            self.screenshot_step(&ctx);
-            return;
-        }
-
         if self.dialogs.home {
             crate::home::show(self, ui);
             crate::dialogs::show(self, &ctx);
@@ -1147,7 +1139,12 @@ impl App {
                 });
             self.settings.palette_width = resp.response.rect.width();
         }
-        egui::CentralPanel::default().frame(style::canvas_frame()).show(ui, |ui| self.dock_area(ui));
+        if self.family_editor.is_some() {
+            // The family editor works in the main window, with its own views.
+            egui::CentralPanel::default().frame(style::canvas_frame()).show(ui, |ui| crate::family_editor::view_area(self, ui));
+        } else {
+            egui::CentralPanel::default().frame(style::canvas_frame()).show(ui, |ui| self.dock_area(ui));
+        }
 
         // Save reminder, like the reference app's "Project Not Saved Recently".
         if !self.doc.dirty {

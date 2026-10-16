@@ -432,6 +432,18 @@ fn least_squares(rows: &[(Vec<f64>, f64, f64)], n: usize) -> Option<Vec<f64>> {
 
 /// Revit's Generic Model template: centre and level planes, Width/Depth/Height planes with EQ,
 /// and one extrusion locked to them.
+/// The reference app's Generic Model template: only the origin planes (the two centre planes
+/// and the reference level), no forms, dimensions or parameters.
+pub fn empty_template() -> FamilyDef {
+    let plane = |id, name: &str, axis, default, fixed| RefPlaneDef { id, name: name.into(), axis, default, fixed };
+    FamilyDef {
+        planes: vec![plane(1, "Center (Left/Right)", Axis::X, 0.0, true), plane(2, "Center (Front/Back)", Axis::Y, 0.0, true), plane(3, "Ref. Level", Axis::Z, 0.0, true)],
+        dims: vec![],
+        forms: vec![],
+        symbolic: vec![],
+    }
+}
+
 pub fn generic_template() -> FamilyDef {
     let plane = |id, name: &str, axis, default, fixed| RefPlaneDef { id, name: name.into(), axis, default, fixed };
     let p = |a, b| SketchPt { a: Loc::Plane(a), b: Loc::Plane(b) };

@@ -21,6 +21,25 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     let sel_el = |f: &dyn Fn(&Element) -> bool| app.selection.iter().any(|id| app.el(*id).is_some_and(f));
     let in_sketch = app.sketch.is_some();
     let on_sheet = view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_)));
+    // The family editor offers its own commands (and a few general ones).
+    if let Some(fe) = app.family_editor.as_ref() {
+        use crate::family_editor::FeTool as F;
+        let custom = fe.family.definition.is_some();
+        let sketching = matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Sweep);
+        return match cmd {
+            FeExtrusion | FeBlend | FeRevolve | FeSweep | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => custom,
+            FeFinishSketch | FeCancelSketch => sketching,
+            FeFamilyTypes | FeFamilyCategory | FeLoadIntoProject | FeLoadAndClose | FeDefault3D => true,
+            DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine),
+            DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve),
+            Modify | ToggleProperties | ToggleBrowser | ToggleStatusBar | ToggleOptionsBar | ThinLines | Undo | Redo | Exit | Options | Save | SaveAs => match cmd {
+                Undo => !fe.undo.is_empty(),
+                Redo => !fe.redo.is_empty(),
+                _ => true,
+            },
+            _ => false,
+        };
+    }
     match cmd {
         Undo => app.doc.can_undo() || in_sketch,
         AlignEaves => app.sketch.as_ref().is_some_and(|s| s.kind.is_roof()),
@@ -89,6 +108,12 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
 }
 
 pub fn exec(app: &mut App, cmd: Cmd) {
+    // In the family editor, RP and DI draw family reference planes and dimensions.
+    let cmd = match cmd {
+        Cmd::RefPlane if app.family_editor.is_some() => Cmd::FeRefPlane,
+        Cmd::DimAligned if app.family_editor.is_some() => Cmd::FeDimension,
+        c => c,
+    };
     if !enabled(app, cmd) {
         let why = match cmd {
             Cmd::Level => "Levels are created in sections and elevations. Open one first.",
@@ -126,6 +151,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 app.open_dialog();
             }
         }
+        Save | SaveAs if app.family_editor.is_some() => crate::family_editor::save_family(app),
         Save => {
             app.save();
         }
@@ -151,6 +177,82 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ExportCsv => export_csv(app),
         Options => app.dialogs.options = true,
         Exit => app.dialogs.exit = true,
+        Undo if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::undo(fe);
+            }
+        }
+        Redo if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::redo(fe);
+            }
+        }
+        Modify if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::cancel_sketch(fe);
+            }
+        }
+        DrawLine | DrawRect | DrawCircle if app.family_editor.is_some() => {
+            app.opts.draw_mode = match cmd {
+                DrawRect => DrawMode::Rect,
+                DrawCircle => DrawMode::Circle,
+                _ => DrawMode::Line,
+            };
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.pts.clear();
+            }
+        }
+        FeExtrusion | FeBlend | FeRevolve | FeSweep | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => {
+            use crate::family_editor::FeTool as F;
+            let (t, void) = match cmd {
+                FeExtrusion => (F::Extrusion, false),
+                FeBlend => (F::Blend, false),
+                FeRevolve => (F::Revolve, false),
+                FeSweep => (F::Sweep, false),
+                FeVoidExtrusion => (F::Extrusion, true),
+                FeVoidBlend => (F::Blend, true),
+                FeVoidRevolve => (F::Revolve, true),
+                FeVoidSweep => (F::Sweep, true),
+                FeRefPlane => (F::RefPlane, false),
+                FeDimension => (F::Dimension, false),
+                _ => (F::SymbolicLine, false),
+            };
+            app.opts.draw_mode = DrawMode::Line;
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::set_tool(fe, t, void);
+            }
+        }
+        FeFinishSketch => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::finish(fe);
+            }
+        }
+        FeCancelSketch => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::cancel_sketch(fe);
+            }
+        }
+        FeFamilyTypes => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.types_dialog = Some(fe.family.clone());
+            }
+        }
+        FeFamilyCategory => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.category_dialog = true;
+            }
+        }
+        FeDefault3D => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.view = crate::family_editor::FeView::ThreeD;
+                if !fe.open_views.contains(&fe.view) {
+                    fe.open_views.push(fe.view);
+                }
+            }
+        }
+        FeLoadIntoProject => crate::family_editor::load(app, false),
+        FeLoadAndClose => crate::family_editor::load(app, true),
+        FeSweptBlend | FeModelLine | FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl | FeRefLine => {}
         Undo => app.undo(),
         Redo => app.redo(),
 

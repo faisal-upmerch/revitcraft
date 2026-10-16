@@ -22,22 +22,27 @@ pub enum FeView {
     Front,
     Right,
     ThreeD,
+    Ceiling,
+    Back,
+    Left,
 }
 
 impl FeView {
-    fn label(self) -> &'static str {
+    pub fn label(self) -> &'static str {
         match self {
-            FeView::Plan => "Ref. Level",
+            FeView::Plan | FeView::Ceiling => "Ref. Level",
             FeView::Front => "Front",
             FeView::Right => "Right",
-            FeView::ThreeD => "{3D}",
+            FeView::Back => "Back",
+            FeView::Left => "Left",
+            FeView::ThreeD => "View 1",
         }
     }
     fn sketch_plane(self) -> Option<SketchPlane> {
         match self {
-            FeView::Plan => Some(SketchPlane::XY),
-            FeView::Front => Some(SketchPlane::XZ),
-            FeView::Right => Some(SketchPlane::YZ),
+            FeView::Plan | FeView::Ceiling => Some(SketchPlane::XY),
+            FeView::Front | FeView::Back => Some(SketchPlane::XZ),
+            FeView::Right | FeView::Left => Some(SketchPlane::YZ),
             FeView::ThreeD => None,
         }
     }
@@ -81,17 +86,36 @@ pub struct FamilyEditor {
     pub undo: Vec<Family>,
     pub redo: Vec<Family>,
     pub dirty: bool,
-    pub show_types: bool,
-    pub new_param: (String, ParamKind, bool, String),
+    /// Family Types: the selected parameter row, its search text and the open sub-dialogs.
+    pub param_sel: Option<String>,
+    pub param_filter: String,
+    pub param_dialog: Option<ParamDialog>,
+    /// New Type (false) or Rename Type (true), with the name being typed.
+    pub type_name_dialog: Option<(bool, String)>,
     pub message: Option<String>,
     pub scene_key: u64,
     /// Model In-place: finishing places the family's one instance in the project.
     pub in_place: Option<Id>,
+    /// The family's open views (view tabs).
+    pub open_views: Vec<FeView>,
+    /// Extrusion Depth while sketching.
+    pub depth: f64,
+    /// The closed profile waiting for Finish Edit Mode.
+    pub closed: bool,
+    /// Family Types is open: the family as it was (Cancel restores it).
+    pub types_dialog: Option<Family>,
+    pub category_dialog: bool,
+    pub category_pick: Option<Category>,
 }
 
 pub fn open(app: &mut App, family_id: Id) {
     let Some(f) = app.doc.data.family(family_id).cloned() else { return };
-    app.family_editor = Some(FamilyEditor::new(Some(family_id), f));
+    let mut fe = FamilyEditor::new(Some(family_id), f);
+    if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial {
+        fe.depth = 304.8;
+    }
+    app.family_editor = Some(fe);
+    app.ribbon_tab = crate::ribbon::Tab::Create;
 }
 
 pub fn new_custom(app: &mut App, name: &str) {
@@ -101,7 +125,8 @@ pub fn new_custom(app: &mut App, name: &str) {
 /// A new family of `category` in the editor; `in_place` (a level) makes it an in-place
 /// family placed in the project when finished.
 pub fn new_family(app: &mut App, name: &str, category: Category, in_place: Option<Id>) {
-    let params = rc_core::library::template_params(FamilyTemplate::Custom);
+    // As the reference app's family templates: the origin planes and Default Elevation.
+    let params = vec![FamilyParameter { name: "Default Elevation".into(), kind: ParamKind::Length, instance: true, formula: String::new(), group: "Constraints".into(), built_in: true, default: "0".into(), reporting: false }];
     let fam = Family {
         id: 0,
         name: rc_core::edit::unique_name(app.doc.data.families.iter().map(|f| f.name.clone()), name),
@@ -109,12 +134,16 @@ pub fn new_family(app: &mut App, name: &str, category: Category, in_place: Optio
         template: FamilyTemplate::Custom,
         params,
         types: vec![FamilyType { id: 0, name: "Type 1".into(), values: BTreeMap::new() }],
-        definition: Some(family_def::generic_template()),
+        definition: Some(family_def::empty_template()),
     };
     let mut fe = FamilyEditor::new(None, fam);
     fe.dirty = true;
     fe.in_place = in_place;
+    if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial {
+        fe.depth = 304.8;
+    }
     app.family_editor = Some(fe);
+    app.ribbon_tab = crate::ribbon::Tab::Create;
 }
 
 impl FamilyEditor {
@@ -137,8 +166,16 @@ impl FamilyEditor {
             redo: Vec::new(),
             dirty: false,
             in_place: None,
-            show_types: !custom,
-            new_param: (String::new(), ParamKind::Length, false, "Dimensions".into()),
+            open_views: vec![if custom { FeView::Plan } else { FeView::ThreeD }],
+            depth: 250.0,
+            closed: false,
+            types_dialog: None,
+            category_dialog: false,
+            category_pick: None,
+            param_sel: None,
+            param_filter: String::new(),
+            param_dialog: None,
+            type_name_dialog: None,
             message: None,
             scene_key: 1,
         }
@@ -193,9 +230,9 @@ impl FamilyEditor {
 /// (horizontal axis, vertical axis) of a 2D family view.
 fn view_axes(v: FeView) -> (Axis, Axis) {
     match v {
-        FeView::Plan => (Axis::X, Axis::Y),
-        FeView::Front => (Axis::X, Axis::Z),
-        FeView::Right => (Axis::Y, Axis::Z),
+        FeView::Plan | FeView::Ceiling => (Axis::X, Axis::Y),
+        FeView::Front | FeView::Back => (Axis::X, Axis::Z),
+        FeView::Right | FeView::Left => (Axis::Y, Axis::Z),
         FeView::ThreeD => (Axis::X, Axis::Y),
     }
 }
@@ -223,227 +260,631 @@ fn snap_loc(def: &FamilyDef, solved: &family_def::Solved, axis: Axis, v: f64, to
 // ---------------------------------------------------------------- UI
 
 /// Shows the family editor in place of the project UI. Returns the editor to keep it open.
-pub fn show(app: &mut App, mut fe: FamilyEditor, ui: &mut egui::Ui) -> Option<FamilyEditor> {
-    let mut close = false;
-    let mut load = false;
-    // Toolbar.
-    egui::Panel::top("fe-ribbon").frame(style::ribbon_frame()).show(ui, |ui| {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new(format!("Family Editor — {}", fe.family.name)).strong().size(14.0));
-            ui.label(egui::RichText::new(format!("({}, {})", fe.family.category.label(), fe.family.template.label())).color(style::text_dim()));
-            if fe.dirty {
-                ui.label(egui::RichText::new("modified").color(style::text_dim()).italics());
-            }
-        });
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            let custom = fe.def().is_some();
-            let tool_btn = |ui: &mut egui::Ui, fe: &mut FamilyEditor, icon: Icon, label: &str, t: FeTool, enabled: bool| {
-                let on = fe.tool == t;
-                if big(ui, icon, label, on, enabled) {
-                    fe.tool = t;
-                    fe.pts.clear();
-                    fe.dim_planes.clear();
-                    fe.blend_bottom = None;
-                    if t != FeTool::Select && fe.view == FeView::ThreeD {
-                        fe.view = FeView::Plan;
-                    }
-                }
-            };
-            tool_btn(ui, &mut fe, Icon::Modify, "Modify", FeTool::Select, true);
-            ui.separator();
-            tool_btn(ui, &mut fe, Icon::RefPlane, "Reference Plane", FeTool::RefPlane, custom);
-            tool_btn(ui, &mut fe, Icon::DimAligned, "Aligned Dimension", FeTool::Dimension, custom);
-            ui.separator();
-            tool_btn(ui, &mut fe, Icon::Extrusion, "Extrusion", FeTool::Extrusion, custom);
-            tool_btn(ui, &mut fe, Icon::Blend, "Blend", FeTool::Blend, custom);
-            tool_btn(ui, &mut fe, Icon::Revolve, "Revolve", FeTool::Revolve, custom);
-            tool_btn(ui, &mut fe, Icon::Sweep, "Sweep", FeTool::Sweep, custom);
-            if big(ui, Icon::VoidForm, "Void Forms", fe.void_mode, custom) {
-                fe.void_mode = !fe.void_mode;
-            }
-            tool_btn(ui, &mut fe, Icon::DetailLine, "Symbolic Line", FeTool::SymbolicLine, custom);
-            ui.separator();
-            if big(ui, Icon::FamilyTypes, "Family Types", fe.show_types, true) {
-                fe.show_types = !fe.show_types;
-            }
-            ui.vertical(|ui| {
-                ui.label("Category:");
-                let mut cat = fe.family.category;
-                egui::ComboBox::from_id_salt("fe-cat").selected_text(cat.label()).width(150.0).show_ui(ui, |ui| {
-                    for c in [Category::GenericModels, Category::Furniture, Category::Casework, Category::PlumbingFixtures, Category::SpecialtyEquipment, Category::Columns, Category::StructuralColumns, Category::StructuralFoundations] {
-                        ui.selectable_value(&mut cat, c, c.label());
-                    }
-                });
-                if cat != fe.family.category && !matches!(fe.family.category, Category::Doors | Category::Windows) {
-                    fe.checkpoint();
-                    fe.family.category = cat;
-                }
-            });
-            ui.separator();
-            if big(ui, Icon::Undo, "Undo", false, !fe.undo.is_empty()) {
-                if let Some(prev) = fe.undo.pop() {
-                    fe.redo.push(std::mem::replace(&mut fe.family, prev));
-                    fe.scene_key += 1;
-                }
-            }
-            if big(ui, Icon::Redo, "Redo", false, !fe.redo.is_empty()) {
-                if let Some(next) = fe.redo.pop() {
-                    fe.undo.push(std::mem::replace(&mut fe.family, next));
-                    fe.scene_key += 1;
-                }
-            }
-            ui.separator();
-            let finish = if fe.in_place.is_some() { "Finish Model" } else { "Load into Project and Close" };
-            if big(ui, if fe.in_place.is_some() { Icon::Finish } else { Icon::LoadIntoProject }, finish, false, true) {
-                load = true;
-            }
-            if big(ui, Icon::Save, "Save As...", false, true) {
-                let path = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{}.rcfa", fe.family.name)).save_file();
-                if let Some(mut path) = path {
-                    if path.extension().is_none() {
-                        path.set_extension(rc_core::io::FAMILY_EXTENSION);
-                    }
-                    match rc_core::io::save_family(&app.doc.data, &fe.family, &path) {
-                        Ok(()) => app.info(format!("Saved {}", path.display())),
-                        Err(e) => app.error(e),
-                    }
-                }
-            }
-            if big(ui, if fe.in_place.is_some() { Icon::Cancel } else { Icon::Close }, if fe.in_place.is_some() { "Cancel Model" } else { "Close" }, false, true) {
-                close = true;
-            }
-        });
-        ui.add_space(4.0);
-    });
-    egui::Panel::bottom("fe-status").frame(style::bar_frame()).exact_size(26.0).show(ui, |ui| {
-        ui.horizontal_centered(|ui| {
-            let (_, err) = fe.solved();
-            if let Some(e) = err.or(fe.message.clone()) {
-                ui.colored_label(style::ERROR, e);
-            } else {
-                ui.label(prompt(&fe));
-            }
-        });
-    });
-    egui::Panel::left("fe-props").resizable(true).default_size(270.0).frame(style::side_frame()).show(ui, |ui| {
-        style::palette_title(ui, "Properties");
-        egui::ScrollArea::vertical().id_salt("fe-props-scroll").show(ui, |ui| {
-            egui::Frame::new().inner_margin(6).show(ui, |ui| properties(app, &mut fe, ui));
-        });
-    });
-    if fe.show_types {
-        egui::Panel::right("fe-types").resizable(true).default_size(380.0).frame(style::side_frame()).show(ui, |ui| {
-            style::palette_title(ui, "Family Types");
-            egui::ScrollArea::vertical().id_salt("fe-types-scroll").show(ui, |ui| {
-                egui::Frame::new().inner_margin(6).show(ui, |ui| family_types(app, &mut fe, ui));
-            });
-        });
+// ---------------------------------------------------------------- the editor in the main window
+
+/// What the status bar shows while the family editor is open.
+pub fn status_text(app: &App) -> String {
+    app.family_editor.as_ref().map(|fe| {
+        let (_, err) = fe.solved();
+        err.or(fe.message.clone()).unwrap_or_else(|| prompt(fe, app.opts.draw_mode))
+    }).unwrap_or_default()
+}
+
+/// The view area: tabs of the open family views and the active view.
+pub fn view_area(app: &mut App, ui: &mut egui::Ui) {
+    let Some(mut fe) = app.family_editor.take() else { return };
+    if fe.open_views.is_empty() {
+        fe.open_views.push(fe.view);
     }
-    egui::CentralPanel::default().frame(style::canvas_frame()).show(ui, |ui| {
-        ui.horizontal(|ui| {
-            for v in [FeView::Plan, FeView::Front, FeView::Right, FeView::ThreeD] {
-                if ui.selectable_label(fe.view == v, v.label()).clicked() {
+    // View tabs, as the reference app shows the family's open views.
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing = vec2(0.0, 0.0);
+        let mut close: Option<FeView> = None;
+        for v in fe.open_views.clone() {
+            let label = v.label();
+            let w = ui.painter().layout_no_wrap(label.to_string(), style::font(12.0), Color32::BLACK).size().x + 44.0;
+            let (r, resp) = ui.allocate_exact_size(vec2(w.max(90.0), 21.0), Sense::click());
+            let active = fe.view == v;
+            ui.painter().rect_filled(r, 0.0, if active { style::field() } else { style::tab_idle() });
+            ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+            icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(5.0, 3.0), vec2(15.0, 15.0)), if v == FeView::ThreeD { Icon::View3D } else if matches!(v, FeView::Plan | FeView::Ceiling) { Icon::FloorPlan } else { Icon::Elevation }, true);
+            ui.painter().text(r.left_center() + vec2(24.0, 0.0), egui::Align2::LEFT_CENTER, label, style::font(12.0), style::text());
+            let xr = Rect::from_center_size(r.right_center() - vec2(11.0, 0.0), vec2(14.0, 14.0));
+            let x_hover = ui.rect_contains_pointer(xr);
+            let c = xr.center();
+            let ink = Stroke::new(1.1, if x_hover { style::ERROR } else { style::text() });
+            ui.painter().line_segment([c + vec2(-4.0, -4.0), c + vec2(4.0, 4.0)], ink);
+            ui.painter().line_segment([c + vec2(4.0, -4.0), c + vec2(-4.0, 4.0)], ink);
+            if resp.clicked() {
+                if x_hover {
+                    close = Some(v);
+                } else {
                     fe.view = v;
                     fe.pts.clear();
                 }
             }
-            ui.separator();
-            ui.label("Type:");
-            let names: Vec<String> = fe.family.types.iter().map(|t| t.name.clone()).collect();
-            egui::ComboBox::from_id_salt("fe-cur-type").selected_text(names.get(fe.type_idx).cloned().unwrap_or_default()).show_ui(ui, |ui| {
-                for (k, n) in names.iter().enumerate() {
-                    if ui.selectable_label(fe.type_idx == k, n).clicked() {
-                        fe.type_idx = k;
-                        fe.scene_key += 1;
-                    }
+        }
+        if let Some(v) = close {
+            if fe.open_views.len() > 1 {
+                fe.open_views.retain(|x| *x != v);
+                if fe.view == v {
+                    fe.view = fe.open_views[0];
                 }
-            });
-        });
-        if fe.view == FeView::ThreeD || fe.def().is_none() {
-            preview_3d(app, &mut fe, ui);
-        } else {
-            canvas_2d(app, &mut fe, ui);
+            }
         }
     });
+    if fe.view == FeView::ThreeD || fe.def().is_none() {
+        preview_3d(app, &mut fe, ui);
+    } else {
+        canvas_2d(app, &mut fe, ui);
+    }
     // Keyboard.
     if !ui.ctx().egui_wants_keyboard_input() {
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             if !fe.pts.is_empty() || !fe.dim_planes.is_empty() {
                 fe.pts.clear();
                 fe.dim_planes.clear();
-                fe.blend_bottom = None;
+            } else if fe.tool != FeTool::Select {
+                cancel_sketch(&mut fe);
             } else {
-                fe.tool = FeTool::Select;
+                fe.sel = FeSel::None;
             }
         }
         if ui.input(|i| i.key_pressed(egui::Key::Delete)) {
             delete_selected(&mut fe);
         }
-        if ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-            finish_sketch(&mut fe);
-        }
         if ui.input(|i| i.modifiers.command && i.key_pressed(egui::Key::Z)) {
-            if let Some(prev) = fe.undo.pop() {
-                fe.redo.push(std::mem::replace(&mut fe.family, prev));
-                fe.scene_key += 1;
-            }
+            undo(&mut fe);
         }
     }
-    if load {
-        load_into_project(app, &fe);
-        // An in-place family's single instance sits at the project origin on its level.
-        if let Some(level) = fe.in_place {
-            let fam = app.doc.data.families.iter().rev().find(|f| f.name == fe.family.name).and_then(|f| f.types.first().map(|t| t.id));
-            if let Some(t) = fam {
-                app.run("Model In-Place", |p| rc_core::edit::place_free(p, t, level, rc_core::geom::DVec2::ZERO, 0.0));
+    app.family_editor = Some(fe);
+    family_types_dialog(app, ui.ctx());
+    family_category_dialog(app, ui.ctx());
+}
+
+pub fn undo(fe: &mut FamilyEditor) {
+    if let Some(prev) = fe.undo.pop() {
+        fe.redo.push(std::mem::replace(&mut fe.family, prev));
+        fe.scene_key += 1;
+    }
+}
+
+pub fn redo(fe: &mut FamilyEditor) {
+    if let Some(next) = fe.redo.pop() {
+        fe.undo.push(std::mem::replace(&mut fe.family, next));
+        fe.scene_key += 1;
+    }
+}
+
+/// Starts a tool (a form opens its sketch mode in a 2D view).
+pub fn set_tool(fe: &mut FamilyEditor, t: FeTool, void: bool) {
+    fe.tool = t;
+    fe.void_mode = void;
+    fe.pts.clear();
+    fe.dim_planes.clear();
+    fe.blend_bottom = None;
+    fe.sel = FeSel::None;
+    if t != FeTool::Select && fe.view == FeView::ThreeD {
+        fe.view = FeView::Plan;
+        if !fe.open_views.contains(&FeView::Plan) {
+            fe.open_views.push(FeView::Plan);
+        }
+    }
+}
+
+/// Mode ✓: finishes the form being sketched.
+pub fn finish(fe: &mut FamilyEditor) {
+    finish_sketch(fe);
+    if fe.pts.is_empty() && fe.blend_bottom.is_none() && fe.message.is_none() {
+        fe.tool = FeTool::Select;
+    }
+}
+
+/// Mode ✗: abandons the sketch.
+pub fn cancel_sketch(fe: &mut FamilyEditor) {
+    fe.pts.clear();
+    fe.blend_bottom = None;
+    fe.dim_planes.clear();
+    fe.tool = FeTool::Select;
+    fe.void_mode = false;
+}
+
+/// The family's views, as the reference app's Project Browser lists them.
+fn pgrid(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Grid::new(id).num_columns(2).spacing(vec2(6.0, 3.0)).min_col_width(110.0).show(ui, add);
+}
+
+fn ro(ui: &mut egui::Ui, s: &str) {
+    ui.label(egui::RichText::new(s).color(style::text_dim()));
+}
+
+/// The Properties palette: the family's parameters, the form being sketched or the selection.
+pub fn properties_palette(app: &mut App, ui: &mut egui::Ui) {
+    let Some(mut fe) = app.family_editor.take() else { return };
+    style::palette_title(ui, "Properties");
+    // Type selector: families have no type here, as in the reference app.
+    egui::Frame::new().inner_margin(4).show(ui, |ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 56.0), Sense::hover());
+        ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+        icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(44.0, 44.0)), Icon::FamilyTypes, true);
+    });
+    let sketching = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep);
+    let header = if sketching {
+        match fe.tool {
+            FeTool::Blend => "Blend".to_string(),
+            FeTool::Revolve => "Revolution".to_string(),
+            FeTool::Sweep => "Sweep".to_string(),
+            _ => "Extrusion".to_string(),
+        }
+    } else {
+        match fe.sel {
+            FeSel::Form(k) => fe.def().and_then(|d| d.forms.get(k)).map(|f| f.form.kind_label().to_string()).unwrap_or_default(),
+            FeSel::Plane(_) => "Reference Planes (1)".into(),
+            FeSel::Dim(_) => "Dimensions (1)".into(),
+            FeSel::Sym(_) => "Symbolic Lines (1)".into(),
+            FeSel::None => format!("Family: {}", fe.family.category.label()),
+        }
+    };
+    ui.horizontal(|ui| {
+        ui.add_space(4.0);
+        ui.label(header);
+    });
+    egui::ScrollArea::vertical().id_salt("fe-props").show(ui, |ui| {
+        egui::Frame::new().inner_margin(egui::Margin { left: 4, right: 4, top: 2, bottom: 6 }).show(ui, |ui| {
+            if sketching {
+                sketch_properties(app, &mut fe, ui);
+            } else {
+                selection_properties(app, &mut fe, ui);
+            }
+        });
+    });
+    app.family_editor = Some(fe);
+}
+
+/// The form being sketched: its extents, visibility, material and solid/void.
+fn sketch_properties(app: &App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
+    let units = app.doc.data.units.clone();
+    style::group_header_ui(ui, "Constraints", true);
+    pgrid(ui, "fe-sk-c", |ui| {
+        if fe.tool == FeTool::Extrusion {
+            ui.label("Extrusion End");
+            let mut s = units.length(fe.depth);
+            if ui.add(egui::TextEdit::singleline(&mut s).desired_width(ui.available_width() - 4.0)).lost_focus() {
+                if let Some(v) = units.parse(&s, ParamKind::Length) {
+                    fe.depth = v;
+                }
+            }
+            ui.end_row();
+            ui.label("Extrusion Start");
+            ro(ui, &units.length(0.0));
+            ui.end_row();
+        }
+        ui.label("Work Plane");
+        ro(ui, match fe.view {
+            FeView::Plan | FeView::Ceiling | FeView::ThreeD => "Level : Ref. Level",
+            FeView::Front | FeView::Back => "Reference Plane : Center (Front/Back)",
+            FeView::Right | FeView::Left => "Reference Plane : Center (Left/Right)",
+        });
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Graphics", true);
+    pgrid(ui, "fe-sk-g", |ui| {
+        ui.label("Visible");
+        ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, ""));
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Materials and Finishes", true);
+    pgrid(ui, "fe-sk-m", |ui| {
+        ui.label("Material");
+        ro(ui, "<By Category>");
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Identity Data", true);
+    pgrid(ui, "fe-sk-i", |ui| {
+        ui.label("Subcategory");
+        ro(ui, "<None>");
+        ui.end_row();
+        ui.label("Solid/Void");
+        let mut void = fe.void_mode;
+        egui::ComboBox::from_id_salt("fe-sv").selected_text(if void { "Void" } else { "Solid" }).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut void, false, "Solid");
+            ui.selectable_value(&mut void, true, "Void");
+        });
+        fe.void_mode = void;
+        ui.end_row();
+    });
+}
+
+/// Family parameters, or the selected plane, dimension, form or line.
+fn selection_properties(app: &App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
+    let Some(def) = fe.def().cloned() else {
+        family_parameters(fe, ui);
+        return;
+    };
+    let length_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::Length).map(|p| p.name.clone()).collect();
+    let yesno_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::YesNo).map(|p| p.name.clone()).collect();
+    let mat_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::Material).map(|p| p.name.clone()).collect();
+    let (solved, _) = fe.solved();
+    let units = app.doc.data.units.clone();
+    match fe.sel {
+        FeSel::None => family_parameters(fe, ui),
+        FeSel::Plane(id) => {
+            let Some(p) = def.plane(id).cloned() else { return };
+            let mut np = p.clone();
+            style::group_header_ui(ui, "Constraints", true);
+            pgrid(ui, "fe-rp-c", |ui| {
+                ui.label("Wall Closure");
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Other", true);
+            pgrid(ui, "fe-rp-o", |ui| {
+                ui.label("Name");
+                ui.add(egui::TextEdit::singleline(&mut np.name).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                ui.label("Is Reference");
+                ro(ui, if p.fixed { "Center (Left/Right)" } else { "Weak Reference" });
+                ui.end_row();
+                ui.label("Defines Origin");
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut p.fixed.clone(), ""));
+                ui.end_row();
+                ui.label("Position");
+                ui.add_enabled_ui(!p.fixed, |ui| ui.add(egui::DragValue::new(&mut np.default).speed(5.0).suffix(" mm")));
+                ui.end_row();
+            });
+            if np != p {
+                fe.checkpoint();
+                if let Some(x) = fe.family.definition.as_mut().and_then(|d| d.planes.iter_mut().find(|x| x.id == id)) {
+                    *x = np;
+                }
             }
         }
-        return None;
+        FeSel::Dim(k) => {
+            let Some(d) = def.dims.get(k).cloned() else { return };
+            let mut nd = d.clone();
+            style::group_header_ui(ui, "Other", true);
+            pgrid(ui, "fe-dim", |ui| {
+                ui.label("Label");
+                egui::ComboBox::from_id_salt("fe-dim-label").selected_text(if nd.label.is_empty() { "<None>".to_string() } else { nd.label.clone() }).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut nd.label, String::new(), "<None>");
+                    for n in &length_params {
+                        ui.selectable_value(&mut nd.label, n.clone(), n);
+                    }
+                });
+                ui.end_row();
+                ui.label("Equality");
+                ui.add_enabled_ui(nd.planes.len() >= 3, |ui| crate::style::check(ui, &mut nd.equal, ""));
+                ui.end_row();
+                ui.label("Locked");
+                crate::style::check(ui, &mut nd.locked, "");
+                ui.end_row();
+            });
+            if nd != d {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().dims[k] = nd;
+            }
+        }
+        FeSel::Form(k) => {
+            let Some(f) = def.forms.get(k).cloned() else { return };
+            let mut nf = f.clone();
+            style::group_header_ui(ui, "Constraints", true);
+            pgrid(ui, "fe-f-c", |ui| match &mut nf.form {
+                Form::Extrusion { plane, start, end, .. } => {
+                    ui.label("Extrusion End");
+                    loc_value_editor(ui, "fe-ee", &def, &solved, &units, end);
+                    ui.end_row();
+                    ui.label("Extrusion Start");
+                    loc_value_editor(ui, "fe-es", &def, &solved, &units, start);
+                    ui.end_row();
+                    ui.label("Work Plane");
+                    ro(ui, match plane {
+                        SketchPlane::XY => "Level : Ref. Level",
+                        SketchPlane::XZ => "Reference Plane : Center (Front/Back)",
+                        SketchPlane::YZ => "Reference Plane : Center (Left/Right)",
+                    });
+                    ui.end_row();
+                }
+                Form::Blend { start, end, .. } => {
+                    ui.label("Second End");
+                    loc_value_editor(ui, "fe-be", &def, &solved, &units, end);
+                    ui.end_row();
+                    ui.label("First End");
+                    loc_value_editor(ui, "fe-bs", &def, &solved, &units, start);
+                    ui.end_row();
+                }
+                Form::Revolve { angle_deg, .. } => {
+                    ui.label("End Angle");
+                    ui.add(egui::DragValue::new(angle_deg).range(1.0..=360.0).suffix("°"));
+                    ui.end_row();
+                    ui.label("Start Angle");
+                    ro(ui, "0.00°");
+                    ui.end_row();
+                }
+                Form::Sweep { z, width, height, .. } => {
+                    ui.label("Path Height");
+                    loc_value_editor(ui, "fe-sz", &def, &solved, &units, z);
+                    ui.end_row();
+                    ui.label("Profile Width");
+                    ui.add(egui::DragValue::new(width).speed(1.0).suffix(" mm"));
+                    ui.end_row();
+                    ui.label("Profile Height");
+                    ui.add(egui::DragValue::new(height).speed(1.0).suffix(" mm"));
+                    ui.end_row();
+                }
+            });
+            style::group_header_ui(ui, "Graphics", true);
+            pgrid(ui, "fe-f-g", |ui| {
+                ui.label("Visible");
+                ui.horizontal(|ui| {
+                    if nf.visible.is_empty() {
+                        ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, ""));
+                    } else {
+                        ro(ui, &format!("[{}]", nf.visible));
+                    }
+                    // Associate Family Parameter: a Yes/No parameter drives visibility.
+                    egui::ComboBox::from_id_salt("fe-vis").selected_text("").width(18.0).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut nf.visible, String::new(), "<none>");
+                        for n in &yesno_params {
+                            ui.selectable_value(&mut nf.visible, n.clone(), n);
+                        }
+                    });
+                });
+                ui.end_row();
+            });
+            if !nf.void {
+                style::group_header_ui(ui, "Materials and Finishes", true);
+                pgrid(ui, "fe-f-m", |ui| {
+                    ui.label("Material");
+                    let shown = if nf.material.is_empty() || nf.material == "Material" && !mat_params.contains(&nf.material) { "<By Category>".to_string() } else if mat_params.contains(&nf.material) { format!("[{}]", nf.material) } else { nf.material.clone() };
+                    egui::ComboBox::from_id_salt("fe-mat").selected_text(shown).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut nf.material, String::new(), "<By Category>");
+                        for n in &mat_params {
+                            ui.selectable_value(&mut nf.material, n.clone(), format!("[{n}]"));
+                        }
+                        for m in &app.doc.data.materials {
+                            ui.selectable_value(&mut nf.material, m.name.clone(), &m.name);
+                        }
+                    });
+                    ui.end_row();
+                });
+            }
+            style::group_header_ui(ui, "Identity Data", true);
+            pgrid(ui, "fe-f-i", |ui| {
+                ui.label("Subcategory");
+                ro(ui, "<None>");
+                ui.end_row();
+                ui.label("Solid/Void");
+                egui::ComboBox::from_id_salt("fe-f-sv").selected_text(if nf.void { "Void" } else { "Solid" }).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut nf.void, false, "Solid");
+                    ui.selectable_value(&mut nf.void, true, "Void");
+                });
+                ui.end_row();
+            });
+            if nf != f {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().forms[k] = nf;
+            }
+        }
+        FeSel::Sym(_) => {
+            style::group_header_ui(ui, "Graphics", true);
+            pgrid(ui, "fe-sym", |ui| {
+                ui.label("Subcategory");
+                ro(ui, "<None>");
+                ui.end_row();
+            });
+        }
+    }
+}
+
+/// The family's own parameters (Family Category and Parameters), shown with nothing selected.
+fn family_parameters(fe: &mut FamilyEditor, ui: &mut egui::Ui) {
+    let hosted = fe.family.is_hosted();
+    style::group_header_ui(ui, "Constraints", true);
+    pgrid(ui, "fe-fam-c", |ui| {
+        ui.label("Host");
+        ro(ui, if hosted { "Wall" } else { "" });
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Structural", true);
+    pgrid(ui, "fe-fam-s", |ui| {
+        ui.label("Can host rebar");
+        ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Mechanical", true);
+    pgrid(ui, "fe-fam-m", |ui| {
+        ui.label("Part Type");
+        ro(ui, "Normal");
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Identity Data", true);
+    pgrid(ui, "fe-fam-i", |ui| {
+        ui.label("Family Name");
+        let mut n = fe.family.name.clone();
+        if ui.add(egui::TextEdit::singleline(&mut n).desired_width(ui.available_width() - 4.0)).lost_focus() && n != fe.family.name && !n.trim().is_empty() {
+            fe.checkpoint();
+            fe.family.name = n;
+        }
+        ui.end_row();
+    });
+    style::group_header_ui(ui, "Other", true);
+    pgrid(ui, "fe-fam-o", |ui| {
+        for (name, on) in [("Work Plane-Based", false), ("Always vertical", true), ("Cut with Voids When Loaded", false), ("Shared", false), ("Room Calculation Point", false)] {
+            ui.label(name);
+            ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut on.clone(), ""));
+            ui.end_row();
+        }
+    });
+}
+
+/// The options bar while sketching or placing in the family editor.
+pub fn options_bar(app: &mut App, ui: &mut egui::Ui) {
+    let Some(fe) = app.family_editor.as_ref() else { return };
+    ui.horizontal_centered(|ui| {
+        ui.add_space(6.0);
+        let title = match fe.tool {
+            FeTool::Select => "Modify".to_string(),
+            FeTool::Extrusion => "Modify | Create Extrusion".into(),
+            FeTool::Blend => "Modify | Create Blend Base Boundary".into(),
+            FeTool::Revolve => "Modify | Create Revolve".into(),
+            FeTool::Sweep => "Modify | Sweep".into(),
+            FeTool::RefPlane => "Modify | Place Reference Plane".into(),
+            FeTool::Dimension => "Modify | Place Dimensions".into(),
+            FeTool::SymbolicLine => "Modify | Place Symbolic Lines".into(),
+        };
+        ui.label(title);
+        if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine | FeTool::RefPlane) {
+            ui.separator();
+            crate::style::check(ui, &mut app.opts.chain, "Chain");
+            ui.label("Offset:");
+            ui.add_enabled_ui(false, |ui| ui.label("0"));
+            ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, "Radius:"));
+        }
+    });
+}
+
+/// Family Types, modal as in the reference app; Cancel restores the family.
+fn family_types_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut fe) = app.family_editor.take() else { return };
+    if fe.types_dialog.is_none() {
+        app.family_editor = Some(fe);
+        return;
+    }
+    let (mut open, mut ok, mut cancel, mut apply) = (true, false, false, false);
+    crate::dialogs::window_pub("Family Types").open(&mut open).resizable(false).default_width(640.0).show(ctx, |ui| {
+        ui.set_width(640.0);
+        family_types(app, &mut fe, ui);
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "Apply", false, true) {
+                apply = true;
+            }
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    param_properties_dialog(&mut fe, ctx);
+    type_name_dialog(&mut fe, ctx);
+    if apply {
+        fe.types_dialog = Some(fe.family.clone());
+    }
+    if cancel || !open {
+        if let Some(before) = fe.types_dialog.take() {
+            fe.family = before;
+            fe.scene_key += 1;
+        }
+    }
+    if ok {
+        fe.types_dialog = None;
+    }
+    app.family_editor = Some(fe);
+}
+
+/// Family Category and Parameters: the category the family loads into.
+fn family_category_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut fe) = app.family_editor.take() else { return };
+    if !fe.category_dialog {
+        app.family_editor = Some(fe);
+        return;
+    }
+    let mut cat = fe.category_pick.unwrap_or(fe.family.category);
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    crate::dialogs::window_pub("Family Category and Parameters").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        ui.label(egui::RichText::new("Family Category").strong());
+        egui::Frame::new().stroke(Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+            ui.set_min_width(340.0);
+            let fixed = matches!(fe.family.category, Category::Doors | Category::Windows);
+            for c in [Category::Casework, Category::Columns, Category::Furniture, Category::GenericModels, Category::PlumbingFixtures, Category::SpecialtyEquipment, Category::StructuralColumns, Category::StructuralFoundations] {
+                ui.add_enabled_ui(!fixed, |ui| {
+                    if ui.selectable_label(cat == c, c.label()).clicked() {
+                        cat = c;
+                    }
+                });
+            }
+        });
+        ui.add_space(6.0);
+        ui.label(egui::RichText::new("Family Parameters").strong());
+        egui::Grid::new("fe-fcp").num_columns(2).striped(true).show(ui, |ui| {
+            for (name, on) in [("Work Plane-Based", false), ("Always vertical", true), ("Cut with Voids When Loaded", false), ("Shared", false), ("Room Calculation Point", false)] {
+                ui.label(name);
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut on.clone(), ""));
+                ui.end_row();
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    fe.category_pick = Some(cat);
+    if ok && cat != fe.family.category {
+        fe.checkpoint();
+        fe.family.category = cat;
+    }
+    if ok || cancel || !open {
+        fe.category_dialog = false;
+        fe.category_pick = None;
+    }
+    app.family_editor = Some(fe);
+}
+
+/// Load into Project (optionally closing the editor), as the Family Editor panel does.
+pub fn load(app: &mut App, close: bool) {
+    let Some(fe) = app.family_editor.take() else { return };
+    load_into_project(app, &fe);
+    // An in-place family's single instance sits at the project origin on its level.
+    if let Some(level) = fe.in_place {
+        let fam = app.doc.data.families.iter().rev().find(|f| f.name == fe.family.name).and_then(|f| f.types.first().map(|t| t.id));
+        if let Some(t) = fam {
+            app.run("Model In-Place", |p| rc_core::edit::place_free(p, t, level, rc_core::geom::DVec2::ZERO, 0.0));
+        }
+        app.ribbon_tab = crate::ribbon::Tab::Architecture;
+        return;
     }
     if close {
+        app.ribbon_tab = crate::ribbon::Tab::Architecture;
+    } else {
+        let mut fe = fe;
+        fe.dirty = false;
+        app.family_editor = Some(fe);
+    }
+}
+
+/// File > Close in the family editor.
+pub fn close(app: &mut App) {
+    if let Some(fe) = app.family_editor.take() {
         if fe.dirty {
-            app.info("Closed the family editor without loading the changes.");
+            app.info(format!("Closed {} without loading the changes.", fe.family.name));
         }
-        return None;
+        app.ribbon_tab = crate::ribbon::Tab::Architecture;
     }
-    Some(fe)
 }
 
-fn big(ui: &mut egui::Ui, icon: Icon, label: &str, on: bool, enabled: bool) -> bool {
-    let font = egui::FontId::proportional(11.0);
-    let lines: Vec<&str> = if label.len() > 12 { label.splitn(2, ' ').collect() } else { vec![label] };
-    let w = lines.iter().map(|l| ui.painter().layout_no_wrap(l.to_string(), font.clone(), Color32::BLACK).size().x).fold(0.0f32, f32::max) + 10.0;
-    let (r, resp) = ui.allocate_exact_size(vec2(w.max(48.0), 66.0), if enabled { Sense::click() } else { Sense::hover() });
-    if on {
-        ui.painter().rect_filled(r, 3.0, style::accent_light());
-    } else if resp.hovered() && enabled {
-        ui.painter().rect_filled(r, 3.0, style::hover());
-    }
-    icons::paint(ui.painter(), Rect::from_center_size(pos2(r.center().x, r.top() + 18.0), vec2(28.0, 28.0)), icon, enabled);
-    for (k, l) in lines.iter().enumerate() {
-        ui.painter().text(pos2(r.center().x, r.top() + 38.0 + k as f32 * 12.0), egui::Align2::CENTER_TOP, l, font.clone(), if enabled { style::text() } else { style::text_dim() });
-    }
-    enabled && resp.clicked()
-}
-
-fn prompt(fe: &FamilyEditor) -> String {
+fn prompt(fe: &FamilyEditor, mode: crate::tools::DrawMode) -> String {
+    use crate::tools::DrawMode;
+    let first = fe.pts.is_empty();
     match fe.tool {
-        FeTool::Select => "Select reference planes, dimensions or forms. Drag a reference plane to move it (when not driven by a dimension).".into(),
-        FeTool::RefPlane => "Click the start and end of the reference plane. Vertical lines make left/right planes, horizontal lines front/back or level planes.".into(),
-        FeTool::Dimension => format!("Pick parallel reference planes ({} picked); click empty space to place the dimension.", fe.dim_planes.len()),
-        FeTool::Extrusion => "Sketch the profile: click corners (they lock to reference planes). Click the first point or press Enter to finish.".into(),
-        FeTool::Blend => {
-            if fe.blend_bottom.is_none() {
-                "Blend: sketch the base profile (closed), then press Enter.".into()
-            } else {
-                "Blend: sketch the top profile, then press Enter.".into()
-            }
-        }
-        FeTool::Revolve => "Revolve (Front view): sketch the profile, press Enter; it revolves about the Center (Left/Right) plane.".into(),
-        FeTool::Sweep => "Sweep (Ref. Level): click the path points, press Enter to sweep a rectangular profile along it.".into(),
-        FeTool::SymbolicLine => "Click the start and end of a plan symbolic line.".into(),
+        FeTool::Select => "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into(),
+        FeTool::RefPlane => if first { "Click to enter Reference Plane start point.".into() } else { "Click to enter Reference Plane end point.".into() },
+        FeTool::Dimension => if fe.dim_planes.is_empty() { "Click on a reference to dimension.".into() } else { "Click on another reference, or click empty space to place the dimension.".into() },
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine => match mode {
+            DrawMode::Rect => if first { "Click to enter rectangle start point.".into() } else { "Click to enter rectangle end point.".into() },
+            DrawMode::Circle => if first { "Click to enter circle center.".into() } else { "Click to enter circle radius.".into() },
+            _ => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
+        },
+        FeTool::Sweep => if first { "Click to enter the sweep path start point.".into() } else { "Click to enter the next path point; Finish Edit Mode when done.".into() },
     }
 }
 
@@ -484,8 +925,8 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     let mesh = fe.mesh(&app.doc.data);
     let to2 = |q: DVec3| -> DVec2 {
         match fe.view {
-            FeView::Plan => DVec2::new(q.x, q.y),
-            FeView::Front => DVec2::new(q.x, q.z),
+            FeView::Plan | FeView::Ceiling => DVec2::new(q.x, q.y),
+            FeView::Front | FeView::Back => DVec2::new(q.x, q.z),
             _ => DVec2::new(q.y, q.z),
         }
     };
@@ -503,11 +944,38 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     // Selected form outline.
     if let FeSel::Form(k) = fe.sel {
         if let Some(f) = def.forms.get(k) {
+            // The form's edges: mesh edges on the boundary or between faces meeting at an angle
+            // (curved faces stay smooth), projected into the view; edges seen end-on vanish.
             let set = family_def::form_mesh(&f.form, &solved, "x");
+            type K = (i64, i64, i64);
+            let key = |p: DVec3| ((p.x * 4.0).round() as i64, (p.y * 4.0).round() as i64, (p.z * 4.0).round() as i64);
+            let mut edges: std::collections::HashMap<(K, K), (DVec3, DVec3, Vec<DVec3>)> = std::collections::HashMap::new();
             for m in set.by_material.values() {
                 for tri in m.indices.chunks(3) {
-                    let v: Vec<Pos2> = (0..3).map(|j| xf.s(to2(m.positions[tri[j] as usize]))).collect();
-                    painter.add(egui::Shape::closed_line(v, Stroke::new(1.0, style::SELECT)));
+                    let v: Vec<DVec3> = (0..3).map(|j| m.positions[tri[j] as usize]).collect();
+                    let n = (v[1] - v[0]).cross(v[2] - v[0]);
+                    if n.length() < 1e-9 {
+                        continue;
+                    }
+                    for k in 0..3 {
+                        let (a, b) = (v[k], v[(k + 1) % 3]);
+                        let (ka, kb) = (key(a), key(b));
+                        let e = if ka < kb { (ka, kb) } else { (kb, ka) };
+                        edges.entry(e).or_insert((a, b, Vec::new())).2.push(n.normalize());
+                    }
+                }
+            }
+            let mut drawn: std::collections::HashSet<((i64, i64), (i64, i64))> = std::collections::HashSet::new();
+            for (a, b, normals) in edges.into_values() {
+                let sharp = normals.len() != 2 || normals[0].dot(normals[1]) < 0.94;
+                let (pa, pb) = (to2(a), to2(b));
+                if !sharp || pa.distance(pb) < 1e-3 {
+                    continue;
+                }
+                let k2 = |p: DVec2| ((p.x * 4.0).round() as i64, (p.y * 4.0).round() as i64);
+                let (ka, kb) = (k2(pa), k2(pb));
+                if drawn.insert(if ka < kb { (ka, kb) } else { (kb, ka) }) {
+                    painter.line_segment([xf.s(pa), xf.s(pb)], Stroke::new(1.6, style::SELECT));
                 }
             }
         }
@@ -527,9 +995,12 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             hover_plane = Some(p.id);
         }
         let selected = fe.sel == FeSel::Plane(p.id) || fe.dim_planes.contains(&p.id);
-        let col = if selected { style::SELECT } else if near { style::PRESELECT } else { green };
-        canvas::paint_polyline(&painter, &[xf.s(a), xf.s(b)], false, Stroke::new(if p.fixed { 1.6 } else { 1.0 }, col), rc_core::plan::Dash::DashDot, &xf);
-        if !p.name.is_empty() {
+        // Halftone while sketching, as the reference app shows everything but the sketch.
+        let idle = if matches!(fe.tool, FeTool::Select | FeTool::Dimension | FeTool::RefPlane) { green } else { Color32::from_rgb(170, 200, 178) };
+        let col = if selected { style::SELECT } else if near { style::PRESELECT } else { idle };
+        canvas::paint_polyline(&painter, &[xf.s(a), xf.s(b)], false, Stroke::new(1.0, col), rc_core::plan::Dash::DashDot, &xf);
+        // Plane names show only on the selected or highlighted plane.
+        if !p.name.is_empty() && (selected || near) {
             let lp = if p.axis == ha { xf.s(DVec2::new(v, 0.0)) } else { xf.s(DVec2::new(0.0, v)) };
             let lp = if p.axis == ha { pos2(lp.x + 4.0, rect.top() + 14.0) } else { pos2(rect.left() + 6.0, lp.y - 4.0) };
             painter.text(lp, if p.axis == ha { egui::Align2::LEFT_TOP } else { egui::Align2::LEFT_BOTTOM }, &p.name, egui::FontId::proportional(11.0), col);
@@ -575,7 +1046,7 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
         }
     }
     // Symbolic lines (plan).
-    if fe.view == FeView::Plan {
+    if matches!(fe.view, FeView::Plan | FeView::Ceiling) {
         for (k, l) in def.symbolic.iter().enumerate() {
             let (a, b) = (pt2(l.a, &solved), pt2(l.b, &solved));
             painter.line_segment([xf.s(a), xf.s(b)], Stroke::new(if fe.sel == FeSel::Sym(k) { 2.0 } else { 1.2 }, if fe.sel == FeSel::Sym(k) { style::SELECT } else { Color32::BLACK }));
@@ -590,10 +1061,26 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             let col = if locked > 0 { style::SNAP } else { style::PREVIEW };
             painter.rect_stroke(Rect::from_center_size(xf.s(sp), vec2(9.0, 9.0)), 0.0, Stroke::new(1.5, col), egui::StrokeKind::Middle);
         }
-        // Current sketch.
-        let pts: Vec<Pos2> = fe.pts.iter().map(|p| xf.s(pt2(*p, &solved))).chain(snap_pos.map(|p| xf.s(p))).collect();
+        // Current sketch (magenta, as sketch lines are).
         let color = if fe.void_mode { Color32::from_rgb(230, 120, 30) } else { Color32::from_rgb(220, 0, 160) };
-        painter.add(egui::Shape::line(pts, Stroke::new(1.8, color)));
+        let placed: Vec<Pos2> = fe.pts.iter().map(|p| xf.s(pt2(*p, &solved))).collect();
+        if fe.closed {
+            painter.add(egui::Shape::closed_line(placed, Stroke::new(1.8, color)));
+        } else {
+            match (app.opts.draw_mode, fe.pts.first().map(|p| pt2(*p, &solved)), snap_pos) {
+                (crate::tools::DrawMode::Rect, Some(a), Some(b)) if fe.pts.len() == 1 => {
+                    let r = Rect::from_two_pos(xf.s(a), xf.s(b));
+                    painter.rect_stroke(r, 0.0, Stroke::new(1.8, color), egui::StrokeKind::Middle);
+                }
+                (crate::tools::DrawMode::Circle, Some(c), Some(b)) if fe.pts.len() == 1 => {
+                    painter.circle_stroke(xf.s(c), (c.distance(b) * xf.zoom) as f32, Stroke::new(1.8, color));
+                }
+                _ => {
+                    let pts: Vec<Pos2> = placed.into_iter().chain(snap_pos.map(|p| xf.s(p))).collect();
+                    painter.add(egui::Shape::line(pts, Stroke::new(1.8, color)));
+                }
+            }
+        }
         if let Some(bottom) = &fe.blend_bottom {
             let v: Vec<Pos2> = bottom.iter().map(|p| xf.s(pt2(*p, &solved))).collect();
             painter.add(egui::Shape::closed_line(v, Stroke::new(1.2, color.gamma_multiply(0.6))));
@@ -624,7 +1111,7 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                                 break;
                             }
                         }
-                        if hit == FeSel::None && fe.view == FeView::Plan {
+                        if hit == FeSel::None && matches!(fe.view, FeView::Plan | FeView::Ceiling) {
                             for (k, l) in def.symbolic.iter().enumerate() {
                                 if rc_core::geom::distance_to_segment(pt2(l.a, &solved), pt2(l.b, &solved), c) < tol {
                                     hit = FeSel::Sym(k);
@@ -704,10 +1191,29 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             }
         }
         FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine => {
-            if let (true, Some(s)) = (clicked, snapped) {
+            let mode = app.opts.draw_mode;
+            let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve);
+            if let (true, Some(s), false) = (clicked, snapped, fe.closed) {
                 let close = fe.pts.len() >= 3 && fe.pts.first().is_some_and(|f| pt2(*f, &solved).distance(pt2(s, &solved)) < tol) && fe.tool != FeTool::Sweep;
-                if close {
-                    finish_sketch(fe);
+                if profile && mode == crate::tools::DrawMode::Rect && fe.pts.len() == 1 {
+                    // Rectangle: its corners keep the plane locks of both clicks.
+                    let a = fe.pts[0];
+                    fe.pts = vec![a, SketchPt { a: s.a, b: a.b }, s, SketchPt { a: a.a, b: s.b }];
+                    fe.closed = true;
+                } else if profile && mode == crate::tools::DrawMode::Circle && fe.pts.len() == 1 {
+                    let c = pt2(fe.pts[0], &solved);
+                    let r = c.distance(pt2(s, &solved));
+                    if r > 1.0 {
+                        fe.pts = (0..32)
+                            .map(|k| {
+                                let t = k as f64 / 32.0 * std::f64::consts::TAU;
+                                SketchPt { a: Loc::Value(c.x + r * t.cos()), b: Loc::Value(c.y + r * t.sin()) }
+                            })
+                            .collect();
+                        fe.closed = true;
+                    }
+                } else if close {
+                    fe.closed = true;
                 } else {
                     fe.pts.push(s);
                     if fe.tool == FeTool::SymbolicLine && fe.pts.len() == 2 {
@@ -722,8 +1228,6 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             }
         }
     }
-    // Axis labels.
-    painter.text(rect.left_bottom() + vec2(10.0, -8.0), egui::Align2::LEFT_BOTTOM, format!("{} view   (horizontal: {:?}, vertical: {:?})", fe.view.label(), ha, va), egui::FontId::proportional(11.0), style::text_dim());
 }
 
 /// Ends the current sketch and creates the form.
@@ -731,18 +1235,17 @@ fn finish_sketch(fe: &mut FamilyEditor) {
     let Some(plane) = fe.view.sketch_plane() else { return };
     let void = fe.void_mode;
     let pts = std::mem::take(&mut fe.pts);
+    fe.closed = false;
     let n = fe.def().map(|d| d.forms.len()).unwrap_or(0) + 1;
     let form = match fe.tool {
         FeTool::Extrusion if pts.len() >= 3 => {
             // Extrude between the work plane's natural limits: Ref. Level → Top in plan, Front → Back
             // in front views, Left → Right in right views (falling back to fixed depths).
-            let def = fe.def().cloned().unwrap_or_default();
-            let named = |n: &str| def.planes.iter().find(|p| p.name == n).map(|p| Loc::Plane(p.id));
-            let (start, end) = match plane {
-                SketchPlane::XY => (named("Ref. Level").unwrap_or(Loc::Value(0.0)), named("Top").unwrap_or(Loc::Value(1000.0))),
-                SketchPlane::XZ => (named("Front").unwrap_or(Loc::Value(-250.0)), named("Back").unwrap_or(Loc::Value(250.0))),
-                SketchPlane::YZ => (named("Left").unwrap_or(Loc::Value(-250.0)), named("Right").unwrap_or(Loc::Value(250.0))),
+            let toward_viewer = match fe.view {
+                FeView::Front | FeView::Left => -1.0,
+                _ => 1.0,
             };
+            let (start, end) = (Loc::Value(0.0), Loc::Value(fe.depth * toward_viewer));
             Some(Form::Extrusion { plane, profile: pts, start, end })
         }
         FeTool::Blend if pts.len() >= 3 => {
@@ -775,7 +1278,7 @@ fn finish_sketch(fe: &mut FamilyEditor) {
         let kind = form.kind_label();
         fe.checkpoint();
         if let Some(def) = fe.family.definition.as_mut() {
-            def.forms.push(FormDef { name: format!("{}{} {}", if void { "Void " } else { "" }, kind, n), form, void, material: if void { String::new() } else { "Material".into() }, visible: String::new() });
+            def.forms.push(FormDef { name: format!("{}{} {}", if void { "Void " } else { "" }, kind, n), form, void, material: String::new(), visible: String::new() });
             fe.sel = FeSel::Form(def.forms.len() - 1);
         }
         fe.message = None;
@@ -818,6 +1321,37 @@ fn delete_selected(fe: &mut FamilyEditor) {
     fe.sel = FeSel::None;
 }
 
+/// An extent of a form: its length in project units, or the plane it is locked to.
+fn loc_value_editor(ui: &mut egui::Ui, id: &str, def: &FamilyDef, solved: &family_def::Solved, units: &rc_core::units::Units, l: &mut Loc) -> bool {
+    match l {
+        Loc::Value(v) => {
+            let key = egui::Id::new(("fe-loc", id));
+            let mut s: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| units.length(*v));
+            let r = ui.add(egui::TextEdit::singleline(&mut s).desired_width(ui.available_width() - 4.0));
+            if r.has_focus() {
+                ui.memory_mut(|m| m.data.insert_temp(key, s.clone()));
+            }
+            if r.lost_focus() {
+                ui.memory_mut(|m| m.data.remove::<String>(key));
+                if let Some(x) = units.parse(&s, ParamKind::Length) {
+                    if (x - *v).abs() > 1e-9 {
+                        *v = x;
+                        return true;
+                    }
+                }
+            }
+            false
+        }
+        Loc::Plane(p) => {
+            let v = solved.get(p).copied().unwrap_or(0.0);
+            let name = def.plane(*p).map(|x| x.name.clone()).unwrap_or_default();
+            ui.label(egui::RichText::new(units.length(v)).color(style::text_dim())).on_hover_text(format!("Locked to {name}"));
+            false
+        }
+    }
+}
+
+#[allow(dead_code)]
 fn loc_editor(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, def: &FamilyDef, axis: Axis, l: &mut Loc) -> bool {
     let mut changed = false;
     let label = match l {
@@ -847,165 +1381,356 @@ fn loc_editor(ui: &mut egui::Ui, id: impl std::hash::Hash + std::fmt::Debug, def
     changed
 }
 
-fn properties(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
-    let Some(def) = fe.def().cloned() else {
-        ui.label(egui::RichText::new("This family is built from a parametric template. Edit its parameters and types in Family Types; geometry follows the parameters.").color(style::text_dim()));
-        return;
+/// Parameter Properties: a new family parameter, or the one being edited.
+#[derive(Clone, Debug)]
+pub struct ParamDialog {
+    /// The parameter's name before editing (None = a new parameter).
+    pub original: Option<String>,
+    pub name: String,
+    pub kind: ParamKind,
+    pub instance: bool,
+    pub group: String,
+    pub reporting: bool,
+}
+
+const PARAM_GROUPS: [&str; 12] = ["Constraints", "Construction", "Data", "Dimensions", "General", "Graphics", "Identity Data", "Materials and Finishes", "Other", "Phasing", "Text", "Visibility"];
+
+/// The small glyphs of the Family Types tool buttons (drawn here, not copied artwork).
+#[derive(Clone, Copy, PartialEq)]
+enum TypesGlyph {
+    NewType,
+    Rename,
+    Delete,
+    Edit,
+    NewParam,
+    Up,
+    Down,
+    SortAsc,
+    SortDesc,
+    Lookup,
+}
+
+fn glyph_button(ui: &mut egui::Ui, g: TypesGlyph, enabled: bool, tip: &str) -> bool {
+    let (r, resp) = ui.allocate_exact_size(vec2(24.0, 22.0), if enabled { Sense::click() } else { Sense::hover() });
+    let p = ui.painter();
+    if enabled && resp.hovered() {
+        p.rect_filled(r, 0.0, style::hover());
+        p.rect_stroke(r, 0.0, Stroke::new(1.0, style::hover_stroke()), egui::StrokeKind::Inside);
+    }
+    let c = r.center();
+    let ink = if enabled { style::text() } else { Color32::from_gray(175) };
+    let blue = if enabled { Color32::from_rgb(40, 110, 200) } else { Color32::from_gray(185) };
+    let red = if enabled { Color32::from_rgb(210, 40, 40) } else { Color32::from_gray(185) };
+    let gold = if enabled { Color32::from_rgb(235, 170, 20) } else { Color32::from_gray(190) };
+    let s = Stroke::new(1.2, ink);
+    let page = |p: &egui::Painter| {
+        let pr = Rect::from_center_size(c + vec2(-1.0, 1.0), vec2(10.0, 13.0));
+        p.rect_filled(pr, 0.0, Color32::WHITE);
+        p.rect_stroke(pr, 0.0, s, egui::StrokeKind::Inside);
     };
-    let length_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::Length).map(|p| p.name.clone()).collect();
-    let yesno_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::YesNo).map(|p| p.name.clone()).collect();
-    let mat_params: Vec<String> = fe.family.params.iter().filter(|p| p.kind == ParamKind::Material).map(|p| p.name.clone()).collect();
-    match fe.sel {
-        FeSel::None => {
-            ui.label(egui::RichText::new("Family").strong());
-            ui.horizontal(|ui| {
-                ui.label("Name:");
-                let mut n = fe.family.name.clone();
-                if ui.text_edit_singleline(&mut n).lost_focus() && n != fe.family.name && !n.trim().is_empty() {
-                    fe.checkpoint();
-                    fe.family.name = n;
-                }
-            });
-            ui.label(format!("Reference planes: {}", def.planes.len()));
-            ui.label(format!("Dimensions: {}", def.dims.len()));
-            ui.label(format!("Forms: {}", def.forms.len()));
-            ui.add_space(6.0);
-            ui.label(egui::RichText::new("Tip: lock sketch corners to reference planes, then label dimensions between those planes with parameters to make the family flex.").color(style::text_dim()));
+    let star = |p: &egui::Painter, at: Pos2| {
+        for k in 0..4 {
+            let a = k as f32 * std::f32::consts::FRAC_PI_4;
+            let d = vec2(a.cos(), a.sin()) * 3.5;
+            p.line_segment([at - d, at + d], Stroke::new(1.4, gold));
         }
-        FeSel::Plane(id) => {
-            let Some(p) = def.plane(id).cloned() else { return };
-            ui.label(egui::RichText::new("Reference Plane").strong());
-            let mut np = p.clone();
-            ui.horizontal(|ui| {
-                ui.label("Name:");
-                ui.text_edit_singleline(&mut np.name);
-            });
-            ui.label(format!("Orientation: {:?} plane", p.axis));
-            ui.add_enabled_ui(!p.fixed, |ui| {
-                ui.horizontal(|ui| {
-                    ui.label("Position:");
-                    ui.add(egui::DragValue::new(&mut np.default).speed(5.0).suffix(" mm"));
-                });
-            });
-            if p.fixed {
-                ui.label(egui::RichText::new("Defines origin (fixed).").color(style::text_dim()));
+    };
+    let arrow = |p: &egui::Painter, up: bool| {
+        let dy = if up { -1.0 } else { 1.0 };
+        p.line_segment([c + vec2(0.0, -5.0 * dy), c + vec2(0.0, 5.0 * dy)], Stroke::new(1.6, blue));
+        p.line_segment([c + vec2(0.0, 5.0 * dy), c + vec2(-4.0, 1.0 * dy)], Stroke::new(1.6, blue));
+        p.line_segment([c + vec2(0.0, 5.0 * dy), c + vec2(4.0, 1.0 * dy)], Stroke::new(1.6, blue));
+    };
+    match g {
+        TypesGlyph::NewType | TypesGlyph::NewParam => {
+            page(p);
+            if g == TypesGlyph::NewParam {
+                p.text(c + vec2(-1.0, 2.0), egui::Align2::CENTER_CENTER, "P", style::bold(8.0), ink);
             }
-            if np != p {
-                fe.checkpoint();
-                if let Some(x) = fe.family.definition.as_mut().and_then(|d| d.planes.iter_mut().find(|x| x.id == id)) {
-                    *x = np;
-                }
-            }
+            star(p, c + vec2(5.0, -5.0));
         }
-        FeSel::Dim(k) => {
-            let Some(d) = def.dims.get(k).cloned() else { return };
-            ui.label(egui::RichText::new("Dimension").strong());
-            let mut nd = d.clone();
-            ui.horizontal(|ui| {
-                ui.label("Label:");
-                egui::ComboBox::from_id_salt("fe-dim-label").selected_text(if nd.label.is_empty() { "<None>".to_string() } else { nd.label.clone() }).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut nd.label, String::new(), "<None>");
-                    for n in &length_params {
-                        ui.selectable_value(&mut nd.label, n.clone(), n);
-                    }
-                });
-            });
-            ui.add_enabled_ui(nd.planes.len() >= 3, |ui| crate::style::check(ui, &mut nd.equal, "Equality (EQ)"));
-            crate::style::check(ui, &mut nd.locked, "Locked");
-            if ui.button("Create Parameter for Label...").clicked() {
-                fe.show_types = true;
-                fe.new_param = (String::new(), ParamKind::Length, false, "Dimensions".into());
-            }
-            if nd != d {
-                fe.checkpoint();
-                fe.family.definition.as_mut().unwrap().dims[k] = nd;
-            }
+        TypesGlyph::Rename => {
+            p.text(c + vec2(-3.0, 0.0), egui::Align2::CENTER_CENTER, "AI", style::bold(10.0), ink);
+            p.line_segment([c + vec2(6.0, -6.0), c + vec2(6.0, 6.0)], Stroke::new(1.2, blue));
         }
-        FeSel::Form(k) => {
-            let Some(f) = def.forms.get(k).cloned() else { return };
-            ui.label(egui::RichText::new(format!("{}{}", if f.void { "Void " } else { "" }, f.form.kind_label())).strong());
-            let mut nf = f.clone();
-            ui.horizontal(|ui| {
-                ui.label("Name:");
-                ui.text_edit_singleline(&mut nf.name);
-            });
-            crate::style::check(ui, &mut nf.void, "Void (cuts solids)");
-            if !nf.void {
-                ui.horizontal(|ui| {
-                    ui.label("Material:");
-                    egui::ComboBox::from_id_salt("fe-mat").selected_text(&nf.material).show_ui(ui, |ui| {
-                        for n in &mat_params {
-                            ui.selectable_value(&mut nf.material, n.clone(), format!("[{n}]"));
-                        }
-                        for m in &app.doc.data.materials {
-                            ui.selectable_value(&mut nf.material, m.name.clone(), &m.name);
-                        }
-                    });
-                });
-            }
-            ui.horizontal(|ui| {
-                ui.label("Visible:");
-                egui::ComboBox::from_id_salt("fe-vis").selected_text(if nf.visible.is_empty() { "Always".to_string() } else { nf.visible.clone() }).show_ui(ui, |ui| {
-                    ui.selectable_value(&mut nf.visible, String::new(), "Always");
-                    for n in &yesno_params {
-                        ui.selectable_value(&mut nf.visible, n.clone(), n);
-                    }
-                });
-            });
-            match &mut nf.form {
-                Form::Extrusion { plane, start, end, .. } => {
-                    let (_, _, axis) = plane.axes();
-                    ui.label(format!("Work plane: {}", plane.label()));
-                    ui.label("Extrusion start:");
-                    loc_editor(ui, "fe-es", &def, axis, start);
-                    ui.label("Extrusion end:");
-                    loc_editor(ui, "fe-ee", &def, axis, end);
-                }
-                Form::Blend { start, end, .. } => {
-                    ui.label("Base:");
-                    loc_editor(ui, "fe-bs", &def, Axis::Z, start);
-                    ui.label("Top:");
-                    loc_editor(ui, "fe-be", &def, Axis::Z, end);
-                }
-                Form::Revolve { angle_deg, .. } => {
-                    ui.horizontal(|ui| {
-                        ui.label("Angle:");
-                        ui.add(egui::DragValue::new(angle_deg).range(1.0..=360.0).suffix("°"));
-                    });
-                }
-                Form::Sweep { z, width, height, .. } => {
-                    ui.label("Path height:");
-                    loc_editor(ui, "fe-sz", &def, Axis::Z, z);
-                    ui.horizontal(|ui| {
-                        ui.label("Profile:");
-                        ui.add(egui::DragValue::new(width).speed(1.0).suffix(" mm"));
-                        ui.label("x");
-                        ui.add(egui::DragValue::new(height).speed(1.0).suffix(" mm"));
-                    });
-                }
-            }
-            if nf != f {
-                fe.checkpoint();
-                fe.family.definition.as_mut().unwrap().forms[k] = nf;
-            }
+        TypesGlyph::Delete => {
+            p.line_segment([c + vec2(-5.0, -5.0), c + vec2(5.0, 5.0)], Stroke::new(2.0, red));
+            p.line_segment([c + vec2(5.0, -5.0), c + vec2(-5.0, 5.0)], Stroke::new(2.0, red));
         }
-        FeSel::Sym(_) => {
-            ui.label(egui::RichText::new("Symbolic Line").strong());
-            ui.label("Shown in plan views of projects instead of the cut geometry.");
+        TypesGlyph::Edit => {
+            page(p);
+            p.line_segment([c + vec2(-2.0, 6.0), c + vec2(6.0, -4.0)], Stroke::new(2.0, gold));
+        }
+        TypesGlyph::Up => arrow(p, true),
+        TypesGlyph::Down => arrow(p, false),
+        TypesGlyph::SortAsc | TypesGlyph::SortDesc => {
+            let (a, b) = if g == TypesGlyph::SortAsc { ("A", "Z") } else { ("Z", "A") };
+            p.text(c + vec2(-4.0, -4.0), egui::Align2::CENTER_CENTER, a, style::bold(7.5), ink);
+            p.text(c + vec2(-4.0, 5.0), egui::Align2::CENTER_CENTER, b, style::bold(7.5), ink);
+            p.line_segment([c + vec2(4.0, -6.0), c + vec2(4.0, 6.0)], Stroke::new(1.4, blue));
+            p.line_segment([c + vec2(4.0, 6.0), c + vec2(1.5, 3.0)], Stroke::new(1.4, blue));
+            p.line_segment([c + vec2(4.0, 6.0), c + vec2(6.5, 3.0)], Stroke::new(1.4, blue));
+        }
+        TypesGlyph::Lookup => {
+            let t = Rect::from_center_size(c, vec2(14.0, 12.0));
+            p.rect_filled(t, 0.0, Color32::WHITE);
+            p.rect_stroke(t, 0.0, s, egui::StrokeKind::Inside);
+            p.line_segment([pos2(t.left(), t.top() + 4.0), pos2(t.right(), t.top() + 4.0)], s);
+            p.line_segment([pos2(t.left(), t.top() + 8.0), pos2(t.right(), t.top() + 8.0)], s);
+            p.line_segment([pos2(t.left() + 5.0, t.top()), pos2(t.left() + 5.0, t.bottom())], s);
         }
     }
-    if fe.sel != FeSel::None && ui.button("Delete").clicked() {
-        delete_selected(fe);
+    let resp = resp.on_hover_text(tip);
+    enabled && resp.clicked()
+}
+
+/// Renames a family parameter everywhere it is used: type values, formulas, labels and forms.
+fn rename_param(fam: &mut Family, old: &str, new: &str) {
+    let swap = |s: &str| -> String {
+        // Whole-word replacement (parameter names may contain spaces, so match the full name).
+        let mut out = String::new();
+        let mut rest = s;
+        while let Some(i) = rest.find(old) {
+            let before = rest[..i].chars().last();
+            let after = rest[i + old.len()..].chars().next();
+            let word = |c: Option<char>| c.is_some_and(|c| c.is_alphanumeric() || c == '_');
+            out.push_str(&rest[..i]);
+            out.push_str(if word(before) || word(after) { old } else { new });
+            rest = &rest[i + old.len()..];
+        }
+        out.push_str(rest);
+        out
+    };
+    for p in &mut fam.params {
+        if p.name == old {
+            p.name = new.to_string();
+        }
+        p.formula = swap(&p.formula);
+    }
+    for t in &mut fam.types {
+        if let Some(v) = t.values.remove(old) {
+            t.values.insert(new.to_string(), v);
+        }
+    }
+    if let Some(d) = fam.definition.as_mut() {
+        for x in &mut d.dims {
+            if x.label == old {
+                x.label = new.to_string();
+            }
+        }
+        for f in &mut d.forms {
+            if f.material == old {
+                f.material = new.to_string();
+            }
+            if f.visible == old {
+                f.visible = new.to_string();
+            }
+        }
     }
 }
 
+/// Parameter Properties, over Family Types.
+fn param_properties_dialog(fe: &mut FamilyEditor, ctx: &egui::Context) {
+    let Some(mut d) = fe.param_dialog.clone() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    crate::dialogs::window_pub("Parameter Properties").open(&mut open).resizable(false).default_width(470.0).show(ctx, |ui| {
+        ui.spacing_mut().item_spacing.y = 5.0;
+        let group_box = |ui: &mut egui::Ui, title: &str, add: &mut dyn FnMut(&mut egui::Ui)| {
+            ui.label(title);
+            egui::Frame::new().stroke(Stroke::new(1.0, style::border())).inner_margin(8.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                add(ui);
+            });
+        };
+        group_box(ui, "Parameter Type", &mut |ui| {
+            let mut family = true;
+            ui.radio_value(&mut family, true, "Family parameter");
+            ui.label(egui::RichText::new("(Cannot appear in schedules or tags)").color(style::text_dim()));
+            ui.add_enabled_ui(false, |ui| {
+                ui.radio_value(&mut family, false, "Shared parameter");
+                ui.label(egui::RichText::new("(Can be shared by multiple projects and families, exported to ODBC, and appear in schedules and tags)").color(style::text_dim()));
+                ui.horizontal(|ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let _ = ui.button("Export...");
+                        let _ = ui.button("Select...");
+                    });
+                });
+            });
+        });
+        group_box(ui, "Parameter Data", &mut |ui| {
+            egui::Grid::new("fe-pp").num_columns(2).spacing(vec2(16.0, 6.0)).show(ui, |ui| {
+                ui.vertical(|ui| {
+                    ui.label("Name:");
+                    let r = ui.add(egui::TextEdit::singleline(&mut d.name).desired_width(220.0));
+                    if d.original.is_none() && d.name.is_empty() {
+                        r.request_focus();
+                    }
+                    ui.label("Discipline:");
+                    ui.add_enabled_ui(false, |ui| {
+                        egui::ComboBox::from_id_salt("fe-pp-disc").selected_text("Common").width(220.0).show_ui(ui, |_| {});
+                    });
+                    ui.label("Type of Parameter:");
+                    let fixed = d.original.is_some();
+                    ui.add_enabled_ui(!fixed, |ui| {
+                        egui::ComboBox::from_id_salt("fe-pp-kind").selected_text(d.kind.label()).width(220.0).show_ui(ui, |ui| {
+                            for k in ParamKind::USER {
+                                ui.selectable_value(&mut d.kind, k, k.label());
+                            }
+                        });
+                    });
+                    ui.label("Group parameter under:");
+                    egui::ComboBox::from_id_salt("fe-pp-group").selected_text(&d.group).width(220.0).show_ui(ui, |ui| {
+                        for g in PARAM_GROUPS {
+                            ui.selectable_value(&mut d.group, g.to_string(), g);
+                        }
+                    });
+                });
+                ui.vertical(|ui| {
+                    ui.add_space(14.0);
+                    ui.radio_value(&mut d.instance, false, "Type");
+                    ui.radio_value(&mut d.instance, true, "Instance");
+                    ui.add_space(8.0);
+                    ui.add_enabled_ui(d.instance && matches!(d.kind, ParamKind::Length | ParamKind::Angle), |ui| {
+                        crate::style::check(ui, &mut d.reporting, "Reporting Parameter");
+                    });
+                    ui.label(egui::RichText::new("(Can be used to extract value\nfrom a geometric condition and\nreport it in a formula or as a\nschedulable parameter)").color(style::text_dim()).size(11.0));
+                });
+                ui.end_row();
+            });
+        });
+        ui.label("Tooltip Description:");
+        egui::Frame::new().stroke(Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.label(egui::RichText::new("<No tooltip description. Edit this parameter to write a custom tooltip. Custom tooltips have a limit of 250 characters.>").color(style::text_dim()));
+        });
+        ui.horizontal(|ui| {
+            ui.add_enabled_ui(false, |ui| {
+                let _ = ui.button("Edit Tooltip...");
+            });
+        });
+        ui.add_space(4.0);
+        ui.label(egui::RichText::new("How do I create family parameters?").color(Color32::from_rgb(0, 102, 204)));
+        ui.add_space(6.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let _ = crate::dialogs::dlg_button(ui, "Help", false, false);
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, true) || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let name = d.name.trim().to_string();
+        let taken = fe.family.params.iter().any(|p| p.name == name && Some(&p.name) != d.original.as_ref());
+        if name.is_empty() {
+            fe.message = Some("The parameter name cannot be empty.".into());
+            fe.param_dialog = Some(d);
+            return;
+        }
+        if taken || name.contains(['[', ']', ':', '{', '}', '|', ';', '<', '>', '?', '`', '~']) {
+            fe.message = Some(if taken { format!("Parameter name \"{name}\" is already in use.") } else { "Parameter names cannot contain any of these characters: \\ : { } [ ] | ; < > ? ` ~".into() });
+            fe.param_dialog = Some(d);
+            return;
+        }
+        fe.checkpoint();
+        match d.original.clone() {
+            Some(old) => {
+                if old != name {
+                    rename_param(&mut fe.family, &old, &name);
+                }
+                if let Some(p) = fe.family.params.iter_mut().find(|p| p.name == name) {
+                    p.instance = d.instance;
+                    p.group = d.group.clone();
+                    p.reporting = d.reporting && d.instance;
+                }
+            }
+            None => {
+                let default = match d.kind {
+                    ParamKind::YesNo => "Yes".to_string(),
+                    ParamKind::Material => String::new(),
+                    ParamKind::Text => String::new(),
+                    _ => "0".to_string(),
+                };
+                fe.family.params.push(FamilyParameter { name: name.clone(), kind: d.kind, instance: d.instance, formula: String::new(), group: d.group.clone(), built_in: false, default, reporting: d.reporting && d.instance });
+            }
+        }
+        fe.param_sel = Some(name);
+        fe.message = None;
+        fe.param_dialog = None;
+    } else if cancel || !open {
+        fe.param_dialog = None;
+    } else {
+        fe.param_dialog = Some(d);
+    }
+}
+
+/// The Name / Rename dialog for family types.
+fn type_name_dialog(fe: &mut FamilyEditor, ctx: &egui::Context) {
+    let Some((rename, mut name)) = fe.type_name_dialog.clone() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    let old = fe.ftype().name.clone();
+    crate::dialogs::window_pub(if rename { "Rename" } else { "Name" }).open(&mut open).resizable(false).default_width(330.0).show(ctx, |ui| {
+        egui::Grid::new("fe-tn").num_columns(2).spacing(vec2(8.0, 8.0)).show(ui, |ui| {
+            if rename {
+                ui.label("Old Name:");
+                ui.label(&old);
+                ui.end_row();
+            }
+            ui.label(if rename { "New Name:" } else { "Name:" });
+            let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
+            if !r.has_focus() && !ui.memory(|m| m.has_focus(r.id)) && ui.ctx().memory(|m| m.focused().is_none()) {
+                r.request_focus();
+            }
+            ui.end_row();
+        });
+        ui.add_space(6.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, true) || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let n = name.trim().to_string();
+        let taken = fe.family.types.iter().enumerate().any(|(k, t)| t.name == n && !(rename && k == fe.type_idx));
+        if n.is_empty() || taken {
+            fe.message = Some(if taken { format!("The name \"{n}\" is already in use.") } else { "The name cannot be empty.".into() });
+            fe.type_name_dialog = Some((rename, name));
+            return;
+        }
+        fe.checkpoint();
+        if rename {
+            let k = fe.type_idx;
+            fe.family.types[k].name = n;
+        } else {
+            let base = fe.ftype().clone();
+            fe.family.types.push(FamilyType { id: 0, name: n, values: base.values });
+            fe.type_idx = fe.family.types.len() - 1;
+        }
+        fe.message = None;
+        fe.type_name_dialog = None;
+    } else if cancel || !open {
+        fe.type_name_dialog = None;
+    } else {
+        fe.type_name_dialog = Some((rename, name));
+    }
+}
+
+/// The Family Types table: types, then each group's parameters with Value, Formula and Lock.
 fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     let units = app.doc.data.units.clone();
-    // Types row.
+    // Type name row with New Type, Rename Type and Delete Type.
     ui.horizontal(|ui| {
         ui.label("Type name:");
         let names: Vec<String> = fe.family.types.iter().map(|t| t.name.clone()).collect();
-        egui::ComboBox::from_id_salt("fe-types").selected_text(names.get(fe.type_idx).cloned().unwrap_or_default()).width(160.0).show_ui(ui, |ui| {
+        egui::ComboBox::from_id_salt("fe-types").selected_text(names.get(fe.type_idx).cloned().unwrap_or_default()).width(ui.available_width() - 92.0).show_ui(ui, |ui| {
             for (k, n) in names.iter().enumerate() {
                 if ui.selectable_label(fe.type_idx == k, n).clicked() {
                     fe.type_idx = k;
@@ -1013,68 +1738,118 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 }
             }
         });
-    });
-    ui.horizontal(|ui| {
-        if ui.button("New...").clicked() {
-            fe.checkpoint();
-            let base = fe.ftype().clone();
-            let name = rc_core::edit::unique_name(fe.family.types.iter().map(|t| t.name.clone()), &format!("{} 2", base.name));
-            fe.family.types.push(FamilyType { id: 0, name, values: base.values });
-            fe.type_idx = fe.family.types.len() - 1;
+        if glyph_button(ui, TypesGlyph::NewType, true, "New Type") {
+            let name = rc_core::edit::unique_name(fe.family.types.iter().map(|t| t.name.clone()), &format!("{} 2", fe.ftype().name));
+            fe.type_name_dialog = Some((false, name));
         }
-        let key = egui::Id::new("fe-type-rename");
-        let mut name: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| fe.ftype().name.clone());
-        let r = ui.add(egui::TextEdit::singleline(&mut name).desired_width(120.0));
-        if r.has_focus() {
-            ui.memory_mut(|m| m.data.insert_temp(key, name.clone()));
+        if glyph_button(ui, TypesGlyph::Rename, true, "Rename Type") {
+            fe.type_name_dialog = Some((true, fe.ftype().name.clone()));
         }
-        if r.lost_focus() {
-            ui.memory_mut(|m| m.data.remove::<String>(key));
-            if name != fe.ftype().name && !name.trim().is_empty() {
-                fe.checkpoint();
-                let k = fe.type_idx;
-                fe.family.types[k].name = name;
-            }
-        }
-        if ui.add_enabled(fe.family.types.len() > 1, egui::Button::new("Delete")).clicked() {
+        if glyph_button(ui, TypesGlyph::Delete, fe.family.types.len() > 1, "Delete Type") {
             fe.checkpoint();
             let k = fe.type_idx;
             fe.family.types.remove(k);
             fe.type_idx = 0;
         }
     });
-    ui.separator();
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        let (r, _) = ui.allocate_exact_size(vec2(16.0, 16.0), Sense::hover());
+        icons::paint(ui.painter(), r, Icon::Search, true);
+        ui.add(egui::TextEdit::singleline(&mut fe.param_filter).hint_text("Search parameters").desired_width(ui.available_width()));
+    });
+    ui.add_space(4.0);
     // Parameters table.
     let r = Resolver::for_type(&fe.family, fe.ftype());
     let params = fe.family.params.clone();
+    let filter = fe.param_filter.trim().to_lowercase();
     let mut set_value: Option<(String, String)> = None;
     let mut set_formula: Option<(String, String)> = None;
-    let mut remove: Option<String> = None;
+    let mut edit: Option<String> = None;
     let mut groups: Vec<(String, Vec<FamilyParameter>)> = Vec::new();
-    for p in params {
+    for p in params.into_iter().filter(|p| filter.is_empty() || p.name.to_lowercase().contains(&filter)) {
         match groups.iter_mut().find(|g| g.0 == p.group) {
             Some(g) => g.1.push(p),
             None => groups.push((p.group.clone(), vec![p])),
         }
     }
-    for (g, ps) in groups {
-        style::header(ui, &g);
-        egui::Grid::new(("fe-params", &g)).num_columns(4).striped(true).spacing(vec2(6.0, 3.0)).show(ui, |ui| {
+    groups.sort_by_key(|g| PARAM_GROUPS.iter().position(|x| *x == g.0).unwrap_or(99));
+    let w = ui.available_width();
+    let cols = [w * 0.34, w * 0.25, w * 0.31, w * 0.10];
+    let row_h = 22.0;
+    let grid = Stroke::new(1.0, Color32::from_gray(205));
+    let cell = |r: Rect, k: usize| -> Rect {
+        let x0 = r.left() + cols[..k].iter().sum::<f32>();
+        Rect::from_min_size(pos2(x0, r.top()), vec2(cols[k], r.height()))
+    };
+    // Header.
+    let (hr, _) = ui.allocate_exact_size(vec2(w, row_h), Sense::hover());
+    ui.painter().rect_filled(hr, 0.0, style::tab_idle());
+    for (k, t) in ["Parameter", "Value", "Formula", "Lock"].iter().enumerate() {
+        let c = cell(hr, k);
+        ui.painter().rect_stroke(c, 0.0, grid, egui::StrokeKind::Inside);
+        ui.painter().text(c.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, *t, style::font(12.0), style::text());
+    }
+    let mut param_sel = fe.param_sel.clone();
+    egui::ScrollArea::vertical().max_height(360.0).min_scrolled_height(360.0).auto_shrink([false, false]).id_salt("fe-types-table").show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        for (g, ps) in groups {
+            let open_id = egui::Id::new(("fe-types-group", g.clone()));
+            let mut open: bool = ui.memory(|m| m.data.get_temp(open_id)).unwrap_or(true);
+            let (gr, gresp) = ui.allocate_exact_size(vec2(w, row_h), Sense::click());
+            ui.painter().rect_filled(gr, 0.0, Color32::from_gray(236));
+            ui.painter().rect_stroke(gr, 0.0, grid, egui::StrokeKind::Inside);
+            ui.painter().text(gr.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, &g, style::bold(12.0), style::text());
+            // Collapse chevron at the right, as the group rows show.
+            let c = gr.right_center() - vec2(12.0, 0.0);
+            let d = if open { -1.0 } else { 1.0 };
+            ui.painter().line_segment([c + vec2(-4.0, 2.0 * -d), c + vec2(0.0, 2.0 * d)], Stroke::new(1.2, style::text()));
+            ui.painter().line_segment([c + vec2(0.0, 2.0 * d), c + vec2(4.0, 2.0 * -d)], Stroke::new(1.2, style::text()));
+            if gresp.clicked() {
+                open = !open;
+                ui.memory_mut(|m| m.data.insert_temp(open_id, open));
+            }
+            if !open {
+                continue;
+            }
             for p in ps {
+                let (rr, rresp) = ui.allocate_exact_size(vec2(w, row_h), Sense::click());
+                let selected = param_sel.as_deref() == Some(p.name.as_str());
+                let name_cell = cell(rr, 0);
+                ui.painter().rect_filled(name_cell, 0.0, if selected { style::accent_light() } else { style::field() });
+                for k in 0..4 {
+                    ui.painter().rect_stroke(cell(rr, k), 0.0, grid, egui::StrokeKind::Inside);
+                }
                 let tag = if p.instance { " (default)" } else { "" };
-                ui.label(format!("{}{}", p.name, tag));
-                let shown = r.display(&p);
-                if !p.formula.is_empty() {
-                    ui.label(egui::RichText::new(&shown).color(style::text_dim()));
+                let label = if p.reporting { format!("{}{} (Report)", p.name, tag) } else { format!("{}{}", p.name, tag) };
+                ui.painter().with_clip_rect(name_cell).text(name_cell.left_center() + vec2(6.0, 0.0), egui::Align2::LEFT_CENTER, label, style::font(12.0), style::text());
+                if rresp.clicked() {
+                    param_sel = Some(p.name.clone());
+                }
+                if rresp.double_clicked() && !p.built_in {
+                    edit = Some(p.name.clone());
+                }
+                // Value.
+                let vc = cell(rr, 1).shrink2(vec2(3.0, 2.0));
+                // Lengths in project units, as the table shows them.
+                let shown = match (p.kind, r.number(&p.name)) {
+                    (ParamKind::Length, Ok(v)) => units.length(v),
+                    _ => r.display(&p),
+                };
+                if !p.formula.is_empty() || p.reporting {
+                    ui.painter().text(vc.left_center() + vec2(3.0, 0.0), egui::Align2::LEFT_CENTER, &shown, style::font(12.0), style::text_dim());
                 } else if p.kind == ParamKind::YesNo {
                     let mut b = r.yes_no(&p.name, false);
-                    if crate::style::check(ui, &mut b, "").changed() {
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(vc.center(), vec2(14.0, 14.0))));
+                    if crate::style::check(&mut child, &mut b, "").changed() {
                         set_value = Some((p.name.clone(), if b { "Yes".into() } else { "No".into() }));
                     }
                 } else if p.kind == ParamKind::Material {
                     let cur = r.text(&p.name, "");
                     let mut v = cur.clone();
-                    egui::ComboBox::from_id_salt(("fe-pm", &p.name)).selected_text(&v).width(110.0).show_ui(ui, |ui| {
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(vc));
+                    egui::ComboBox::from_id_salt(("fe-pm", &p.name)).selected_text(if v.is_empty() { "<By Category>" } else { &v }).width(vc.width()).show_ui(&mut child, |ui| {
+                        ui.selectable_value(&mut v, String::new(), "<By Category>");
                         for m in &app.doc.data.materials {
                             ui.selectable_value(&mut v, m.name.clone(), &m.name);
                         }
@@ -1085,7 +1860,7 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 } else {
                     let key = egui::Id::new(("fe-pv", fe.type_idx, p.name.clone()));
                     let mut s: String = ui.memory(|m| m.data.get_temp(key)).unwrap_or_else(|| shown.clone());
-                    let resp = ui.add(egui::TextEdit::singleline(&mut s).desired_width(100.0));
+                    let resp = ui.put(vc, egui::TextEdit::singleline(&mut s).frame(egui::Frame::NONE).desired_width(vc.width()));
                     if resp.has_focus() {
                         ui.memory_mut(|m| m.data.insert_temp(key, s.clone()));
                     }
@@ -1096,27 +1871,104 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                         }
                     }
                 }
-                let fkey = egui::Id::new(("fe-pf", p.name.clone()));
-                let mut f: String = ui.memory(|m| m.data.get_temp(fkey)).unwrap_or_else(|| p.formula.clone());
-                let fr = ui.add(egui::TextEdit::singleline(&mut f).hint_text("= formula").desired_width(110.0));
-                if fr.has_focus() {
-                    ui.memory_mut(|m| m.data.insert_temp(fkey, f.clone()));
-                }
-                if fr.lost_focus() {
-                    ui.memory_mut(|m| m.data.remove::<String>(fkey));
-                    if f != p.formula {
-                        set_formula = Some((p.name.clone(), f));
+                // Formula: "=" then the expression.
+                let fc = cell(rr, 2).shrink2(vec2(3.0, 2.0));
+                ui.painter().text(fc.left_center() + vec2(2.0, 0.0), egui::Align2::LEFT_CENTER, "=", style::font(12.0), style::text());
+                if !p.reporting {
+                    let fkey = egui::Id::new(("fe-pf", p.name.clone()));
+                    let mut f: String = ui.memory(|m| m.data.get_temp(fkey)).unwrap_or_else(|| p.formula.clone());
+                    let frect = Rect::from_min_max(fc.min + vec2(14.0, 0.0), fc.max);
+                    let fr = ui.put(frect, egui::TextEdit::singleline(&mut f).frame(egui::Frame::NONE).desired_width(frect.width()));
+                    if fr.has_focus() {
+                        ui.memory_mut(|m| m.data.insert_temp(fkey, f.clone()));
+                    }
+                    if fr.lost_focus() {
+                        ui.memory_mut(|m| m.data.remove::<String>(fkey));
+                        if f != p.formula {
+                            set_formula = Some((p.name.clone(), f));
+                        }
                     }
                 }
-                if !p.built_in {
-                    if ui.small_button("✕").on_hover_text("Remove parameter").clicked() {
-                        remove = Some(p.name.clone());
-                    }
-                } else {
-                    ui.label("");
+                // Lock: lengths and angles can be locked (dimension-driven parameters).
+                if matches!(p.kind, ParamKind::Length | ParamKind::Angle) && p.formula.is_empty() && !p.reporting {
+                    let lc = cell(rr, 3);
+                    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(Rect::from_center_size(lc.center(), vec2(14.0, 14.0))));
+                    child.add_enabled_ui(false, |ui| crate::style::check(ui, &mut false, ""));
                 }
-                ui.end_row();
             }
+        }
+    });
+    drop(r);
+    fe.param_sel = param_sel;
+    // Parameter tools.
+    let sel = fe.param_sel.clone().filter(|n| fe.family.param(n).is_some());
+    let editable = sel.as_ref().and_then(|n| fe.family.param(n)).is_some_and(|p| !p.built_in);
+    let mut delete = false;
+    let mut mv: i32 = 0;
+    let mut sort: Option<bool> = None;
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 2.0;
+        if glyph_button(ui, TypesGlyph::Edit, editable, "Edit Parameter") {
+            edit = sel.clone();
+        }
+        if glyph_button(ui, TypesGlyph::NewParam, true, "New Parameter") {
+            fe.param_dialog = Some(ParamDialog { original: None, name: String::new(), kind: ParamKind::Length, instance: false, group: "Dimensions".into(), reporting: false });
+        }
+        if glyph_button(ui, TypesGlyph::Delete, editable, "Delete Parameter") {
+            delete = true;
+        }
+        ui.add_space(8.0);
+        if glyph_button(ui, TypesGlyph::Up, sel.is_some(), "Move Parameter Up") {
+            mv = -1;
+        }
+        if glyph_button(ui, TypesGlyph::Down, sel.is_some(), "Move Parameter Down") {
+            mv = 1;
+        }
+        ui.add_space(8.0);
+        if glyph_button(ui, TypesGlyph::SortAsc, true, "Sort Parameters Ascending") {
+            sort = Some(true);
+        }
+        if glyph_button(ui, TypesGlyph::SortDesc, true, "Sort Parameters Descending") {
+            sort = Some(false);
+        }
+        ui.add_space(8.0);
+        let _ = glyph_button(ui, TypesGlyph::Lookup, false, "Manage Lookup Tables");
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(egui::RichText::new("How do I manage family types?").color(Color32::from_rgb(0, 102, 204)));
+        });
+    });
+    if let Some(n) = edit {
+        if let Some(p) = fe.family.param(&n).filter(|p| !p.built_in) {
+            fe.param_dialog = Some(ParamDialog { original: Some(n.clone()), name: n, kind: p.kind, instance: p.instance, group: p.group.clone(), reporting: p.reporting });
+        }
+    }
+    if let Some(n) = sel.clone().filter(|_| delete) {
+        let used = fe.def().is_some_and(|d| d.dims.iter().any(|x| x.label == n) || d.forms.iter().any(|f| f.material == n || f.visible == n));
+        let in_formula = fe.family.params.iter().any(|p| p.name != n && p.formula.contains(n.as_str()));
+        if used || in_formula {
+            fe.message = Some(format!("\"{n}\" is used by a dimension label, form or formula. Remove those first."));
+        } else {
+            fe.checkpoint();
+            fe.family.params.retain(|p| p.name != n);
+            fe.param_sel = None;
+        }
+    }
+    if let (Some(n), true) = (sel.clone(), mv != 0) {
+        if let Some(i) = fe.family.params.iter().position(|p| p.name == n) {
+            let g = fe.family.params[i].group.clone();
+            let j = if mv < 0 { fe.family.params[..i].iter().rposition(|p| p.group == g) } else { fe.family.params[i + 1..].iter().position(|p| p.group == g).map(|k| i + 1 + k) };
+            if let Some(j) = j {
+                fe.checkpoint();
+                fe.family.params.swap(i, j);
+            }
+        }
+    }
+    if let Some(asc) = sort {
+        fe.checkpoint();
+        fe.family.params.sort_by(|a, b| {
+            let o = a.name.to_lowercase().cmp(&b.name.to_lowercase());
+            if asc { o } else { o.reverse() }
         });
     }
     if let Some((n, v)) = set_value {
@@ -1147,60 +1999,6 @@ fn family_types(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             Err(e) => fe.message = Some(e),
         }
     }
-    if let Some(n) = remove {
-        let used = fe.def().is_some_and(|d| d.dims.iter().any(|x| x.label == n) || d.forms.iter().any(|f| f.material == n || f.visible == n));
-        if used {
-            fe.message = Some(format!("'{n}' is used by a dimension label or form. Remove those first."));
-        } else {
-            fe.checkpoint();
-            fe.family.params.retain(|p| p.name != n);
-        }
-    }
-    ui.separator();
-    ui.label(egui::RichText::new("New parameter").strong());
-    let (mut name, mut kind, mut inst, mut group) = fe.new_param.clone();
-    egui::Grid::new("fe-newp").num_columns(2).show(ui, |ui| {
-        ui.label("Name:");
-        ui.text_edit_singleline(&mut name);
-        ui.end_row();
-        ui.label("Type of parameter:");
-        egui::ComboBox::from_id_salt("fe-np-kind").selected_text(kind.label()).show_ui(ui, |ui| {
-            for k in ParamKind::USER {
-                ui.selectable_value(&mut kind, k, k.label());
-            }
-        });
-        ui.end_row();
-        ui.label("Group:");
-        egui::ComboBox::from_id_salt("fe-np-group").selected_text(&group).show_ui(ui, |ui| {
-            for g in ["Dimensions", "Materials and Finishes", "Construction", "Graphics", "Identity Data", "Other"] {
-                ui.selectable_value(&mut group, g.to_string(), g);
-            }
-        });
-        ui.end_row();
-        ui.label("");
-        ui.horizontal(|ui| {
-            ui.radio_value(&mut inst, false, "Type");
-            ui.radio_value(&mut inst, true, "Instance");
-        });
-        ui.end_row();
-    });
-    if ui.add_enabled(!name.trim().is_empty(), egui::Button::new("Add Parameter")).clicked() {
-        if fe.family.param(name.trim()).is_some() {
-            fe.message = Some(format!("A parameter named '{}' already exists.", name.trim()));
-        } else {
-            fe.checkpoint();
-            let default = match kind {
-                ParamKind::Length => "1000".to_string(),
-                ParamKind::YesNo => "Yes".to_string(),
-                ParamKind::Material => "Default".to_string(),
-                ParamKind::Text => String::new(),
-                _ => "0".to_string(),
-            };
-            fe.family.params.push(FamilyParameter { name: name.trim().to_string(), kind, instance: inst, formula: String::new(), group: group.clone(), built_in: false, default, reporting: false });
-            name.clear();
-        }
-    }
-    fe.new_param = (name, kind, inst, group);
 }
 
 fn preview_3d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
@@ -1236,7 +2034,6 @@ fn preview_3d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     let settings = DrawSettings { style: VisualStyle::Shaded, shadows: false, sun: DVec3::new(0.4, -0.6, 0.9), section_box: None, background: [0.95, 0.96, 0.98] };
     let tex = renderer.render_view(u32::MAX - 3, size, &scene, &cam, &settings);
     ui.painter().image(tex, rect, Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
-    ui.painter().text(rect.left_bottom() + vec2(10.0, -8.0), egui::Align2::LEFT_BOTTOM, format!("{} — {}: drag to orbit, wheel to zoom", fe.family.name, fe.ftype().name), egui::FontId::proportional(11.0), style::text_dim());
 }
 
 fn load_into_project(app: &mut App, fe: &FamilyEditor) {
@@ -1281,5 +2078,20 @@ fn load_into_project(app: &mut App, fe: &FamilyEditor) {
                 app.opts.component_type = t;
             }
         }
+    }
+}
+
+/// Save in the family editor saves the family file (.rcfa).
+pub fn save_family(app: &mut App) {
+    let Some(name) = app.family_editor.as_ref().map(|fe| fe.family.name.clone()) else { return };
+    let path = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[rc_core::io::FAMILY_EXTENSION]).set_file_name(format!("{name}.{}", rc_core::io::FAMILY_EXTENSION)).save_file();
+    let Some(mut path) = path else { return };
+    if path.extension().is_none() {
+        path.set_extension(rc_core::io::FAMILY_EXTENSION);
+    }
+    let Some(fe) = app.family_editor.as_ref() else { return };
+    match rc_core::io::save_family(&app.doc.data, &fe.family, &path) {
+        Ok(()) => app.info(format!("Saved {}", path.display())),
+        Err(e) => app.error(e),
     }
 }

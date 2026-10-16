@@ -207,6 +207,11 @@ pub struct Dlg<'a> {
     resizable: bool,
 }
 
+/// A dialog window in the reference app's style (for other modules).
+pub fn window_pub(title: &str) -> Dlg<'static> {
+    window(title)
+}
+
 fn window(title: &str) -> Dlg<'static> {
     let c = CENTER.with(|c| c.get());
     let win = egui::Window::new(title.to_string())

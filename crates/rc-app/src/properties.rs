@@ -207,6 +207,10 @@ fn selector_box(ui: &mut egui::Ui, icon: Icon, line1: &str, line2: &str, dropdow
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
+    if app.family_editor.is_some() {
+        crate::family_editor::properties_palette(app, ui);
+        return;
+    }
     if style::palette_title(ui, "Properties") {
         app.settings.show_properties = false;
     }

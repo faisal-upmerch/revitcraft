@@ -92,6 +92,10 @@ impl InputScript {
     pub fn feed(&mut self, raw: &mut egui::RawInput) {
         self.frame += 1;
         let f = self.frame;
+        // A steady 10 fps clock, so double-clicks and hover delays do not depend on how
+        // long the first frames take to render. Clicks four or more frames apart are separate
+        // clicks; `dblclick` (two frames apart) is a double-click.
+        raw.time = Some(f as f64 / 10.0);
         raw.events.extend(self.events.iter().filter(|(k, _)| *k == f).map(|(_, e)| e.clone()));
     }
 }

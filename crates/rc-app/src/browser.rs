@@ -228,6 +228,10 @@ fn view_row(app: &mut App, ui: &mut egui::Ui, v: &View) {
 }
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
+    if app.family_editor.is_some() {
+        family_browser(app, ui);
+        return;
+    }
     let name = app.doc.path.as_ref().and_then(|p| p.file_stem()).map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Project1".into());
     if style::palette_title(ui, &format!("Project Browser - {name}")) {
         app.settings.show_browser = false;
@@ -516,4 +520,66 @@ pub fn save_family(app: &mut App, fid: Id) {
         Ok(()) => app.info(format!("Saved family {}", path.display())),
         Err(e) => app.error(e),
     }
+}
+
+/// The Project Browser of an open family: its views (double-click opens one), its loaded
+/// families and groups.
+fn family_browser(app: &mut App, ui: &mut egui::Ui) {
+    use crate::family_editor::FeView;
+    let Some(fe) = app.family_editor.as_mut() else { return };
+    if style::palette_title(ui, &format!("Project Browser - {}", fe.family.name)) {
+        app.settings.show_browser = false;
+        return;
+    }
+    egui::ScrollArea::vertical().auto_shrink([false, false]).id_salt("fe-browser-scroll").show(ui, |ui| {
+        ui.spacing_mut().item_spacing.y = 0.0;
+        ui.spacing_mut().indent = INDENT;
+        let selected_id = egui::Id::new("fe-browser-sel");
+        let mut selected: Option<FeView> = ui.memory(|m| m.data.get_temp(selected_id));
+        let mut open: Option<FeView> = None;
+        let active = fe.view;
+        tree_node(ui, "fe-views", "Views (all)", Some(Icon::FloorPlan), true, false, |ui| {
+            for (title, icon, views) in [
+                ("Floor Plans", Icon::FloorPlan, vec![FeView::Plan]),
+                ("Ceiling Plans", Icon::CeilingPlan, vec![FeView::Ceiling]),
+                ("3D Views", Icon::View3D, vec![FeView::ThreeD]),
+                ("Elevations (Elevation 1)", Icon::Elevation, vec![FeView::Back, FeView::Front, FeView::Left, FeView::Right]),
+            ] {
+                tree_node(ui, ("fe-group", title), title, None, true, false, |ui| {
+                    for v in views {
+                        let resp = row(ui, icon, v.label(), selected == Some(v), v == active);
+                        if resp.double_clicked() {
+                            open = Some(v);
+                        } else if resp.clicked() {
+                            selected = Some(v);
+                        }
+                    }
+                });
+            }
+        });
+        tree_node(ui, "fe-legends", "Legends", Some(Icon::Legend), false, false, |_| {});
+        tree_node(ui, "fe-schedules", "Schedules/Quantities (all)", Some(Icon::Schedule), false, false, |_| {});
+        tree_node(ui, "fe-sheets", "Sheets (all)", Some(Icon::Sheet), false, false, |_| {});
+        tree_node(ui, "fe-families", "Families", Some(Icon::LoadFamily), false, false, |ui| {
+            for cat in ["Annotation Symbols"] {
+                tree_node(ui, ("fe-fam-cat", cat), cat, None, false, false, |_| {});
+            }
+        });
+        tree_node(ui, "fe-groups", "Groups", Some(Icon::PlaceGroup), false, false, |_| {});
+        tree_node(ui, "fe-links", "Revit Links", Some(Icon::LinkCad), false, false, |_| {});
+        ui.memory_mut(|m| match selected {
+            Some(v) => {
+                m.data.insert_temp(selected_id, v);
+            }
+            None => m.data.remove::<FeView>(selected_id),
+        });
+        if let Some(v) = open {
+            fe.view = v;
+            fe.pts.clear();
+            fe.closed = false;
+            if !fe.open_views.contains(&v) {
+                fe.open_views.push(v);
+            }
+        }
+    });
 }

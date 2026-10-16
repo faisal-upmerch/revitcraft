@@ -26,7 +26,13 @@ fn toggle_icon(ui: &mut egui::Ui, icon: Icon, on: &mut bool, tip: &str) -> bool 
 
 pub fn show(app: &mut App, ui: &mut egui::Ui) {
     ui.horizontal_centered(|ui| {
-        let prompt = if app.interact.prompt.is_empty() { crate::canvas_tools::prompt(app) } else { app.interact.prompt.clone() };
+        let prompt = if app.family_editor.is_some() {
+            crate::family_editor::status_text(app)
+        } else if app.interact.prompt.is_empty() {
+            crate::canvas_tools::prompt(app)
+        } else {
+            app.interact.prompt.clone()
+        };
         let prompt = if prompt.is_empty() { "Ready".to_string() } else { prompt };
         ui.add(egui::Label::new(egui::RichText::new(prompt).color(style::text())).truncate());
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
