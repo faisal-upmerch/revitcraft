@@ -163,6 +163,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
+        ToolKind::Relocate => if n == 0 { "Click to enter move start point.".into() } else { "Click to enter move end point.".into() },
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
         ToolKind::ModelText => "Click to place model text.".into(),
         ToolKind::Mullion => "Select a grid line to create mullion.".into(),
@@ -523,6 +524,22 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::Relocate => {
+            let Some(pt) = point else { return };
+            if let Some(a) = app.tool.pts.first().copied() {
+                painter.line_segment([xf.s(a), xf.s(pt)], preview_stroke());
+                if clicked {
+                    app.tool.reset();
+                    app.run("Relocate Project", |p| {
+                        p.relocate(pt - a);
+                        Ok(())
+                    });
+                    app.info("The project was relocated against the shared coordinates.");
+                }
+            } else if clicked {
+                app.tool.pts.push(pt);
+            }
+        }
         ToolKind::SpecifyCoords | ToolKind::ReportCoords => {
             let Some(pt) = point else { return };
             let z = view.plan_level().map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);

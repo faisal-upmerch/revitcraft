@@ -72,6 +72,8 @@ pub struct Dialogs {
     pub transfer: Option<Box<TransferState>>,
     /// Location, Weather and Site.
     pub location: bool,
+    /// The tab Location opens on (Rotate True North opens Site).
+    pub location_tab: u8,
     /// Specify Coordinates at Point: the point and its N/S, E/W, Elevation and angle texts.
     pub specify_coords: Option<(rc_core::geom::DVec3, [String; 4])>,
     pub options: bool,
@@ -932,7 +934,7 @@ fn location_dialog(app: &mut App, ctx: &egui::Context) {
     let id = egui::Id::new("location-dialog");
     let p0 = &app.doc.data;
     let mut st: St = ctx.data(|m| m.get_temp(id)).unwrap_or_else(|| St {
-        tab: 0,
+        tab: app.dialogs.location_tab,
         lat: format!("{:.6}", p0.sun.latitude),
         lon: format!("{:.6}", p0.sun.longitude),
         zone: (p0.sun.longitude / 15.0).round(),

@@ -666,7 +666,15 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         Section => app.set_tool(ToolKind::Section),
         Camera => app.set_tool(ToolKind::Camera),
         StartingView => app.dialogs.starting_view = true,
-        Location => app.dialogs.location = true,
+        Location => {
+            app.dialogs.location_tab = 0;
+            app.dialogs.location = true;
+        }
+        RotateTrueNorth => {
+            app.dialogs.location_tab = 2;
+            app.dialogs.location = true;
+        }
+        RelocateProject => app.set_tool(ToolKind::Relocate),
         SpecifyCoordinates => app.set_tool(ToolKind::SpecifyCoords),
         ReportCoordinates => app.set_tool(ToolKind::ReportCoords),
         Callout => app.set_tool(ToolKind::Callout),

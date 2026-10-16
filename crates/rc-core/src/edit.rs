@@ -2515,6 +2515,10 @@ mod tests {
         let t = 30f64.to_radians();
         let (n2, e2, _) = p.to_shared(pt + DVec3::new(t.sin(), t.cos(), 0.0) * 1000.0);
         assert!((n2 - 51000.0).abs() < 1e-6 && (e2 - 30000.0).abs() < 1e-6);
+        // Relocating the project 1 m along true north: the same point now reads 1 m further north.
+        p.relocate(DVec2::new(t.sin(), t.cos()) * 1000.0);
+        let (n3, e3, _) = p.to_shared(pt);
+        assert!((n3 - 51000.0).abs() < 1e-6 && (e3 - 30000.0).abs() < 1e-6);
     }
 
     #[test]

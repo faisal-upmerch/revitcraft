@@ -2836,6 +2836,15 @@ impl Project {
         (self.shared.north + q.dot(north), self.shared.east + q.dot(east), self.shared.elevation + pt.z)
     }
 
+    /// Relocate Project: the project moves by `delta` (project directions) against the shared
+    /// coordinates, so every point reads its shared position plus that move.
+    pub fn relocate(&mut self, delta: DVec2) {
+        let (n0, e0, _) = self.to_shared(DVec3::ZERO);
+        let (n1, e1, _) = self.to_shared(DVec3::new(delta.x, delta.y, 0.0));
+        self.shared.north += n1 - n0;
+        self.shared.east += e1 - e0;
+    }
+
     /// Sets the shared coordinates so the project point `pt` reads (n, e, z), with true north
     /// `angle` degrees east of project north.
     pub fn specify_shared(&mut self, pt: DVec3, n: f64, e: f64, z: f64, angle: f64) {
