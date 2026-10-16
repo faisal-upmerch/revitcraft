@@ -58,6 +58,10 @@ pub enum Category {
     ScopeBoxes,
     Matchline,
     Decals,
+    PathReinforcement,
+    FabricAreas,
+    FabricReinforcement,
+    RebarCouplers,
 }
 
 impl Category {
@@ -235,6 +239,10 @@ impl Category {
             Category::ScopeBoxes => "Scope Boxes",
             Category::Matchline => "Matchline",
             Category::Decals => "Decals",
+            Category::PathReinforcement => "Structural Path Reinforcement",
+            Category::FabricAreas => "Structural Fabric Areas",
+            Category::FabricReinforcement => "Structural Fabric Reinforcement",
+            Category::RebarCouplers => "Structural Rebar Couplers",
         }
     }
 
@@ -288,6 +296,10 @@ impl Category {
             Category::ScopeBoxes => "Scope Box",
             Category::Matchline => "Matchline",
             Category::Decals => "Decal",
+            Category::PathReinforcement => "Structural Path Reinforcement",
+            Category::FabricAreas => "Structural Fabric Area",
+            Category::FabricReinforcement => "Structural Fabric Reinforcement",
+            Category::RebarCouplers => "Structural Rebar Coupler",
         }
     }
 
@@ -370,6 +382,14 @@ pub enum ElementKind {
     CutProfile(CutProfile),
     /// Insert > Decal: an image placed on a face of the model.
     Decal(Decal),
+    /// Structure > Path: bars across a sketched path.
+    PathReinforcement(PathReinforcement),
+    /// Structure > Fabric Area: welded wire fabric sheets laid over a sketched area.
+    FabricArea(FabricArea),
+    /// Structure > Fabric Sheet: one sheet of welded wire fabric.
+    FabricSheet(FabricSheet),
+    /// Structure > Rebar Coupler: couplers on the ends of a rebar set's bars.
+    RebarCoupler(RebarCoupler),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -437,6 +457,10 @@ impl Element {
             ElementKind::Rebar(_) => Category::StructuralRebar,
             ElementKind::CutProfile(_) => Category::Lines,
             ElementKind::Decal(_) => Category::Decals,
+            ElementKind::PathReinforcement(_) => Category::PathReinforcement,
+            ElementKind::FabricArea(_) => Category::FabricAreas,
+            ElementKind::FabricSheet(_) => Category::FabricReinforcement,
+            ElementKind::RebarCoupler(_) => Category::RebarCouplers,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -1608,6 +1632,7 @@ impl SystemType {
             (Category::Railings, _) => "Railing",
             (Category::StructuralFoundations, _) => "Wall Foundation",
             (Category::Decals, _) => "Decal",
+            (Category::FabricReinforcement, _) => "Fabric Sheet",
             _ => "System Family",
         }
     }
@@ -2770,6 +2795,54 @@ impl Decal {
     }
 }
 
+/// Path reinforcement: bars `spacing` apart along a path, each `length` long, running into the
+/// host from the path.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct PathReinforcement {
+    pub host: Id,
+    pub path: Vec<DVec2>,
+    pub bar_type: Id,
+    pub spacing: f64,
+    pub length: f64,
+    /// Face: Top (else Bottom).
+    pub top: bool,
+    /// The bars run to the other side of the path.
+    #[serde(default)]
+    pub flip: bool,
+}
+
+/// A fabric area: sheets of `type_id` tiled over the boundary along `major`, lapped.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FabricArea {
+    pub host: Id,
+    pub boundary: Vec<DVec2>,
+    pub major: DVec2,
+    pub type_id: Id,
+    pub top: bool,
+    pub major_lap: f64,
+    pub minor_lap: f64,
+}
+
+/// A fabric sheet centred at `center`, its length along `angle` (degrees).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct FabricSheet {
+    pub host: Id,
+    pub type_id: Id,
+    pub center: DVec2,
+    pub angle: f64,
+    pub top: bool,
+}
+
+/// Couplers at one end of every bar of a rebar set (joining `other`'s bars when placed
+/// between two sets).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RebarCoupler {
+    pub rebar: Id,
+    pub at_end: bool,
+    #[serde(default)]
+    pub other: Option<Id>,
+}
+
 /// One layer of an area reinforcement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RebarLayer {
@@ -3098,6 +3171,7 @@ impl Project {
             ElementKind::WallFoundation(f) => Some(f.type_id),
             ElementKind::GroupInstance(g) => Some(g.type_id),
             ElementKind::Decal(d) => Some(d.type_id),
+            ElementKind::FabricSheet(f) => Some(f.type_id),
             _ => None,
         }
     }

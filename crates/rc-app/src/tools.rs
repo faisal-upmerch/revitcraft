@@ -48,6 +48,10 @@ pub enum ToolKind {
     PickToEdit,
     CutProfileHost,
     PlaceDecal,
+    PathReinfHost,
+    FabricAreaHost,
+    FabricSheet,
+    RebarCoupler,
     Walkthrough,
     AreaReinfHost,
     SpecifyCoords,
@@ -142,6 +146,10 @@ impl ToolKind {
             ToolKind::PickToEdit => "Pick to Edit",
             ToolKind::CutProfileHost => "Cut Profile",
             ToolKind::PlaceDecal => "Decal",
+            ToolKind::PathReinfHost => "Path Reinforcement",
+            ToolKind::FabricAreaHost => "Fabric Area",
+            ToolKind::FabricSheet => "Fabric Sheet",
+            ToolKind::RebarCoupler => "Rebar Coupler",
             ToolKind::Walkthrough => "Walkthrough",
             ToolKind::AreaReinfHost => "Area Reinforcement",
             ToolKind::FramingElevation => "Framing Elevation",
@@ -405,6 +413,10 @@ pub enum SketchKind {
     Callout,
     /// A cut profile of this element.
     CutProfile(Id),
+    /// A path reinforcement's path on this floor.
+    PathReinforcement(Id),
+    /// A fabric area's boundary on this floor.
+    FabricArea(Id),
     /// A multi-segment grid.
     Grid,
     EditFloor(Id),
@@ -436,6 +448,8 @@ impl SketchKind {
             SketchKind::AreaReinforcement(_) => "Create Reinforcement Boundary",
             SketchKind::Callout => "Edit Profile",
             SketchKind::CutProfile(_) => "Create Cut Profile Sketch",
+            SketchKind::PathReinforcement(_) => "Create Reinforcement Path",
+            SketchKind::FabricArea(_) => "Create Fabric Boundary",
         }
     }
     pub fn is_roof(self) -> bool {
@@ -682,6 +696,8 @@ pub struct ToolOptions {
     pub image_asset: Id,
     /// Place Decal: the decal type.
     pub decal_type: Id,
+    /// Rebar Coupler: Place between Two Bars (else Place on Bar End).
+    pub coupler_between: bool,
     pub draw_mode: DrawMode,
     pub sketch_sub: SketchSub,
     /// Components: rotate each instance right after placing it.
@@ -852,6 +868,7 @@ impl ToolOptions {
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
             image_asset: 0,
             decal_type: 0,
+            coupler_between: true,
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,
             rotate_after_placement: false,

@@ -56,6 +56,12 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    PathReinforcement,
+    FabricArea,
+    FabricSheet,
+    RebarCoupler,
+    CouplerEnd,
+    CouplerBetween,
     Decal,
     DecalTypes,
     ArrowLeft,
@@ -971,6 +977,50 @@ fn draw(g: &Pen, icon: Icon) {
             for y in [0.68, 0.76, 0.84] {
                 g.thin_line(&[(0.56, y), (0.88, y)], ink);
             }
+        }
+        PathReinforcement => {
+            // A path (an L) with bars running off it.
+            g.line(&[(0.12, 0.88), (0.88, 0.88)], ink);
+            for x in [0.2, 0.36, 0.52, 0.68, 0.84] {
+                g.line(&[(x, 0.86), (x, 0.42)], Color32::from_rgb(200, 60, 40));
+            }
+            g.line(&[(0.12, 0.88), (0.12, 0.12)], ink);
+        }
+        FabricArea => {
+            // Two lapped sheets of mesh inside a dashed boundary.
+            g.rect(0.08, 0.1, 0.92, 0.9, Color32::from_rgb(235, 240, 250), ink);
+            for k in 0..6 {
+                let t = 0.16 + k as f32 * 0.14;
+                g.thin_line(&[(t, 0.16), (t, 0.84)], Color32::from_rgb(200, 60, 40));
+                g.thin_line(&[(0.14, t), (0.86, t)], Color32::from_rgb(200, 60, 40));
+            }
+            g.line(&[(0.08, 0.9), (0.92, 0.1)], ink);
+        }
+        FabricSheet => {
+            // One sheet of mesh with its diagonal.
+            g.rect(0.12, 0.2, 0.88, 0.8, Color32::WHITE, ink);
+            for k in 0..5 {
+                let t = 0.24 + k as f32 * 0.13;
+                g.thin_line(&[(t, 0.22), (t, 0.78)], Color32::from_rgb(200, 60, 40));
+            }
+            for y in [0.33, 0.5, 0.67] {
+                g.thin_line(&[(0.14, y), (0.86, y)], Color32::from_rgb(200, 60, 40));
+            }
+            g.line(&[(0.12, 0.8), (0.88, 0.2)], ink);
+        }
+        RebarCoupler | CouplerBetween => {
+            // Two bars joined by a sleeve.
+            g.line(&[(0.04, 0.5), (0.4, 0.5)], ink);
+            g.line(&[(0.6, 0.5), (0.96, 0.5)], ink);
+            g.rect(0.34, 0.36, 0.66, 0.64, LGREY, ink);
+            g.thin_line(&[(0.42, 0.36), (0.42, 0.64)], ink);
+            g.thin_line(&[(0.58, 0.36), (0.58, 0.64)], ink);
+        }
+        CouplerEnd => {
+            // A bar with a sleeve on its end.
+            g.line(&[(0.04, 0.5), (0.6, 0.5)], ink);
+            g.rect(0.56, 0.36, 0.9, 0.64, LGREY, ink);
+            g.thin_line(&[(0.66, 0.36), (0.66, 0.64)], ink);
         }
         Picture => {
             // A framed picture: sky, sun and hills.

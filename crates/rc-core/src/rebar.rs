@@ -133,6 +133,164 @@ pub fn rebar_bars(p: &Project, r: &Rebar) -> Vec<(DVec3, DVec3, f64)> {
     }).collect()
 }
 
+/// The z of a top or bottom layer of bars of diameter `d` (`below` = diameters of bars laid
+/// outside it).
+fn layer_z(p: &Project, host: Id, top: bool, d: f64, below: f64) -> Option<f64> {
+    let (zb, zt) = host_z(p, host)?;
+    let c = cover(p) + below;
+    Some(if top { zt - c - d / 2.0 } else { zb + c + d / 2.0 })
+}
+
+/// Which side of the path (+1 left, -1 right) the bars run to: into the host.
+pub fn path_side(p: &Project, r: &PathReinforcement) -> f64 {
+    let side = match (p.element(r.host).map(|e| &e.kind), r.path.first(), r.path.get(1)) {
+        (Some(ElementKind::Floor(f)), Some(a), Some(b)) => {
+            let n = geom::perp((*b - *a).normalize_or_zero());
+            if geom::contains(&f.boundary, (*a + *b) / 2.0 + n * r.length.min(600.0) / 2.0) { 1.0 } else { -1.0 }
+        }
+        _ => 1.0,
+    };
+    if r.flip { -side } else { side }
+}
+
+/// The bars of a path reinforcement, centred along each segment of the path.
+pub fn path_bars(p: &Project, r: &PathReinforcement) -> Vec<(DVec3, DVec3, f64)> {
+    let d = bar_diameter(p, r.bar_type);
+    let Some(z) = layer_z(p, r.host, r.top, d, 0.0) else { return vec![] };
+    let side = path_side(p, r);
+    let mut out = Vec::new();
+    for w in r.path.windows(2) {
+        let len = w[0].distance(w[1]);
+        if len < 1.0 || r.spacing < 1.0 {
+            continue;
+        }
+        let dir = (w[1] - w[0]) / len;
+        let n = geom::perp(dir) * side;
+        let count = (len / r.spacing).floor() as usize + 1;
+        let first = (len - (count - 1) as f64 * r.spacing) / 2.0;
+        for k in 0..count {
+            let q = w[0] + dir * (first + k as f64 * r.spacing);
+            out.push((geom::at(q, z), geom::at(q + n * r.length, z), d));
+        }
+    }
+    out
+}
+
+/// The strips a path reinforcement covers, one per path segment.
+pub fn path_region(p: &Project, r: &PathReinforcement) -> Vec<Vec<DVec2>> {
+    let side = path_side(p, r);
+    r.path.windows(2).map(|w| {
+        let n = geom::perp((w[1] - w[0]).normalize_or_zero()) * side * r.length;
+        vec![w[0], w[1], w[1] + n, w[0] + n]
+    }).collect()
+}
+
+/// The tag of a path reinforcement, as "15M @ 300".
+pub fn path_tag(p: &Project, r: &PathReinforcement) -> String {
+    format!("{} @ {}", bar_name(p, r.bar_type), p.units.length(r.spacing))
+}
+
+/// The project's fabric sheet type (made on first use): 4800 x 2400 at 200 / 12'-6" x 8'-0" at 1'-0".
+pub fn ensure_fabric_types(p: &mut Project) -> Id {
+    if let Some(t) = p.types.iter().find(|t| t.category == Category::FabricReinforcement) {
+        return t.id;
+    }
+    let (l, w, s, dia, lap) = if p.units.system == UnitSystem::Imperial { (3810.0, 2438.4, 304.8, 4.9, 203.2) } else { (4800.0, 2400.0, 200.0, 6.0, 200.0) };
+    let id = p.new_id();
+    let mut t = SystemType { id, category: Category::FabricReinforcement, name: "Fabric Sheet 1".into(), ..Default::default() };
+    for (k, v) in [("Overall Length", l), ("Overall Width", w), ("Major Spacing", s), ("Minor Spacing", s), ("Wire Diameter", dia), ("Default Major Lap Splice Length", lap), ("Default Minor Lap Splice Length", lap)] {
+        t.props.insert(k.into(), v);
+    }
+    t.texts.insert("Material".into(), "Steel".into());
+    p.types.push(t);
+    id
+}
+
+/// (length, width, major spacing, minor spacing, wire diameter) of a fabric sheet type.
+pub fn sheet_size(p: &Project, type_id: Id) -> (f64, f64, f64, f64, f64) {
+    let t = p.sys_type(type_id);
+    let g = |k: &str, d: f64| t.map(|t| t.prop(k, d)).unwrap_or(d);
+    (g("Overall Length", 4800.0), g("Overall Width", 2400.0), g("Major Spacing", 200.0), g("Minor Spacing", 200.0), g("Wire Diameter", 6.0))
+}
+
+/// The outline of a sheet of `length` x `width` centred at `c`, its length along `dir`.
+pub fn sheet_rect(c: DVec2, dir: DVec2, length: f64, width: f64) -> Vec<DVec2> {
+    let (u, v) = (dir * (length / 2.0), geom::perp(dir) * (width / 2.0));
+    vec![c - u - v, c + u - v, c + u + v, c - u + v]
+}
+
+/// The wires of a fabric piece (an outline), major wires along `dir`.
+fn sheet_wires(p: &Project, host: Id, top: bool, type_id: Id, piece: &[DVec2], dir: DVec2) -> Vec<(DVec3, DVec3, f64)> {
+    let (_, _, smaj, smin, d) = sheet_size(p, type_id);
+    let (Some(z0), Some(z1)) = (layer_z(p, host, top, d, 0.0), layer_z(p, host, top, d, d)) else { return vec![] };
+    let mut out: Vec<(DVec3, DVec3, f64)> = hatch(piece, dir, smaj).into_iter().map(|(a, b)| (geom::at(a, z0), geom::at(b, z0), d)).collect();
+    out.extend(hatch(piece, geom::perp(dir), smin).into_iter().map(|(a, b)| (geom::at(a, z1), geom::at(b, z1), d)));
+    out
+}
+
+pub fn fabric_sheet_wires(p: &Project, s: &FabricSheet) -> Vec<(DVec3, DVec3, f64)> {
+    let (l, w, ..) = sheet_size(p, s.type_id);
+    let dir = DVec2::from_angle(s.angle.to_radians());
+    sheet_wires(p, s.host, s.top, s.type_id, &sheet_rect(s.center, dir, l, w), dir)
+}
+
+/// The sheets of a fabric area: lapped tiles along the major direction, cut to the boundary
+/// inside the cover.
+pub fn fabric_area_sheets(p: &Project, a: &FabricArea) -> Vec<Vec<DVec2>> {
+    use geo::BooleanOps;
+    let inner = geom::offset(&geom::ensure_ccw(&a.boundary), -cover(p));
+    if inner.len() < 3 {
+        return vec![];
+    }
+    let (l, w, ..) = sheet_size(p, a.type_id);
+    let dir = a.major.normalize_or(DVec2::X);
+    let n = geom::perp(dir);
+    let (su, sv) = ((l - a.major_lap).max(100.0), (w - a.minor_lap).max(100.0));
+    let o = inner[0];
+    let us: Vec<f64> = inner.iter().map(|q| (*q - o).dot(dir)).collect();
+    let vs: Vec<f64> = inner.iter().map(|q| (*q - o).dot(n)).collect();
+    let (u0, u1) = us.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+    let (v0, v1) = vs.iter().fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(*v), b.max(*v)));
+    let to = |pts: &[DVec2]| geo::Polygon::new(geo::LineString::from(pts.iter().map(|q| geo::Coord { x: q.x, y: q.y }).collect::<Vec<_>>()), vec![]);
+    let area = geo::MultiPolygon::new(vec![to(&inner)]);
+    let mut out = Vec::new();
+    let mut u = u0;
+    while u < u1 - 1.0 && out.len() < 2000 {
+        let mut v = v0;
+        while v < v1 - 1.0 {
+            let c = o + dir * (u + l / 2.0) + n * (v + w / 2.0);
+            let tile = geo::MultiPolygon::new(vec![to(&geom::ensure_ccw(&sheet_rect(c, dir, l, w)))]);
+            for poly in tile.intersection(&area).0 {
+                let mut pts: Vec<DVec2> = poly.exterior().coords().map(|c| DVec2::new(c.x, c.y)).collect();
+                pts.pop();
+                if pts.len() >= 3 && geom::area(&pts).abs() > 1000.0 {
+                    out.push(pts);
+                }
+            }
+            v += sv;
+        }
+        u += su;
+    }
+    out
+}
+
+pub fn fabric_area_wires(p: &Project, a: &FabricArea) -> Vec<(DVec3, DVec3, f64)> {
+    let dir = a.major.normalize_or(DVec2::X);
+    fabric_area_sheets(p, a).iter().flat_map(|s| sheet_wires(p, a.host, a.top, a.type_id, s, dir)).collect()
+}
+
+/// Couplers: (centre, bar axis, bar diameter), one per bar of the set.
+pub fn coupler_points(p: &Project, c: &RebarCoupler) -> Vec<(DVec3, DVec3, f64)> {
+    let Some(ElementKind::Rebar(r)) = p.element(c.rebar).map(|e| &e.kind) else { return vec![] };
+    rebar_bars(p, r).into_iter().map(|(a, b, d)| (if c.at_end { b } else { a }, (b - a).normalize_or_zero(), d)).collect()
+}
+
+/// Couplers as sleeves: 4 bar diameters long, 1.6 wide.
+pub fn couplers_mesh(pts: &[(DVec3, DVec3, f64)]) -> MeshSet {
+    let sleeves: Vec<(DVec3, DVec3, f64)> = pts.iter().map(|(c, ax, d)| (*c - *ax * 2.0 * d, *c + *ax * 2.0 * d, 1.6 * d)).collect();
+    bars_mesh(&sleeves)
+}
+
 /// Bars as octagonal rods.
 pub fn bars_mesh(bars: &[(DVec3, DVec3, f64)]) -> MeshSet {
     let mut set = MeshSet::default();
@@ -177,6 +335,36 @@ pub fn area_tag(p: &Project, a: &AreaReinforcement) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn path_fabric_and_couplers_lay_out_their_bars() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let ft = p.types_of(Category::Floors).next().unwrap().id;
+        let sq = vec![DVec2::ZERO, DVec2::new(6000.0, 0.0), DVec2::new(6000.0, 4000.0), DVec2::new(0.0, 4000.0)];
+        let floor = crate::edit::add_floor(&mut p, l1, ft, sq.clone()).unwrap();
+        let bt = ensure_bar_types(&mut p)[1];
+        // A path along the south edge, drawn west to east: bars run north, into the slab.
+        let path = crate::edit::add_path_reinforcement(&mut p, floor, vec![DVec2::new(0.0, 0.0), DVec2::new(3000.0, 0.0)], bt, 300.0, 1800.0).unwrap();
+        let Some(ElementKind::PathReinforcement(r)) = p.element(path).map(|e| e.kind.clone()) else { panic!() };
+        let bars = path_bars(&p, &r);
+        assert_eq!(bars.len(), 11);
+        assert!(bars.iter().all(|(a, b, _)| (b.y - a.y - 1800.0).abs() < 1e-6));
+        // A fabric area over the slab: 2 x 2 lapped 4800 x 2400 sheets cover 5920 x 3920.
+        let fa = crate::edit::add_fabric_area(&mut p, floor, sq).unwrap();
+        let Some(ElementKind::FabricArea(a)) = p.element(fa).map(|e| e.kind.clone()) else { panic!() };
+        assert_eq!(fabric_area_sheets(&p, &a).len(), 4);
+        assert!(!fabric_area_wires(&p, &a).is_empty());
+        // Couplers on the bar ends of a two-bar set.
+        let rb = crate::edit::add_rebar(&mut p, floor, DVec2::new(500.0, 1000.0), DVec2::new(2500.0, 1000.0), bt, 2, 200.0).unwrap();
+        let c = crate::edit::add_coupler(&mut p, rb, true, None).unwrap();
+        let Some(ElementKind::RebarCoupler(cp)) = p.element(c).map(|e| e.kind.clone()) else { panic!() };
+        let pts = coupler_points(&p, &cp);
+        assert_eq!(pts.len(), 2);
+        assert!((pts[0].0.x - 2500.0).abs() < 1e-6);
+        crate::edit::delete_elements(&mut p, &[rb]).unwrap();
+        assert!(p.element(c).is_none());
+    }
 
     #[test]
     fn area_reinforcement_bars_sit_inside_the_cover_in_four_layers() {

@@ -785,6 +785,64 @@ pub fn add_area_reinforcement(p: &mut Project, host: Id, boundary: Vec<DVec2>, b
     Ok(push(p, ElementKind::AreaReinforcement(AreaReinforcement { host, boundary: geom::ensure_ccw(&b), major, layers: [layer.clone(), layer.clone(), layer.clone(), layer] })))
 }
 
+/// Structure > Path: bars across a sketched path (one or more connected lines) in a floor.
+pub fn add_path_reinforcement(p: &mut Project, host: Id, path: Vec<DVec2>, bar_type: Id, spacing: f64, length: f64) -> Result<Id, String> {
+    let mut pts: Vec<DVec2> = Vec::new();
+    for q in path {
+        if pts.last().is_none_or(|l| l.distance(q) > 1.0) {
+            pts.push(q);
+        }
+    }
+    if pts.len() < 2 {
+        return Err("Sketch the path: one or more connected lines.".into());
+    }
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+        return Err("Pick Structural Floor or Wall for Path Reinforcement".into());
+    }
+    if spacing < 25.0 || length < 25.0 {
+        return Err("The bar spacing or length is too small.".into());
+    }
+    Ok(push(p, ElementKind::PathReinforcement(PathReinforcement { host, path: pts, bar_type, spacing, length, top: true, flip: false })))
+}
+
+/// Structure > Fabric Area: fabric sheets laid over a sketched area of a floor, the major
+/// direction along the first sketched edge.
+pub fn add_fabric_area(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
+    let b = geom::clean(&boundary, 1.0);
+    if b.len() < 3 {
+        return Err("A fabric area needs a closed boundary.".into());
+    }
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+        return Err("Pick Structural Floor or Wall for Fabric Area Reinforcement".into());
+    }
+    let type_id = crate::rebar::ensure_fabric_types(p);
+    let t = p.sys_type(type_id).unwrap();
+    let (major_lap, minor_lap) = (t.prop("Default Major Lap Splice Length", 200.0), t.prop("Default Minor Lap Splice Length", 200.0));
+    let major = (b[1] - b[0]).normalize_or_zero();
+    Ok(push(p, ElementKind::FabricArea(FabricArea { host, boundary: geom::ensure_ccw(&b), major, type_id, top: true, major_lap, minor_lap })))
+}
+
+/// Structure > Fabric Sheet: one sheet centred at `center` in a floor.
+pub fn add_fabric_sheet(p: &mut Project, host: Id, center: DVec2, angle: f64) -> Result<Id, String> {
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+        return Err("Click within a structural Wall or Floor to place Fabric Sheet.".into());
+    }
+    let type_id = crate::rebar::ensure_fabric_types(p);
+    Ok(push(p, ElementKind::FabricSheet(FabricSheet { host, type_id, center, angle, top: true })))
+}
+
+/// Structure > Rebar Coupler: couplers on one end of every bar of a rebar set.
+pub fn add_coupler(p: &mut Project, rebar: Id, at_end: bool, other: Option<Id>) -> Result<Id, String> {
+    if !matches!(p.element(rebar).map(|e| &e.kind), Some(ElementKind::Rebar(_))) {
+        return Err("Select a valid rebar set to place the coupler.".into());
+    }
+    let taken = p.elements.iter().any(|e| matches!(&e.kind, ElementKind::RebarCoupler(c) if (c.rebar == rebar && c.at_end == at_end)));
+    if taken {
+        return Err("This end of the bars already has a coupler.".into());
+    }
+    Ok(push(p, ElementKind::RebarCoupler(RebarCoupler { rebar, at_end, other })))
+}
+
 /// Structure > Rebar: `count` straight bars from `start` to `end` at the host's bottom cover,
 /// `spacing` apart to the left.
 pub fn add_rebar(p: &mut Project, host: Id, start: DVec2, end: DVec2, bar_type: Id, count: u32, spacing: f64) -> Result<Id, String> {
@@ -1144,6 +1202,10 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::Toposolid(t) => t.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&t.level),
                 ElementKind::AreaReinforcement(a) => doomed.contains(&a.host),
                 ElementKind::CutProfile(cp) => doomed.contains(&cp.host),
+                ElementKind::PathReinforcement(r) => doomed.contains(&r.host),
+                ElementKind::FabricArea(a) => doomed.contains(&a.host),
+                ElementKind::FabricSheet(f) => doomed.contains(&f.host),
+                ElementKind::RebarCoupler(c) => doomed.contains(&c.rebar) || c.other.is_some_and(|o| doomed.contains(&o)),
                 ElementKind::Decal(dc) => doomed.contains(&dc.host) || !matches!(p.sys_type(dc.type_id), Some(t) if t.category == Category::Decals),
                 ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
@@ -1236,6 +1298,23 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             r.end = f(r.end);
         }
         ElementKind::CutProfile(cp) => cp.region = cp.region.iter().map(|q| f(*q)).collect(),
+        ElementKind::PathReinforcement(r) => {
+            r.path = r.path.iter().map(|q| f(*q)).collect();
+            if mirror {
+                r.flip = !r.flip;
+            }
+        }
+        ElementKind::FabricArea(a) => {
+            let o = f(DVec2::ZERO);
+            a.major = (f(a.major) - o).normalize_or(a.major);
+            a.boundary = a.boundary.iter().map(|q| f(*q)).collect();
+        }
+        ElementKind::FabricSheet(s) => {
+            let c = f(s.center);
+            let d = f(s.center + DVec2::from_angle(s.angle.to_radians())) - c;
+            s.center = c;
+            s.angle = d.y.atan2(d.x).to_degrees();
+        }
         ElementKind::Decal(dc) => {
             let c = dc.center.truncate();
             let c2 = f(c);

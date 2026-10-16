@@ -208,6 +208,36 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
         ElementKind::CutProfile(_) => {
             d.push(def("Profile", CONSTRAINTS, v(Text), true, false));
         }
+        ElementKind::PathReinforcement(_) => {
+            d.push(def("Layout Rule", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Bar Spacing", CONSTRUCTION, v(Length), false, false));
+            d.push(def("Number of Bars", CONSTRUCTION, v(Integer), true, false));
+            d.push(def("Face", CONSTRUCTION, choice(&[0u8, 1], |a: u8| ["Top", "Bottom"][a as usize]), false, false));
+            d.push(def("Primary Bar - Type", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Primary Bar - Length", CONSTRUCTION, v(Length), false, false));
+        }
+        ElementKind::RebarCoupler(_) => {}
+        ElementKind::FabricArea(_) => {
+            d.push(def("Location", CONSTRUCTION, choice(&[0u8, 1], |a: u8| ["Top", "Bottom"][a as usize]), false, false));
+            d.push(def("Fabric Sheet", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Major Lap Splice Length", CONSTRUCTION, v(Length), false, false));
+            d.push(def("Minor Lap Splice Length", CONSTRUCTION, v(Length), false, false));
+            d.push(def("Number of Sheets", CONSTRUCTION, v(Integer), true, false));
+        }
+        ElementKind::FabricSheet(_) => {
+            type_identity(&mut d);
+            d.push(def("Location", CONSTRUCTION, choice(&[0u8, 1], |a: u8| ["Top", "Bottom"][a as usize]), false, false));
+            d.push(def("Wires at Cover", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Cut Overall Length", DIMENSIONS, v(Length), true, false));
+            d.push(def("Cut Overall Width", DIMENSIONS, v(Length), true, false));
+            d.push(def("Overall Length", DIMENSIONS, v(Length), false, true));
+            d.push(def("Overall Width", DIMENSIONS, v(Length), false, true));
+            d.push(def("Major Spacing", DIMENSIONS, v(Length), false, true));
+            d.push(def("Minor Spacing", DIMENSIONS, v(Length), false, true));
+            d.push(def("Default Major Lap Splice Length", CONSTRUCTION, v(Length), false, true));
+            d.push(def("Default Minor Lap Splice Length", CONSTRUCTION, v(Length), false, true));
+            system_type_params(&mut d);
+        }
         ElementKind::Decal(_) => {
             type_identity(&mut d);
             d.push(def("Width", DIMENSIONS, v(Length), false, false));
@@ -730,6 +760,31 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             "Bar Length" => num(r.start.distance(r.end)),
             _ => None,
         },
+        ElementKind::PathReinforcement(r) => match name {
+            "Layout Rule" => text("Maximum Spacing".to_string()),
+            "Bar Spacing" => num(r.spacing),
+            "Number of Bars" => num(crate::rebar::path_bars(p, r).len() as f64),
+            "Face" => text(if r.top { "Top" } else { "Bottom" }.to_string()),
+            "Primary Bar - Type" => text(crate::rebar::bar_name(p, r.bar_type)),
+            "Primary Bar - Length" => num(r.length),
+            _ => None,
+        },
+        ElementKind::RebarCoupler(_) => None,
+        ElementKind::FabricArea(a) => match name {
+            "Location" => text(if a.top { "Top" } else { "Bottom" }.to_string()),
+            "Fabric Sheet" => text(p.sys_type(a.type_id).map(|t| t.name.clone()).unwrap_or_default()),
+            "Major Lap Splice Length" => num(a.major_lap),
+            "Minor Lap Splice Length" => num(a.minor_lap),
+            "Number of Sheets" => num(crate::rebar::fabric_area_sheets(p, a).len() as f64),
+            _ => None,
+        },
+        ElementKind::FabricSheet(f) => match name {
+            "Location" => text(if f.top { "Top" } else { "Bottom" }.to_string()),
+            "Wires at Cover" => text("Major Direction".to_string()),
+            "Cut Overall Length" => num(crate::rebar::sheet_size(p, f.type_id).0),
+            "Cut Overall Width" => num(crate::rebar::sheet_size(p, f.type_id).1),
+            _ => sys_common(st, name),
+        },
         ElementKind::Decal(dc) => match name {
             "Width" => num(dc.width),
             "Height" => num(dc.height),
@@ -1225,6 +1280,22 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
         ElementKind::Rebar(r) => match name {
             "Quantity" => r.count = (n().round() as u32).clamp(1, 1000),
             "Spacing" => r.spacing = n().max(0.0),
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::PathReinforcement(r) => match name {
+            "Bar Spacing" => r.spacing = positive(n(), name)?.max(25.0),
+            "Primary Bar - Length" => r.length = positive(n(), name)?,
+            "Face" => r.top = t() == "Top" || t() == "0",
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::FabricArea(a) => match name {
+            "Location" => a.top = t() == "Top" || t() == "0",
+            "Major Lap Splice Length" => a.major_lap = n().max(0.0),
+            "Minor Lap Splice Length" => a.minor_lap = n().max(0.0),
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::FabricSheet(f) => match name {
+            "Location" => f.top = t() == "Top" || t() == "0",
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Decal(dc) => match name {

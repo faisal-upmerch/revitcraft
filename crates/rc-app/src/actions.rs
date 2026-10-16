@@ -56,7 +56,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
-        Door | Window | Component | Column | StructColumn | Beam | RebarTool | AreaReinforcementTool | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
+        Door | Window | Component | Column | StructColumn | Beam | RebarTool | AreaReinforcementTool | PathReinforcementTool | FabricAreaTool | FabricSheetTool | RebarCouplerTool | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
         | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | ModelText | Shaft | WallOpening | VerticalOpening | FaceOpening | DormerOpening | Mullion | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
@@ -303,6 +303,25 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.set_tool(ToolKind::AreaReinfHost);
         }
         RebarCover => app.dialogs.rebar_cover = true,
+        PathReinforcementTool => {
+            app.run("Rebar Types", |p| {
+                rc_core::rebar::ensure_bar_types(p);
+                Ok(())
+            });
+            app.set_tool(ToolKind::PathReinfHost);
+        }
+        FabricAreaTool | FabricSheetTool => {
+            app.run("Fabric Sheet Types", |p| {
+                rc_core::rebar::ensure_fabric_types(p);
+                Ok(())
+            });
+            app.set_tool(if cmd == FabricAreaTool { ToolKind::FabricAreaHost } else { ToolKind::FabricSheet });
+        }
+        RebarCouplerTool => app.set_tool(ToolKind::RebarCoupler),
+        CouplerOnBarEnd | CouplerBetweenBars => {
+            app.opts.coupler_between = cmd == CouplerBetweenBars;
+            app.tool.reset();
+        }
         AddToSet => app.dialogs.add_to_set = true,
         PickToEdit => app.set_tool(ToolKind::PickToEdit),
         Truss => start_drawing(app, ToolKind::Truss),
@@ -1496,6 +1515,16 @@ pub fn finish_sketch(app: &mut App) {
                 let path = sk.chain()?;
                 Ok(app.run("Create Grid", |p| edit::add_grid_path(p, path)))
             }
+            SketchKind::PathReinforcement(host) => {
+                let path = sk.chain()?;
+                let spacing = o.rebar_spacing;
+                let length = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1828.8 } else { 1800.0 };
+                Ok(app.run("Create Path Reinforcement", |p| {
+                    let types = rc_core::rebar::ensure_bar_types(p);
+                    let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
+                    edit::add_path_reinforcement(p, host, path, bt, spacing, length)
+                }))
+            }
             SketchKind::Railing => {
                 let path = sk.chain()?;
                 let host = sk.host;
@@ -1648,6 +1677,7 @@ pub fn finish_sketch(app: &mut App) {
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
                     SketchKind::Callout => app.run("Create Callout", |p| edit::new_sketch_callout(p, vid, outer)),
                     SketchKind::CutProfile(host) => app.run("Cut Profile", |p| edit::add_cut_profile(p, vid, host, outer)),
+                    SketchKind::FabricArea(host) => app.run("Create Fabric Area", |p| edit::add_fabric_area(p, host, outer)),
                     SketchKind::AreaReinforcement(host) => {
                         let spacing = o.rebar_spacing;
                         app.run("Create Area Reinforcement", |p| {

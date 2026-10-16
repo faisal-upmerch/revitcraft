@@ -79,7 +79,7 @@ pub fn draw_modes(app: &App) -> &'static [DrawMode] {
     match app.sketch.as_ref().map(|s| s.kind) {
         Some(SketchKind::Railing) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines],
         Some(SketchKind::Stair | SketchKind::Ramp) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line],
-        Some(SketchKind::Grid) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, PickLines],
+        Some(SketchKind::Grid | SketchKind::PathReinforcement(_)) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, PickLines],
         Some(_) if app.tool.kind == ToolKind::Select => modes_for(ToolKind::SketchLine),
         _ => modes_for(app.tool.kind),
     }
@@ -163,6 +163,10 @@ pub fn prompt(app: &App) -> String {
         ToolKind::FramingElevation => "Click near a grid, on the side to look from.".into(),
         ToolKind::RebarSet => if n == 0 { "Click inside a floor or slab to start the bar.".into() } else { "Click to end the bar.".into() },
         ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
+        ToolKind::PathReinfHost => "Pick Structural Floor or Wall for Path Reinforcement".into(),
+        ToolKind::FabricAreaHost => "Pick Structural Floor or Wall for Fabric Area Reinforcement".into(),
+        ToolKind::FabricSheet => "Click within a structural Wall or Floor to place Fabric Sheet.".into(),
+        ToolKind::RebarCoupler => if app.opts.coupler_between && !app.tool.ids.is_empty() { "Select the second rebar set; its bars must meet the first set's end to end.".into() } else { "Select a valid rebar set to place the coupler.".into() },
         ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
         ToolKind::CutProfileHost => "Select a wall to edit its cut profile.".into(),
         ToolKind::PlaceDecal => "Click on a planar face to place the decal.".into(),
@@ -590,7 +594,67 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 }
             }
         }
-        ToolKind::AreaReinfHost => {
+        ToolKind::FabricSheet => {
+            let Some(pt) = point else { return };
+            let level = view.plan_level();
+            let (l, w, ..) = rc_core::rebar::sheet_size(&app.doc.data, app.doc.data.types_of(rc_core::model::Category::FabricReinforcement).next().map(|t| t.id).unwrap_or(0));
+            let r = rc_core::rebar::sheet_rect(pt, DVec2::X, l, w);
+            let pts: Vec<Pos2> = r.iter().map(|q| xf.s(*q)).collect();
+            painter.add(egui::Shape::closed_line(pts.clone(), Stroke::new(1.0, style::PREVIEW)));
+            painter.line_segment([pts[0], pts[2]], Stroke::new(1.0, style::PREVIEW));
+            if clicked {
+                let host = app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, pt))).map(|e| e.id);
+                match host {
+                    Some(host) => {
+                        if let Some(id) = app.run("Place Fabric Sheet", |p| edit::add_fabric_sheet(p, host, pt, 0.0)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    None => app.error("Click within a structural Wall or Floor to place Fabric Sheet."),
+                }
+            }
+        }
+        ToolKind::RebarCoupler => {
+            let Some(c) = cursor else { return };
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Rebar(_)));
+            app.interact.hover = hit;
+            if clicked {
+                let Some(rb) = hit else {
+                    app.error("Select a valid rebar set to place the coupler.");
+                    return;
+                };
+                // The end of the set nearest the click.
+                let ends = |app: &App, id: Id| -> Option<(DVec2, DVec2)> {
+                    match app.el(id).map(|e| &e.kind) {
+                        Some(ElementKind::Rebar(r)) => Some((r.start, r.end)),
+                        _ => None,
+                    }
+                };
+                let Some((s0, e0)) = ends(app, rb) else { return };
+                let at_end = c.distance(e0) < c.distance(s0);
+                if !app.opts.coupler_between {
+                    if let Some(id) = app.run("Rebar Coupler", |p| edit::add_coupler(p, rb, at_end, None)) {
+                        app.select(vec![id]);
+                    }
+                } else if let (Some(&first), Some(&click)) = (app.tool.ids.first(), app.tool.pts.first()) {
+                    app.tool.reset();
+                    let Some((s1, e1)) = ends(app, first) else { return };
+                    let first_end = click.distance(e1) < click.distance(s1);
+                    let q = if first_end { e1 } else { s1 };
+                    if rb == first || q.distance(s0).min(q.distance(e0)) > 100.0 {
+                        app.error("The bars must meet end to end to be coupled.");
+                        return;
+                    }
+                    if let Some(id) = app.run("Rebar Coupler", |p| edit::add_coupler(p, first, first_end, Some(rb))) {
+                        app.select(vec![id]);
+                    }
+                } else {
+                    app.tool.ids = vec![rb];
+                    app.tool.pts = vec![c];
+                }
+            }
+        }
+        ToolKind::AreaReinfHost | ToolKind::PathReinfHost | ToolKind::FabricAreaHost => {
             // Pick the slab (by its edge or inside it), then sketch the boundary.
             let Some(c) = cursor else { return };
             let level = view.plan_level();
@@ -602,7 +666,12 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 match hit {
                     Some(host) => {
                         let level = app.el(host).and_then(|e| e.level()).unwrap_or(0);
-                        app.sketch = Some(tools::Sketch::new(SketchKind::AreaReinforcement(host), view.id, level));
+                        let kind = match app.tool.kind {
+                            ToolKind::PathReinfHost => SketchKind::PathReinforcement(host),
+                            ToolKind::FabricAreaHost => SketchKind::FabricArea(host),
+                            _ => SketchKind::AreaReinforcement(host),
+                        };
+                        app.sketch = Some(tools::Sketch::new(kind, view.id, level));
                         app.opts.draw_mode = DrawMode::Line;
                         app.opts.sketch_sub = SketchSub::Boundary;
                         app.tool = Tool::new(ToolKind::SketchLine);

@@ -934,6 +934,47 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 }
                 d.text(Some(e.id), ctr - n * 2.5 * c.scale, crate::rebar::area_tag(p, a), 2.0, Anchor::Center);
             }
+            ElementKind::PathReinforcement(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) => {
+                // The path, the strips it reinforces (dashed) and the symbol with its tag.
+                d.line(Some(e.id), r.path.clone(), false, ANNO);
+                for strip in crate::rebar::path_region(p, r) {
+                    d.line(Some(e.id), strip, true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
+                }
+                if r.path.len() >= 2 {
+                    let (a, b) = (r.path[0], r.path[1]);
+                    let dir = (b - a).normalize_or_zero();
+                    let n = geom::perp(dir) * crate::rebar::path_side(p, r);
+                    let (s0, s1) = ((a + b) / 2.0, (a + b) / 2.0 + n * r.length);
+                    let head = 2.0 * c.scale;
+                    d.line(Some(e.id), vec![s0, s1], false, ANNO);
+                    d.fill(Some(e.id), &[s1, s1 - n * head + dir * head * 0.4, s1 - n * head - dir * head * 0.4], [0, 0, 0, 255]);
+                    d.line(Some(e.id), vec![s0 - dir * head * 0.6, s0 + dir * head * 0.6], false, ANNO);
+                    d.text(Some(e.id), (s0 + s1) / 2.0 + dir * 2.5 * c.scale, crate::rebar::path_tag(p, r), 2.0, Anchor::Center);
+                }
+            }
+            ElementKind::FabricArea(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
+                // Boundary (dashed) and each sheet with its diagonal.
+                d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
+                for sheet in crate::rebar::fabric_area_sheets(p, a) {
+                    d.line(Some(e.id), sheet.clone(), true, THIN);
+                }
+            }
+            ElementKind::FabricSheet(f) if p.element(f.host).and_then(|h| h.level()) == Some(c.level) => {
+                let (l, w, ..) = crate::rebar::sheet_size(p, f.type_id);
+                let r = crate::rebar::sheet_rect(f.center, DVec2::from_angle(f.angle.to_radians()), l, w);
+                d.line(Some(e.id), r.clone(), true, THIN);
+                d.line(Some(e.id), vec![r[0], r[2]], false, THIN);
+            }
+            ElementKind::RebarCoupler(cp) if p.element(cp.rebar).and_then(|r| match &r.kind {
+                ElementKind::Rebar(r) => p.element(r.host),
+                _ => None,
+            }).and_then(|h| h.level()) == Some(c.level) => {
+                for (q, ax, dia) in crate::rebar::coupler_points(p, cp) {
+                    let (u, v) = (ax.truncate().normalize_or_zero() * 2.0 * dia, geom::perp(ax.truncate().normalize_or_zero()) * 0.8 * dia);
+                    let q = q.truncate();
+                    d.line(Some(e.id), vec![q - u - v, q + u - v, q + u + v, q - u + v], true, Stroke::new(0.25, [0, 0, 0], Dash::Solid));
+                }
+            }
             ElementKind::Rebar(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) => {
                 for (a, b, _) in crate::rebar::rebar_bars(p, r) {
                     d.line(Some(e.id), vec![a.truncate(), b.truncate()], false, Stroke::new(0.25, [0, 0, 0], Dash::Solid));
@@ -2373,6 +2414,20 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
         ElementKind::CutProfile(cp) => vec![cp.region.clone()],
         ElementKind::Decal(dc) => vec![dc.corners().iter().map(|q| q.truncate()).collect()],
+        ElementKind::PathReinforcement(r) => crate::rebar::path_region(p, r),
+        ElementKind::FabricArea(a) => vec![a.boundary.clone()],
+        ElementKind::RebarCoupler(cp) => crate::rebar::coupler_points(p, cp)
+            .into_iter()
+            .map(|(q, ax, dia)| {
+                let (u, v) = (ax.truncate().normalize_or_zero() * 2.0 * dia, geom::perp(ax.truncate().normalize_or_zero()) * 0.8 * dia);
+                let q = q.truncate();
+                vec![q - u - v, q + u - v, q + u + v, q - u + v]
+            })
+            .collect(),
+        ElementKind::FabricSheet(f) => {
+            let (l, w, ..) = crate::rebar::sheet_size(p, f.type_id);
+            vec![crate::rebar::sheet_rect(f.center, DVec2::from_angle(f.angle.to_radians()), l, w)]
+        }
         ElementKind::AreaReinforcement(a) => vec![a.boundary.clone()],
         ElementKind::Rebar(r) => crate::rebar::rebar_bars(p, r).into_iter().map(|(a, b, _)| vec![a.truncate(), b.truncate()]).collect(),
         ElementKind::Link(l) => match p.link_model(l.link) {
