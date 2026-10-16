@@ -1362,6 +1362,7 @@ pub fn timestamp() -> String {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        crate::images::sync(ui.ctx(), &self.doc.data);
         self.frame(ui);
     }
 

@@ -1,5 +1,5 @@
 //! Native file dialogs. During the self-test they behave as if cancelled, so an unattended
-//! run never blocks on a dialog.
+//! run never blocks on a dialog; `RC_PICK_FILE` answers file pickers in scripted runs.
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -26,6 +26,10 @@ impl FileDialog {
         FileDialog(self.0.set_title(title))
     }
     pub fn pick_file(self) -> Option<PathBuf> {
+        // Scripted screenshots pick this file instead of showing the dialog.
+        if let Ok(f) = std::env::var("RC_PICK_FILE") {
+            return Some(PathBuf::from(f));
+        }
         if DISABLED.load(Ordering::Relaxed) { None } else { self.0.pick_file() }
     }
     pub fn pick_folder(self) -> Option<PathBuf> {

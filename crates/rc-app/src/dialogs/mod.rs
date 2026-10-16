@@ -1222,6 +1222,11 @@ fn print_preview(app: &mut App, ctx: &egui::Context) {
                 rc_core::sheet::SheetPrim::Text { pos, text, size, anchor, angle, bold, .. } => {
                     crate::canvas::paint_text_ex(&painter, xf.s(*pos), text, (*size as f64 * zoom) as f32, egui::Color32::BLACK, *anchor, *angle, *bold);
                 }
+                rc_core::sheet::SheetPrim::Picture { asset, min, max, .. } => {
+                    if let Some(t) = crate::images::texture(*asset) {
+                        painter.image(t, egui::Rect::from_two_pos(xf.s(*min), xf.s(*max)), egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                    }
+                }
                 rc_core::sheet::SheetPrim::Image { min, max, .. } => {
                     painter.rect_filled(egui::Rect::from_two_pos(xf.s(*min), xf.s(*max)), 0.0, egui::Color32::from_gray(225));
                 }
@@ -1340,6 +1345,22 @@ pub(crate) fn raster_2d(app: &mut App, view: &View, width: u32) -> Option<rc_cor
     let mut img = tiny_raster::Canvas::new(width, height);
     for (_, prim) in &d.prims {
         match prim {
+            rc_core::plan::Prim::Image { asset, min, max } => {
+                // Nearest-pixel sampling of the image over its rectangle.
+                let Some(a) = app.doc.data.images.iter().find(|a| a.id == *asset) else { continue };
+                let Some(rgb) = a.rgb() else { continue };
+                let (x0, x1) = ((min.x - origin.x) * scale, (max.x - origin.x) * scale);
+                let (y0, y1) = ((size.y - (max.y - origin.y)) * scale, (size.y - (min.y - origin.y)) * scale);
+                for y in (y0.max(0.0) as u32)..(y1.min(height as f64) as u32) {
+                    for x in (x0.max(0.0) as u32)..(x1.min(width as f64) as u32) {
+                        let u = (((x as f64 - x0) / (x1 - x0)) * a.width as f64) as u32;
+                        let v = (((y as f64 - y0) / (y1 - y0)) * a.height as f64) as u32;
+                        let si = ((v.min(a.height - 1) * a.width + u.min(a.width - 1)) * 3) as usize;
+                        let di = ((y * width + x) * 3) as usize;
+                        img.rgb[di..di + 3].copy_from_slice(&rgb[si..si + 3]);
+                    }
+                }
+            }
             rc_core::plan::Prim::Fill { tris, color } => {
                 for t in tris {
                     let pts: Vec<(f64, f64)> = t.iter().map(|q| ((q.x - origin.x) * scale, (size.y - (q.y - origin.y)) * scale)).collect();

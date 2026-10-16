@@ -156,6 +156,8 @@ pub enum Prim {
     Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4] },
     /// Text height is in paper millimetres; angle in radians (counter-clockwise).
     Text { pos: DVec2, text: String, size: f32, color: [u8; 3], anchor: Anchor, angle: f32, bold: bool },
+    /// A project image asset stretched over a rectangle.
+    Image { asset: Id, min: DVec2, max: DVec2 },
 }
 
 #[derive(Clone, Debug, Default)]
@@ -195,6 +197,10 @@ impl Drawing {
                     *pos = r(*pos);
                     *a += angle as f32;
                 }
+                Prim::Image { min, max, .. } => {
+                    let (a, b) = geom::bounds([r(*min), r(*max)]);
+                    (*min, *max) = (a, b);
+                }
             }
         }
     }
@@ -214,6 +220,7 @@ impl Drawing {
             Prim::Line { pts, .. } => pts.clone(),
             Prim::Fill { tris, .. } => tris.iter().flatten().copied().collect(),
             Prim::Text { pos, .. } => vec![*pos],
+            Prim::Image { min, max, .. } => vec![*min, *max],
         });
         let (mn, mx) = geom::bounds(pts);
         (mn.x <= mx.x).then_some((mn, mx))
@@ -281,6 +288,7 @@ impl Drawing {
                         fc[2] = ((fc[2] as u16 + c[2] as u16 * 2) / 3) as u8;
                     }
                 }
+                Prim::Image { .. } => {}
             }
         }
     }
@@ -320,7 +328,7 @@ pub fn apply_object_styles(p: &Project, d: &mut Drawing) {
                     *color = c;
                 }
             }
-            Prim::Fill { .. } => {}
+            Prim::Fill { .. } | Prim::Image { .. } => {}
         }
     }
 }
@@ -1556,6 +1564,20 @@ fn ceiling_plan_graphics(c: &Ctx, d: &mut Drawing) {
 pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, d: &mut Drawing) {
     let scale = view.scale;
     let _ = footprints;
+    // Images: background ones behind everything drawn so far, foreground ones on top.
+    for e in &p.elements {
+        if e.view != Some(view.id) || !view.shows_element(e) {
+            continue;
+        }
+        if let ElementKind::RasterImage(im) = &e.kind {
+            let prim = (Some(e.id), Prim::Image { asset: im.asset, min: im.min, max: im.max });
+            if im.foreground {
+                d.prims.push(prim);
+            } else {
+                d.prims.insert(0, prim);
+            }
+        }
+    }
     // Regions first so text and lines draw on top.
     for e in &p.elements {
         if e.view != Some(view.id) || !view.shows_element(e) {
@@ -2196,6 +2218,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             vec![geom::offset(&geom::ensure_ccw(&r.footprint), r.overhang)]
         }
         ElementKind::Grid(g) => vec![g.polyline()],
+        ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
         ElementKind::RefPlane(r) => vec![vec![r.start, r.end]],
         ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => vec![vec![s.start, s.end]],
         ElementKind::Line(l) => vec![line_points(l)],

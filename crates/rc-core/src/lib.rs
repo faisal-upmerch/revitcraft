@@ -24,6 +24,7 @@ pub mod params;
 pub mod pdf;
 pub mod plan;
 pub mod png;
+pub mod util;
 pub mod sample;
 pub mod schedule;
 pub mod section;

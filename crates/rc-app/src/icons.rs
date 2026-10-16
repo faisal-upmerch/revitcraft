@@ -55,6 +55,7 @@ pub enum Icon {
     WorkPlane,
     Beam,
     Globe,
+    Picture,
     StartingView,
     Brace,
     Truss,
@@ -884,6 +885,12 @@ fn draw(g: &Pen, icon: Icon) {
             g.poly(&[(0.06, 0.48), (0.7, 0.26), (0.94, 0.36), (0.3, 0.58)], LBLUE, ink);
             g.poly(&[(0.06, 0.48), (0.3, 0.58), (0.3, 0.74), (0.06, 0.64)], BLUE, ink);
             g.poly(&[(0.3, 0.58), (0.94, 0.36), (0.94, 0.52), (0.3, 0.74)], Color32::from_rgb(90, 150, 220), ink);
+        }
+        Picture => {
+            // A framed picture: sky, sun and hills.
+            g.rect(0.08, 0.16, 0.92, 0.84, Color32::from_rgb(200, 225, 250), ink);
+            g.circle((0.68, 0.36), 0.08, Color32::from_rgb(250, 200, 60), ink);
+            g.poly(&[(0.1, 0.82), (0.36, 0.46), (0.56, 0.7), (0.7, 0.56), (0.9, 0.82)], Color32::from_rgb(90, 160, 90), ink);
         }
         Globe => {
             // A globe with a meridian and the equator.

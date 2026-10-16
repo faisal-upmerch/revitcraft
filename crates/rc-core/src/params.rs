@@ -192,6 +192,12 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::RasterImage(_) => {
+            d.push(def("Width", DIMENSIONS, v(Length), false, false));
+            d.push(def("Height", DIMENSIONS, v(Length), false, false));
+            d.push(def("Lock Proportions", DIMENSIONS, v(YesNo), true, false));
+            d.push(def("Draw Layer", OTHER, choice(&[0u8, 1], |a: u8| ["Background", "Foreground"][a as usize]), false, false));
+        }
         ElementKind::ModelText(_) => {
             d.push(def("Work Plane", CONSTRAINTS, v(Text), true, false));
             d.push(def("Elevation", CONSTRAINTS, v(Length), false, false));
@@ -676,6 +682,13 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 _ => sys_common(st, name),
             }
         }
+        ElementKind::RasterImage(im) => match name {
+            "Width" => num(im.max.x - im.min.x),
+            "Height" => num(im.max.y - im.min.y),
+            "Lock Proportions" => yn(true),
+            "Draw Layer" => text(if im.foreground { "Foreground" } else { "Background" }),
+            _ => None,
+        },
         ElementKind::ModelText(t) => match name {
             "Work Plane" => text(format!("{} : {}", if t.vertical { "Vertical" } else { "Level" }, p.level_name(t.level))),
             "Elevation" => num(t.elevation),
@@ -1130,6 +1143,20 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
                 }
                 s.desired_risers = r as u32;
             }
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::RasterImage(im) => match name {
+            // Proportions stay locked: the other side follows.
+            "Width" | "Height" => {
+                let (w, h) = (im.max.x - im.min.x, im.max.y - im.min.y);
+                let v = n();
+                if v <= 0.0 || w <= 0.0 || h <= 0.0 {
+                    return Err("Enter a positive size.".into());
+                }
+                let k = if name == "Width" { v / w } else { v / h };
+                im.max = im.min + DVec2::new(w * k, h * k);
+            }
+            "Draw Layer" => im.foreground = t() == "Foreground" || t() == "1",
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::ModelText(m) => match name {

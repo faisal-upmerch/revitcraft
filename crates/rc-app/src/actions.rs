@@ -502,6 +502,25 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 link_cad_path(app, &path);
             }
         }
+        ImportImage | LinkImage => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("Image Files", &["bmp", "jpg", "jpeg", "png"]).pick_file() {
+                let id = app.doc.data.next_id;
+                match crate::images::load_file(&path, id) {
+                    Ok(asset) => {
+                        let made = app.run("Import Image", |p| {
+                            let id = p.new_id();
+                            p.images.push(rc_core::model::ImageAsset { id, ..asset });
+                            Ok(id)
+                        });
+                        if let Some(id) = made {
+                            app.opts.image_asset = id;
+                            app.set_tool(ToolKind::PlaceImage);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
         LoadFamily => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
                 load_family_path(app, &path);

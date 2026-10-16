@@ -369,6 +369,8 @@ pub fn export_drawing_with(p: &Project, d: &Drawing, view_scale: f64, std: Layer
         let layer = id.and_then(|i| layers.get(&i).cloned()).unwrap_or_else(|| annotation.to_string());
         match prim {
             Prim::Line { pts, closed, stroke } => w.polyline(&layer, pts, *closed, stroke.color, stroke.dash),
+            // Images export as their frame (DXF image references need the file beside the drawing).
+            Prim::Image { min, max, .. } => w.polyline(&layer, &[*min, DVec2::new(max.x, min.y), *max, DVec2::new(min.x, max.y)], true, [128, 128, 128], Dash::Solid),
             Prim::Fill { tris, color } => {
                 // Skip invisible and pure white (masking) fills.
                 if color[3] < 20 || (color[0] > 250 && color[1] > 250 && color[2] > 250) {
@@ -423,6 +425,10 @@ pub fn export_sheet_with(p: &Project, view: &View, footprints: &HashMap<Id, Foot
                 }
             }
             SheetPrim::Text { pos, text, size, anchor, angle, id, .. } => w.text(&layer_of(id).replace("SHEET", "SHEET-TEXT"), pos, &text, size as f64, [0, 0, 0], anchor, (angle as f64).to_degrees()),
+            SheetPrim::Picture { min, max, id, .. } => {
+                let pts = vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
+                w.polyline(&layer_of(id), &pts, true, [128, 128, 128], Dash::Solid);
+            }
             SheetPrim::Image { min, max, .. } => {
                 let pts = vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
                 w.polyline(if aia { "G-ANNO-VPRT" } else { "SHEET-VIEWPORT" }, &pts, true, [128, 128, 128], Dash::Solid);

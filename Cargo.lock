@@ -1119,6 +1119,8 @@ dependencies = [
  "num-traits",
  "png",
  "tiff",
+ "zune-core",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -2251,6 +2253,7 @@ dependencies = [
  "egui_dock",
  "egui_extras",
  "glam",
+ "image",
  "rc-core",
  "rfd",
  "serde",

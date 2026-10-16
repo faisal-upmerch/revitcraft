@@ -15,6 +15,7 @@ mod family_editor;
 mod grips;
 mod home;
 mod icons;
+mod images;
 mod options_bar;
 mod properties;
 mod render3d;

@@ -368,6 +368,23 @@ pub fn paint_prims(painter: &egui::Painter, prims: &[(Option<Id>, Prim)], xf: &X
     let clip = painter.clip_rect().expand(40.0);
     for (id, prim) in prims {
         match prim {
+            Prim::Image { asset, min, max } => {
+                let r = egui::Rect::from_two_pos(xf.s(*min), xf.s(*max));
+                if !clip.intersects(r) {
+                    continue;
+                }
+                match crate::images::texture(*asset) {
+                    Some(t) => {
+                        painter.image(t, r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+                    }
+                    None => {
+                        let s = Stroke::new(1.0, Color32::from_gray(150));
+                        painter.rect_stroke(r, 0.0, s, egui::StrokeKind::Inside);
+                        painter.line_segment([r.left_top(), r.right_bottom()], s);
+                        painter.line_segment([r.right_top(), r.left_bottom()], s);
+                    }
+                }
+            }
             Prim::Fill { tris, color } => {
                 let Some(c) = color_of(*id, [color[0], color[1], color[2]]) else { continue };
                 let c = Color32::from_rgba_unmultiplied(c.r(), c.g(), c.b(), color[3]);
@@ -415,6 +432,9 @@ fn paint_highlight(painter: &egui::Painter, d: &Drawing, ids: &HashSet<Id>, xf: 
             continue;
         }
         match prim {
+            Prim::Image { min, max, .. } => {
+                painter.rect_stroke(egui::Rect::from_two_pos(xf.s(*min + offset), xf.s(*max + offset)), 0.0, Stroke::new(2.0, color), egui::StrokeKind::Middle);
+            }
             Prim::Line { pts, closed, stroke } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q + offset)).collect();
                 let w = (xf.px(stroke.width) + 1.2).max(2.0);
@@ -491,6 +511,9 @@ pub fn pick_candidates(app: &App, view: &View, d: &Drawing, pt: DVec2, tol: f64)
     for (id, prim) in &d.prims {
         let Some(id) = *id else { continue };
         let score = match prim {
+            Prim::Image { min, max, .. } => {
+                if pt.x >= min.x && pt.x <= max.x && pt.y >= min.y && pt.y <= max.y { tol * 0.8 } else { f64::MAX }
+            }
             Prim::Line { pts, closed, .. } => {
                 let n = pts.len();
                 let mut dmin = f64::MAX;
@@ -1699,6 +1722,7 @@ fn window_select(app: &App, view: &View, d: &Drawing, a: DVec2, b: DVec2, crossi
             Prim::Line { pts, .. } => pts.clone(),
             Prim::Fill { tris, .. } => tris.iter().flatten().copied().collect(),
             Prim::Text { pos, .. } => vec![*pos],
+            Prim::Image { min, max, .. } => vec![*min, *max],
         };
         let any = pts.iter().any(|q| inside(*q));
         let all = pts.iter().all(|q| inside(*q));

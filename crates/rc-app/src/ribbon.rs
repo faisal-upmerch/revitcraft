@@ -138,9 +138,10 @@ fn structure() -> Vec<Panel> {
 fn insert() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
-        panel("Link", vec![Big(C::LinkCad), Big(C::ManageLinks)]),
-        panel("Import", vec![Big(C::ImportCad), Big(C::ImportIfc)]),
-        panel("Load from Library", vec![Big(C::LoadFamily), Big(C::NewFamily)]),
+        panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
+        panel("Link", vec![Big(C::LinkCad), Big(C::LinkImage)]),
+        panel("Import", vec![Big(C::ImportCad), Big(C::ImportImage), Big(C::ImportIfc)]),
+        panel("Load from Library", vec![Big(C::LoadFamily)]),
     ]
 }
 

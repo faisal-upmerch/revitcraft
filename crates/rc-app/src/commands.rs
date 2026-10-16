@@ -110,6 +110,8 @@ pub enum Cmd {
     // Insert
     LinkCad,
     ImportCad,
+    ImportImage,
+    LinkImage,
     LoadFamily,
     // Annotate
     DimAligned,
@@ -477,6 +479,8 @@ impl Cmd {
             WallFoundation => ci("Wall Foundation", I::WallFoundation, "Adds a strip footing under a picked wall.", "FT"),
             IsolatedFoundation => ci("Isolated Foundation", I::IsolatedFoundation, "Places a pad footing (snaps to columns and grid intersections).", ""),
 
+            ImportImage => ci("Import Image", I::Picture, "Places a raster image (PNG, JPG, BMP) in the current view or sheet; it is stored in the project.", ""),
+            LinkImage => ci("Link Image", I::Picture, "Places a raster image from a file in the current view or sheet.", ""),
             LinkCad => ci("Link CAD", I::LinkCad, "Links a DXF drawing into the current view as a halftone underlay.", ""),
             ImportCad => ci("Import CAD", I::ImportCad, "Imports a DXF drawing into the current view.", ""),
             LoadFamily => ci("Load Family", I::LoadFamily, "Loads a family file (.rcfa) into the project.", ""),
@@ -734,7 +738,7 @@ impl Cmd {
         Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Home, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelText, Cmd::Ramp, Cmd::PlaceRoomsAuto, Cmd::HighlightBoundaries, Cmd::RampRun, Cmd::RampBoundary, Cmd::RampRiser, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,
-        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::FaceOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::Brace, Cmd::Truss, Cmd::BeamSystem, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad,
+        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::FaceOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::Brace, Cmd::Truss, Cmd::BeamSystem, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad, Cmd::ImportImage, Cmd::LinkImage,
         Cmd::LoadFamily, Cmd::DimAligned, Cmd::DimLinear, Cmd::DimAngular, Cmd::DimRadial, Cmd::DimDiameter, Cmd::DimArcLength, Cmd::SpotElevation, Cmd::DetailLine,
         Cmd::FilledRegion, Cmd::MaskingRegion, Cmd::RevisionCloud, Cmd::Text, Cmd::TagByCategory, Cmd::TagAll, Cmd::Symbol, Cmd::ViewTemplates, Cmd::TemplateFromView,
         Cmd::VisibilityGraphics, Cmd::ThinLines, Cmd::Default3D, Cmd::Camera, Cmd::StartingView, Cmd::Location, Cmd::SpecifyCoordinates, Cmd::ReportCoordinates, Cmd::Section, Cmd::Callout, Cmd::NewFloorPlan, Cmd::NewCeilingPlan, Cmd::NewAreaPlan,

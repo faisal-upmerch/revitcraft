@@ -808,6 +808,9 @@ pub fn pick(dw: &Drawing, pt: DVec2, tol: f64) -> Option<Id> {
                 if tris.iter().any(|t| geom::contains(&t[..], pt)) { 0.0 } else { f64::MAX }
             }
             Prim::Text { pos, .. } => pos.distance(pt),
+            Prim::Image { min, max, .. } => {
+                if pt.x >= min.x && pt.x <= max.x && pt.y >= min.y && pt.y <= max.y { 0.0 } else { f64::MAX }
+            }
         };
         if dist <= tol && best.is_none_or(|b| dist < b.0) {
             best = Some((dist, *id));

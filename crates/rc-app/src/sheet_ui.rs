@@ -69,6 +69,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 let h = (*size as f64 * xf.zoom) as f32;
                 canvas::paint_text_ex(&painter, xf.s(*pos), text, h, Color32::BLACK, *anchor, *angle, *bold);
             }
+            SheetPrim::Picture { asset, min, max, .. } => {
+                if let Some(t) = crate::images::texture(*asset) {
+                    painter.image(t, Rect::from_two_pos(xf.s(*min), xf.s(*max)), Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+                }
+            }
             SheetPrim::Image { view: v3, min, max } => {
                 let r = Rect::from_two_pos(xf.s(*min), xf.s(*max));
                 let ppp = ui.ctx().pixels_per_point();

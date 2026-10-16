@@ -767,6 +767,21 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
     Ok(push(p, ElementKind::Instance(inst)))
 }
 
+/// Places an image (already in `p.images`) in a view or on a sheet, `width` wide with its
+/// proportions, its lower-left corner at `at`.
+pub fn add_image(p: &mut Project, view: Id, asset: Id, at: DVec2, width: f64) -> Result<Id, String> {
+    let a = p.images.iter().find(|a| a.id == asset).ok_or("The image was not found.")?;
+    if a.width == 0 || a.height == 0 || width <= 0.0 {
+        return Err("The image is empty.".into());
+    }
+    let h = width * a.height as f64 / a.width as f64;
+    let id = push(p, ElementKind::RasterImage(RasterImage { asset, min: at, max: at + DVec2::new(width, h), foreground: false }));
+    if let Some(e) = p.element_mut(id) {
+        e.view = Some(view);
+    }
+    Ok(id)
+}
+
 /// A brace: a framing member from `start` at `z0` above the level to `end` at `z1`.
 pub fn add_brace(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec2, z0: f64, z1: f64) -> Result<Id, String> {
     let id = add_beam(p, type_id, level, start, end)?;

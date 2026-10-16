@@ -44,6 +44,7 @@ pub enum Category {
     Symbols,
     Groups,
     ImportedCad,
+    RasterImages,
     Mass,
     Toposolid,
     Site,
@@ -216,6 +217,7 @@ impl Category {
             Category::Symbols => "Symbols",
             Category::Groups => "Model Groups",
             Category::ImportedCad => "Imported CAD",
+            Category::RasterImages => "Raster Images",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site",
@@ -264,6 +266,7 @@ impl Category {
             Category::Symbols => "Symbol",
             Category::Groups => "Model Group",
             Category::ImportedCad => "Imported CAD",
+            Category::RasterImages => "Raster Images",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site Component",
@@ -343,6 +346,8 @@ pub enum ElementKind {
     Stair(Stair),
     Ramp(Ramp),
     ModelText(ModelText),
+    /// An imported or linked raster image placed in a view or on a sheet.
+    RasterImage(RasterImage),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -404,6 +409,7 @@ impl Element {
             ElementKind::Stair(_) => Category::Stairs,
             ElementKind::Ramp(_) => Category::Ramps,
             ElementKind::ModelText(_) => Category::GenericModels,
+            ElementKind::RasterImage(_) => Category::RasterImages,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -2628,6 +2634,48 @@ pub struct Project {
     /// The view opened with the project (None = the last viewed).
     #[serde(default)]
     pub starting_view: Option<Id>,
+    /// Images imported into the project (Manage Images).
+    #[serde(default)]
+    pub images: Vec<ImageAsset>,
+}
+
+/// A raster image stored once in the project.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ImageAsset {
+    pub id: Id,
+    pub name: String,
+    pub width: u32,
+    pub height: u32,
+    /// RGB8 rows (top row first), zlib-deflated and base64-encoded.
+    pub data: String,
+}
+
+impl ImageAsset {
+    pub fn from_rgb(id: Id, name: &str, width: u32, height: u32, rgb: &[u8]) -> ImageAsset {
+        use std::io::Write as _;
+        let mut z = flate2::write::ZlibEncoder::new(Vec::new(), flate2::Compression::default());
+        let _ = z.write_all(rgb);
+        ImageAsset { id, name: name.into(), width, height, data: crate::util::b64_encode(&z.finish().unwrap_or_default()) }
+    }
+    /// The RGB8 pixels, or None if the data is damaged.
+    pub fn rgb(&self) -> Option<Vec<u8>> {
+        use std::io::Read as _;
+        let raw = crate::util::b64_decode(&self.data)?;
+        let mut out = Vec::new();
+        flate2::read::ZlibDecoder::new(&raw[..]).read_to_end(&mut out).ok()?;
+        (out.len() == (self.width * self.height * 3) as usize).then_some(out)
+    }
+}
+
+/// An image instance: the asset stretched over a rectangle of its view (or sheet).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RasterImage {
+    pub asset: Id,
+    pub min: DVec2,
+    pub max: DVec2,
+    /// Draw Layer: Foreground (over the model) or Background (behind it, the default).
+    #[serde(default)]
+    pub foreground: bool,
 }
 
 /// Where the project's internal origin sits in shared (survey) coordinates.
@@ -2688,6 +2736,7 @@ impl Project {
             keynote_display: 0,
             shared: SharedCoordinates::default(),
             starting_view: None,
+            images: Vec::new(),
         }
     }
 

@@ -17,6 +17,8 @@ pub enum SheetPrim {
     Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32, id: Option<Id> },
     /// A rendered 3D image of `view` fills this rectangle.
     Image { view: Id, min: DVec2, max: DVec2 },
+    /// A project image asset (Import/Link Image) fills this rectangle.
+    Picture { asset: Id, min: DVec2, max: DVec2, id: Option<Id> },
 }
 
 #[derive(Clone, Debug)]
@@ -176,6 +178,10 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
                     out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle, id });
                 }
             }
+            Prim::Image { asset, min, max } => {
+                let (a, b) = geom::bounds([map(min), map(max)]);
+                out.push(SheetPrim::Picture { asset, min: a, max: b, id });
+            }
         }
     }
 }
@@ -301,6 +307,7 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
             }
             Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color, id }),
             Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle, id }),
+            Prim::Image { asset, min, max } => out.push(SheetPrim::Picture { asset, min, max, id }),
         }
     }
     out
@@ -379,12 +386,25 @@ pub fn apply_print_settings(p: &Project, prims: Vec<SheetPrim>, s: &PrintSetting
     prims
         .into_iter()
         .filter_map(|prim| match prim {
-            SheetPrim::Line { id, .. } | SheetPrim::Fill { id, .. } | SheetPrim::Text { id, .. } if hidden(id) => None,
+            SheetPrim::Line { id, .. } | SheetPrim::Fill { id, .. } | SheetPrim::Text { id, .. } | SheetPrim::Picture { id, .. } if hidden(id) => None,
             SheetPrim::Line { pts, closed, width, color, dash, id } => Some(SheetPrim::Line { pts, closed, width, color: line_color(color), dash, id }),
             SheetPrim::Fill { tris, color, id } => Some(SheetPrim::Fill { tris, color: fill_color(color), id }),
             other => Some(other),
         })
         .collect()
+}
+
+/// A project image for PDF output (grey when printing in grayscale or black lines).
+fn picture(p: &Project, asset: Id, grey_out: bool) -> Option<crate::pdf::Image> {
+    let a = p.images.iter().find(|a| a.id == asset)?;
+    let mut rgb = a.rgb()?;
+    if grey_out {
+        for px in rgb.chunks_mut(3) {
+            let g = grey([px[0], px[1], px[2]]);
+            px.copy_from_slice(&[g, g, g]);
+        }
+    }
+    Some(crate::pdf::Image { width: a.width, height: a.height, rgb })
 }
 
 /// Writes a sheet to PDF. `render` produces an RGB image (w, h, pixels) for 3D viewports.
@@ -422,6 +442,11 @@ pub fn to_pdf_page_with(
                 }
             }
             SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
+            SheetPrim::Picture { asset, min, max, .. } => {
+                if let Some(img) = picture(p, asset, settings.colors != PrintColors::Color) {
+                    page.image(min.x, min.y, max.x - min.x, max.y - min.y, img);
+                }
+            }
             SheetPrim::Image { view, min, max } => {
                 let px_per_mm = 6.0;
                 let w = ((max.x - min.x) * px_per_mm).round().clamp(16.0, 4096.0) as u32;
@@ -495,6 +520,11 @@ pub fn view_to_pdf_page_with(p: &Project, view: &View, footprints: &HashMap<Id, 
             }
             SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
             SheetPrim::Image { .. } => {}
+            SheetPrim::Picture { asset, min, max, .. } => {
+                if let Some(img) = picture(p, asset, settings.colors != PrintColors::Color) {
+                    page.image(min.x, min.y, max.x - min.x, max.y - min.y, img);
+                }
+            }
         }
     }
     Some(page)

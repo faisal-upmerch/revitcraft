@@ -157,6 +157,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Section => if n == 0 { "Click the start of the section line.".into() } else { "Click the end of the section line.".into() },
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
+        ToolKind::PlaceImage => "Click to place the image.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -218,6 +219,30 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::StructColumn if app.opts.column_multi.is_some() => column_multi_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::PlaceImage => {
+            // The image's frame follows the cursor (centred); a click places it, 150 mm wide on
+            // paper at the view's scale.
+            let Some(pt) = point else { return };
+            let asset = app.opts.image_asset;
+            let Some(a) = app.doc.data.images.iter().find(|a| a.id == asset) else {
+                app.tool = Tool::select();
+                return;
+            };
+            let w = 150.0 * view.scale.max(1.0);
+            let h = w * a.height as f64 / a.width.max(1) as f64;
+            let at = pt - DVec2::new(w, h) / 2.0;
+            let r = egui::Rect::from_two_pos(xf.s(at), xf.s(at + DVec2::new(w, h)));
+            painter.rect_stroke(r, 0.0, Stroke::new(1.0, style::PREVIEW), egui::StrokeKind::Middle);
+            painter.line_segment([r.left_top(), r.right_bottom()], Stroke::new(1.0, style::PREVIEW));
+            painter.line_segment([r.right_top(), r.left_bottom()], Stroke::new(1.0, style::PREVIEW));
+            if clicked {
+                let vid = view.id;
+                if let Some(id) = app.run("Place Image", |p| edit::add_image(p, vid, asset, at, w)) {
+                    app.tool = Tool::select();
+                    app.select(vec![id]);
+                }
+            }
+        }
         ToolKind::Paint | ToolKind::RemovePaint => {
             if clicked {
                 let fp = app.footprints();

@@ -9,6 +9,7 @@ eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "de
 egui_dock = "0.21"
 egui_extras = "0.36.2"
 glam = "0.34.1"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "bmp"] }
 rc-core = { version = "0.1.0", path = "../rc-core" }
 rfd = "0.17.2"
 serde = { version = "1.0.229", features = ["derive"] }

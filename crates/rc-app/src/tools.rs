@@ -75,6 +75,7 @@ pub enum ToolKind {
     VerticalOpening,
     DormerOpening,
     PlaceGroup,
+    PlaceImage,
     Align,
     Offset,
     MirrorPick,
@@ -168,6 +169,7 @@ impl ToolKind {
             ToolKind::VerticalOpening => "Vertical Opening",
             ToolKind::DormerOpening => "Dormer Opening",
             ToolKind::PlaceGroup => "Model Group",
+            ToolKind::PlaceImage => "Image",
             ToolKind::Align => "Align",
             ToolKind::Offset => "Offset",
             ToolKind::MirrorPick => "Mirror - Pick Axis",
@@ -647,6 +649,8 @@ pub struct ToolOptions {
     pub beam_type: Id,
     pub footing_type: Id,
     pub group_type: Id,
+    /// Import Image: the asset being placed.
+    pub image_asset: Id,
     pub draw_mode: DrawMode,
     pub sketch_sub: SketchSub,
     /// Components: rotate each instance right after placing it.
@@ -812,6 +816,7 @@ impl ToolOptions {
             beam_type: first_fam(Category::StructuralFraming),
             footing_type: first_fam(Category::StructuralFoundations),
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
+            image_asset: 0,
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,
             rotate_after_placement: false,
