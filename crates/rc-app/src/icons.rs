@@ -56,6 +56,7 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    TreadNumber,
     StartingView,
     Brace,
     Truss,
@@ -885,6 +886,17 @@ fn draw(g: &Pen, icon: Icon) {
             g.poly(&[(0.06, 0.48), (0.7, 0.26), (0.94, 0.36), (0.3, 0.58)], LBLUE, ink);
             g.poly(&[(0.06, 0.48), (0.3, 0.58), (0.3, 0.74), (0.06, 0.64)], BLUE, ink);
             g.poly(&[(0.3, 0.58), (0.94, 0.36), (0.94, 0.52), (0.3, 0.74)], Color32::from_rgb(90, 150, 220), ink);
+        }
+        TreadNumber => {
+            // A stair run in plan with numbered treads.
+            g.rect(0.2, 0.08, 0.8, 0.92, Color32::WHITE, ink);
+            for k in 1..4 {
+                let y = 0.08 + 0.21 * k as f32;
+                g.thin_line(&[(0.2, y), (0.8, y)], ink);
+            }
+            for (k, t) in ["1", "2", "3", "4"].iter().enumerate() {
+                g.text((0.5, 0.18 + 0.21 * k as f32), t, 0.16, BLUE);
+            }
         }
         Picture => {
             // A framed picture: sky, sun and hills.

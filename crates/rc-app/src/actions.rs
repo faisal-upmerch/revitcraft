@@ -80,6 +80,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DeactivateView => app.sheet_activation.is_some(),
         Matchline => plan && !in_sketch,
         ViewReference => graphical_2d && !in_sketch,
+        SpanSymbol | TreadNumber => view.is_some_and(|v| v.plan_level().is_some()) && !in_sketch,
         Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
         TypeProperties => true,
         Paste | PasteSameLevel => app.clipboard.is_some(),
@@ -502,6 +503,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 link_cad_path(app, &path);
             }
         }
+        SpanSymbol => app.set_tool(ToolKind::SpanSymbol),
+        TreadNumber => app.set_tool(ToolKind::TreadNumber),
         ImportImage | LinkImage => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("Image Files", &["bmp", "jpg", "jpeg", "png"]).pick_file() {
                 let id = app.doc.data.next_id;

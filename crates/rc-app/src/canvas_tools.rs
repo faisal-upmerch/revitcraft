@@ -158,6 +158,8 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
         ToolKind::PlaceImage => "Click to place the image.".into(),
+        ToolKind::SpanSymbol => "Select a floor to place the span direction symbol.".into(),
+        ToolKind::TreadNumber => "Select a stair run to number its treads.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -219,6 +221,59 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         ToolKind::StructColumn if app.opts.column_multi.is_some() => column_multi_tool(app, painter, xf, view, d, cursor, clicked),
         ToolKind::Component | ToolKind::Column | ToolKind::StructColumn | ToolKind::IsolatedFooting => free_tool(app, painter, xf, view, point, clicked),
         ToolKind::PlaceGroup => group_tool(app, painter, xf, view, point, clicked),
+        ToolKind::SpanSymbol | ToolKind::TreadNumber => {
+            let Some(c) = cursor else { return };
+            let span = app.tool.kind == ToolKind::SpanSymbol;
+            let hit = hover_of(app, view, d, c, xf, &|e| if span { matches!(e.kind, ElementKind::Floor(_)) } else { matches!(e.kind, ElementKind::Stair(_)) });
+            // A click inside a floor of this level picks it too (floors are otherwise picked by their edges).
+            let level = view.plan_level();
+            let hit = hit.or_else(|| {
+                span.then(|| app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, c))).map(|e| e.id)).flatten()
+            });
+            app.interact.hover = hit;
+            if !clicked {
+                return;
+            }
+            let Some(host) = hit else {
+                app.error(if span { "Select a floor." } else { "Select a stair run." });
+                return;
+            };
+            let vid = view.id;
+            let made = match app.el(host).map(|e| e.kind.clone()) {
+                Some(ElementKind::Floor(f)) => {
+                    // Along the deck's span, or its first boundary edge.
+                    let dir = f.span.unwrap_or_else(|| (f.boundary[1] - f.boundary[0]).normalize_or_zero());
+                    let deg = dir.y.atan2(dir.x).to_degrees();
+                    app.run("Span Direction", |p| {
+                        let id = edit::add_symbol(p, vid, SymbolKind::SpanDirection, c);
+                        if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                            s.rotation_deg = deg;
+                            s.value = host.to_string();
+                        }
+                        Ok(id)
+                    })
+                }
+                Some(ElementKind::Stair(st)) => {
+                    // The run nearest the click.
+                    let k = st.runs.iter().enumerate().min_by(|a, b| {
+                        let da = rc_core::geom::distance_to_segment(a.1.start, a.1.end, c);
+                        let db = rc_core::geom::distance_to_segment(b.1.start, b.1.end, c);
+                        da.total_cmp(&db)
+                    }).map(|r| r.0).unwrap_or(0);
+                    app.run("Tread Number", |p| {
+                        let id = edit::add_symbol(p, vid, SymbolKind::TreadNumber, c);
+                        if let Some(ElementKind::Symbol(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+                            s.value = format!("{host}:{k}");
+                        }
+                        Ok(id)
+                    })
+                }
+                _ => None,
+            };
+            if let Some(id) = made {
+                app.select(vec![id]);
+            }
+        }
         ToolKind::PlaceImage => {
             // The image's frame follows the cursor (centred); a click places it, 150 mm wide on
             // paper at the view's scale.

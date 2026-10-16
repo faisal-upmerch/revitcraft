@@ -435,6 +435,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::Insulation => "Insulation",
                     SymbolKind::DetailComponent => "Detail Component",
                     SymbolKind::ViewReference => "View Reference",
+                    SymbolKind::SpanDirection => "Span Direction",
+                    SymbolKind::TreadNumber => "Tread Number",
                     SymbolKind::RepeatingDetail => "Repeating Detail",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {

@@ -174,9 +174,9 @@ fn annotate() -> Vec<Panel> {
             ],
         ),
         panel("Text", vec![Big(C::Text), Labeled("Find/\nReplace", C::FindReplace, vec![])]),
-        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::MultiCategoryTag, C::MaterialTag]), Stack(vec![C::RoomTag, C::AreaTag]), Labeled("Keynote", C::ElementKeynote, vec![C::ElementKeynote, C::MaterialKeynote, C::UserKeynote, C::KeynotingSettings])]),
+        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::MultiCategoryTag, C::MaterialTag]), Stack(vec![C::AreaTag, C::RoomTag]), Stack(vec![C::ViewReference, C::TreadNumber]), Labeled("Keynote", C::ElementKeynote, vec![C::ElementKeynote, C::MaterialKeynote, C::UserKeynote, C::KeynotingSettings])]),
         panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
-        panel("Symbol", vec![Big(C::Symbol)]),
+        panel("Symbol", vec![Big(C::Symbol), Stack(vec![C::SpanSymbol])]),
     ]
 }
 

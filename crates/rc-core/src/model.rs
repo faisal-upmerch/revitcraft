@@ -1313,6 +1313,10 @@ pub enum SymbolKind {
     ViewReference,
     /// A detail repeated along `points[0]`..`points[1]`; the repeating type in `value`.
     RepeatingDetail,
+    /// A floor's span direction (along `rotation_deg`); the floor id in `value`.
+    SpanDirection,
+    /// Tread numbers of a stair run: "stair id:run index" in `value`.
+    TreadNumber,
 }
 
 /// Built-in 2D detail components (Annotate > Component > Detail Component).

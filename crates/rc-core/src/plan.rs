@@ -1796,6 +1796,35 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     insulation_graphics(e.id, s.points[0], s.points[1], s.size, d);
                 }
                 SymbolKind::Insulation => {}
+                SymbolKind::SpanDirection => {
+                    // A one-way span: a line along the span with half arrowheads, filled, at both
+                    // ends on opposite sides.
+                    let dir = DVec2::new(s.rotation_deg.to_radians().cos(), s.rotation_deg.to_radians().sin());
+                    let n = geom::perp(dir);
+                    let (half, head, wing) = (12.0 * scale, 4.5 * scale, 2.0 * scale);
+                    let (a, b) = (s.position - dir * half, s.position + dir * half);
+                    d.line(Some(e.id), vec![a, b], false, ANNO);
+                    d.fill(Some(e.id), &[b, b - dir * head + n * wing, b - dir * head], [0, 0, 0, 255]);
+                    d.fill(Some(e.id), &[a, a + dir * head - n * wing, a + dir * head], [0, 0, 0, 255]);
+                }
+                SymbolKind::TreadNumber => {
+                    // Numbers at the middle of each tread, a quarter of the run width to its left,
+                    // counted through the stair.
+                    let mut it = s.value.split(':');
+                    let (Some(sid), Some(k)) = (it.next().and_then(|v| v.parse::<Id>().ok()), it.next().and_then(|v| v.parse::<usize>().ok())) else { continue };
+                    let Some(ElementKind::Stair(st)) = p.element(sid).map(|e| &e.kind) else { continue };
+                    let lay = crate::build3d::stair_layout(p, st);
+                    let Some((run, count, first, _)) = lay.runs.get(k) else { continue };
+                    let len = run.start.distance(run.end);
+                    let treads = count.saturating_sub(1).max(1);
+                    let going = len / treads as f64;
+                    let dir = (run.end - run.start).normalize_or_zero();
+                    let left = geom::perp(dir) * (run.width / 4.0);
+                    for t in 0..treads {
+                        let c = run.start + dir * (going * (t as f64 + 0.5)) + left;
+                        d.text(Some(e.id), c, format!("{}", first + t + 1), 2.0, Anchor::Center);
+                    }
+                }
                 SymbolKind::ViewReference => {
                     // "detail / sheet" of the target view, or its name when it is not on a sheet.
                     let target = s.value.parse::<Id>().ok();
