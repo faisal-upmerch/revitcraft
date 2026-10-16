@@ -142,7 +142,7 @@ fn insert() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
         panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
-        panel("Link", vec![Big(C::LinkRevit), Big(C::LinkIfc), Big(C::LinkCad), Big(C::LinkImage)]),
+        panel("Link", vec![Big(C::LinkRevit), Big(C::LinkIfc), Big(C::LinkCad), Labeled("Decal", C::PlaceDecal, vec![C::PlaceDecal, C::DecalTypes]), Big(C::LinkImage)]),
         panel("Import", vec![Big(C::ImportCad), Big(C::ImportImage), Big(C::ImportIfc)]),
         panel("Load from Library", vec![Big(C::LoadFamily), Labeled("Load as\nGroup", C::LoadAsGroup, vec![]), Labeled("Insert\nfrom File", C::InsertViews, vec![C::InsertViews])]),
     ]
@@ -288,7 +288,7 @@ fn manage() -> Vec<Panel> {
         ),
         panel("Project Location", vec![Labeled("Location", C::Location, vec![]), Labeled("Coordinates", C::SpecifyCoordinates, vec![C::SpecifyCoordinates, C::ReportCoordinates]), Labeled("Position", C::RelocateProject, vec![C::RelocateProject, C::RotateTrueNorth, C::MirrorProject, C::RotateProjectNorth])]),
         panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![]), Stack(vec![C::AddToSet, C::PickToEdit]), OptionCombo]),
-        panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
+        panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Decal\nTypes", C::DecalTypes, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),
         panel("Selection", vec![Stack(vec![C::SaveSelection, C::LoadSelection, C::EditSelection])]),
         panel("Inquiry", vec![Stack(vec![C::IdsOfSelection, C::SelectById, C::Warnings])]),

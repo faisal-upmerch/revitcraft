@@ -2372,6 +2372,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::Grid(g) => vec![g.polyline()],
         ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
         ElementKind::CutProfile(cp) => vec![cp.region.clone()],
+        ElementKind::Decal(dc) => vec![dc.corners().iter().map(|q| q.truncate()).collect()],
         ElementKind::AreaReinforcement(a) => vec![a.boundary.clone()],
         ElementKind::Rebar(r) => crate::rebar::rebar_bars(p, r).into_iter().map(|(a, b, _)| vec![a.truncate(), b.truncate()]).collect(),
         ElementKind::Link(l) => match p.link_model(l.link) {

@@ -687,7 +687,23 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                     }
                 }
             }
-            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting && !modify_3d {
+            // Place Decal: click a face.
+            let decal = app.tool.kind == crate::tools::ToolKind::PlaceDecal;
+            if decal {
+                app.interact.prompt = "Click on a planar face to place the decal.".into();
+                if resp.clicked_by(egui::PointerButton::Primary) {
+                    match app.scenes.get(&view_id).and_then(|s| render3d::pick_face(s, o, d, view.section_box)) {
+                        Some((host, q, n)) if !app.el(host).is_some_and(|e| matches!(e.kind, ElementKind::Decal(_))) => {
+                            let t = app.opts.decal_type;
+                            if let Some(id) = app.run("Place Decal", |p| rc_core::edit::add_decal(p, t, host, q, n)) {
+                                app.select(vec![id]);
+                            }
+                        }
+                        _ => app.error("Click on a planar face of the model."),
+                    }
+                }
+            }
+            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting && !modify_3d && !decal {
                 match hit_id {
                     Some(id) if ctrl => {
                         let mut s = app.selection.clone();

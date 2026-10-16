@@ -46,6 +46,7 @@ fn selector_target(app: &App) -> Option<(Category, Option<Id>)> {
         ToolKind::IsolatedFooting => (Category::StructuralFoundations, o.footing_type),
         ToolKind::WallFoundation => (Category::StructuralFoundations, o.foundation_type),
         ToolKind::Component => (app.doc.data.family_type(o.component_type).map(|(f, _)| f.category)?, o.component_type),
+        ToolKind::PlaceDecal => (Category::Decals, o.decal_type),
         ToolKind::SketchLine | ToolKind::Select if app.sketch.is_some() => match app.sketch.as_ref()?.kind {
             SketchKind::Floor { .. } | SketchKind::EditFloor(_) => (Category::Floors, o.floor_type),
             SketchKind::Ceiling | SketchKind::EditCeiling(_) => (Category::Ceilings, o.ceiling_type),
@@ -82,6 +83,7 @@ fn set_tool_type(app: &mut App, cat: Category, t: Id) {
         Category::Stairs => o.stair_type = t,
         Category::Ramps => o.ramp_type = t,
         Category::Railings => o.railing_type = t,
+        Category::Decals => o.decal_type = t,
         _ => o.component_type = t,
     }
 }

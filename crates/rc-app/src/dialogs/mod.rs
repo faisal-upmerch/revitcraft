@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Decal Types.
+    pub decal_types: Option<DecalTypesState>,
     /// Rotate Project (false) or Mirror Project (true).
     pub project_turn: Option<bool>,
     /// Add to Design Option Set.
@@ -467,6 +469,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     rebar_cover_dialog(app, ctx);
     add_to_set_dialog(app, ctx);
     project_turn_dialog(app, ctx);
+    decal_types_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -785,6 +788,267 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
     }
+}
+
+/// Decal Types: the project's decal types, edited on copies until OK.
+pub struct DecalTypesState {
+    pub types: Vec<rc_core::model::SystemType>,
+    /// Images picked in this session, keyed by the temporary id their type refers to.
+    pub images: Vec<rc_core::model::ImageAsset>,
+    pub sel: usize,
+    pub search: String,
+    /// Start Place Decal after OK (the dialog was opened by Place Decal).
+    pub then_place: bool,
+    /// A name being entered for New or Rename (true = rename).
+    pub naming: Option<(bool, String)>,
+    preview: Option<(Id, egui::TextureHandle)>,
+}
+
+/// Temporary ids for types and images made in the dialog, above any project id.
+const DECAL_TMP: Id = 0xF000_0000;
+
+impl DecalTypesState {
+    pub fn new(p: &rc_core::model::Project, sel: Option<Id>, then_place: bool) -> DecalTypesState {
+        let types: Vec<rc_core::model::SystemType> = p.types_of(rc_core::model::Category::Decals).cloned().collect();
+        let sel = sel.and_then(|t| types.iter().position(|x| x.id == t)).unwrap_or(0);
+        DecalTypesState { types, images: Vec::new(), sel, search: String::new(), then_place, naming: None, preview: None }
+    }
+}
+
+fn decal_types_dialog(app: &mut App, ctx: &egui::Context) {
+    use rc_core::model::{Category, ImageAsset, SystemType};
+    let Some(mut st) = app.dialogs.decal_types.take() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    let mut pick_image = false;
+    window("Decal Types").open(&mut open).resizable(false).default_width(620.0).show(ctx, |ui| {
+        ui.horizontal_top(|ui| {
+            // Left: the types in the project, with New / Duplicate / Rename / Delete below.
+            ui.vertical(|ui| {
+                ui.set_width(250.0);
+                ui.label("Decal Types in Project");
+                ui.add(egui::TextEdit::singleline(&mut st.search).hint_text("Enter Search Words").desired_width(244.0));
+                egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(2.0).show(ui, |ui| {
+                    ui.set_min_size(vec2(240.0, 320.0));
+                    egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                        ui.set_width(236.0);
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                        for k in 0..st.types.len() {
+                            let name = st.types[k].name.clone();
+                            if !st.search.is_empty() && !name.to_lowercase().contains(&st.search.to_lowercase()) {
+                                continue;
+                            }
+                            if ui.selectable_label(st.sel == k, name).clicked() {
+                                st.sel = k;
+                            }
+                        }
+                        });
+                    });
+                });
+                ui.horizontal(|ui| {
+                    let has = st.sel < st.types.len();
+                    if ui.add(egui::Button::new("New").small()).on_hover_text("New Decal").clicked() {
+                        st.naming = Some((false, "New Decal".into()));
+                    }
+                    if ui.add_enabled(has, egui::Button::new("Duplicate").small()).clicked() {
+                        let mut t = st.types[st.sel].clone();
+                        t.id = DECAL_TMP + 0x1000 + st.types.len() as Id + st.images.len() as Id * 0x100;
+                        t.name = unique_name(&st.types, &format!("{} 2", t.name));
+                        st.types.push(t);
+                        st.sel = st.types.len() - 1;
+                    }
+                    if ui.add_enabled(has, egui::Button::new("Rename").small()).clicked() {
+                        st.naming = Some((true, st.types[st.sel].name.clone()));
+                    }
+                    if ui.add_enabled(has, egui::Button::new("Delete").small()).clicked() {
+                        st.types.remove(st.sel);
+                        st.sel = st.sel.min(st.types.len().saturating_sub(1));
+                    }
+                });
+            });
+            ui.add_space(10.0);
+            // Right: the selected type's settings.
+            ui.vertical(|ui| {
+                ui.set_width(330.0);
+                ui.label("Settings");
+                if st.sel >= st.types.len() {
+                    return;
+                }
+                let image_id = st.types[st.sel].props.get("Image").map(|v| v.round() as Id);
+                let image: Option<ImageAsset> = image_id.and_then(|i| st.images.iter().find(|a| a.id == i).or_else(|| app.doc.data.images.iter().find(|a| a.id == i))).cloned();
+                egui::Grid::new("decal-settings").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label("Source"));
+                    ui.horizontal(|ui| {
+                        let mut name = image.as_ref().map(|a| a.name.clone()).unwrap_or_default();
+                        ui.add_enabled(false, egui::TextEdit::singleline(&mut name).desired_width(200.0));
+                        if ui.small_button("...").clicked() {
+                            pick_image = true;
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("");
+                    // The image preview (or the notice Revit-style dialogs show without one).
+                    let (rect, _) = ui.allocate_exact_size(vec2(96.0, 96.0), egui::Sense::hover());
+                    ui.painter().rect_filled(rect, 0.0, egui::Color32::WHITE);
+                    match &image {
+                        Some(a) => {
+                            if st.preview.as_ref().is_none_or(|(id, _)| *id != a.id) {
+                                st.preview = a.rgb().map(|rgb| (a.id, ctx.load_texture("decal-preview", egui::ColorImage::from_rgb([a.width as usize, a.height as usize], &rgb), egui::TextureOptions::LINEAR)));
+                            }
+                            if let Some((_, tex)) = &st.preview {
+                                let k = (96.0 / a.width.max(a.height) as f32).min(f32::MAX);
+                                let r = egui::Rect::from_center_size(rect.center(), vec2(a.width as f32 * k, a.height as f32 * k));
+                                ui.painter().image(tex.id(), r, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), egui::Color32::WHITE);
+                            }
+                        }
+                        None => {
+                            ui.painter().text(rect.center(), egui::Align2::CENTER_CENTER, "Invalid Image File", style::font(11.0), style::text());
+                        }
+                    }
+                    ui.end_row();
+                    let t = &mut st.types[st.sel];
+                    let mut num = |ui: &mut egui::Ui, label: &str, key: &str, range: std::ops::RangeInclusive<f64>, pct: bool| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(format!("{label}:")));
+                        let mut v = t.props.get(key).copied().unwrap_or(0.0);
+                        let mut dv = egui::DragValue::new(&mut v).range(range).speed(if pct { 1.0 } else { 0.01 });
+                        if pct {
+                            dv = dv.suffix("%");
+                        }
+                        if ui.add_sized(vec2(70.0, 18.0), dv).changed() {
+                            t.props.insert(key.into(), v);
+                        }
+                        ui.end_row();
+                    };
+                    num(ui, "Brightness", "Brightness", 0.0..=10.0, false);
+                    num(ui, "Reflectivity", "Reflectivity", 0.0..=100.0, true);
+                    num(ui, "Transparency", "Transparency", 0.0..=100.0, true);
+                    let mut combo = |ui: &mut egui::Ui, label: &str, key: &str, choices: &[&str]| {
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(format!("{label}:")));
+                        let cur = t.texts.get(key).cloned().unwrap_or_else(|| choices[0].to_string());
+                        egui::ComboBox::from_id_salt(("decal", key)).width(110.0).selected_text(cur.clone()).show_ui(ui, |ui| {
+                            for c in choices {
+                                if ui.selectable_label(cur == *c, *c).clicked() {
+                                    t.texts.insert(key.into(), c.to_string());
+                                }
+                            }
+                        });
+                        ui.end_row();
+                    };
+                    combo(ui, "Finish", "Finish", &["Matte", "Semi-gloss", "Gloss", "High Gloss", "Custom"]);
+                    combo(ui, "Luminance (cd/m²)", "Luminance", &["Not illuminated", "Dim glow", "LED panel", "LCD screen", "Cell phone screen", "CRT television", "Lamp shade exterior", "Lamp shade interior", "Desk lamp lens", "Halogen lamp lens", "Frosted bulb", "Custom"]);
+                    num(ui, "Bump Amount", "Bump Amount", 0.0..=100.0, true);
+                    combo(ui, "Cutouts", "Cutouts", &["None", "Image file"]);
+                });
+            });
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    // New / Rename: the name box.
+    if let Some((rename, mut name)) = st.naming.take() {
+        let (mut done, mut quit) = (false, false);
+        window(if rename { "Rename" } else { "New Decal" }).resizable(false).default_width(300.0).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Name:");
+                ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
+            });
+            ui.add_space(6.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                quit = dlg_button(ui, "Cancel", false, true);
+                done = dlg_button(ui, "OK", true, !name.trim().is_empty());
+            });
+        });
+        let name = name.trim().to_string();
+        if done && st.types.iter().enumerate().any(|(k, t)| t.name == name && !(rename && k == st.sel)) {
+            app.error("The name is already in use.");
+            st.naming = Some((rename, name));
+        } else if done {
+            if rename {
+                st.types[st.sel].name = name;
+            } else {
+                let t: SystemType = rc_core::edit::decal_type(DECAL_TMP + 0x1000 + st.types.len() as Id + st.images.len() as Id * 0x100, &name);
+                st.types.push(t);
+                st.sel = st.types.len() - 1;
+            }
+        } else if !quit {
+            st.naming = Some((rename, name));
+        }
+    }
+    if pick_image && st.sel < st.types.len() {
+        if let Some(path) = crate::files::FileDialog::new().add_filter("Image Files", &["bmp", "jpg", "jpeg", "png"]).pick_file() {
+            let id = DECAL_TMP + st.images.len() as Id;
+            match crate::images::load_file(&path, id) {
+                Ok(a) => {
+                    st.images.push(a);
+                    st.types[st.sel].props.insert("Image".into(), id as f64);
+                }
+                Err(e) => app.error(e),
+            }
+        }
+    }
+    if ok {
+        let (types, images) = (st.types.clone(), st.images.clone());
+        let first = app.run("Decal Types", |p| {
+            // Images picked here join the project; types made here get real ids.
+            let mut remap: std::collections::HashMap<Id, Id> = std::collections::HashMap::new();
+            for a in images.into_iter().filter(|a| types.iter().any(|t| t.props.get("Image").is_some_and(|v| v.round() as Id == a.id))) {
+                let id = p.new_id();
+                remap.insert(a.id, id);
+                p.images.push(ImageAsset { id, ..a });
+            }
+            let mut keep = Vec::new();
+            for mut t in types {
+                if t.id >= DECAL_TMP {
+                    t.id = p.new_id();
+                }
+                if let Some(v) = t.props.get("Image").map(|v| v.round() as Id) {
+                    if let Some(n) = remap.get(&v) {
+                        t.props.insert("Image".into(), *n as f64);
+                    }
+                }
+                keep.push(t);
+            }
+            // Deleted types take their decals with them.
+            let gone: Vec<Id> = p.types.iter().filter(|t| t.category == Category::Decals && !keep.iter().any(|k| k.id == t.id)).map(|t| t.id).collect();
+            let doomed: Vec<Id> = p.elements.iter().filter(|e| matches!(&e.kind, rc_core::model::ElementKind::Decal(d) if gone.contains(&d.type_id))).map(|e| e.id).collect();
+            p.types.retain(|t| t.category != Category::Decals);
+            let first = keep.first().map(|t| t.id);
+            p.types.extend(keep);
+            rc_core::edit::delete_elements(p, &doomed)?;
+            Ok(first)
+        }).flatten();
+        app.scenes.clear();
+        if st.then_place {
+            match first {
+                Some(t) => {
+                    app.opts.decal_type = t;
+                    app.set_tool(crate::tools::ToolKind::PlaceDecal);
+                }
+                None => {}
+            }
+        }
+    }
+    if !(ok || cancel || !open) {
+        app.dialogs.decal_types = Some(st);
+    }
+}
+
+fn unique_name(types: &[rc_core::model::SystemType], base: &str) -> String {
+    let mut name = base.to_string();
+    let mut k = 2;
+    while types.iter().any(|t| t.name == name) {
+        k += 1;
+        name = format!("{} {k}", base.trim_end_matches(char::is_numeric).trim_end());
+    }
+    name
 }
 
 /// Rotate Project / Mirror Project: how the whole project turns or flips.

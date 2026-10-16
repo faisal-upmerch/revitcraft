@@ -208,6 +208,18 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
         ElementKind::CutProfile(_) => {
             d.push(def("Profile", CONSTRAINTS, v(Text), true, false));
         }
+        ElementKind::Decal(_) => {
+            type_identity(&mut d);
+            d.push(def("Width", DIMENSIONS, v(Length), false, false));
+            d.push(def("Height", DIMENSIONS, v(Length), false, false));
+            d.push(def("Lock Proportions", DIMENSIONS, v(YesNo), true, false));
+            d.push(def("Source", OTHER, v(Text), true, true));
+            d.push(def("Brightness", OTHER, v(Number), true, true));
+            d.push(def("Reflectivity", OTHER, v(Number), true, true));
+            d.push(def("Transparency", OTHER, v(Number), true, true));
+            d.push(def("Finish", OTHER, v(Text), true, true));
+            d.push(def("Cutouts", OTHER, v(Text), true, true));
+        }
         ElementKind::Link(_) => {
             d.push(def("Name", IDENTITY, v(Text), true, false));
             d.push(def("Shared Site", OTHER, v(Text), true, false));
@@ -718,6 +730,13 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             "Bar Length" => num(r.start.distance(r.end)),
             _ => None,
         },
+        ElementKind::Decal(dc) => match name {
+            "Width" => num(dc.width),
+            "Height" => num(dc.height),
+            "Lock Proportions" => yn(true),
+            "Source" => text(crate::edit::decal_image(p, dc.type_id).map(|a| a.name.clone()).unwrap_or_default()),
+            _ => sys_common(st, name),
+        },
         ElementKind::CutProfile(cp) => match name {
             "Profile" => text(if cp.add { "Added" } else { "Cut away" }.to_string()),
             _ => None,
@@ -1206,6 +1225,20 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
         ElementKind::Rebar(r) => match name {
             "Quantity" => r.count = (n().round() as u32).clamp(1, 1000),
             "Spacing" => r.spacing = n().max(0.0),
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::Decal(dc) => match name {
+            // Proportions stay locked: the other side follows.
+            "Width" | "Height" => {
+                let v = n();
+                if v <= 0.0 || dc.width <= 0.0 || dc.height <= 0.0 {
+                    return Err("Enter a positive size.".into());
+                }
+                let k = if name == "Width" { v / dc.width } else { v / dc.height };
+                dc.width *= k;
+                dc.height *= k;
+            }
+            "Lock Proportions" => {}
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::RasterImage(im) => match name {

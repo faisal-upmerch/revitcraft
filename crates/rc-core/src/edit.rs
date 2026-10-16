@@ -1144,6 +1144,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::Toposolid(t) => t.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&t.level),
                 ElementKind::AreaReinforcement(a) => doomed.contains(&a.host),
                 ElementKind::CutProfile(cp) => doomed.contains(&cp.host),
+                ElementKind::Decal(dc) => doomed.contains(&dc.host) || !matches!(p.sys_type(dc.type_id), Some(t) if t.category == Category::Decals),
                 ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
@@ -1235,6 +1236,17 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             r.end = f(r.end);
         }
         ElementKind::CutProfile(cp) => cp.region = cp.region.iter().map(|q| f(*q)).collect(),
+        ElementKind::Decal(dc) => {
+            let c = dc.center.truncate();
+            let c2 = f(c);
+            let turn = |v: DVec3| {
+                let w = f(c + v.truncate()) - c2;
+                DVec3::new(w.x, w.y, v.z)
+            };
+            dc.normal = turn(dc.normal);
+            dc.up = turn(dc.up);
+            dc.center = DVec3::new(c2.x, c2.y, dc.center.z);
+        }
         ElementKind::Grid(g) => {
             g.start = f(g.start);
             g.end = f(g.end);
@@ -1989,6 +2001,7 @@ pub fn change_type(p: &mut Project, ids: &[Id], new_type: Id) -> Result<(), Stri
             (ElementKind::Ramp(r), Some(Category::Ramps), _) => r.type_id = new_type,
             (ElementKind::Railing(r), Some(Category::Railings), _) => r.type_id = new_type,
             (ElementKind::WallFoundation(f), Some(Category::StructuralFoundations), _) => f.type_id = new_type,
+            (ElementKind::Decal(d), Some(Category::Decals), _) => d.type_id = new_type,
             (ElementKind::Instance(i), _, Some((fid, cat, hosted))) if cat == i.category && hosted == i.host.is_some() => {
                 i.family_id = fid;
                 i.type_id = new_type;
@@ -2518,6 +2531,51 @@ pub fn set_walk_frame(p: &mut Project, view: Id, frame: u32) {
     }
 }
 
+/// Insert > Decal > Decal Types: a decal type with the default settings (no image yet).
+pub fn new_decal_type(p: &mut Project, name: &str) -> Id {
+    let id = p.new_id();
+    p.types.push(decal_type(id, name));
+    id
+}
+
+/// A decal type with the default settings.
+pub fn decal_type(id: Id, name: &str) -> SystemType {
+    let mut t = SystemType { id, category: Category::Decals, name: name.into(), ..Default::default() };
+    for (k, v) in [("Brightness", 1.0), ("Reflectivity", 0.0), ("Transparency", 0.0), ("Bump Amount", 30.0)] {
+        t.props.insert(k.into(), v);
+    }
+    t.texts.insert("Finish".into(), "High Gloss".into());
+    t.texts.insert("Luminance".into(), "Not illuminated".into());
+    t.texts.insert("Cutouts".into(), "None".into());
+    t
+}
+
+/// The image of a decal type.
+pub fn decal_image(p: &Project, type_id: Id) -> Option<&ImageAsset> {
+    let asset = p.sys_type(type_id)?.props.get("Image")?.round() as Id;
+    p.images.iter().find(|a| a.id == asset)
+}
+
+/// Insert > Decal > Place Decal: a decal of `type_id` centred at `at` on the face of `host`
+/// facing `normal`, 1000 mm (3') wide and as tall as its image's proportions.
+pub fn add_decal(p: &mut Project, type_id: Id, host: Id, at: DVec3, normal: DVec3) -> Result<Id, String> {
+    if !matches!(p.sys_type(type_id), Some(t) if t.category == Category::Decals) {
+        return Err("Create a decal type first (Decal Types).".into());
+    }
+    if p.element(host).is_none() {
+        return Err("Place the decal on a face of the model.".into());
+    }
+    let n = normal.normalize_or_zero();
+    if n == DVec3::ZERO {
+        return Err("Place the decal on a planar face.".into());
+    }
+    // Upright on walls; on floors and roofs the image's top points north.
+    let up = (DVec3::Z - n * n.z).try_normalize().unwrap_or_else(|| (DVec3::Y - n * n.y).normalize());
+    let width = if p.units.system == crate::units::UnitSystem::Imperial { 914.4 } else { 1000.0 };
+    let height = decal_image(p, type_id).filter(|a| a.width > 0).map(|a| width * a.height as f64 / a.width as f64).unwrap_or(width);
+    Ok(push(p, ElementKind::Decal(Decal { type_id, host, center: at, normal: n, up, width, height })))
+}
+
 /// View > Cut Profile: a sketched region reshapes a wall's cut in `view` only. A region lying
 /// mostly inside the wall cuts it away; otherwise it joins the wall.
 pub fn add_cut_profile(p: &mut Project, view: Id, host: Id, region: Vec<DVec2>) -> Result<Id, String> {
@@ -2815,6 +2873,26 @@ mod tests {
         assert!(t.distance(e) > 900.0);
         set_walk_frame(&mut p, v, 300);
         assert!((eye(&p).0 - DVec3::new(10000.0, 10000.0, 1750.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn decals_sit_on_the_picked_face_and_go_with_their_host() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let dt = new_decal_type(&mut p, "Logo");
+        // A 4 x 2 image: the decal is half as tall as wide.
+        let img = p.new_id();
+        p.images.push(ImageAsset::from_rgb(img, "logo.png", 4, 2, &[255; 24]));
+        p.sys_type_mut(dt).unwrap().props.insert("Image".into(), img as f64);
+        let d = add_decal(&mut p, dt, w, DVec3::new(2000.0, -100.0, 1500.0), DVec3::new(0.0, -1.0, 0.0)).unwrap();
+        let Some(ElementKind::Decal(dc)) = p.element(d).map(|e| e.kind.clone()) else { panic!() };
+        assert!((dc.height - dc.width / 2.0).abs() < 1e-9);
+        assert!((dc.up - DVec3::Z).length() < 1e-9);
+        let [a, b, ..] = dc.corners();
+        // Seen from the front (from -y), the bottom edge runs left to right: +x.
+        assert!(b.x > a.x && (a.z - (1500.0 - dc.height / 2.0)).abs() < 1e-9);
+        delete_elements(&mut p, &[w]);
+        assert!(p.element(d).is_none());
     }
 
     #[test]

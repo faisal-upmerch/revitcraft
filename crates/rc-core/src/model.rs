@@ -57,6 +57,7 @@ pub enum Category {
     ColorFillLegends,
     ScopeBoxes,
     Matchline,
+    Decals,
 }
 
 impl Category {
@@ -233,6 +234,7 @@ impl Category {
             Category::ColorFillLegends => "Color Fill Legends",
             Category::ScopeBoxes => "Scope Boxes",
             Category::Matchline => "Matchline",
+            Category::Decals => "Decals",
         }
     }
 
@@ -285,6 +287,7 @@ impl Category {
             Category::ColorFillLegends => "Color Fill Legend",
             Category::ScopeBoxes => "Scope Box",
             Category::Matchline => "Matchline",
+            Category::Decals => "Decal",
         }
     }
 
@@ -365,6 +368,8 @@ pub enum ElementKind {
     Rebar(Rebar),
     /// View > Cut Profile: a region added to or cut from an element's cut shape in one view.
     CutProfile(CutProfile),
+    /// Insert > Decal: an image placed on a face of the model.
+    Decal(Decal),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -431,6 +436,7 @@ impl Element {
             ElementKind::AreaReinforcement(_) => Category::AreaReinforcement,
             ElementKind::Rebar(_) => Category::StructuralRebar,
             ElementKind::CutProfile(_) => Category::Lines,
+            ElementKind::Decal(_) => Category::Decals,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -1601,6 +1607,7 @@ impl SystemType {
             (Category::Ramps, _) => "Ramp",
             (Category::Railings, _) => "Railing",
             (Category::StructuralFoundations, _) => "Wall Foundation",
+            (Category::Decals, _) => "Decal",
             _ => "System Family",
         }
     }
@@ -2739,6 +2746,30 @@ impl Walkthrough {
     }
 }
 
+/// A decal: a rectangle of its type's image on a planar face, centred at `center`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Decal {
+    pub type_id: Id,
+    pub host: Id,
+    pub center: DVec3,
+    /// Out of the face.
+    pub normal: DVec3,
+    /// The image's up direction, in the face.
+    pub up: DVec3,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Decal {
+    /// Bottom left, bottom right, top right, top left (seen from the front).
+    pub fn corners(&self) -> [DVec3; 4] {
+        let right = self.up.cross(self.normal).normalize_or_zero() * (self.width / 2.0);
+        let up = self.up.normalize_or_zero() * (self.height / 2.0);
+        let c = self.center;
+        [c - right - up, c + right - up, c + right + up, c - right + up]
+    }
+}
+
 /// One layer of an area reinforcement.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RebarLayer {
@@ -3066,6 +3097,7 @@ impl Project {
             ElementKind::Railing(r) => Some(r.type_id),
             ElementKind::WallFoundation(f) => Some(f.type_id),
             ElementKind::GroupInstance(g) => Some(g.type_id),
+            ElementKind::Decal(d) => Some(d.type_id),
             _ => None,
         }
     }

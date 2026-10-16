@@ -83,6 +83,8 @@ fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     // Selection overlay: a translucent blue tint in every visual style.
     if (i.extra.y > 0.5) { return vec4<f32>(0.25, 0.5, 1.0, 0.32); }
     let style = u.params.z;
+    // Decal images (extra.z) show in the Realistic style only.
+    if (i.extra.z > 0.5 && style < 3.5) { discard; }
     if (style < 1.5 && style > 0.5) {
         // Hidden line: plain white surfaces.
         return vec4<f32>(1.0, 1.0, 1.0, 1.0);
@@ -140,6 +142,8 @@ fn vs_line(v: VIn) -> VOut {
 @fragment
 fn fs_line(i: VOut) -> @location(0) vec4<f32> {
     if (clipped(i.world)) { discard; }
+    // Decal placeholders (extra.x = 2) give way to the image in the Realistic style.
+    if (i.extra.x > 1.5 && u.params.z > 3.5) { discard; }
     return i.color;
 }
 
@@ -317,6 +321,57 @@ pub struct Renderer {
     targets: HashMap<Id, Target>,
 }
 
+/// A decal: the placeholder rectangle with its diagonals (every style but Realistic) and the
+/// image as a grid of coloured cells (Realistic only).
+fn decal_vertices(p: &Project, dc: &rc_core::model::Decal, selected: bool, opaque: &mut Vec<Vertex>, transparent: &mut Vec<Vertex>, lines: &mut Vec<Vertex>) {
+    let off = dc.normal.normalize_or_zero() * 2.0;
+    let [a, b, c, d] = dc.corners().map(|q| q + off);
+    let lc = srgb_color(if selected { [20, 70, 200] } else { [35, 35, 35] }, 1.0);
+    for (s, e) in [(a, b), (b, c), (c, d), (d, a), (a, c), (b, d)] {
+        for q in [s, e] {
+            lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: lc, extra: [2.0, 0.0, 0.0, 0.0] });
+        }
+    }
+    let st = p.sys_type(dc.type_id);
+    let Some(img) = rc_core::edit::decal_image(p, dc.type_id) else { return };
+    let Some(rgb) = img.rgb() else { return };
+    let (w, h) = (img.width as usize, img.height as usize);
+    if w == 0 || h == 0 {
+        return;
+    }
+    const CELLS: usize = 64;
+    let (nx, ny) = if w >= h { (CELLS.min(w), (CELLS * h / w).clamp(1, h)) } else { ((CELLS * w / h).clamp(1, w), CELLS.min(h)) };
+    let bright = st.map(|t| t.prop("Brightness", 1.0)).unwrap_or(1.0);
+    let alpha = (1.0 - st.map(|t| t.prop("Transparency", 0.0)).unwrap_or(0.0) / 100.0).clamp(0.0, 1.0) as f32;
+    let n = dc.normal.normalize_or_zero().as_vec3().to_array();
+    let (ux, uy) = (b - a, d - a);
+    let target = if alpha < 0.99 { transparent } else { opaque };
+    for j in 0..ny {
+        for i in 0..nx {
+            // The cell's average colour (image rows run top to bottom).
+            let (x0, x1) = (i * w / nx, ((i + 1) * w / nx).max(i * w / nx + 1));
+            let (y0, y1) = ((ny - 1 - j) * h / ny, ((ny - j) * h / ny).max((ny - 1 - j) * h / ny + 1));
+            let mut sum = [0u32; 3];
+            for y in y0..y1.min(h) {
+                for x in x0..x1.min(w) {
+                    let k = (y * w + x) * 3;
+                    for c in 0..3 {
+                        sum[c] += rgb[k + c] as u32;
+                    }
+                }
+            }
+            let cnt = ((y1.min(h) - y0) * (x1.min(w) - x0)).max(1) as f64;
+            let col = sum.map(|v| (v as f64 / cnt * bright).clamp(0.0, 255.0) as u8);
+            let color = srgb_color(col, alpha);
+            let q = |x: usize, y: usize| a + ux * (x as f64 / nx as f64) + uy * (y as f64 / ny as f64);
+            let (p0, p1, p2, p3) = (q(i, j), q(i + 1, j), q(i + 1, j + 1), q(i, j + 1));
+            for v in [p0, p1, p2, p0, p2, p3] {
+                target.push(Vertex { pos: (v * 0.001).as_vec3().to_array(), normal: n, color, extra: [0.1, 0.0, 1.0, 0.0] });
+            }
+        }
+    }
+}
+
 fn srgb_color(rgb: [u8; 3], a: f32) -> [f32; 4] {
     [rgb[0] as f32 / 255.0, rgb[1] as f32 / 255.0, rgb[2] as f32 / 255.0, a]
 }
@@ -419,6 +474,10 @@ impl Renderer {
                     Some((a, b)) => (a.min(mn), b.max(mx)),
                     None => (mn, mx),
                 });
+            }
+            if let Some(rc_core::model::ElementKind::Decal(dc)) = p.element(*id).map(|e| &e.kind) {
+                decal_vertices(p, dc, selected, &mut opaque, &mut transparent, &mut lines);
+                continue;
             }
             for (mat_name, mesh) in &set.by_material {
                 let mat = p.material(mat_name);

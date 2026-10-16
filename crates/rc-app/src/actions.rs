@@ -740,6 +740,20 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         Section => app.set_tool(ToolKind::Section),
         Camera => app.set_tool(ToolKind::Camera),
         CutProfile => app.set_tool(ToolKind::CutProfileHost),
+        PlaceDecal => {
+            // With no decal types yet, Decal Types opens first.
+            let first = app.doc.data.types_of(rc_core::model::Category::Decals).next().map(|t| t.id);
+            match first {
+                Some(t) => {
+                    if !app.doc.data.sys_type(app.opts.decal_type).is_some_and(|x| x.category == rc_core::model::Category::Decals) {
+                        app.opts.decal_type = t;
+                    }
+                    app.set_tool(ToolKind::PlaceDecal);
+                }
+                None => app.dialogs.decal_types = Some(dialogs::DecalTypesState::new(&app.doc.data, None, true)),
+            }
+        }
+        DecalTypes => app.dialogs.decal_types = Some(dialogs::DecalTypesState::new(&app.doc.data, None, false)),
         Walkthrough => app.set_tool(ToolKind::Walkthrough),
         FinishWalkthrough => {
             let pts = app.tool.pts.clone();
@@ -922,6 +936,10 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         TypeProperties => {
             let t = type_for_properties(app);
             match t {
+                // Decals edit their types in Decal Types.
+                Some(t) if app.doc.data.sys_type(t).is_some_and(|x| x.category == rc_core::model::Category::Decals) => {
+                    app.dialogs.decal_types = Some(dialogs::DecalTypesState::new(&app.doc.data, Some(t), false));
+                }
                 Some(t) => app.dialogs.type_props = Some(t),
                 None => app.error("Select an element that has a type, or start a placement tool."),
             }

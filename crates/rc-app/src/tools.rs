@@ -47,6 +47,7 @@ pub enum ToolKind {
     RebarSet,
     PickToEdit,
     CutProfileHost,
+    PlaceDecal,
     Walkthrough,
     AreaReinfHost,
     SpecifyCoords,
@@ -140,6 +141,7 @@ impl ToolKind {
             ToolKind::RebarSet => "Rebar",
             ToolKind::PickToEdit => "Pick to Edit",
             ToolKind::CutProfileHost => "Cut Profile",
+            ToolKind::PlaceDecal => "Decal",
             ToolKind::Walkthrough => "Walkthrough",
             ToolKind::AreaReinfHost => "Area Reinforcement",
             ToolKind::FramingElevation => "Framing Elevation",
@@ -678,6 +680,8 @@ pub struct ToolOptions {
     pub group_type: Id,
     /// Import Image: the asset being placed.
     pub image_asset: Id,
+    /// Place Decal: the decal type.
+    pub decal_type: Id,
     pub draw_mode: DrawMode,
     pub sketch_sub: SketchSub,
     /// Components: rotate each instance right after placing it.
@@ -847,6 +851,7 @@ impl ToolOptions {
             footing_type: first_fam(Category::StructuralFoundations),
             group_type: p.group_types.first().map(|g| g.id).unwrap_or(0),
             image_asset: 0,
+            decal_type: 0,
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,
             rotate_after_placement: false,

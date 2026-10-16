@@ -165,6 +165,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
         ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
         ToolKind::CutProfileHost => "Select a wall to edit its cut profile.".into(),
+        ToolKind::PlaceDecal => "Click on a planar face to place the decal.".into(),
         ToolKind::Walkthrough => if n < 2 { "Click to place the walkthrough's camera positions.".into() } else { "Click the next camera position, or Finish Walkthrough.".into() },
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
@@ -302,6 +303,20 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 if let Some(id) = app.run("Place Image", |p| edit::add_image(p, vid, asset, at, w)) {
                     app.tool = Tool::select();
                     app.select(vec![id]);
+                }
+            }
+        }
+        ToolKind::PlaceDecal => {
+            if clicked {
+                let fp = app.footprints();
+                match rc_core::section::pick_face(&app.doc.data, view, cursor.unwrap_or_default(), &fp) {
+                    Some((host, q, n)) => {
+                        let t = app.opts.decal_type;
+                        if let Some(id) = app.run("Place Decal", |p| edit::add_decal(p, t, host, q, n)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    None => app.error("Decals are placed on planar faces of the model, in 3D, elevation and section views."),
                 }
             }
         }

@@ -56,6 +56,8 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    Decal,
+    DecalTypes,
     ArrowLeft,
     ArrowRight,
     Play,
@@ -952,6 +954,23 @@ fn draw(g: &Pen, icon: Icon) {
         }
         Play => {
             g.poly(&[(0.28, 0.18), (0.82, 0.5), (0.28, 0.82)], Color32::from_rgb(40, 150, 70), ink);
+        }
+        Decal => {
+            // A picture laid onto a box face, with a bent arrow.
+            g.poly(&[(0.42, 0.62), (0.78, 0.5), (0.92, 0.62), (0.92, 0.9), (0.56, 0.9), (0.42, 0.78)], LGREY, ink);
+            g.rect(0.06, 0.08, 0.5, 0.44, Color32::from_rgb(200, 225, 250), ink);
+            g.poly(&[(0.08, 0.42), (0.22, 0.24), (0.32, 0.34), (0.4, 0.28), (0.48, 0.42)], Color32::from_rgb(70, 140, 220), ink);
+            g.line(&[(0.16, 0.5), (0.16, 0.74), (0.34, 0.74)], ink);
+            g.line(&[(0.28, 0.68), (0.34, 0.74), (0.28, 0.8)], ink);
+        }
+        DecalTypes => {
+            // A picture over a small list.
+            g.rect(0.06, 0.06, 0.66, 0.6, Color32::from_rgb(200, 225, 250), ink);
+            g.poly(&[(0.08, 0.58), (0.28, 0.3), (0.42, 0.44), (0.52, 0.36), (0.64, 0.58)], Color32::from_rgb(70, 140, 220), ink);
+            g.rect(0.5, 0.56, 0.94, 0.94, Color32::WHITE, ink);
+            for y in [0.68, 0.76, 0.84] {
+                g.thin_line(&[(0.56, y), (0.88, y)], ink);
+            }
         }
         Picture => {
             // A framed picture: sky, sun and hills.

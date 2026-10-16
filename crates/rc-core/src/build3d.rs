@@ -62,6 +62,13 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         ElementKind::Link(l) => link_mesh(p, l),
         ElementKind::AreaReinforcement(a) => crate::rebar::bars_mesh(&crate::rebar::area_bars(p, a)),
         ElementKind::Rebar(r) => crate::rebar::bars_mesh(&crate::rebar::rebar_bars(p, r)),
+        ElementKind::Decal(d) => {
+            // A sheet just off the face (picking and hidden-line drawings use it).
+            let mut set = MeshSet::default();
+            let [a, b, c, q] = d.corners().map(|v| v + d.normal.normalize_or_zero());
+            set.mesh("Decal").add_quad_facing(a, b, c, q, d.normal);
+            set
+        }
         ElementKind::Wall(w) => match footprints.get(&e.id) {
             Some(fp) => wall(p, e.id, w, fp),
             None => MeshSet::default(),
