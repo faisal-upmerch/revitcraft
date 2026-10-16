@@ -43,6 +43,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let total_w: f32 = widths.iter().sum::<f32>().max(200.0);
     let mut edits: Vec<(Id, String, String)> = Vec::new();
     let mut select_rows: Option<Vec<Id>> = None;
+    let mut pick_column: Option<String> = None;
     let look = def.look.clone();
     let grid = Stroke::new(1.0, if look.grid_lines { Color32::from_gray(200) } else { Color32::TRANSPARENT });
     // Rows above the body: column letters, then the title and headers when shown.
@@ -76,15 +77,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
             if look.show_title {
                 let tr = Rect::from_min_size(pos2(origin.x, row_y), vec2(total_w, ROW_H));
                 p.rect_stroke(tr, 0.0, grid, egui::StrokeKind::Inside);
-                p.text(tr.center(), egui::Align2::CENTER_CENTER, format!("<{}>", view.name), style::font(12.5), style::text());
+                p.text(tr.center(), egui::Align2::CENTER_CENTER, format!("<{}>", view.name), style::bold(15.0), style::text());
                 row_y += ROW_H;
             }
-            // Headers.
+            // Headers: clicking one selects its column (for the Columns and Appearance tools).
             if look.show_headers {
                 for (k, x) in xs.iter().enumerate() {
                     let cell = Rect::from_min_size(pos2(*x, row_y), vec2(widths[k], ROW_H));
+                    let picked = app.sched_column.as_ref().is_some_and(|(v, f)| *v == view_id && *f == table.columns[k].def.name);
+                    if picked {
+                        p.rect_filled(cell, 0.0, Color32::from_rgb(204, 228, 247));
+                    }
                     p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
-                    p.text(cell.center(), egui::Align2::CENTER_CENTER, &table.columns[k].heading, font.clone(), style::text());
+                    p.text(cell.center(), egui::Align2::CENTER_CENTER, &table.columns[k].heading, style::bold(12.0), style::text());
+                    if ui.interact(cell, egui::Id::new(("sched-head", view_id, k)), Sense::click()).clicked() {
+                        pick_column = Some(table.columns[k].def.name.clone());
+                    }
                 }
             }
             // Body.
@@ -138,6 +146,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     });
     if let Some(ids) = select_rows {
         app.select(ids);
+        app.sched_column = None;
+    }
+    if let Some(f) = pick_column {
+        app.sched_column = Some((view_id, f));
     }
     if !edits.is_empty() {
         app.run("Edit Schedule", |pr| {

@@ -479,7 +479,16 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
     if app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))) {
         return Some((
             "Schedule/Quantities".into(),
-            vec![panel("Parameters", vec![Big(C::ScheduleFields), Big(C::ScheduleFilter), Big(C::ScheduleSorting)]), panel("Element", vec![Big(C::HighlightInModel)])],
+            vec![
+                panel("Properties", vec![Big(C::ToggleProperties)]),
+                panel("Parameters", vec![Labeled("Format\nUnit", C::SchedFormatUnit, vec![]), Labeled("Calculated", C::SchedCalculated, vec![]), Labeled("Combine\nParameters", C::SchedCombine, vec![])]),
+                panel("Columns", vec![Labeled("Insert", C::SchedColInsert, vec![]), Labeled("Delete", C::SchedColDelete, vec![]), Labeled("Resize", C::SchedColResize, vec![]), Labeled("Hide", C::SchedColHide, vec![]), Labeled("Unhide\nAll", C::SchedColUnhide, vec![])]),
+                panel("Rows", vec![Labeled("Insert", C::SchedRowInsert, vec![]), Labeled("Insert\nData Row", C::SchedRowInsertData, vec![]), Labeled("Delete", C::SchedRowDelete, vec![]), Labeled("Resize", C::SchedRowResize, vec![])]),
+                panel("Titles & Headers", vec![Labeled("Merge\nUnmerge", C::SchedMerge, vec![]), Labeled("Insert\nImage", C::SchedInsertImage, vec![]), Labeled("Clear\nCell", C::SchedClearCell, vec![]), Labeled("Group", C::SchedGroup, vec![]), Labeled("Ungroup", C::SchedUngroup, vec![]), Labeled("Freeze\nHeader", C::SchedFreeze, vec![])]),
+                panel("Appearance", vec![Labeled("Shading", C::SchedShading, vec![]), Labeled("Borders", C::SchedBorders, vec![]), Labeled("Reset", C::SchedReset, vec![]), Labeled("Font", C::SchedFont, vec![]), Labeled("Align\nHorizontal", C::SchedAlignLeft, vec![C::SchedAlignLeft, C::SchedAlignCenter, C::SchedAlignRight]), Labeled("Align\nVertical", C::SchedAlignVertical, vec![])]),
+                panel("Element", vec![Labeled("Highlight\nin Model", C::HighlightInModel, vec![])]),
+                panel("Split", vec![Labeled("Split &\nPlace", C::SchedSplit, vec![])]),
+            ],
         ));
     }
     if app.selection.is_empty() && app.active_view().is_some_and(|v| v.walk.is_some()) {
@@ -1179,7 +1188,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
             let tabs: &[Tab] = if family { &FAMILY_TABS } else { &Tab::ALL };
             for &t in tabs {
                 match (&ctx, t) {
-                    (Some((title, _)), Tab::Modify) => tab_button(ui, app, t, &format!("Modify | {title}"), Some(if sketch { style::SKETCH_TAB } else { style::CONTEXT })),
+                    (Some((title, _)), Tab::Modify) => tab_button(ui, app, t, &if title == "Schedule/Quantities" { format!("Modify {title}") } else { format!("Modify | {title}") }, Some(if sketch { style::SKETCH_TAB } else { style::CONTEXT })),
                     _ => tab_button(ui, app, t, t.label(), None),
                 }
             }
@@ -1223,7 +1232,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     }
                     Tab::Manage => show_panels(ui, app, manage()),
                     Tab::Modify => {
-                        let mut panels = modify_panels();
+                        // Schedule views have their own panels only, as in the reference app.
+                        let schedule = !family && app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_)));
+                        let mut panels = if schedule { Vec::new() } else { modify_panels() };
                         if let Some((_, extra)) = if family { family_contextual(app) } else { contextual(app) } {
                             // Tool- and element-specific panels follow the standard Modify panels.
                             panels.extend(extra);

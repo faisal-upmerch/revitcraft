@@ -211,6 +211,8 @@ pub struct App {
     pub save_reminder_at: f64,
     /// A walkthrough playing: (view, time of the last frame).
     pub walk_play: Option<(Id, f64)>,
+    /// The column selected in a schedule view: (view, field name).
+    pub sched_column: Option<(Id, String)>,
     /// Self-test runs toggle every setting: they must not save them.
     pub no_save_settings: bool,
     /// A view to open once the dock is back (views opened while the dock is drawn).
@@ -276,6 +278,7 @@ impl App {
             open_pending: None,
             no_save_settings: false,
             walk_play: None,
+            sched_column: None,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
