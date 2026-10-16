@@ -192,6 +192,19 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::AreaReinforcement(_) => {
+            d.push(def("Layout Rule", CONSTRAINTS, v(Text), true, false));
+            for l in ["Top Major", "Top Minor", "Bottom Major", "Bottom Minor"] {
+                d.push(def(&format!("{l} Direction"), CONSTRAINTS, v(YesNo), false, false));
+                d.push(def(&format!("{l} Spacing"), CONSTRAINTS, v(Length), false, false));
+            }
+        }
+        ElementKind::Rebar(_) => {
+            d.push(def("Bar Type", CONSTRAINTS, v(Text), true, false));
+            d.push(def("Quantity", CONSTRAINTS, v(Integer), false, false));
+            d.push(def("Spacing", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Bar Length", DIMENSIONS, v(Length), true, false));
+        }
         ElementKind::Link(_) => {
             d.push(def("Name", IDENTITY, v(Text), true, false));
             d.push(def("Shared Site", OTHER, v(Text), true, false));
@@ -686,6 +699,22 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 _ => sys_common(st, name),
             }
         }
+        ElementKind::AreaReinforcement(a) => {
+            let layer = |n: &str| ["Top Major", "Top Minor", "Bottom Major", "Bottom Minor"].iter().position(|x| n.starts_with(x));
+            match name {
+                "Layout Rule" => text("Maximum Spacing".to_string()),
+                n if n.ends_with(" Direction") => layer(n).map(|k| yn(a.layers[k].on)).unwrap_or(None),
+                n if n.ends_with(" Spacing") => layer(n).map(|k| num(a.layers[k].spacing)).unwrap_or(None),
+                _ => None,
+            }
+        }
+        ElementKind::Rebar(r) => match name {
+            "Bar Type" => text(crate::rebar::bar_name(p, r.bar_type)),
+            "Quantity" => num(r.count as f64),
+            "Spacing" => num(r.spacing),
+            "Bar Length" => num(r.start.distance(r.end)),
+            _ => None,
+        },
         ElementKind::Link(l) => match name {
             "Name" => text(p.links.iter().find(|x| x.id == l.link).map(|x| x.name.clone()).unwrap_or_default()),
             "Shared Site" => text("<Not Shared>".to_string()),
@@ -1152,6 +1181,24 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
                 }
                 s.desired_risers = r as u32;
             }
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::AreaReinforcement(a) => {
+            let k = ["Top Major", "Top Minor", "Bottom Major", "Bottom Minor"].iter().position(|x| name.starts_with(x)).ok_or_else(|| format!("'{name}' cannot be set."))?;
+            if name.ends_with(" Direction") {
+                a.layers[k].on = t() == "Yes" || t() == "1" || t() == "true";
+            } else if name.ends_with(" Spacing") {
+                if n() < 25.0 {
+                    return Err("The bar spacing is too small.".into());
+                }
+                a.layers[k].spacing = n();
+            } else {
+                return Err(format!("'{name}' cannot be set."));
+            }
+        }
+        ElementKind::Rebar(r) => match name {
+            "Quantity" => r.count = (n().round() as u32).clamp(1, 1000),
+            "Spacing" => r.spacing = n().max(0.0),
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::RasterImage(im) => match name {

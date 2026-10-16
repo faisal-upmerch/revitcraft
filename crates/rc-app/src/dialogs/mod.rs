@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Rebar Cover Settings.
+    pub rebar_cover: bool,
     /// Rendering (View > Render).
     pub render: Option<Box<RenderState>>,
     /// Insert Views from File: the source project and its views.
@@ -458,6 +460,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     shared_params_dialog(app, ctx);
     insert_views_dialog(app, ctx);
     render_dialog(app, ctx);
+    rebar_cover_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -775,6 +778,56 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+/// Rebar Cover Settings: the cover from concrete faces to the bars.
+fn rebar_cover_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.rebar_cover {
+        return;
+    }
+    let id = egui::Id::new("rebar-cover");
+    let mut text: String = ctx.data(|m| m.get_temp(id)).unwrap_or_else(|| app.doc.data.units.length(rc_core::rebar::cover(&app.doc.data)));
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Rebar Cover Settings").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        egui::Grid::new("cover-grid").num_columns(2).striped(true).spacing(vec2(16.0, 6.0)).show(ui, |ui| {
+            ui.label(egui::RichText::new("Description").strong());
+            ui.label(egui::RichText::new("Setting").strong());
+            ui.end_row();
+            ui.label("Rebar Cover");
+            ui.add(egui::TextEdit::singleline(&mut text).desired_width(100.0));
+            ui.end_row();
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        match app.doc.data.units.parse(&text, ParamKind::Length) {
+            Some(v) if v > 0.0 => {
+                app.run("Rebar Cover Settings", |p| {
+                    p.rebar_cover = v;
+                    Ok(())
+                });
+            }
+            _ => {
+                app.error("Enter a positive length for the cover.");
+                ok = false;
+            }
+        }
+    }
+    if ok || cancel || !open {
+        app.dialogs.rebar_cover = false;
+        ctx.data_mut(|m| m.remove::<String>(id));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(id, text));
     }
 }
 

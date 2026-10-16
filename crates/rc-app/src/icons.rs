@@ -63,6 +63,9 @@ pub enum Icon {
     StartingView,
     Brace,
     Truss,
+    Rebar,
+    AreaReinforcement,
+    RebarCover,
     BeamSystem,
     WallFoundation,
     IsolatedFoundation,
@@ -951,6 +954,31 @@ fn draw(g: &Pen, icon: Icon) {
             // A view with a play mark.
             g.rect(0.1, 0.18, 0.9, 0.82, Color32::WHITE, ink);
             g.poly(&[(0.4, 0.34), (0.66, 0.5), (0.4, 0.66)], Color32::from_rgb(40, 150, 70), ink);
+        }
+        Rebar => {
+            // A concrete section with bars.
+            g.rect(0.1, 0.2, 0.9, 0.8, LGREY, ink);
+            let red = Color32::from_rgb(170, 40, 40);
+            for (x, y) in [(0.26, 0.36), (0.74, 0.36), (0.26, 0.64), (0.74, 0.64)] {
+                g.circle((x, y), 0.06, red, red);
+            }
+        }
+        AreaReinforcement => {
+            // A slab corner with a bar mesh.
+            g.poly(&[(0.06, 0.5), (0.5, 0.24), (0.94, 0.5), (0.5, 0.76)], LGREY, ink);
+            let red = Color32::from_rgb(170, 40, 40);
+            for k in 1..4 {
+                let t = k as f32 * 0.25;
+                g.thin_line(&[(0.06 + 0.44 * t, 0.5 - 0.26 * t), (0.5 + 0.44 * t, 0.76 - 0.26 * t)], red);
+                g.thin_line(&[(0.06 + 0.44 * t, 0.5 + 0.26 * t), (0.5 + 0.44 * t, 0.24 + 0.26 * t)], red);
+            }
+        }
+        RebarCover => {
+            // A bar inside a dashed cover line.
+            g.rect(0.1, 0.2, 0.9, 0.8, LGREY, ink);
+            g.thin_line(&[(0.22, 0.32), (0.78, 0.32), (0.78, 0.68), (0.22, 0.68), (0.22, 0.32)], BLUE);
+            let red = Color32::from_rgb(170, 40, 40);
+            g.circle((0.3, 0.6), 0.05, red, red);
         }
         Brace => {
             // A diagonal member between two posts.

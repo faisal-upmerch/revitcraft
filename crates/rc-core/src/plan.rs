@@ -870,6 +870,26 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 let pts = line_points(l);
                 d.line(Some(e.id), pts, l.closed, line_style_stroke(p, l.style));
             }
+            ElementKind::AreaReinforcement(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
+                // Boundary (dashed), the area reinforcement symbol along the major direction and
+                // its tag.
+                d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
+                let ctr = geom::centroid(&a.boundary);
+                let dir = a.major.normalize_or(DVec2::X);
+                let n = geom::perp(dir);
+                let (half, head) = (8.0 * c.scale, 2.0 * c.scale);
+                let (s0, s1) = (ctr - dir * half, ctr + dir * half);
+                d.line(Some(e.id), vec![s0, s1], false, ANNO);
+                for (tip, back) in [(s1, -dir), (s0, dir)] {
+                    d.fill(Some(e.id), &[tip, tip + back * head + n * head * 0.4, tip + back * head - n * head * 0.4], [0, 0, 0, 255]);
+                }
+                d.text(Some(e.id), ctr - n * 2.5 * c.scale, crate::rebar::area_tag(p, a), 2.0, Anchor::Center);
+            }
+            ElementKind::Rebar(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) => {
+                for (a, b, _) in crate::rebar::rebar_bars(p, r) {
+                    d.line(Some(e.id), vec![a.truncate(), b.truncate()], false, Stroke::new(0.25, [0, 0, 0], Dash::Solid));
+                }
+            }
             ElementKind::Cad(cad) if e.view.is_none() && cad.level.is_none_or(|lv| lv == c.level) => {
                 for (pts, col) in &cad.polylines {
                     let color = if cad.halftone { HALFTONE } else { *col };
@@ -2292,6 +2312,8 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         }
         ElementKind::Grid(g) => vec![g.polyline()],
         ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
+        ElementKind::AreaReinforcement(a) => vec![a.boundary.clone()],
+        ElementKind::Rebar(r) => crate::rebar::rebar_bars(p, r).into_iter().map(|(a, b, _)| vec![a.truncate(), b.truncate()]).collect(),
         ElementKind::Link(l) => match p.link_model(l.link) {
             // The linked model's extents, placed.
             Some(lp) => {

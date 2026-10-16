@@ -767,6 +767,36 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
     Ok(push(p, ElementKind::Instance(inst)))
 }
 
+/// Structure > Area: area reinforcement over `boundary` on a floor, all four layers on with
+/// `bar_type` at `spacing`, its major direction along the first edge.
+pub fn add_area_reinforcement(p: &mut Project, host: Id, boundary: Vec<DVec2>, bar_type: Id, spacing: f64) -> Result<Id, String> {
+    let b = geom::clean(&boundary, 1.0);
+    if b.len() < 3 {
+        return Err("Area reinforcement needs a closed boundary.".into());
+    }
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+        return Err("Select a floor or slab to reinforce.".into());
+    }
+    if spacing < 25.0 {
+        return Err("The bar spacing is too small.".into());
+    }
+    let major = (b[1] - b[0]).normalize_or_zero();
+    let layer = RebarLayer { on: true, bar_type, spacing };
+    Ok(push(p, ElementKind::AreaReinforcement(AreaReinforcement { host, boundary: geom::ensure_ccw(&b), major, layers: [layer.clone(), layer.clone(), layer.clone(), layer] })))
+}
+
+/// Structure > Rebar: `count` straight bars from `start` to `end` at the host's bottom cover,
+/// `spacing` apart to the left.
+pub fn add_rebar(p: &mut Project, host: Id, start: DVec2, end: DVec2, bar_type: Id, count: u32, spacing: f64) -> Result<Id, String> {
+    if start.distance(end) < 50.0 {
+        return Err("The bar is too short.".into());
+    }
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+        return Err("Select a floor or slab to place rebar in.".into());
+    }
+    Ok(push(p, ElementKind::Rebar(Rebar { host, start, end, bar_type, count: count.max(1), spacing })))
+}
+
 /// Insert > Link Revit: links `model` (read from `path`), placed internal origin to internal
 /// origin. Returns the link instance.
 pub fn add_link(p: &mut Project, name: &str, path: &str, model: Project) -> Result<Id, String> {
@@ -1112,6 +1142,8 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::Railing(r) => r.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&r.level),
                 ElementKind::Shaft(s) => s.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&s.base_level),
                 ElementKind::Toposolid(t) => t.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&t.level),
+                ElementKind::AreaReinforcement(a) => doomed.contains(&a.host),
+                ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
                 || e.view.is_some_and(|v| !p.views.iter().any(|x| x.id == v));
@@ -1191,6 +1223,15 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
         ElementKind::Link(l) => {
             l.origin = f(l.origin);
             l.rotation_deg += rot;
+        }
+        ElementKind::AreaReinforcement(a) => {
+            let o = f(DVec2::ZERO);
+            a.major = (f(a.major) - o).normalize_or(a.major);
+            a.boundary = a.boundary.iter().map(|q| f(*q)).collect();
+        }
+        ElementKind::Rebar(r) => {
+            r.start = f(r.start);
+            r.end = f(r.end);
         }
         ElementKind::Grid(g) => {
             g.start = f(g.start);

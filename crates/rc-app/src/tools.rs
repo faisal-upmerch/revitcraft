@@ -44,6 +44,8 @@ pub enum ToolKind {
     Truss,
     Camera,
     FramingElevation,
+    RebarSet,
+    AreaReinfHost,
     SpecifyCoords,
     ReportCoords,
     Relocate,
@@ -132,6 +134,8 @@ impl ToolKind {
             ToolKind::Brace => "Brace",
             ToolKind::Truss => "Truss",
             ToolKind::Camera => "Camera",
+            ToolKind::RebarSet => "Rebar",
+            ToolKind::AreaReinfHost => "Area Reinforcement",
             ToolKind::FramingElevation => "Framing Elevation",
             ToolKind::SpecifyCoords => "Specify Coordinates at Point",
             ToolKind::ReportCoords => "Report Shared Coordinates",
@@ -387,6 +391,8 @@ pub enum SketchKind {
     PropertyLine,
     /// A beam system's boundary.
     BeamSystem,
+    /// An area reinforcement boundary on this floor.
+    AreaReinforcement(Id),
     /// A multi-segment grid.
     Grid,
     EditFloor(Id),
@@ -415,6 +421,7 @@ impl SketchKind {
             SketchKind::PropertyLine => "Create Property Line Sketch",
             SketchKind::Grid => "Edit Sketch",
             SketchKind::BeamSystem => "Create Beam System Boundary",
+            SketchKind::AreaReinforcement(_) => "Create Reinforcement Boundary",
         }
     }
     pub fn is_roof(self) -> bool {
@@ -780,6 +787,9 @@ pub struct ToolOptions {
     pub fill_color: [u8; 3],
     pub symbol_kind: SymbolKind,
     pub stair_width: f64,
+    /// Rebar: Quantity and Spacing of a set.
+    pub rebar_count: u32,
+    pub rebar_spacing: f64,
     pub room_tag: bool,
     pub room_upper: f64,
     /// New rooms: Upper Limit (None = the room's level) and Base Offset.
@@ -916,6 +926,8 @@ impl ToolOptions {
             fill_color: [0, 0, 0],
             symbol_kind: SymbolKind::NorthArrow,
             stair_width: if imperial { 1066.8 } else { 1200.0 },
+            rebar_count: 1,
+            rebar_spacing: if imperial { 304.8 } else { 300.0 },
             room_tag: true,
             // The reference app's templates: Limit Offset 10'-0" (2500 mm in metric).
             room_upper: if imperial { 3048.0 } else { 2500.0 },

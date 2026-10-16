@@ -56,7 +56,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         AdjustHeight | AdjustOverhang => false,
         Redo => app.doc.can_redo(),
         AutoCeiling if app.sketch.as_ref().is_some_and(|s| s.kind == SketchKind::Ceiling) => true,
-        Door | Window | Component | Column | StructColumn | Beam | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
+        Door | Window | Component | Column | StructColumn | Beam | RebarTool | AreaReinforcementTool | Brace | Truss | BeamSystem | IsolatedFoundation | WallFoundation | Room | RoomSeparator | RoomTag | Grid | RefPlane
         | ModelLine | Ceiling | Floor | FloorStructural | RoofFootprint | Railing | Stair | Ramp | ModelText | Shaft | WallOpening | VerticalOpening | FaceOpening | DormerOpening | Mullion | CurtainGrid | Section | Callout | ElevationView
         | PlaceGroup | Wall | WallStructural | AutoCeiling | SketchCeiling => !in_sketch && app.group_edit.as_ref().is_none_or(|_| true),
         Area | AreaBoundary | AreaTag => view.is_some_and(|v| matches!(v.kind, ViewKind::AreaPlan { .. })) && !in_sketch,
@@ -284,6 +284,21 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         StructColumn => app.set_tool(ToolKind::StructColumn),
         Beam => start_drawing(app, ToolKind::Beam),
         Brace => start_drawing(app, ToolKind::Brace),
+        RebarTool => {
+            app.run("Rebar Types", |p| {
+                rc_core::rebar::ensure_bar_types(p);
+                Ok(())
+            });
+            app.set_tool(ToolKind::RebarSet);
+        }
+        AreaReinforcementTool => {
+            app.run("Rebar Types", |p| {
+                rc_core::rebar::ensure_bar_types(p);
+                Ok(())
+            });
+            app.set_tool(ToolKind::AreaReinfHost);
+        }
+        RebarCover => app.dialogs.rebar_cover = true,
         Truss => start_drawing(app, ToolKind::Truss),
         BeamSystem => start_sketch(app, SketchKind::BeamSystem, DrawMode::Line),
         IsolatedFoundation => app.set_tool(ToolKind::IsolatedFooting),
@@ -1527,6 +1542,14 @@ pub fn finish_sketch(app: &mut App) {
                         })
                     }
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
+                    SketchKind::AreaReinforcement(host) => {
+                        let spacing = o.rebar_spacing;
+                        app.run("Create Area Reinforcement", |p| {
+                            let types = rc_core::rebar::ensure_bar_types(p);
+                            let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
+                            edit::add_area_reinforcement(p, host, outer, bt, spacing)
+                        })
+                    }
                     SketchKind::BeamSystem => {
                         let spacing = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1828.8 } else { 1800.0 };
                         app.run("Create Beam System", |p| edit::add_beam_system(p, o.beam_type, level, outer, spacing).map(|ids| ids[0]))

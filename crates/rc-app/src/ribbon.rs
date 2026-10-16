@@ -128,6 +128,7 @@ fn structure() -> Vec<Panel> {
             ],
         ),
         panel("Foundation", vec![Labeled("Isolated", C::IsolatedFoundation, vec![]), Labeled("Wall", C::WallFoundation, vec![]), Labeled("Slab", C::FloorStructural, vec![C::FloorStructural])]),
+        panel("Reinforcement", vec![Big(C::RebarTool), Labeled("Area", C::AreaReinforcementTool, vec![]), Labeled("Cover", C::RebarCover, vec![])]),
         panel("Model", vec![Labeled("Component", C::Component, vec![C::Component, C::ModelInPlace]), Labeled("Model\nText", C::ModelText, vec![]), Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
         panel("Opening", vec![Labeled("By\nFace", C::FaceOpening, vec![]), Big(C::Shaft), Labeled("Wall", C::WallOpening, vec![]), Labeled("Vertical", C::VerticalOpening, vec![]), Labeled("Dormer", C::DormerOpening, vec![])]),
         panel("Datum", vec![Big(C::Level), Big(C::Grid)]),

@@ -98,6 +98,22 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 app.opts.location_line = ll;
                 draw_common(app, ui, mode, true);
             }
+            ToolKind::RebarSet => {
+                ui.label("Layout:");
+                ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("rebar-layout").selected_text("Fixed Number").width(110.0).show_ui(ui, |_| {});
+                });
+                ui.label("Quantity:");
+                let mut q = app.opts.rebar_count as f64;
+                if ui.add(egui::DragValue::new(&mut q).range(1.0..=200.0).speed(0.2)).changed() {
+                    app.opts.rebar_count = q.round() as u32;
+                }
+                ui.label("Spacing:");
+                let mut sp = app.opts.rebar_spacing;
+                if length_field(ui, app, "rebar-spacing", &mut sp, 80.0) {
+                    app.opts.rebar_spacing = sp.max(25.0);
+                }
+            }
             ToolKind::Beam | ToolKind::Grid | ToolKind::RefPlane | ToolKind::RoomSeparator | ToolKind::AreaBoundary => draw_common(app, ui, mode, kind != ToolKind::Grid && kind != ToolKind::RefPlane),
             ToolKind::ModelLine | ToolKind::DetailLine => {
                 ui.label("Line Style:");

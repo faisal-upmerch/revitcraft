@@ -161,6 +161,8 @@ pub fn prompt(app: &App) -> String {
         ToolKind::SpanSymbol => "Select a floor to place the span direction symbol.".into(),
         ToolKind::TreadNumber => "Select a stair run to number its treads.".into(),
         ToolKind::FramingElevation => "Click near a grid, on the side to look from.".into(),
+        ToolKind::RebarSet => if n == 0 { "Click inside a floor or slab to start the bar.".into() } else { "Click to end the bar.".into() },
+        ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -525,6 +527,62 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::AreaReinfHost => {
+            // Pick the slab (by its edge or inside it), then sketch the boundary.
+            let Some(c) = cursor else { return };
+            let level = view.plan_level();
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Floor(_))).or_else(|| {
+                app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, c))).map(|e| e.id)
+            });
+            app.interact.hover = hit;
+            if clicked {
+                match hit {
+                    Some(host) => {
+                        let level = app.el(host).and_then(|e| e.level()).unwrap_or(0);
+                        app.sketch = Some(tools::Sketch::new(SketchKind::AreaReinforcement(host), view.id, level));
+                        app.opts.draw_mode = DrawMode::Line;
+                        app.opts.sketch_sub = SketchSub::Boundary;
+                        app.tool = Tool::new(ToolKind::SketchLine);
+                        app.select(vec![]);
+                    }
+                    None => app.error("Select a floor or slab to reinforce."),
+                }
+            }
+        }
+        ToolKind::RebarSet => {
+            let Some(pt) = point else { return };
+            let level = view.plan_level();
+            let host_at = |app: &App, q: DVec2| app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, q))).map(|e| e.id);
+            if let Some(a) = app.tool.pts.first().copied() {
+                // The set: the bar and its copies to the left.
+                let n = rc_core::geom::perp((pt - a).normalize_or_zero());
+                for k in 0..app.opts.rebar_count.max(1) {
+                    let off = n * (app.opts.rebar_spacing * k as f64);
+                    painter.line_segment([xf.s(a + off), xf.s(pt + off)], Stroke::new(2.0, style::PREVIEW));
+                }
+                if clicked {
+                    app.tool.reset();
+                    let Some(host) = host_at(app, a) else {
+                        app.error("Start the bar inside a floor or slab.");
+                        return;
+                    };
+                    let (count, spacing) = (app.opts.rebar_count, app.opts.rebar_spacing);
+                    if let Some(id) = app.run("Create Rebar", |p| {
+                        let types = rc_core::rebar::ensure_bar_types(p);
+                        let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
+                        edit::add_rebar(p, host, a, pt, bt, count, spacing)
+                    }) {
+                        app.select(vec![id]);
+                    }
+                }
+            } else if clicked {
+                if host_at(app, pt).is_some() {
+                    app.tool.pts.push(pt);
+                } else {
+                    app.error("Start the bar inside a floor or slab.");
+                }
+            }
+        }
         ToolKind::FramingElevation => {
             let Some(c) = cursor else { return };
             let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Grid(_)));

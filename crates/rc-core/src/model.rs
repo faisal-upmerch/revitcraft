@@ -46,6 +46,8 @@ pub enum Category {
     ImportedCad,
     RasterImages,
     Links,
+    StructuralRebar,
+    AreaReinforcement,
     Mass,
     Toposolid,
     Site,
@@ -220,6 +222,8 @@ impl Category {
             Category::ImportedCad => "Imported CAD",
             Category::RasterImages => "Raster Images",
             Category::Links => "RVT Links",
+            Category::StructuralRebar => "Structural Rebar",
+            Category::AreaReinforcement => "Structural Area Reinforcement",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site",
@@ -270,6 +274,8 @@ impl Category {
             Category::ImportedCad => "Imported CAD",
             Category::RasterImages => "Raster Images",
             Category::Links => "RVT Links",
+            Category::StructuralRebar => "Structural Rebar",
+            Category::AreaReinforcement => "Structural Area Reinforcement",
             Category::Mass => "Mass",
             Category::Toposolid => "Toposolid",
             Category::Site => "Site Component",
@@ -353,6 +359,10 @@ pub enum ElementKind {
     RasterImage(RasterImage),
     /// An instance of a linked project (Insert > Link Revit).
     Link(LinkInstance),
+    /// Bars in layers over a sketched area of a floor (Structure > Area).
+    AreaReinforcement(AreaReinforcement),
+    /// A set of straight bars in a host (Structure > Rebar).
+    Rebar(Rebar),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -416,6 +426,8 @@ impl Element {
             ElementKind::ModelText(_) => Category::GenericModels,
             ElementKind::RasterImage(_) => Category::RasterImages,
             ElementKind::Link(_) => Category::Links,
+            ElementKind::AreaReinforcement(_) => Category::AreaReinforcement,
+            ElementKind::Rebar(_) => Category::StructuralRebar,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -2653,6 +2665,9 @@ pub struct Project {
     /// Linked project files (Manage Links).
     #[serde(default)]
     pub links: Vec<LinkedModel>,
+    /// Rebar Cover Settings: concrete cover (0 = the default 40 mm / 1 1/2").
+    #[serde(default)]
+    pub rebar_cover: f64,
 }
 
 /// A linked project file. Its model is read from `path` when the project opens and is never
@@ -2664,6 +2679,35 @@ pub struct LinkedModel {
     pub path: String,
     #[serde(skip)]
     pub data: Option<std::sync::Arc<Project>>,
+}
+
+/// One layer of an area reinforcement.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct RebarLayer {
+    pub on: bool,
+    pub bar_type: Id,
+    pub spacing: f64,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AreaReinforcement {
+    pub host: Id,
+    pub boundary: Vec<DVec2>,
+    /// Major direction (the first sketched edge by default).
+    pub major: DVec2,
+    /// Top major, top minor, bottom major, bottom minor.
+    pub layers: [RebarLayer; 4],
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Rebar {
+    pub host: Id,
+    pub start: DVec2,
+    pub end: DVec2,
+    pub bar_type: Id,
+    /// Bars in the set (Layout Rule: Fixed Number), `spacing` apart to the left of the first.
+    pub count: u32,
+    pub spacing: f64,
 }
 
 /// Where a linked model sits: its internal origin at `origin`, turned `rotation_deg`.
@@ -2785,6 +2829,7 @@ impl Project {
             starting_view: None,
             images: Vec::new(),
             links: Vec::new(),
+            rebar_cover: 0.0,
         }
     }
 

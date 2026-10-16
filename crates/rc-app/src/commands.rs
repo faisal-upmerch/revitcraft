@@ -102,6 +102,9 @@ pub enum Cmd {
     RefPlane,
     // Structure
     Beam,
+    RebarTool,
+    AreaReinforcementTool,
+    RebarCover,
     Brace,
     Truss,
     BeamSystem,
@@ -484,6 +487,9 @@ impl Cmd {
             RefPlane => ci("Ref Plane", I::RefPlane, "Draws a reference plane to help with placing and aligning.", "RP"),
 
             Beam => ci("Beam", I::Beam, "Draws structural beams between two points.", "BM"),
+            RebarTool => ci("Rebar", I::Rebar, "Places a set of straight bars in a floor or slab at its bottom cover: click the bar's start and end.", "RB"),
+            AreaReinforcementTool => ci("Area", I::AreaReinforcement, "Reinforces a sketched area of a floor or slab with top and bottom bar layers both ways.", ""),
+            RebarCover => ci("Cover", I::RebarCover, "Rebar Cover Settings: the concrete cover to the bars.", ""),
             Brace => ci("Brace", I::Brace, "Adds diagonal braces from the current level up to the level above.", "BR"),
             Truss => ci("Truss", I::Truss, "Places a flat truss of chords and diagonal members between two points.", ""),
             BeamSystem => ci("Beam System", I::BeamSystem, "Sketches a bay and fills it with parallel beams at a fixed spacing.", "BS"),
@@ -760,7 +766,7 @@ impl Cmd {
         Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Home, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelText, Cmd::Ramp, Cmd::PlaceRoomsAuto, Cmd::HighlightBoundaries, Cmd::RampRun, Cmd::RampBoundary, Cmd::RampRiser, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,
-        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::FaceOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::Brace, Cmd::Truss, Cmd::BeamSystem, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::LinkRevit, Cmd::ImportCad, Cmd::ImportImage, Cmd::SpanSymbol, Cmd::TreadNumber, Cmd::LinkImage,
+        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::FaceOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::RebarTool, Cmd::AreaReinforcementTool, Cmd::RebarCover, Cmd::Brace, Cmd::Truss, Cmd::BeamSystem, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::LinkRevit, Cmd::ImportCad, Cmd::ImportImage, Cmd::SpanSymbol, Cmd::TreadNumber, Cmd::LinkImage,
         Cmd::LoadFamily, Cmd::LoadAsGroup, Cmd::InsertViews, Cmd::TransferStandards, Cmd::SharedParameters, Cmd::DimAligned, Cmd::DimLinear, Cmd::DimAngular, Cmd::DimRadial, Cmd::DimDiameter, Cmd::DimArcLength, Cmd::SpotElevation, Cmd::DetailLine,
         Cmd::FilledRegion, Cmd::MaskingRegion, Cmd::RevisionCloud, Cmd::Text, Cmd::TagByCategory, Cmd::TagAll, Cmd::Symbol, Cmd::ViewTemplates, Cmd::TemplateFromView,
         Cmd::VisibilityGraphics, Cmd::ThinLines, Cmd::Default3D, Cmd::Camera, Cmd::FramingElevation, Cmd::Render, Cmd::StartingView, Cmd::Location, Cmd::SpecifyCoordinates, Cmd::ReportCoordinates, Cmd::RelocateProject, Cmd::RotateTrueNorth, Cmd::Section, Cmd::Callout, Cmd::NewFloorPlan, Cmd::NewCeilingPlan, Cmd::NewAreaPlan,

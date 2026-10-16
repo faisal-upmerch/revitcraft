@@ -24,6 +24,7 @@ pub mod params;
 pub mod pdf;
 pub mod plan;
 pub mod png;
+pub mod rebar;
 pub mod shared_params;
 pub mod transfer;
 pub mod util;
