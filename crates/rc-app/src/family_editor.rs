@@ -57,6 +57,7 @@ pub enum FeTool {
     Blend,
     Revolve,
     Sweep,
+    SweptBlend,
     SymbolicLine,
 }
 
@@ -94,6 +95,8 @@ pub struct FamilyEditor {
     pub chain_ended: bool,
     /// Sweep: the finished path while its profile is sketched.
     pub sweep_path: Option<Vec<SketchPt>>,
+    /// Swept Blend: the finished first profile while the second is sketched.
+    pub sb_profile1: Option<Vec<DVec2>>,
     /// Go To View is open with these views to choose from.
     pub goto_view: Vec<FeView>,
     /// New Type (false) or Rename Type (true), with the name being typed.
@@ -182,6 +185,7 @@ impl FamilyEditor {
             sweep_path: None,
             chain_ended: false,
             goto_view: Vec::new(),
+            sb_profile1: None,
             param_filter: String::new(),
             param_dialog: None,
             type_name_dialog: None,
@@ -332,7 +336,7 @@ pub fn view_area(app: &mut App, ui: &mut egui::Ui) {
         if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
             // In sketch mode Esc ends the chain but keeps the sketch; only Finish or Cancel
             // Edit Mode leave it.
-            let sketching = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep);
+            let sketching = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend);
             if sketching {
                 fe.chain_ended = true;
             } else if !fe.pts.is_empty() || !fe.dim_planes.is_empty() {
@@ -378,6 +382,9 @@ pub fn set_tool(fe: &mut FamilyEditor, t: FeTool, void: bool) {
     fe.pts.clear();
     fe.dim_planes.clear();
     fe.blend_bottom = None;
+    fe.sweep_path = None;
+    fe.sb_profile1 = None;
+    fe.closed = false;
     fe.sel = FeSel::None;
     if t != FeTool::Select && fe.view == FeView::ThreeD {
         fe.view = FeView::Plan;
@@ -401,6 +408,7 @@ pub fn cancel_sketch(fe: &mut FamilyEditor) {
     fe.pts.clear();
     fe.blend_bottom = None;
     fe.sweep_path = None;
+    fe.sb_profile1 = None;
     fe.goto_view.clear();
     fe.closed = false;
     fe.dim_planes.clear();
@@ -427,12 +435,13 @@ pub fn properties_palette(app: &mut App, ui: &mut egui::Ui) {
         ui.painter().rect_stroke(r, 0.0, Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
         icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(44.0, 44.0)), Icon::FamilyTypes, true);
     });
-    let sketching = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep);
+    let sketching = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend);
     let header = if sketching {
         match fe.tool {
             FeTool::Blend => "Blend".to_string(),
             FeTool::Revolve => "Revolution".to_string(),
             FeTool::Sweep => "Sweep".to_string(),
+            FeTool::SweptBlend => "Swept Blend".to_string(),
             _ => "Extrusion".to_string(),
         }
     } else {
@@ -619,6 +628,11 @@ fn selection_properties(app: &App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                     ro(ui, "0.00°");
                     ui.end_row();
                 }
+                Form::SweptBlend { z, .. } => {
+                    ui.label("Path Height");
+                    loc_value_editor(ui, "fe-sbz", &def, &solved, &units, z);
+                    ui.end_row();
+                }
                 Form::Sweep { z, width, height, profile, .. } => {
                     ui.label("Path Height");
                     loc_value_editor(ui, "fe-sz", &def, &solved, &units, z);
@@ -755,13 +769,13 @@ pub fn options_bar(app: &mut App, ui: &mut egui::Ui) {
             FeTool::Extrusion => "Modify | Create Extrusion".into(),
             FeTool::Blend => "Modify | Create Blend Base Boundary".into(),
             FeTool::Revolve => "Modify | Create Revolve".into(),
-            FeTool::Sweep => "Modify | Sweep".into(),
+            FeTool::Sweep | FeTool::SweptBlend => format!("Modify | {} > {}", if fe.tool == FeTool::Sweep { "Sweep" } else { "Swept Blend" }, if fe.sweep_path.is_none() { "Sketch Path" } else { "Edit Profile" }),
             FeTool::RefPlane => "Modify | Place Reference Plane".into(),
             FeTool::Dimension => "Modify | Place Dimensions".into(),
             FeTool::SymbolicLine => "Modify | Place Symbolic Lines".into(),
         };
         ui.label(title);
-        if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine | FeTool::RefPlane) {
+        if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::RefPlane) {
             ui.separator();
             crate::style::check(ui, &mut app.opts.chain, "Chain");
             ui.label("Offset:");
@@ -818,6 +832,17 @@ fn sweep_frame(pp: &[DVec2]) -> (DVec2, DVec2) {
     let a = pp.first().copied().unwrap_or(DVec2::ZERO);
     let b = pp.get(1).copied().unwrap_or(a + DVec2::X);
     ((a + b) / 2.0, rc_core::geom::perp((b - a).normalize_or_zero()))
+}
+
+/// The profile plane being sketched: a sweep's is mid-way along its first segment, a swept
+/// blend's first profile is at the path start and its second at the end.
+fn profile_frame(tool: FeTool, second: bool, pp: &[DVec2]) -> (DVec2, DVec2) {
+    let (mid, n) = sweep_frame(pp);
+    match tool {
+        FeTool::SweptBlend if second => (pp.get(1).copied().unwrap_or(mid), n),
+        FeTool::SweptBlend => (pp.first().copied().unwrap_or(mid), n),
+        _ => (mid, n),
+    }
 }
 
 /// The elevations in which a sweep's profile plane is parallel to the screen.
@@ -972,9 +997,9 @@ fn prompt(fe: &FamilyEditor, mode: crate::tools::DrawMode) -> String {
         FeTool::Select => "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into(),
         FeTool::RefPlane => if first { "Click to enter Reference Plane start point.".into() } else { "Click to enter Reference Plane end point.".into() },
         FeTool::Dimension => if fe.dim_planes.is_empty() { "Click on a reference to dimension.".into() } else { "Click on another reference, or click empty space to place the dimension.".into() },
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
-        FeTool::Sweep if fe.sweep_path.is_none() => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine | FeTool::Sweep => match mode {
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
+        FeTool::Sweep | FeTool::SweptBlend if fe.sweep_path.is_none() => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine | FeTool::Sweep | FeTool::SweptBlend => match mode {
             DrawMode::Rect => if first { "Click to enter rectangle start point.".into() } else { "Click to enter rectangle end point.".into() },
             DrawMode::Circle => if first { "Click to enter circle center.".into() } else { "Click to enter circle radius.".into() },
             _ => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
@@ -1203,14 +1228,20 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             painter.rect_stroke(Rect::from_center_size(xf.s(sp), vec2(9.0, 9.0)), 0.0, Stroke::new(1.5, col), egui::StrokeKind::Middle);
         }
         // Sweep: the finished path (halftone) and the profile plane across its first segment.
-        if let Some(path) = fe.sweep_path.as_ref().filter(|_| fe.tool == FeTool::Sweep) {
+        if let Some(path) = fe.sweep_path.as_ref().filter(|_| matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend)) {
             let pp: Vec<DVec2> = path.iter().map(|p| pt2(*p, &solved)).collect();
             if pp.len() >= 2 {
                 let half = Color32::from_rgb(232, 150, 210);
                 let red = Color32::from_rgb(220, 30, 30);
                 let line: Vec<Pos2> = pp.iter().map(|q| xf.s(to2(DVec3::new(q.x, q.y, 0.0)))).collect();
                 painter.add(egui::Shape::line(line, Stroke::new(1.5, half)));
-                let (o, n) = sweep_frame(&pp);
+                let (o, n) = profile_frame(fe.tool, fe.sb_profile1.is_some(), &pp);
+                // Swept Blend: the finished first profile, halftone, at the path start.
+                if let Some(p1) = fe.sb_profile1.as_ref() {
+                    let a = pp[0];
+                    let ring: Vec<Pos2> = p1.iter().map(|q| { let w = a + n * q.x; xf.s(to2(DVec3::new(w.x, w.y, q.y))) }).collect();
+                    painter.add(egui::Shape::closed_line(ring, Stroke::new(1.5, half)));
+                }
                 if matches!(fe.view, FeView::Plan | FeView::Ceiling) {
                     painter.line_segment([xf.s(o - n * 300.0), xf.s(o + n * 300.0)], Stroke::new(1.5, red));
                     painter.circle_filled(xf.s(o), 3.5, red);
@@ -1351,11 +1382,11 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 }
             }
         }
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SymbolicLine => {
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine => {
             let mode = app.opts.draw_mode;
-            let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve) || (fe.tool == FeTool::Sweep && fe.sweep_path.is_some());
+            let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve) || (matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) && fe.sweep_path.is_some());
             if let (true, Some(s), false) = (clicked, snapped, fe.closed) {
-                let close = fe.pts.len() >= 3 && fe.pts.first().is_some_and(|f| pt2(*f, &solved).distance(pt2(s, &solved)) < tol) && (fe.tool != FeTool::Sweep || fe.sweep_path.is_some());
+                let close = fe.pts.len() >= 3 && fe.pts.first().is_some_and(|f| pt2(*f, &solved).distance(pt2(s, &solved)) < tol) && (!matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) || fe.sweep_path.is_some());
                 if profile && mode == crate::tools::DrawMode::Rect && fe.pts.len() == 1 {
                     // Rectangle: its corners keep the plane locks of both clicks.
                     let a = fe.pts[0];
@@ -1426,10 +1457,15 @@ fn finish_sketch(fe: &mut FamilyEditor) {
             let cx = def.planes.iter().find(|p| p.name == "Center (Left/Right)").map(|p| Loc::Plane(p.id)).unwrap_or(Loc::Value(0.0));
             Some(Form::Revolve { profile: pts, axis: SketchPt { a: cx, b: Loc::Value(0.0) }, angle_deg: 360.0 })
         }
-        FeTool::Sweep if fe.sweep_path.is_none() => {
+        FeTool::Sweep | FeTool::SweptBlend if fe.sweep_path.is_none() => {
             // The path is done; its profile is sketched next, in a view across the path.
             if pts.len() < 2 || plane != SketchPlane::XY {
                 fe.message = Some(if plane != SketchPlane::XY { "Sweep paths are sketched in the Ref. Level view.".into() } else { "Sketch the sweep path first.".into() });
+                fe.pts = pts;
+                return;
+            }
+            if fe.tool == FeTool::SweptBlend && pts.len() != 2 {
+                fe.message = Some("A swept blend path must be a single line.".into());
                 fe.pts = pts;
                 return;
             }
@@ -1440,7 +1476,7 @@ fn finish_sketch(fe: &mut FamilyEditor) {
             fe.message = None;
             return;
         }
-        FeTool::Sweep => {
+        FeTool::Sweep | FeTool::SweptBlend => {
             if pts.len() < 3 || plane == SketchPlane::XY {
                 fe.message = Some("Sketch a closed profile in a view where the profile plane is parallel to the screen.".into());
                 if plane == SketchPlane::XY {
@@ -1451,10 +1487,10 @@ fn finish_sketch(fe: &mut FamilyEditor) {
                 fe.pts = pts;
                 return;
             }
-            let path = fe.sweep_path.take().unwrap_or_default();
+            let path = fe.sweep_path.clone().unwrap_or_default();
             let (solved, _) = fe.solved();
             let pp: Vec<DVec2> = path.iter().map(|p| pt2(*p, &solved)).collect();
-            let (o, n) = sweep_frame(&pp);
+            let (o, n) = profile_frame(fe.tool, fe.sb_profile1.is_some(), &pp);
             // The view's horizontal axis in plan.
             let e = if plane == SketchPlane::XZ { DVec2::X } else { DVec2::Y };
             let profile: Vec<DVec2> = pts
@@ -1464,7 +1500,17 @@ fn finish_sketch(fe: &mut FamilyEditor) {
                     DVec2::new((e * (q.x - o.dot(e))).dot(n), q.y)
                 })
                 .collect();
-            Some(Form::Sweep { path, z: Loc::Value(0.0), width: 50.0, height: 50.0, profile })
+            if fe.tool == FeTool::SweptBlend && fe.sb_profile1.is_none() {
+                // Profile 1 is done; Profile 2 is sketched at the path's end.
+                fe.sb_profile1 = Some(profile);
+                fe.message = None;
+                return;
+            }
+            fe.sweep_path = None;
+            match fe.sb_profile1.take() {
+                Some(profile1) => Some(Form::SweptBlend { path, z: Loc::Value(0.0), profile1, profile2: profile }),
+                None => Some(Form::Sweep { path, z: Loc::Value(0.0), width: 50.0, height: 50.0, profile }),
+            }
         }
         FeTool::Revolve => {
             fe.message = Some("Revolves are sketched in the Front view.".into());

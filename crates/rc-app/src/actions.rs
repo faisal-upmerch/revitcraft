@@ -25,13 +25,13 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
     if let Some(fe) = app.family_editor.as_ref() {
         use crate::family_editor::FeTool as F;
         let custom = fe.family.definition.is_some();
-        let sketching = matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Sweep);
+        let sketching = matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Sweep | F::SweptBlend);
         return match cmd {
-            FeExtrusion | FeBlend | FeRevolve | FeSweep | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => custom,
+            FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => custom,
             FeFinishSketch | FeCancelSketch => sketching,
             FeFamilyTypes | FeFamilyCategory | FeLoadIntoProject | FeLoadAndClose | FeDefault3D => true,
             DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine),
-            DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve),
+            DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve) || (matches!(fe.tool, F::Sweep | F::SweptBlend) && fe.sweep_path.is_some()),
             Modify | ToggleProperties | ToggleBrowser | ToggleStatusBar | ToggleOptionsBar | ThinLines | Undo | Redo | Exit | Options | Save | SaveAs => match cmd {
                 Undo => !fe.undo.is_empty(),
                 Redo => !fe.redo.is_empty(),
@@ -202,13 +202,14 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 fe.pts.clear();
             }
         }
-        FeExtrusion | FeBlend | FeRevolve | FeSweep | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => {
+        FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => {
             use crate::family_editor::FeTool as F;
             let (t, void) = match cmd {
                 FeExtrusion => (F::Extrusion, false),
                 FeBlend => (F::Blend, false),
                 FeRevolve => (F::Revolve, false),
                 FeSweep => (F::Sweep, false),
+                FeSweptBlend => (F::SweptBlend, false),
                 FeVoidExtrusion => (F::Extrusion, true),
                 FeVoidBlend => (F::Blend, true),
                 FeVoidRevolve => (F::Revolve, true),
@@ -252,7 +253,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         FeLoadIntoProject => crate::family_editor::load(app, false),
         FeLoadAndClose => crate::family_editor::load(app, true),
-        FeSweptBlend | FeModelLine | FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl | FeRefLine => {}
+        FeModelLine | FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl | FeRefLine => {}
         Undo => app.undo(),
         Redo => app.redo(),
 

@@ -99,6 +99,9 @@ pub enum Form {
         #[serde(default)]
         profile: Vec<DVec2>,
     },
+    /// A single plan path segment at height `z` with a profile at each end (x along the
+    /// path's left normal, y up from `z`), lofted from the first to the second.
+    SweptBlend { path: Vec<SketchPt>, z: Loc, profile1: Vec<DVec2>, profile2: Vec<DVec2> },
 }
 
 impl Form {
@@ -108,6 +111,7 @@ impl Form {
             Form::Blend { .. } => "Blend",
             Form::Revolve { .. } => "Revolve",
             Form::Sweep { .. } => "Sweep",
+            Form::SweptBlend { .. } => "Swept Blend",
         }
     }
 }
@@ -374,6 +378,31 @@ pub fn form_mesh(form: &Form, solved: &Solved, material: &str) -> MeshSet {
                 m.add_polygon_facing(&end, DVec3::new(-ang.sin(), ang.cos(), 0.0));
             }
         }
+        Form::SweptBlend { path, z, profile1, profile2 } => {
+            let pts: Vec<DVec2> = path.iter().map(|p| DVec2::new(loc(p.a, solved), loc(p.b, solved))).collect();
+            if pts.len() < 2 || profile1.len() < 3 || profile2.len() < 3 || pts[0].distance(pts[1]) < 1e-6 {
+                return set;
+            }
+            let z0 = loc(*z, solved);
+            let (a, b) = (pts[0], pts[1]);
+            let d = (b - a).normalize();
+            let nrm = geom::perp(d);
+            let n = profile1.len().max(profile2.len());
+            let p1 = geom::ensure_ccw(&resample(profile1, n));
+            let p2 = geom::ensure_ccw(&resample(profile2, n));
+            let at = |o: DVec2, q: DVec2| { let w = o + nrm * q.x; DVec3::new(w.x, w.y, z0 + q.y) };
+            let r0: Vec<DVec3> = p1.iter().map(|q| at(a, *q)).collect();
+            let r1: Vec<DVec3> = p2.iter().map(|q| at(b, *q)).collect();
+            let m = set.mesh(material);
+            let c1 = geom::centroid(&p1);
+            for i in 0..n {
+                let j = (i + 1) % n;
+                let e = (p1[i] + p1[j]) / 2.0 - c1;
+                m.add_quad_facing(r0[i], r0[j], r1[j], r1[i], DVec3::new(nrm.x * e.x, nrm.y * e.x, e.y));
+            }
+            m.add_polygon_facing(&r0, DVec3::new(-d.x, -d.y, 0.0));
+            m.add_polygon_facing(&r1, DVec3::new(d.x, d.y, 0.0));
+        }
         Form::Sweep { path, z, width, height, profile } => {
             let pts: Vec<DVec2> = path.iter().map(|p| DVec2::new(loc(p.a, solved), loc(p.b, solved))).collect();
             let z0 = loc(*z, solved);
@@ -569,6 +598,20 @@ mod tests {
         let tris = mesh.by_material.values().map(|m| m.indices.len() / 3).sum::<usize>();
         // 2 segments x 4 sides x 2 triangles + 2 caps x 2 triangles.
         assert_eq!(tris, 20);
+    }
+
+    #[test]
+    fn swept_blend_lofts_between_its_end_profiles() {
+        let mut def = FamilyDef::default();
+        let p = |a: f64, b: f64| SketchPt { a: Loc::Value(a), b: Loc::Value(b) };
+        let sq = |s: f64| vec![DVec2::new(0.0, 0.0), DVec2::new(s, 0.0), DVec2::new(s, s), DVec2::new(0.0, s)];
+        def.forms.push(FormDef { name: "SB".into(), form: Form::SweptBlend { path: vec![p(0.0, 0.0), p(1000.0, 0.0)], z: Loc::Value(0.0), profile1: sq(200.0), profile2: sq(100.0) }, void: false, material: String::new(), visible: String::new() });
+        let mesh = def.build(&Solved::new(), &|_| "Wood".into(), &|_| true);
+        let (mn, mx) = mesh.bounds().unwrap();
+        assert!((mn - DVec3::ZERO).length() < 1e-6 && (mx - DVec3::new(1000.0, 200.0, 200.0)).length() < 1e-6, "{mn:?} {mx:?}");
+        // The far end is the small profile.
+        let far: Vec<DVec3> = mesh.by_material.values().flat_map(|m| m.positions.iter().copied()).filter(|q| (q.x - 1000.0).abs() < 1e-6).collect();
+        assert!(far.iter().all(|q| q.y <= 100.0 + 1e-6 && q.z <= 100.0 + 1e-6));
     }
 
     #[test]
