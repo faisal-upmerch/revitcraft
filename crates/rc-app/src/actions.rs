@@ -524,6 +524,31 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 }
             }
         }
+        LoadAsGroup => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
+                match io::load(&path) {
+                    Ok(src) => {
+                        let name = path.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "Group".into());
+                        if let Some(id) = app.run("Load as Group", |p| rc_core::transfer::load_as_group(p, &src, &name)) {
+                            let n = app.doc.data.group_types.iter().find(|g| g.id == id).map(|g| g.name.clone()).unwrap_or_default();
+                            app.info(format!("Loaded group \"{n}\". Place it from Architecture > Model Group."));
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        TransferStandards => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
+                match io::load(&path) {
+                    Ok(src) => {
+                        let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        app.dialogs.transfer = Some(Box::new(dialogs::TransferState { name, src, checks: vec![true; rc_core::transfer::STANDARDS.len()], duplicates: None }));
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
         LoadFamily => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
                 load_family_path(app, &path);

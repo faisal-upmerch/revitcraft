@@ -56,6 +56,8 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    LoadAsGroup,
+    TransferStandards,
     TreadNumber,
     StartingView,
     Brace,
@@ -897,6 +899,23 @@ fn draw(g: &Pen, icon: Icon) {
             for (k, t) in ["1", "2", "3", "4"].iter().enumerate() {
                 g.text((0.5, 0.18 + 0.21 * k as f32), t, 0.16, BLUE);
             }
+        }
+        LoadAsGroup => {
+            // A dashed group box of two blocks, with a green load arrow.
+            g.rect(0.18, 0.4, 0.5, 0.86, LGREY, ink);
+            g.rect(0.56, 0.52, 0.86, 0.86, LBLUE, ink);
+            let green = Color32::from_rgb(40, 150, 70);
+            g.line(&[(0.66, 0.08), (0.66, 0.38)], green);
+            g.poly(&[(0.56, 0.3), (0.76, 0.3), (0.66, 0.44)], green, green);
+        }
+        TransferStandards => {
+            // Two project sheets with an arrow from one to the other.
+            g.rect(0.06, 0.1, 0.46, 0.62, Color32::WHITE, ink);
+            g.rect(0.54, 0.38, 0.94, 0.9, Color32::WHITE, ink);
+            g.thin_line(&[(0.14, 0.24), (0.38, 0.24)], ink);
+            g.thin_line(&[(0.14, 0.36), (0.38, 0.36)], ink);
+            g.line(&[(0.3, 0.72), (0.3, 0.8), (0.5, 0.8)], BLUE);
+            g.poly(&[(0.46, 0.73), (0.54, 0.8), (0.46, 0.87)], BLUE, BLUE);
         }
         Picture => {
             // A framed picture: sky, sun and hills.

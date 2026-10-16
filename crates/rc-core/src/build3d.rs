@@ -1427,7 +1427,7 @@ mod slanted_column_tests {
     /// A slanted column's top lands on its top point; its base stays on the base point.
     #[test]
     fn slanted_column_leans_to_its_top() {
-        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let p = crate::defaults::new_project(UnitSystem::Metric);
         let l1 = p.levels()[0].0;
         let (fam, ty) = p.families.iter().find(|f| f.is_column() && f.category == Category::StructuralColumns).map(|f| (f.id, f.types[0].id)).unwrap();
         let mut i = FamilyInstance { family_id: fam, type_id: ty, category: Category::StructuralColumns, level: l1, ..Default::default() };

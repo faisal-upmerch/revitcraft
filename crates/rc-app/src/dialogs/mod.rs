@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Transfer Project Standards: the source project and what to copy.
+    pub transfer: Option<Box<TransferState>>,
     /// Location, Weather and Site.
     pub location: bool,
     /// Specify Coordinates at Point: the point and its N/S, E/W, Elevation and angle texts.
@@ -444,6 +446,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     model_text_dialog(app, ctx);
     plan_view_types_dialog(app, ctx);
     starting_view_dialog(app, ctx);
+    transfer_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -761,6 +764,108 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+pub struct TransferState {
+    pub name: String,
+    pub src: rc_core::model::Project,
+    pub checks: Vec<bool>,
+    /// The Duplicate Types list once OK found items the project already has.
+    pub duplicates: Option<Vec<String>>,
+}
+
+/// Select Items To Copy, then Duplicate Types (Overwrite / New Only / Cancel).
+fn transfer_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut st) = app.dialogs.transfer.take() else { return };
+    let items = rc_core::transfer::STANDARDS;
+    let chosen = |st: &TransferState| -> Vec<&'static str> { items.iter().zip(&st.checks).filter(|(_, c)| **c).map(|(i, _)| *i).collect() };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    let mut run: Option<bool> = None;
+    if let Some(dups) = st.duplicates.clone() {
+        window("Duplicate Types").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
+            ui.label("The following types already exist in the destination project but are different:");
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                egui::ScrollArea::vertical().max_height(200.0).show(ui, |ui| {
+                    for d in &dups {
+                        ui.label(d);
+                    }
+                });
+            });
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if dlg_button(ui, "Cancel", false, true) {
+                    cancel = true;
+                }
+                if dlg_button(ui, "New Only", false, true) {
+                    run = Some(false);
+                }
+                if dlg_button(ui, "Overwrite", true, true) {
+                    run = Some(true);
+                }
+            });
+        });
+    } else {
+        window("Select Items To Copy").open(&mut open).resizable(false).default_width(360.0).show(ctx, |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Copy from:");
+                egui::ComboBox::from_id_salt("transfer-from").selected_text(&st.name).width(240.0).show_ui(ui, |ui| {
+                    let _ = ui.selectable_label(true, &st.name);
+                });
+            });
+            ui.add_space(4.0);
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    for (k, item) in items.iter().enumerate() {
+                        crate::style::check(ui, &mut st.checks[k], *item);
+                    }
+                });
+            });
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                if ui.button("Check All").clicked() {
+                    st.checks.iter_mut().for_each(|c| *c = true);
+                }
+                if ui.button("Check None").clicked() {
+                    st.checks.iter_mut().for_each(|c| *c = false);
+                }
+            });
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if dlg_button(ui, "Cancel", false, true) {
+                    cancel = true;
+                }
+                if dlg_button(ui, "OK", true, st.checks.iter().any(|c| *c)) {
+                    ok = true;
+                }
+            });
+        });
+    }
+    if ok {
+        let dups = rc_core::transfer::duplicates(&app.doc.data, &st.src, &chosen(&st));
+        if dups.is_empty() {
+            run = Some(false);
+        } else {
+            st.duplicates = Some(dups);
+        }
+    }
+    if let Some(overwrite) = run {
+        let what = chosen(&st);
+        let src = &st.src;
+        let mut copied = 0;
+        app.run("Transfer Project Standards", |p| {
+            copied = rc_core::transfer::transfer_standards(p, src, &what, overwrite);
+            Ok(())
+        });
+        app.info(format!("Copied {copied} item(s) from {}.", st.name));
+        return;
+    }
+    if !(cancel || !open) {
+        app.dialogs.transfer = Some(st);
     }
 }
 

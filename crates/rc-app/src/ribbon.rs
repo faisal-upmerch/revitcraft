@@ -141,7 +141,7 @@ fn insert() -> Vec<Panel> {
         panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
         panel("Link", vec![Big(C::LinkCad), Big(C::LinkImage)]),
         panel("Import", vec![Big(C::ImportCad), Big(C::ImportImage), Big(C::ImportIfc)]),
-        panel("Load from Library", vec![Big(C::LoadFamily)]),
+        panel("Load from Library", vec![Big(C::LoadFamily), Labeled("Load as\nGroup", C::LoadAsGroup, vec![])]),
     ]
 }
 
@@ -277,7 +277,7 @@ fn manage() -> Vec<Panel> {
                 Big(C::Materials),
                 Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]),
                 Stack(vec![C::ProjectParameters, C::GlobalParameters]),
-                Stack(vec![C::Purge, C::ProjectUnits]),
+                Stack(vec![C::TransferStandards, C::Purge, C::ProjectUnits]),
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],
         ),
