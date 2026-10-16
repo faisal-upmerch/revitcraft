@@ -1364,6 +1364,21 @@ fn nav_bar(app: &mut App, ui: &mut egui::Ui, area: Rect, view_id: Id, mode: NavM
 }
 
 /// Renders a 3D view off-screen at the given pixel size (sheets, PDF, image export).
+/// View > Render: the 3D view in the Realistic style with sun shadows over a sky background.
+pub fn render_realistic(app: &mut App, view_id: Id, w: u32, h: u32) -> Option<rc_core::pdf::Image> {
+    let view = app.doc.data.view(view_id)?.clone();
+    if !matches!(view.kind, ViewKind::ThreeD { .. }) {
+        return None;
+    }
+    let cam = camera_of(app, view_id);
+    ensure_scene(app, view_id);
+    let sun = render3d::sun_direction(app.doc.data.sun.azimuth + app.doc.data.true_north, app.doc.data.sun.altitude);
+    let set = DrawSettings { style: VisualStyle::Realistic, shadows: true, sun, section_box: view.section_box, background: [0.74, 0.84, 0.95] };
+    let scene = app.scenes.get(&view_id)?;
+    let renderer = app.renderer.as_ref()?;
+    Some(renderer.render_to_rgb(scene, &cam, &set, w, h))
+}
+
 pub fn render_image(app: &mut App, view_id: Id, w: u32, h: u32) -> Option<rc_core::pdf::Image> {
     let view = app.doc.data.view(view_id)?.clone();
     if !matches!(view.kind, ViewKind::ThreeD { .. }) {

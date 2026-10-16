@@ -500,7 +500,7 @@ const GROUPS: [&str; 10] = [
 ];
 
 /// A titled group box (thin border, title above).
-fn group<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+pub(crate) fn group<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
     ui.label(egui::RichText::new(title).size(12.0));
     egui::Frame::new()
         .stroke(egui::Stroke::new(1.0, egui::Color32::from_gray(200)))

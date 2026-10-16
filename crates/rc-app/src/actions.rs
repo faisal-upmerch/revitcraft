@@ -80,6 +80,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DeactivateView => app.sheet_activation.is_some(),
         Matchline => plan && !in_sketch,
         ViewReference => graphical_2d && !in_sketch,
+        Render => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
         SpanSymbol | TreadNumber => view.is_some_and(|v| v.plan_level().is_some()) && !in_sketch,
         Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
         TypeProperties => true,
@@ -681,6 +682,9 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         VisibilityGraphics => app.dialogs.vg = app.active,
         ThinLines => app.thin_lines = !app.thin_lines,
+        Render => {
+            app.dialogs.render = Some(Box::new(dialogs::RenderState { quality: 2, printer: false, dpi: 150, image: None, texture: None }));
+        }
         Default3D => {
             let existing = app.doc.data.views.iter().find(|v| matches!(v.kind, ViewKind::ThreeD { .. }) && v.name == "{3D}").map(|v| v.id);
             let id = match existing {

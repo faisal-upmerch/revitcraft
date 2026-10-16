@@ -223,6 +223,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Remove\nHidden Lines", C::RemoveHiddenLines, vec![]),
             ],
         ),
+        panel("Presentation", vec![Big(C::Render)]),
         panel(
             "Create",
             vec![

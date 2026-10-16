@@ -56,6 +56,7 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    Render,
     LoadAsGroup,
     TransferStandards,
     TreadNumber,
@@ -926,6 +927,12 @@ fn draw(g: &Pen, icon: Icon) {
             let link = Color32::from_rgb(40, 110, 200);
             g.arc((0.74, 0.8), 0.1, 0.0, TAU, link);
             g.arc((0.88, 0.8), 0.1, 0.0, TAU, link);
+        }
+        Render => {
+            // A teapot-free render mark: a shaded sphere with a highlight.
+            g.circle((0.5, 0.52), 0.36, Color32::from_rgb(120, 160, 210), ink);
+            g.circle((0.4, 0.4), 0.1, Color32::from_rgb(235, 242, 252), Color32::from_rgb(235, 242, 252));
+            g.thin_line(&[(0.1, 0.92), (0.9, 0.92)], ink);
         }
         Picture => {
             // A framed picture: sky, sun and hills.

@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Rendering (View > Render).
+    pub render: Option<Box<RenderState>>,
     /// Insert Views from File: the source project and its views.
     pub insert_views: Option<Box<InsertViewsState>>,
     /// Edit Shared Parameters.
@@ -455,6 +457,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     transfer_dialog(app, ctx);
     shared_params_dialog(app, ctx);
     insert_views_dialog(app, ctx);
+    render_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -772,6 +775,151 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+pub struct RenderState {
+    /// Draft, Low, Medium, High, Best.
+    pub quality: u8,
+    /// Output resolution: Printer (dpi) rather than Screen.
+    pub printer: bool,
+    pub dpi: u32,
+    pub image: Option<rc_core::pdf::Image>,
+    pub texture: Option<egui::TextureHandle>,
+}
+
+const RENDER_QUALITY: [&str; 5] = ["Draft", "Low", "Medium", "High", "Best"];
+
+/// The image size a render produces: the screen size scaled by quality, or a 10" x 6.25"
+/// print at the chosen dpi.
+fn render_size(st: &RenderState) -> (u32, u32) {
+    if st.printer {
+        (st.dpi * 10, st.dpi * 10 * 5 / 8)
+    } else {
+        let k = [0.5, 0.75, 1.0, 1.5, 2.0][st.quality.min(4) as usize];
+        ((1280.0 * k) as u32, (800.0 * k) as u32)
+    }
+}
+
+/// Rendering: renders the active 3D view; Save to Project or Export the image.
+fn render_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut st) = app.dialogs.render.take() else { return };
+    let Some(view) = app.active.filter(|v| app.doc.data.view(*v).is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. }))) else {
+        app.error("Rendering works in a 3D view.");
+        return;
+    };
+    let (mut open, mut go, mut save, mut export) = (true, false, false, false);
+    window("Rendering").open(&mut open).resizable(false).default_width(330.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            if dlg_button(ui, "Render", true, true) {
+                go = true;
+            }
+            crate::style::check(ui, &mut false, "Region");
+        });
+        manage::group(ui, "Quality", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Setting:");
+                egui::ComboBox::from_id_salt("render-q").selected_text(RENDER_QUALITY[st.quality.min(4) as usize]).width(150.0).show_ui(ui, |ui| {
+                    for (k, q) in RENDER_QUALITY.iter().enumerate() {
+                        ui.selectable_value(&mut st.quality, k as u8, *q);
+                    }
+                });
+            });
+        });
+        manage::group(ui, "Output Settings", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Resolution:");
+                ui.radio_value(&mut st.printer, false, "Screen");
+                ui.radio_value(&mut st.printer, true, "Printer");
+                ui.add_enabled_ui(st.printer, |ui| {
+                    egui::ComboBox::from_id_salt("render-dpi").selected_text(format!("{} DPI", st.dpi)).width(80.0).show_ui(ui, |ui| {
+                        for d in [75u32, 150, 300, 600] {
+                            ui.selectable_value(&mut st.dpi, d, format!("{d} DPI"));
+                        }
+                    });
+                });
+            });
+            let (w, h) = render_size(&st);
+            ui.label(format!("Width: {w} pixels    Height: {h} pixels"));
+        });
+        manage::group(ui, "Lighting", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Scheme:");
+                ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("render-light").selected_text("Exterior: Sun only").width(180.0).show_ui(ui, |_| {});
+                });
+            });
+            ui.label(format!("Sun Setting: azimuth {:.0}°, altitude {:.0}°", app.doc.data.sun.azimuth, app.doc.data.sun.altitude));
+        });
+        manage::group(ui, "Background", |ui| {
+            ui.horizontal(|ui| {
+                ui.label("Style:");
+                ui.add_enabled_ui(false, |ui| {
+                    egui::ComboBox::from_id_salt("render-bg").selected_text("Sky: Few Clouds").width(180.0).show_ui(ui, |_| {});
+                });
+            });
+        });
+        manage::group(ui, "Image", |ui| {
+            ui.horizontal(|ui| {
+                if dlg_button(ui, "Save to Project...", false, st.image.is_some()) {
+                    save = true;
+                }
+                if dlg_button(ui, "Export...", false, st.image.is_some()) {
+                    export = true;
+                }
+            });
+        });
+        if let Some(t) = &st.texture {
+            let size = t.size_vec2();
+            let w = ui.available_width();
+            ui.add(egui::Image::new((t.id(), vec2(w, w * size.y / size.x.max(1.0)))));
+        }
+    });
+    if go {
+        let (w, h) = render_size(&st);
+        match crate::view3d::render_realistic(app, view, w, h) {
+            Some(img) => {
+                let ci = egui::ColorImage::from_rgb([img.width as usize, img.height as usize], &img.rgb);
+                st.texture = Some(ctx.load_texture("rendering", ci, egui::TextureOptions::LINEAR));
+                st.image = Some(img);
+            }
+            None => app.error("The view could not be rendered."),
+        }
+    }
+    if save {
+        if let Some(img) = &st.image {
+            // A drafting view holding the rendering, as the reference app keeps renderings.
+            let base = app.doc.data.view(view).map(|v| v.name.clone()).unwrap_or_default();
+            let (w, h, rgb) = (img.width, img.height, img.rgb.clone());
+            let made = app.run("Save Rendering to Project", |p| {
+                let name = rc_core::edit::unique_name(p.views.iter().map(|v| v.name.clone()), &format!("{base}_1"));
+                let asset = p.new_id();
+                p.images.push(rc_core::model::ImageAsset::from_rgb(asset, &name, w, h, &rgb));
+                let vid = p.new_id();
+                p.views.push(View::new(vid, name, 1.0, ViewKind::Drafting));
+                rc_core::edit::add_image(p, vid, asset, rc_core::geom::DVec2::ZERO, w as f64 * 0.25)?;
+                Ok(vid)
+            });
+            if made.is_some() {
+                app.info("The rendering was saved to the project as a drafting view.");
+            }
+        }
+    }
+    if export {
+        if let Some(img) = &st.image {
+            if let Some(mut path) = crate::files::FileDialog::new().add_filter("PNG image", &["png"]).set_file_name("Rendering.png").save_file() {
+                if path.extension().is_none() {
+                    path.set_extension("png");
+                }
+                match std::fs::write(&path, rc_core::png::encode(img.width, img.height, 3, &img.rgb)) {
+                    Ok(()) => app.info(format!("Exported {}", path.display())),
+                    Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+                }
+            }
+        }
+    }
+    if open {
+        app.dialogs.render = Some(st);
     }
 }
 
