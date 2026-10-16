@@ -1375,8 +1375,8 @@ mod tests {
         let a = edit::add_wall(&mut p, lvl, ty, geom::DVec2::ZERO, geom::DVec2::new(4000.0, 0.0), 3000.0).unwrap();
         let b = edit::add_wall(&mut p, lvl, ty, geom::DVec2::new(0.0, 3000.0), geom::DVec2::new(4000.0, 3000.0), 3000.0).unwrap();
         // Instance text parameter and type length parameter on walls.
-        p.project_params.push(ProjectParameter { name: "Fire Rating".into(), kind: ParamKind::Text, group: "Identity Data".into(), instance: true, categories: vec![Category::Walls] });
-        p.project_params.push(ProjectParameter { name: "Finish Depth".into(), kind: ParamKind::Length, group: "Dimensions".into(), instance: false, categories: vec![Category::Walls] });
+        p.project_params.push(ProjectParameter { name: "Fire Rating".into(), kind: ParamKind::Text, group: "Identity Data".into(), instance: true, categories: vec![Category::Walls], guid: String::new() });
+        p.project_params.push(ProjectParameter { name: "Finish Depth".into(), kind: ParamKind::Length, group: "Dimensions".into(), instance: false, categories: vec![Category::Walls], guid: String::new() });
         let e = p.element(a).unwrap();
         let defs = element_params(&p, e);
         assert!(defs.iter().any(|d| d.name == "Fire Rating" && !d.type_param));

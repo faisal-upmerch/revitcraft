@@ -622,22 +622,46 @@ fn param_edit(app: &mut App, ctx: &egui::Context) {
         ui.horizontal_top(|ui| {
             ui.vertical(|ui| {
                 ui.set_width(300.0);
+                // Shared parameters come from the shared parameter file (Manage > Shared Parameters).
+                let shared_file = std::fs::read_to_string(&app.settings.shared_params_path).ok().and_then(|t| rc_core::shared_params::SharedParamFile::parse(&t).ok());
                 group(ui, "Parameter Type", |ui| {
-                    let _ = ui.radio(true, "Project parameter");
+                    if ui.radio(q.guid.is_empty(), "Project parameter").clicked() {
+                        q.guid.clear();
+                    }
                     ui.label(egui::RichText::new("(Can appear in schedules but not in tags)").size(11.0).color(style::text_dim()));
-                    ui.add_enabled(false, egui::RadioButton::new(false, "Shared parameter"));
+                    let can_share = shared_file.as_ref().is_some_and(|f| !f.params.is_empty());
+                    let r = ui.add_enabled(can_share, egui::RadioButton::new(!q.guid.is_empty(), "Shared parameter"));
+                    let r = if can_share { r } else { r.on_disabled_hover_text("Set up a shared parameter file in Manage > Shared Parameters first.") };
+                    ui.label(egui::RichText::new("(Can be shared by multiple projects and families, exported to ODBC, and appear in schedules and tags)").size(11.0).color(style::text_dim()));
+                    if let (Some(f), true) = (shared_file.as_ref(), r.clicked() || !q.guid.is_empty()) {
+                        let current = f.params.iter().find(|x| x.guid == q.guid).map(|x| x.name.clone()).unwrap_or_else(|| "Select...".into());
+                        egui::ComboBox::from_id_salt("pp-shared").selected_text(current).width(240.0).show_ui(ui, |ui| {
+                            for (gid, gname) in &f.groups {
+                                for x in f.params.iter().filter(|x| x.group == *gid) {
+                                    if ui.selectable_label(q.guid == x.guid, format!("{gname} : {}", x.name)).clicked() {
+                                        q.guid = x.guid.clone();
+                                        q.name = x.name.clone();
+                                        q.kind = x.kind;
+                                    }
+                                }
+                            }
+                        });
+                    }
                 });
                 ui.add_space(6.0);
                 group(ui, "Parameter Data", |ui| {
                     egui::Grid::new("pp-data").num_columns(2).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
                         ui.label("Name:");
-                        ui.add(egui::TextEdit::singleline(&mut q.name).desired_width(180.0));
+                        let shared = !q.guid.is_empty();
+                        ui.add_enabled(!shared, egui::TextEdit::singleline(&mut q.name).desired_width(180.0));
                         ui.end_row();
                         ui.label("Type of Parameter:");
-                        egui::ComboBox::from_id_salt("pp-kind").selected_text(q.kind.label()).width(180.0).show_ui(ui, |ui| {
-                            for k in ParamKind::USER {
-                                ui.selectable_value(&mut q.kind, k, k.label());
-                            }
+                        ui.add_enabled_ui(!shared, |ui| {
+                            egui::ComboBox::from_id_salt("pp-kind").selected_text(q.kind.label()).width(180.0).show_ui(ui, |ui| {
+                                for k in ParamKind::USER {
+                                    ui.selectable_value(&mut q.kind, k, k.label());
+                                }
+                            });
                         });
                         ui.end_row();
                         ui.label("Group parameter under:");

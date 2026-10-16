@@ -2254,6 +2254,9 @@ pub struct ProjectParameter {
     /// Instance parameter (else a type parameter).
     pub instance: bool,
     pub categories: Vec<Category>,
+    /// A shared parameter: its GUID in the shared parameter file (empty = a project parameter).
+    #[serde(default)]
+    pub guid: String,
 }
 
 /// A project-wide value (Manage > Global Parameters) that can drive dimensions and element

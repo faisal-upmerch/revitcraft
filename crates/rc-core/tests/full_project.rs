@@ -100,7 +100,7 @@ fn full_project_workflow() {
 
     // --- Project parameter, view filter, global parameter.
     doc.transact("params", |p| {
-        p.project_params.push(ProjectParameter { name: "Fire Rating".into(), kind: ParamKind::Text, group: "Identity Data".into(), instance: true, categories: vec![Category::Doors] });
+        p.project_params.push(ProjectParameter { name: "Fire Rating".into(), kind: ParamKind::Text, group: "Identity Data".into(), instance: true, categories: vec![Category::Doors], guid: String::new() });
         let d = p.elements.iter().find(|e| e.category() == Category::Doors).unwrap().id;
         params::set(p, d, "Fire Rating", "60 min")?;
         let fid = p.new_id();
