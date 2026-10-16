@@ -204,7 +204,32 @@ pub fn add_grid_ex(p: &mut Project, start: DVec2, end: DVec2, arc_mid: Option<DV
             .unwrap()
     };
     // Like the reference app, a new grid shows its bubble at the end point only.
-    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: false, bubble_end: true })))
+    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: false, bubble_end: true, vertices: vec![] })))
+}
+
+/// A multi-segment grid through `pts` (named by its first segment's direction).
+pub fn add_grid_path(p: &mut Project, pts: Vec<DVec2>) -> Result<Id, String> {
+    let mut v: Vec<DVec2> = Vec::new();
+    for q in pts {
+        if v.last().is_none_or(|l: &DVec2| l.distance(q) > 1.0) {
+            v.push(q);
+        }
+    }
+    if v.len() < 2 {
+        return Err("Sketch the grid's segments as one connected chain.".into());
+    }
+    let length: f64 = v.windows(2).map(|w| w[0].distance(w[1])).sum();
+    if length < 100.0 {
+        return Err("Grid is too short.".into());
+    }
+    let n = v.len();
+    let id = add_grid_ex(p, v[0], v[1] + (v[1] - v[0]).normalize_or_zero(), None)?;
+    if let Some(ElementKind::Grid(g)) = p.element_mut(id).map(|e| &mut e.kind) {
+        g.start = v[0];
+        g.end = v[n - 1];
+        g.vertices = v[1..n - 1].to_vec();
+    }
+    Ok(id)
 }
 
 pub fn add_ref_plane(p: &mut Project, start: DVec2, end: DVec2) -> Result<Id, String> {
@@ -1019,6 +1044,9 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             g.start = f(g.start);
             g.end = f(g.end);
             g.arc_mid = g.arc_mid.map(f);
+            for q in g.vertices.iter_mut() {
+                *q = f(*q);
+            }
         }
         ElementKind::RefPlane(r) => {
             r.start = f(r.start);
@@ -1369,7 +1397,7 @@ pub fn offset_elements(p: &mut Project, ids: &[Id], distance: f64, side: DVec2, 
 pub fn linear_axis(e: &Element) -> Option<(DVec2, DVec2)> {
     match &e.kind {
         ElementKind::Wall(w) if w.arc_mid.is_none() => Some((w.start, w.end)),
-        ElementKind::Grid(g) if g.arc_mid.is_none() => Some((g.start, g.end)),
+        ElementKind::Grid(g) if g.arc_mid.is_none() && g.vertices.is_empty() => Some((g.start, g.end)),
         ElementKind::RefPlane(r) => Some((r.start, r.end)),
         ElementKind::Line(l) if l.pts.len() == 2 && l.arc_mid.is_none() => Some((l.pts[0], l.pts[1])),
         ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => Some((s.start, s.end)),
@@ -2375,6 +2403,18 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn multi_segment_grid_keeps_its_bends() {
+        let (mut p, ..) = project();
+        let id = add_grid_path(&mut p, vec![DVec2::new(0.0, 0.0), DVec2::new(0.0, 5000.0), DVec2::new(3000.0, 8000.0)]).unwrap();
+        let Some(ElementKind::Grid(g)) = p.element(id).map(|e| &e.kind) else { panic!() };
+        assert_eq!(g.polyline(), vec![DVec2::new(0.0, 0.0), DVec2::new(0.0, 5000.0), DVec2::new(3000.0, 8000.0)]);
+        // Named as a vertical grid (numbers), from its first segment.
+        assert!(g.name.parse::<u32>().is_ok(), "{}", g.name);
+        let (d0, d1) = g.end_dirs();
+        assert!((d0 - DVec2::new(0.0, -1.0)).length() < 1e-9 && (d1 - DVec2::new(1.0, 1.0).normalize()).length() < 1e-9);
     }
 
     #[test]

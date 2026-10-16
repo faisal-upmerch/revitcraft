@@ -79,6 +79,7 @@ pub fn draw_modes(app: &App) -> &'static [DrawMode] {
     match app.sketch.as_ref().map(|s| s.kind) {
         Some(SketchKind::Railing) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, PickLines],
         Some(SketchKind::Stair | SketchKind::Ramp) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line],
+        Some(SketchKind::Grid) if matches!(app.tool.kind, ToolKind::SketchLine | ToolKind::Select) => &[Line, PickLines],
         Some(_) if app.tool.kind == ToolKind::Select => modes_for(ToolKind::SketchLine),
         _ => modes_for(app.tool.kind),
     }

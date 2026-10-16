@@ -483,6 +483,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         MullionAllLines => app.opts.mullion_mode = 2,
         Level => app.set_tool(ToolKind::Level),
         Grid => start_drawing(app, ToolKind::Grid),
+        GridMultiSegment => start_sketch(app, SketchKind::Grid, DrawMode::Line),
         RefPlane => start_drawing(app, ToolKind::RefPlane),
 
         // ---------------- insert
@@ -1257,6 +1258,10 @@ pub fn finish_sketch(app: &mut App) {
     let vid = sk.view;
     let result: Result<Option<Id>, String> = (|| {
         match sk.kind {
+            SketchKind::Grid => {
+                let path = sk.chain()?;
+                Ok(app.run("Create Grid", |p| edit::add_grid_path(p, path)))
+            }
             SketchKind::Railing => {
                 let path = sk.chain()?;
                 let host = sk.host;

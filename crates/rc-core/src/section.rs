@@ -758,25 +758,25 @@ fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVe
         let (z0, z1) = (f.z_range.0, p.levels().last().map(|l| l.1.elevation).unwrap_or(3000.0) + 4000.0);
         for e in &p.elements {
             let ElementKind::Grid(g) = &e.kind else { continue };
-            // Grids that cross the view plane (or are perpendicular to the view) show as vertical lines.
-            let a = f.to_view(geom::at(g.start, 0.0));
-            let b = f.to_view(geom::at(g.end, 0.0));
-            let u = if (a.1 - b.1).abs() > 1e-6 {
+            // Grids that cross the view plane (or are perpendicular to the view) show as vertical
+            // lines; a multi-segment grid shows where one of its segments does.
+            let crossing = g.polyline().windows(2).find_map(|w| {
+                let a = f.to_view(geom::at(w[0], 0.0));
+                let b = f.to_view(geom::at(w[1], 0.0));
+                if (a.1 - b.1).abs() <= 1e-6 {
+                    return None;
+                }
                 // Where the grid crosses depth 0 (sections) or its mid point (elevations).
                 if f.cuts {
                     let t = a.1 / (a.1 - b.1);
-                    if !(0.0..=1.0).contains(&t) {
-                        continue;
-                    }
-                    a.0.x + (b.0.x - a.0.x) * t
+                    (0.0..=1.0).contains(&t).then(|| a.0.x + (b.0.x - a.0.x) * t)
                 } else if (a.0.x - b.0.x).abs() < 1.0 {
-                    a.0.x
+                    Some(a.0.x)
                 } else {
-                    continue;
+                    None
                 }
-            } else {
-                continue;
-            };
+            });
+            let Some(u) = crossing else { continue };
             d.line(Some(e.id), vec![DVec2::new(u, z0), DVec2::new(u, z1)], false, plan::GRID);
             let r = 6.0 * scale;
             let c = DVec2::new(u, z1 + r);

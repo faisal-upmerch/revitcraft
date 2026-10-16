@@ -331,6 +331,10 @@ fn draw_panel(app: &App) -> Option<Panel> {
         Some(SketchKind::Ceiling | SketchKind::EditCeiling(_) | SketchKind::Roof | SketchKind::EditRoof(_)) => vec![C::SketchBoundary, C::SlopeArrow],
         _ => vec![],
     };
+    // The Grid tool's Draw panel ends with Multi-Segment (a sketch of connected segments).
+    if kind == ToolKind::Grid && app.sketch.is_none() {
+        return Some(panel("Draw", vec![Icons(modes), Labeled("Multi-\nSegment", C::GridMultiSegment, vec![])]));
+    }
     if left.is_empty() {
         return Some(panel("Draw", vec![Icons(modes)]));
     }

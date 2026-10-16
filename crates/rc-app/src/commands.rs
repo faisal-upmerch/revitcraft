@@ -97,6 +97,7 @@ pub enum Cmd {
     MullionAllLines,
     Level,
     Grid,
+    GridMultiSegment,
     RefPlane,
     // Structure
     Beam,
@@ -456,6 +457,7 @@ impl Cmd {
             VerticalOpening => ci("Vertical Opening", I::VerticalOpening, "Cuts a vertical opening through a roof, floor or ceiling.", ""),
             Level => ci("Level", I::Level, "Adds a level. Works in sections and elevations; can create the associated plan views.", "LL"),
             Grid => ci("Grid", I::Grid, "Places column grid lines. Grid heads number automatically.", "GR"),
+            GridMultiSegment => ci("Multi-Segment", I::Grid, "Sketches a grid of several connected segments.", ""),
             RefPlane => ci("Ref Plane", I::RefPlane, "Draws a reference plane to help with placing and aligning.", "RP"),
 
             Beam => ci("Beam", I::Beam, "Draws structural beams between two points.", "BM"),
@@ -714,7 +716,7 @@ impl Cmd {
         Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Home, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelText, Cmd::Ramp, Cmd::PlaceRoomsAuto, Cmd::HighlightBoundaries, Cmd::RampRun, Cmd::RampBoundary, Cmd::RampRiser, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,
-        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::RefPlane, Cmd::Beam, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad,
+        Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad,
         Cmd::LoadFamily, Cmd::DimAligned, Cmd::DimLinear, Cmd::DimAngular, Cmd::DimRadial, Cmd::DimDiameter, Cmd::DimArcLength, Cmd::SpotElevation, Cmd::DetailLine,
         Cmd::FilledRegion, Cmd::MaskingRegion, Cmd::RevisionCloud, Cmd::Text, Cmd::TagByCategory, Cmd::TagAll, Cmd::Symbol, Cmd::ViewTemplates, Cmd::TemplateFromView,
         Cmd::VisibilityGraphics, Cmd::ThinLines, Cmd::Default3D, Cmd::Section, Cmd::Callout, Cmd::NewFloorPlan, Cmd::NewCeilingPlan, Cmd::NewAreaPlan,

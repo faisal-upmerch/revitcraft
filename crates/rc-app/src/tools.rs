@@ -361,6 +361,8 @@ pub enum SketchKind {
     Mass,
     Toposolid,
     PropertyLine,
+    /// A multi-segment grid.
+    Grid,
     EditFloor(Id),
     EditCeiling(Id),
     EditRoof(Id),
@@ -385,6 +387,7 @@ impl SketchKind {
             SketchKind::Mass => "Create Mass",
             SketchKind::Toposolid => "Create Toposolid Boundary",
             SketchKind::PropertyLine => "Create Property Line Sketch",
+            SketchKind::Grid => "Edit Sketch",
         }
     }
     pub fn is_roof(self) -> bool {

@@ -516,6 +516,28 @@ pub struct Grid {
     pub bubble_start: bool,
     #[serde(default = "yes")]
     pub bubble_end: bool,
+    /// Multi-segment grids: the bend points between start and end.
+    #[serde(default)]
+    pub vertices: Vec<DVec2>,
+}
+
+impl Grid {
+    /// The grid line as drawn: arcs tessellated, multi-segment grids through their bends.
+    pub fn polyline(&self) -> Vec<DVec2> {
+        if let Some(a) = self.arc_mid.and_then(|m| crate::geom::Arc2::through(self.start, m, self.end)) {
+            return a.tessellate(500.0);
+        }
+        std::iter::once(self.start).chain(self.vertices.iter().copied()).chain(std::iter::once(self.end)).collect()
+    }
+    /// Outward directions at the start and end, where the bubbles sit.
+    pub fn end_dirs(&self) -> (DVec2, DVec2) {
+        if let Some(a) = self.arc_mid.and_then(|m| crate::geom::Arc2::through(self.start, m, self.end)) {
+            return (-a.tangent(0.0), a.tangent(1.0));
+        }
+        let pl = self.polyline();
+        let n = pl.len();
+        ((pl[0] - pl[1]).normalize_or_zero(), (pl[n - 1] - pl[n - 2]).normalize_or_zero())
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

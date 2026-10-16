@@ -920,13 +920,8 @@ fn style_element(c: &Ctx, e: &Element, d: &mut Drawing, start: usize) {
 }
 
 fn grid_graphics(id: Id, g: &Grid, scale: f64, d: &mut Drawing) {
-    let (pts, d0, d1) = match g.arc_mid.and_then(|m| geom::Arc2::through(g.start, m, g.end)) {
-        Some(a) => (a.tessellate(500.0), -a.tangent(0.0), a.tangent(1.0)),
-        None => {
-            let dir = (g.end - g.start).normalize_or_zero();
-            (vec![g.start, g.end], -dir, dir)
-        }
-    };
+    let pts = g.polyline();
+    let (d0, d1) = g.end_dirs();
     d.line(Some(id), pts, false, GRID);
     // 1/2" bubble with the grid name.
     let r = 6.0 * scale;
@@ -1042,7 +1037,7 @@ fn model_extent(p: &Project) -> Option<(DVec2, DVec2)> {
         .flat_map(|e| match &e.kind {
             ElementKind::Wall(w) => vec![w.start, w.end],
             ElementKind::Floor(f) => f.boundary.clone(),
-            ElementKind::Grid(g) => vec![g.start, g.end],
+            ElementKind::Grid(g) => g.polyline(),
             _ => vec![],
         })
         .collect();
@@ -2200,10 +2195,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             }
             vec![geom::offset(&geom::ensure_ccw(&r.footprint), r.overhang)]
         }
-        ElementKind::Grid(g) => match g.arc_mid.and_then(|m| geom::Arc2::through(g.start, m, g.end)) {
-            Some(a) => vec![a.tessellate(500.0)],
-            None => vec![vec![g.start, g.end]],
-        },
+        ElementKind::Grid(g) => vec![g.polyline()],
         ElementKind::RefPlane(r) => vec![vec![r.start, r.end]],
         ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => vec![vec![s.start, s.end]],
         ElementKind::Line(l) => vec![line_points(l)],
