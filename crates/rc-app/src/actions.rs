@@ -757,6 +757,12 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         SelectById => app.dialogs.select_by_id = Some(String::new()),
         ProjectParameters => app.dialogs.project_params = true,
+        SharedParameters => {
+            let path = app.settings.shared_params_path.clone();
+            let file = std::fs::read_to_string(&path).ok().and_then(|t| rc_core::shared_params::SharedParamFile::parse(&t).ok()).unwrap_or_default();
+            let group = file.groups.first().map(|g| g.0);
+            app.dialogs.shared_params = Some(Box::new(dialogs::SharedParamsState { path, file, group, sel: None, sub: None }));
+        }
         GlobalParameters => app.dialogs.global_params = true,
         ViewFilters => app.dialogs.filters = Some(app.doc.data.filters.first().map(|f| f.id)),
         LineStyles => app.dialogs.line_styles = true,

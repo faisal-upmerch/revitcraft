@@ -276,7 +276,7 @@ fn manage() -> Vec<Panel> {
             vec![
                 Big(C::Materials),
                 Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]),
-                Stack(vec![C::ProjectParameters, C::GlobalParameters]),
+                Stack(vec![C::ProjectParameters, C::SharedParameters, C::GlobalParameters]),
                 Stack(vec![C::TransferStandards, C::Purge, C::ProjectUnits]),
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],

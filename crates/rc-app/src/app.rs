@@ -45,6 +45,8 @@ pub struct Settings {
     pub palette_width: f32,
     /// Minutes between "Project Not Saved Recently" reminders (0 = never).
     pub save_reminder_minutes: u32,
+    /// The shared parameter file (Manage > Shared Parameters).
+    pub shared_params_path: String,
 }
 
 impl Default for Settings {
@@ -70,6 +72,7 @@ impl Default for Settings {
             select_by_face: false,
             palette_width: 290.0,
             save_reminder_minutes: 30,
+            shared_params_path: String::new(),
         }
     }
 }

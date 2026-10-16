@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Edit Shared Parameters.
+    pub shared_params: Option<Box<SharedParamsState>>,
     /// Transfer Project Standards: the source project and what to copy.
     pub transfer: Option<Box<TransferState>>,
     /// Location, Weather and Site.
@@ -449,6 +451,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     plan_view_types_dialog(app, ctx);
     starting_view_dialog(app, ctx);
     transfer_dialog(app, ctx);
+    shared_params_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -766,6 +769,245 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+pub struct SharedParamsState {
+    pub path: String,
+    pub file: rc_core::shared_params::SharedParamFile,
+    pub group: Option<u32>,
+    pub sel: Option<usize>,
+    pub sub: Option<SharedSub>,
+}
+
+/// The small dialogs over Edit Shared Parameters.
+#[derive(Clone)]
+pub enum SharedSub {
+    /// Parameter Properties: the parameter being edited (None = new), name, kind, tooltip.
+    Param(Option<usize>, String, ParamKind, String),
+    NewGroup(String),
+    RenameGroup(String),
+}
+
+/// Edit Shared Parameters: the shared parameter file's groups and parameters.
+fn shared_params_dialog(app: &mut App, ctx: &egui::Context) {
+    use rc_core::shared_params::{SharedParam, SharedParamFile};
+    let Some(mut st) = app.dialogs.shared_params.take() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Edit Shared Parameters").open(&mut open).resizable(false).default_width(520.0).show(ctx, |ui| {
+        ui.label("Shared parameter file:");
+        ui.horizontal(|ui| {
+            ui.add(egui::TextEdit::singleline(&mut st.path).desired_width(300.0));
+            if ui.button("Browse...").clicked() {
+                if let Some(f) = crate::files::FileDialog::new().add_filter("Shared Parameter Files", &["txt"]).pick_file() {
+                    match std::fs::read_to_string(&f).map_err(|e| e.to_string()).and_then(|t| SharedParamFile::parse(&t)) {
+                        Ok(file) => {
+                            st.path = f.display().to_string();
+                            st.group = file.groups.first().map(|g| g.0);
+                            st.file = file;
+                            st.sel = None;
+                        }
+                        Err(e) => app.error(format!("The shared parameter file could not be read: {e}")),
+                    }
+                }
+            }
+            if ui.button("Create...").clicked() {
+                if let Some(f) = crate::files::FileDialog::new().add_filter("Shared Parameter Files", &["txt"]).set_file_name("SharedParameters.txt").save_file() {
+                    st.path = f.display().to_string();
+                    st.file = SharedParamFile::default();
+                    st.group = None;
+                    st.sel = None;
+                }
+            }
+        });
+        ui.add_space(6.0);
+        let has_file = !st.path.trim().is_empty();
+        ui.add_enabled_ui(has_file, |ui| {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.set_width(320.0);
+                    ui.label("Parameter group:");
+                    let gname = st.group.and_then(|g| st.file.groups.iter().find(|x| x.0 == g)).map(|x| x.1.clone()).unwrap_or_default();
+                    egui::ComboBox::from_id_salt("sp-group").selected_text(gname).width(310.0).show_ui(ui, |ui| {
+                        for (gid, name) in st.file.groups.clone() {
+                            if ui.selectable_label(st.group == Some(gid), &name).clicked() {
+                                st.group = Some(gid);
+                                st.sel = None;
+                            }
+                        }
+                    });
+                    ui.add_space(4.0);
+                    ui.label("Parameters:");
+                    egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+                        ui.set_width(310.0);
+                        ui.set_min_height(220.0);
+                        egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
+                            for (k, prm) in st.file.params.iter().enumerate() {
+                                if Some(prm.group) == st.group && ui.selectable_label(st.sel == Some(k), &prm.name).clicked() {
+                                    st.sel = Some(k);
+                                }
+                            }
+                        });
+                    });
+                });
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new("Parameters").strong());
+                    let w = vec2(130.0, 22.0);
+                    if ui.add_enabled(st.group.is_some(), egui::Button::new("New...").min_size(w)).clicked() {
+                        st.sub = Some(SharedSub::Param(None, String::new(), ParamKind::Text, String::new()));
+                    }
+                    if ui.add_enabled(st.sel.is_some(), egui::Button::new("Properties...").min_size(w)).clicked() {
+                        if let Some(k) = st.sel {
+                            let prm = &st.file.params[k];
+                            st.sub = Some(SharedSub::Param(Some(k), prm.name.clone(), prm.kind, prm.description.clone()));
+                        }
+                    }
+                    if ui.add_enabled(st.sel.is_some(), egui::Button::new("Delete").min_size(w)).clicked() {
+                        if let Some(k) = st.sel.take() {
+                            st.file.params.remove(k);
+                        }
+                    }
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("Groups").strong());
+                    if ui.add(egui::Button::new("New...").min_size(w)).clicked() {
+                        st.sub = Some(SharedSub::NewGroup(String::new()));
+                    }
+                    if ui.add_enabled(st.group.is_some(), egui::Button::new("Rename...").min_size(w)).clicked() {
+                        let name = st.group.and_then(|g| st.file.groups.iter().find(|x| x.0 == g)).map(|x| x.1.clone()).unwrap_or_default();
+                        st.sub = Some(SharedSub::RenameGroup(name));
+                    }
+                    let empty = st.group.is_some_and(|g| !st.file.params.iter().any(|x| x.group == g));
+                    if ui.add_enabled(empty, egui::Button::new("Delete").min_size(w)).on_disabled_hover_text("Only an empty group can be deleted.").clicked() {
+                        if let Some(g) = st.group {
+                            st.file.groups.retain(|x| x.0 != g);
+                            st.group = st.file.groups.first().map(|x| x.0);
+                        }
+                    }
+                });
+            });
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let _ = dlg_button(ui, "Help", false, false);
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    // Sub-dialogs.
+    if let Some(sub) = st.sub.clone() {
+        let (mut sopen, mut sok, mut scancel) = (true, false, false);
+        let title = match &sub {
+            SharedSub::Param(..) => "Parameter Properties",
+            SharedSub::NewGroup(_) => "New Parameter Group",
+            SharedSub::RenameGroup(_) => "Rename Parameter Group",
+        };
+        let mut next = sub.clone();
+        window(title).open(&mut sopen).resizable(false).default_width(320.0).show(ctx, |ui| {
+            match &mut next {
+                SharedSub::Param(edit, name, kind, tip) => {
+                    egui::Grid::new("sp-param").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                        ui.label("Name:");
+                        ui.add(egui::TextEdit::singleline(name).desired_width(200.0));
+                        ui.end_row();
+                        ui.label("Discipline:");
+                        ui.add_enabled_ui(false, |ui| {
+                            egui::ComboBox::from_id_salt("sp-disc").selected_text("Common").width(200.0).show_ui(ui, |_| {});
+                        });
+                        ui.end_row();
+                        ui.label("Type of Parameter:");
+                        ui.add_enabled_ui(edit.is_none(), |ui| {
+                            egui::ComboBox::from_id_salt("sp-kind").selected_text(kind.label()).width(200.0).show_ui(ui, |ui| {
+                                for k in ParamKind::USER {
+                                    ui.selectable_value(kind, k, k.label());
+                                }
+                            });
+                        });
+                        ui.end_row();
+                        ui.label("Tooltip Description:");
+                        ui.add(egui::TextEdit::singleline(tip).desired_width(200.0));
+                        ui.end_row();
+                    });
+                }
+                SharedSub::NewGroup(name) | SharedSub::RenameGroup(name) => {
+                    ui.label("Name:");
+                    ui.add(egui::TextEdit::singleline(name).desired_width(280.0));
+                }
+            }
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                if dlg_button(ui, "Cancel", false, true) {
+                    scancel = true;
+                }
+                if dlg_button(ui, "OK", true, true) {
+                    sok = true;
+                }
+            });
+        });
+        st.sub = Some(next.clone());
+        if sok {
+            let taken = |n: &str, skip: Option<usize>| st.file.params.iter().enumerate().any(|(k, x)| x.name == n && Some(k) != skip);
+            match next {
+                SharedSub::Param(_, ref name, ..) if name.trim().is_empty() => app.error("Enter a parameter name."),
+                SharedSub::Param(edit, name, kind, tip) => {
+                    let name = name.trim().to_string();
+                    if taken(&name, edit) {
+                        app.error(format!("A parameter named \"{name}\" already exists in the shared parameter file."));
+                    } else {
+                        match edit {
+                            Some(k) => {
+                                st.file.params[k].name = name;
+                                st.file.params[k].description = tip;
+                            }
+                            None => {
+                                st.file.params.push(SharedParam { guid: SharedParamFile::new_guid(), name, kind, group: st.group.unwrap_or(1), visible: true, description: tip, user_modifiable: true, hide_when_no_value: false });
+                                st.sel = Some(st.file.params.len() - 1);
+                            }
+                        }
+                        st.sub = None;
+                    }
+                }
+                SharedSub::NewGroup(name) if !name.trim().is_empty() => {
+                    let id = st.file.next_group_id();
+                    st.file.groups.push((id, name.trim().to_string()));
+                    st.group = Some(id);
+                    st.sub = None;
+                }
+                SharedSub::RenameGroup(name) if !name.trim().is_empty() => {
+                    if let Some(g) = st.group.and_then(|g| st.file.groups.iter_mut().find(|x| x.0 == g)) {
+                        g.1 = name.trim().to_string();
+                    }
+                    st.sub = None;
+                }
+                _ => app.error("Enter a group name."),
+            }
+        } else if scancel || !sopen {
+            st.sub = None;
+        }
+    }
+    if ok {
+        if !st.path.trim().is_empty() {
+            match std::fs::write(&st.path, st.file.to_text()) {
+                Ok(()) => {
+                    app.settings.shared_params_path = st.path.clone();
+                    app.settings_dirty = true;
+                }
+                Err(e) => {
+                    app.error(format!("The shared parameter file could not be saved: {e}"));
+                    app.dialogs.shared_params = Some(st);
+                    return;
+                }
+            }
+        }
+        return;
+    }
+    if !(cancel || !open) {
+        app.dialogs.shared_params = Some(st);
     }
 }
 
