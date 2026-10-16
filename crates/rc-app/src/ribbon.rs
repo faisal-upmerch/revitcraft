@@ -285,7 +285,7 @@ fn manage() -> Vec<Panel> {
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],
         ),
-        panel("Project Location", vec![Labeled("Location", C::Location, vec![]), Labeled("Coordinates", C::SpecifyCoordinates, vec![C::SpecifyCoordinates, C::ReportCoordinates]), Labeled("Position", C::RelocateProject, vec![C::RelocateProject, C::RotateTrueNorth])]),
+        panel("Project Location", vec![Labeled("Location", C::Location, vec![]), Labeled("Coordinates", C::SpecifyCoordinates, vec![C::SpecifyCoordinates, C::ReportCoordinates]), Labeled("Position", C::RelocateProject, vec![C::RelocateProject, C::RotateTrueNorth, C::MirrorProject, C::RotateProjectNorth])]),
         panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![]), Stack(vec![C::AddToSet, C::PickToEdit]), OptionCombo]),
         panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),

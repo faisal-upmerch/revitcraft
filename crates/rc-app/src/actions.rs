@@ -748,6 +748,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.dialogs.location = true;
         }
         RelocateProject => app.set_tool(ToolKind::Relocate),
+        RotateProjectNorth => app.dialogs.project_turn = Some(false),
+        MirrorProject => app.dialogs.project_turn = Some(true),
         SpecifyCoordinates => app.set_tool(ToolKind::SpecifyCoords),
         ReportCoordinates => app.set_tool(ToolKind::ReportCoords),
         Callout => app.set_tool(ToolKind::Callout),

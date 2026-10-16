@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Rotate Project (false) or Mirror Project (true).
+    pub project_turn: Option<bool>,
     /// Add to Design Option Set.
     pub add_to_set: bool,
     /// Rebar Cover Settings.
@@ -464,6 +466,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     render_dialog(app, ctx);
     rebar_cover_dialog(app, ctx);
     add_to_set_dialog(app, ctx);
+    project_turn_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -781,6 +784,56 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+/// Rotate Project / Mirror Project: how the whole project turns or flips.
+fn project_turn_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mirror) = app.dialogs.project_turn else { return };
+    let id = egui::Id::new("project-turn");
+    let mut pick: usize = ctx.data(|m| m.get_temp(id)).unwrap_or(0);
+    let choices: &[&str] = if mirror { &["Mirror North/South Axis", "Mirror East/West Axis"] } else { &["Rotate 90° Clockwise", "Rotate 90° Counterclockwise", "Rotate 180°"] };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window(if mirror { "Mirror Project" } else { "Rotate Project" }).open(&mut open).resizable(false).default_width(300.0).show(ctx, |ui| {
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            for (k, c) in choices.iter().enumerate() {
+                if ui.selectable_label(pick == k, *c).clicked() {
+                    pick = k;
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        if mirror {
+            app.run("Mirror Project", |p| {
+                rc_core::edit::mirror_project(p, pick == 0);
+                Ok(())
+            });
+        } else {
+            let deg = [-90.0, 90.0, 180.0][pick.min(2)];
+            app.run("Rotate Project North", |p| {
+                rc_core::edit::rotate_project(p, deg);
+                Ok(())
+            });
+        }
+        app.cams.clear();
+    }
+    if ok || cancel || !open {
+        app.dialogs.project_turn = None;
+        ctx.data_mut(|m| m.remove::<usize>(id));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(id, pick));
     }
 }
 

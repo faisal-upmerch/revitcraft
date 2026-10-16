@@ -1497,6 +1497,88 @@ pub fn rotate_elements(p: &mut Project, ids: &[Id], center: DVec2, degrees: f64)
     }
 }
 
+/// Gives elevations still placed automatically (around the model) a fixed marker, so they keep
+/// looking at the same faces when the whole project moves. Call before moving the model.
+fn fix_elevation_markers(p: &mut Project) {
+    let fp = analysis::wall_footprints(p);
+    let frames: Vec<(Id, Option<(DVec2, DVec2)>)> = p
+        .views
+        .iter()
+        .filter(|v| matches!(v.kind, ViewKind::Elevation { .. }) && v.marker.is_none())
+        .map(|v| (v.id, crate::section::view_frame(p, v, &fp).map(|fr| (fr.origin.truncate(), fr.look.truncate()))))
+        .collect();
+    for (id, m) in frames {
+        if let Some(v) = p.view_mut(id) {
+            v.marker = m;
+        }
+    }
+}
+
+/// Moves the geometry views carry with the model: plan crops, section lines, elevation
+/// markers and 3D cameras.
+fn transform_views(p: &mut Project, f: &dyn Fn(DVec2) -> DVec2, mirror: bool) {
+    for v in p.views.iter_mut() {
+        if v.plan_level().is_some() {
+            if let Some((a, b)) = v.crop {
+                let (mn, mx) = geom::bounds([f(a), f(b), f(DVec2::new(a.x, b.y)), f(DVec2::new(b.x, a.y))]);
+                v.crop = Some((mn, mx));
+            }
+        }
+        if let Some((o, l)) = v.marker {
+            let o2 = f(o);
+            v.marker = Some((o2, (f(o + l) - o2).normalize_or(l)));
+        }
+        match &mut v.kind {
+            ViewKind::Section { start, end, .. } => {
+                let (a, b) = (f(*start), f(*end));
+                // A mirrored line would look the other way: swap its ends.
+                (*start, *end) = if mirror { (b, a) } else { (a, b) };
+            }
+            ViewKind::ThreeD { eye, target, .. } => {
+                let (e, t) = (f(eye.truncate()), f(target.truncate()));
+                *eye = DVec3::new(e.x, e.y, eye.z);
+                *target = DVec3::new(t.x, t.y, target.z);
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Manage > Position > Rotate Project North: the whole project turns `degrees`
+/// (counter-clockwise) about its origin; true north turns back so the site stays put.
+pub fn rotate_project(p: &mut Project, degrees: f64) {
+    fix_elevation_markers(p);
+    let all: Vec<Id> = p.elements.iter().map(|e| e.id).collect();
+    let pinned: Vec<Id> = p.elements.iter().filter(|e| e.pinned).map(|e| e.id).collect();
+    for e in p.elements.iter_mut() {
+        e.pinned = false;
+    }
+    rotate_elements(p, &all, DVec2::ZERO, degrees);
+    for e in p.elements.iter_mut().filter(|e| pinned.contains(&e.id)) {
+        e.pinned = true;
+    }
+    let r = DVec2::from_angle(degrees.to_radians());
+    transform_views(p, &|q| r.rotate(q), false);
+    p.true_north -= degrees;
+}
+
+/// Manage > Position > Mirror Project: the whole project mirrored about the project's
+/// north-south axis (x flips) or east-west axis (y flips) through its origin.
+pub fn mirror_project(p: &mut Project, north_south: bool) {
+    fix_elevation_markers(p);
+    let all: Vec<Id> = p.elements.iter().map(|e| e.id).collect();
+    let pinned: Vec<Id> = p.elements.iter().filter(|e| e.pinned).map(|e| e.id).collect();
+    for e in p.elements.iter_mut() {
+        e.pinned = false;
+    }
+    let axis = if north_south { DVec2::Y } else { DVec2::X };
+    mirror_elements(p, &all, DVec2::ZERO, axis);
+    for e in p.elements.iter_mut().filter(|e| pinned.contains(&e.id)) {
+        e.pinned = true;
+    }
+    transform_views(p, &|q| if north_south { DVec2::new(-q.x, q.y) } else { DVec2::new(q.x, -q.y) }, true);
+}
+
 /// Mirrors elements across the line through `a` and `b`.
 pub fn mirror_elements(p: &mut Project, ids: &[Id], a: DVec2, b: DVec2) {
     let ids = with_group_members(p, ids);
@@ -2626,6 +2708,25 @@ mod tests {
         let walls: Vec<Option<Id>> = p.elements.iter().filter(|e| matches!(e.kind, ElementKind::Wall(_))).map(|e| e.design_option).collect();
         assert_eq!(walls.len(), 2);
         assert!(walls.contains(&Some(o2)) && !walls.contains(&None));
+    }
+
+    #[test]
+    fn rotating_project_north_keeps_true_north_and_shared_coordinates() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(1000.0, 0.0), DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        p.true_north = 20.0;
+        let before = p.to_shared(DVec3::new(4000.0, 0.0, 0.0));
+        rotate_project(&mut p, 90.0);
+        let wall = p.wall(w).unwrap().clone();
+        assert!((wall.end - DVec2::new(0.0, 4000.0)).length() < 1e-6);
+        assert!((p.true_north + 70.0).abs() < 1e-9);
+        let after = p.to_shared(DVec3::new(0.0, 4000.0, 0.0));
+        assert!((before.0 - after.0).abs() < 1e-6 && (before.1 - after.1).abs() < 1e-6);
+        // Sections turn with the model.
+        let s = new_section(&mut p, DVec2::new(0.0, -1000.0), DVec2::new(3000.0, -1000.0), 5000.0).unwrap();
+        mirror_project(&mut p, true);
+        let Some(ViewKind::Section { start, end, .. }) = p.view(s).map(|v| v.kind.clone()) else { panic!() };
+        assert!((start - DVec2::new(-3000.0, -1000.0)).length() < 1e-6 && (end - DVec2::new(0.0, -1000.0)).length() < 1e-6);
     }
 
     #[test]
