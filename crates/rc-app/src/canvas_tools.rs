@@ -160,6 +160,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
         ToolKind::ModelText => "Click to place model text.".into(),
         ToolKind::Mullion => "Select a grid line to create mullion.".into(),
+        ToolKind::VerticalOpening if app.opts.opening_by_face => "Pick a face of a roof, floor, or ceiling.".into(),
         ToolKind::VerticalOpening => "Select a roof, floor, or ceiling.".into(),
         ToolKind::DormerOpening => "Select the roof to be cut by the dormer opening.".into(),
         ToolKind::WallOpening => if n == 0 { "Click a wall at one side of the opening.".into() } else { "Click the other side of the opening.".into() },

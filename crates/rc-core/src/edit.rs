@@ -875,7 +875,7 @@ pub fn add_shaft(p: &mut Project, base_level: Id, boundary: Vec<DVec2>) -> Resul
         return Err("A shaft needs a closed boundary.".into());
     }
     let top_level = p.levels().last().map(|l| l.0).filter(|t| *t != base_level);
-    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level, top_offset: 0.0, base_offset: 0.0, unconnected_height: 3000.0, host: None })))
+    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level, top_offset: 0.0, base_offset: 0.0, unconnected_height: 3000.0, host: None, by_face: false })))
 }
 
 /// Adds (`on`) or removes mullions on curtain grid segments of a curtain wall, fixing its grid.
@@ -929,7 +929,17 @@ pub fn add_vertical_opening(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> 
         return Err("Vertical openings cut floors, roofs and ceilings.".into());
     }
     let base_level = e.level().unwrap_or(0);
-    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level: None, top_offset: 0.0, base_offset: 0.0, unconnected_height: 0.0, host: Some(host) })))
+    Ok(push(p, ElementKind::Shaft(Shaft { boundary: geom::ensure_ccw(&boundary), base_level, top_level: None, top_offset: 0.0, base_offset: 0.0, unconnected_height: 0.0, host: Some(host), by_face: false })))
+}
+
+/// An opening sketched in plan and cut perpendicular to the host's face (By Face): on a
+/// sloped roof the opening's sides are square to the roof, not vertical.
+pub fn add_face_opening(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Result<Id, String> {
+    let id = add_vertical_opening(p, host, boundary)?;
+    if let Some(ElementKind::Shaft(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+        s.by_face = true;
+    }
+    Ok(id)
 }
 
 pub fn add_wall_foundation(p: &mut Project, wall: Id, type_id: Id) -> Result<Id, String> {

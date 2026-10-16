@@ -671,6 +671,8 @@ pub struct ToolOptions {
     pub model_text_depth: f64,
     /// Mullion placement: 0 = Grid Line, 1 = Grid Line Segment, 2 = All Grid Lines.
     pub mullion_mode: u8,
+    /// The opening tool is By Face (square to the host's face) rather than Vertical.
+    pub opening_by_face: bool,
     /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
     pub use_radius: bool,
     /// New stairs (Properties and options bar while the runs are drawn).
@@ -814,6 +816,7 @@ impl ToolOptions {
             ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
             use_radius: false,
             mullion_mode: 0,
+            opening_by_face: false,
             model_text: String::new(),
             level_plan_types: (true, true),
             level_offset: 0.0,

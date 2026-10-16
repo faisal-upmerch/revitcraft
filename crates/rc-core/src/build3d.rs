@@ -795,10 +795,19 @@ fn roof(p: &Project, id: Id, r: &Roof) -> MeshSet {
         let out = DVec3::new(mid.x - center.x, mid.y - center.y, 0.0);
         m.add_quad_facing(a, b, b + up, a + up, out);
     }
-    // Shafts cut through the roof.
+    // Shafts and vertical openings cut through the roof; By Face openings square to its face.
     let (z0, z1) = under.iter().flat_map(|t| t.iter()).fold((f64::MAX, f64::MIN), |(a, b), v| (a.min(v.z), b.max(v.z)));
+    let face = face_openings(p, id);
     for s in shafts_cutting(p, id, z0, z1 + thick) {
+        if face.contains(&s) {
+            continue;
+        }
         set = csg::subtract_set(&set, &csg::prism(&s, z0 - 10.0, z1 + thick + 10.0));
+    }
+    for s in &face {
+        if let Some(cut) = face_prism(&under, s, thick) {
+            set = csg::subtract_set(&set, &cut);
+        }
     }
     if r.fascia || r.gutter {
         let (pts, flags) = roof_ccw(r);
@@ -824,6 +833,47 @@ fn roof(p: &Project, id: Id, r: &Roof) -> MeshSet {
         }
     }
     set
+}
+
+/// The boundaries of the By Face openings in this host.
+fn face_openings(p: &Project, host: Id) -> Vec<Vec<DVec2>> {
+    p.elements
+        .iter()
+        .filter_map(|e| match &e.kind {
+            ElementKind::Shaft(s) if s.by_face && s.host == Some(host) && s.boundary.len() >= 3 => Some(s.boundary.clone()),
+            _ => None,
+        })
+        .collect()
+}
+
+/// A prism cutting a roof square to the face under the boundary: the plan boundary is
+/// projected onto the face's plane and extruded along its normal through the roof.
+fn face_prism(under: &[[DVec3; 3]], boundary: &[DVec2], thick: f64) -> Option<Solid> {
+    let c = geom::centroid(boundary);
+    let tri = under.iter().find(|t| geom::contains(&t.iter().map(|v| v.truncate()).collect::<Vec<_>>(), c))?;
+    let mut n = (tri[1] - tri[0]).cross(tri[2] - tri[0]).normalize_or_zero();
+    if n.z < 0.0 {
+        n = -n;
+    }
+    if n.z < 1e-6 {
+        return None;
+    }
+    let a = tri[0];
+    let on_face = |q: DVec2| DVec3::new(q.x, q.y, a.z - (n.x * (q.x - a.x) + n.y * (q.y - a.y)) / n.z);
+    let margin = 200.0;
+    let r0: Vec<DVec3> = boundary.iter().map(|q| on_face(*q) - n * margin).collect();
+    let r1: Vec<DVec3> = boundary.iter().map(|q| on_face(*q) + n * (thick / n.z + margin)).collect();
+    let mut m = Mesh::default();
+    let mid0 = r0.iter().fold(DVec3::ZERO, |s, v| s + *v) / r0.len() as f64;
+    let k = boundary.len();
+    for i in 0..k {
+        let j = (i + 1) % k;
+        let out = (r0[i] + r0[j]) / 2.0 - mid0;
+        m.add_quad_facing(r0[i], r0[j], r1[j], r1[i], out - n * out.dot(n));
+    }
+    m.add_polygon_facing(&r0, -n);
+    m.add_polygon_facing(&r1, n);
+    Some(Solid::from_mesh(&m, 0))
 }
 
 /// A solid occupying the space above a roof's underside (trims attached walls).
@@ -1262,6 +1312,36 @@ mod opening_tests {
         // Deleting the floor deletes its opening.
         crate::edit::delete_elements(&mut p, &[f1]).unwrap();
         assert!(p.element(o).is_none());
+    }
+
+    /// A vertical opening in a sloped roof has four plumb sides; a By Face one is square to
+    /// the roof, so the two sides across the slope tilt with it (those along it stay plumb).
+    #[test]
+    fn face_opening_is_square_to_the_roof() {
+        let sides = |by_face: bool| -> (usize, usize) {
+            let mut p = crate::defaults::new_project(UnitSystem::Metric);
+            let l1 = p.levels()[0].0;
+            let ty = p.types_of(Category::Roofs).next().unwrap().id;
+            let fp = vec![DVec2::new(0.0, 0.0), DVec2::new(8000.0, 0.0), DVec2::new(8000.0, 6000.0), DVec2::new(0.0, 6000.0)];
+            let r = crate::edit::add_roof(&mut p, l1, ty, fp, RoofShape::Shed, 0.0).unwrap();
+            let hole = vec![DVec2::new(3000.0, 2000.0), DVec2::new(4000.0, 2000.0), DVec2::new(4000.0, 3000.0), DVec2::new(3000.0, 3000.0)];
+            if by_face { crate::edit::add_face_opening(&mut p, r, hole).unwrap() } else { crate::edit::add_vertical_opening(&mut p, r, hole).unwrap() };
+            let e = p.element(r).unwrap().clone();
+            let set = element_mesh(&p, &e, &HashMap::new());
+            // Plumb faces around the opening, facing x and facing y.
+            let count = |axis_x: bool| -> usize { set.by_material.values().map(|m| m.indices.chunks(3).filter(|t| {
+                let v: Vec<DVec3> = t.iter().map(|i| m.positions[*i as usize]).collect();
+                let n = (v[1] - v[0]).cross(v[2] - v[0]).normalize_or_zero();
+                let c = (v[0] + v[1] + v[2]) / 3.0;
+                let facing = if axis_x { n.x.abs() > 0.5 } else { n.y.abs() > 0.5 };
+                n.z.abs() < 1e-3 && facing && c.x > 2500.0 && c.x < 4500.0 && c.y > 1500.0 && c.y < 3500.0
+            }).count()).sum() };
+            (count(true), count(false))
+        };
+        let (vx, vy) = sides(false);
+        assert!(vx > 0 && vy > 0, "{vx} {vy}");
+        let (fx, fy) = sides(true);
+        assert!((fx == 0) != (fy == 0), "{fx} {fy}");
     }
 }
 

@@ -1020,6 +1020,9 @@ pub struct Shaft {
     /// Vertical openings: the floor, roof or ceiling cut (only that element); None = a shaft.
     #[serde(default)]
     pub host: Option<Id>,
+    /// By Face openings cut perpendicular to the host's face instead of vertically.
+    #[serde(default)]
+    pub by_face: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
