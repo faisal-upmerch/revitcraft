@@ -40,6 +40,8 @@ pub enum ToolKind {
     Column,
     StructColumn,
     Beam,
+    Brace,
+    Truss,
     IsolatedFooting,
     WallFoundation,
     CeilingAuto,
@@ -119,6 +121,8 @@ impl ToolKind {
             ToolKind::Column => "Column",
             ToolKind::StructColumn => "Structural Column",
             ToolKind::Beam => "Beam",
+            ToolKind::Brace => "Brace",
+            ToolKind::Truss => "Truss",
             ToolKind::IsolatedFooting => "Isolated Foundation",
             ToolKind::WallFoundation => "Wall Foundation",
             ToolKind::CeilingAuto => "Automatic Ceiling",
@@ -203,6 +207,8 @@ impl ToolKind {
             self,
             ToolKind::Wall
                 | ToolKind::Beam
+                | ToolKind::Brace
+                | ToolKind::Truss
                 | ToolKind::Grid
                 | ToolKind::RefPlane
                 | ToolKind::ModelLine
@@ -231,6 +237,8 @@ impl ToolKind {
                 | ToolKind::Column
                 | ToolKind::StructColumn
                 | ToolKind::Beam
+                | ToolKind::Brace
+                | ToolKind::Truss
                 | ToolKind::IsolatedFooting
                 | ToolKind::WallFoundation
                 | ToolKind::CeilingAuto
@@ -361,6 +369,8 @@ pub enum SketchKind {
     Mass,
     Toposolid,
     PropertyLine,
+    /// A beam system's boundary.
+    BeamSystem,
     /// A multi-segment grid.
     Grid,
     EditFloor(Id),
@@ -388,6 +398,7 @@ impl SketchKind {
             SketchKind::Toposolid => "Create Toposolid Boundary",
             SketchKind::PropertyLine => "Create Property Line Sketch",
             SketchKind::Grid => "Edit Sketch",
+            SketchKind::BeamSystem => "Create Beam System Boundary",
         }
     }
     pub fn is_roof(self) -> bool {

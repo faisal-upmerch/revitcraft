@@ -767,6 +767,80 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
     Ok(push(p, ElementKind::Instance(inst)))
 }
 
+/// A brace: a framing member from `start` at `z0` above the level to `end` at `z1`.
+pub fn add_brace(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec2, z0: f64, z1: f64) -> Result<Id, String> {
+    let id = add_beam(p, type_id, level, start, end)?;
+    if let Some(ElementKind::Instance(i)) = p.element_mut(id).map(|e| &mut e.kind) {
+        i.elevation = z0;
+        i.end_elevation = z1;
+        i.values.insert("Structural Usage".into(), "Vertical Bracing".into());
+    }
+    Ok(id)
+}
+
+/// A flat Warren truss from `start` to `end`: bottom chord at the level, top chord `height`
+/// above it and diagonals alternating between them, one panel per `height` or so.
+pub fn add_truss(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec2, height: f64) -> Result<Vec<Id>, String> {
+    let len = start.distance(end);
+    if len < 2.0 * height.max(100.0) {
+        return Err("The truss is too short for its height.".into());
+    }
+    let panels = ((len / height).round() as usize).max(2);
+    let at = |k: usize| start + (end - start) * (k as f64 / panels as f64);
+    let mut ids = vec![add_beam(p, type_id, level, start, end)?, add_brace(p, type_id, level, start, end, height, height)?];
+    for k in 0..panels {
+        let (z0, z1) = if k % 2 == 0 { (0.0, height) } else { (height, 0.0) };
+        ids.push(add_brace(p, type_id, level, at(k), at(k + 1), z0, z1)?);
+    }
+    for id in &ids[1..] {
+        if let Some(ElementKind::Instance(i)) = p.element_mut(*id).map(|e| &mut e.kind) {
+            i.values.insert("Structural Usage".into(), "Other".into());
+        }
+    }
+    Ok(ids)
+}
+
+/// A beam system: beams parallel to the boundary's first edge at `spacing`, centred across
+/// the bay, each clipped to the boundary.
+pub fn add_beam_system(p: &mut Project, type_id: Id, level: Id, boundary: Vec<DVec2>, spacing: f64) -> Result<Vec<Id>, String> {
+    let b = geom::clean(&boundary, 1.0);
+    if b.len() < 3 {
+        return Err("A beam system needs a closed boundary.".into());
+    }
+    let dir = (b[1] - b[0]).normalize_or_zero();
+    let n = geom::perp(dir);
+    let across: Vec<f64> = b.iter().map(|q| (*q - b[0]).dot(n)).collect();
+    let (lo, hi) = across.iter().fold((f64::MAX, f64::MIN), |(a, c), v| (a.min(*v), c.max(*v)));
+    let width = hi - lo;
+    let count = (width / spacing).floor() as usize;
+    if count == 0 {
+        return Err("The boundary is narrower than the beam spacing.".into());
+    }
+    let first = lo + (width - (count - 1) as f64 * spacing) / 2.0;
+    let mut ids = Vec::new();
+    for k in 0..count {
+        let off = first + k as f64 * spacing;
+        // Where the line at this offset crosses the boundary, paired inside-out.
+        let o = b[0] + n * off;
+        let mut ts: Vec<f64> = Vec::new();
+        for i in 0..b.len() {
+            let (a, c) = (b[i], b[(i + 1) % b.len()]);
+            let (da, dc) = ((a - o).dot(n), (c - o).dot(n));
+            if (da > 0.0) != (dc > 0.0) {
+                let t = da / (da - dc);
+                ts.push((a + (c - a) * t - o).dot(dir));
+            }
+        }
+        ts.sort_by(|x, y| x.total_cmp(y));
+        for w in ts.chunks(2) {
+            if w.len() == 2 && w[1] - w[0] > 100.0 {
+                ids.push(add_beam(p, type_id, level, o + dir * w[0], o + dir * w[1])?);
+            }
+        }
+    }
+    Ok(ids)
+}
+
 /// Creates a stair from runs, with railings on both sides when requested.
 pub fn add_stair(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRun>, railing_type: Option<Id>) -> Result<Id, String> {
     if runs.is_empty() || runs.iter().any(|r| r.start.distance(r.end) < 100.0) {
@@ -2413,6 +2487,23 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn braces_trusses_and_beam_systems() {
+        let (mut p, lvl, _) = project();
+        let bt = p.families.iter().find(|f| f.is_framing()).and_then(|f| f.types.first()).map(|t| t.id).unwrap();
+        let b = add_brace(&mut p, bt, lvl, DVec2::ZERO, DVec2::new(3000.0, 0.0), 0.0, 3000.0).unwrap();
+        let Some(ElementKind::Instance(i)) = p.element(b).map(|e| &e.kind) else { panic!() };
+        assert_eq!((i.elevation, i.end_elevation), (0.0, 3000.0));
+        // A 6 m truss 1.5 m deep: 2 chords and 4 diagonals.
+        assert_eq!(add_truss(&mut p, bt, lvl, DVec2::ZERO, DVec2::new(6000.0, 0.0), 1500.0).unwrap().len(), 6);
+        // A 6 x 4 m bay at 1.8 m spacing: 2 beams, 0.2 m in from... centred across the 4 m.
+        let bay = vec![DVec2::new(0.0, 0.0), DVec2::new(6000.0, 0.0), DVec2::new(6000.0, 4000.0), DVec2::new(0.0, 4000.0)];
+        let ids = add_beam_system(&mut p, bt, lvl, bay, 1800.0).unwrap();
+        assert_eq!(ids.len(), 2);
+        let ys: Vec<f64> = ids.iter().map(|id| match p.element(*id).map(|e| &e.kind) { Some(ElementKind::Instance(i)) => i.location.y, _ => 0.0 }).collect();
+        assert!((ys[0] - 1100.0).abs() < 1e-6 && (ys[1] - 2900.0).abs() < 1e-6, "{ys:?}");
     }
 
     #[test]

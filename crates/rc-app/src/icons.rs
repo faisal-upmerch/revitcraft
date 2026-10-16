@@ -54,6 +54,9 @@ pub enum Icon {
     RefPlane,
     WorkPlane,
     Beam,
+    Brace,
+    Truss,
+    BeamSystem,
     WallFoundation,
     IsolatedFoundation,
     DimAligned,
@@ -879,6 +882,24 @@ fn draw(g: &Pen, icon: Icon) {
             g.poly(&[(0.06, 0.48), (0.7, 0.26), (0.94, 0.36), (0.3, 0.58)], LBLUE, ink);
             g.poly(&[(0.06, 0.48), (0.3, 0.58), (0.3, 0.74), (0.06, 0.64)], BLUE, ink);
             g.poly(&[(0.3, 0.58), (0.94, 0.36), (0.94, 0.52), (0.3, 0.74)], Color32::from_rgb(90, 150, 220), ink);
+        }
+        Brace => {
+            // A diagonal member between two posts.
+            g.rect(0.1, 0.12, 0.2, 0.9, LGREY, ink);
+            g.rect(0.8, 0.12, 0.9, 0.9, LGREY, ink);
+            g.poly(&[(0.2, 0.78), (0.26, 0.86), (0.8, 0.26), (0.74, 0.18)], BLUE, ink);
+        }
+        Truss => {
+            // Top and bottom chords with a zigzag of diagonals.
+            g.rect(0.06, 0.24, 0.94, 0.32, BLUE, ink);
+            g.rect(0.06, 0.7, 0.94, 0.78, BLUE, ink);
+            g.line(&[(0.1, 0.72), (0.3, 0.3), (0.5, 0.72), (0.7, 0.3), (0.9, 0.72)], BLUE);
+        }
+        BeamSystem => {
+            // A bay with parallel beams.
+            g.poly(&[(0.06, 0.5), (0.5, 0.22), (0.94, 0.5), (0.5, 0.78)], LGREY, ink);
+            g.line(&[(0.22, 0.6), (0.62, 0.32)], BLUE);
+            g.line(&[(0.38, 0.7), (0.78, 0.42)], BLUE);
         }
         WallFoundation => {
             g.rect(0.36, 0.1, 0.64, 0.6, LGREY, ink);

@@ -68,7 +68,7 @@ pub fn modes_for(kind: ToolKind) -> &'static [DrawMode] {
         ToolKind::ModelLine | ToolKind::DetailLine => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, Spline, Ellipse, PartialEllipse, PickLines],
         ToolKind::RoomSeparator | ToolKind::AreaBoundary => &[Line, Rect, PolyIn, PolyCirc, Circle, Arc3, ArcCenter, ArcTangent, Fillet, Spline, Ellipse, PartialEllipse, PickLines],
         ToolKind::Grid => &[Line, Arc3, ArcCenter, PickLines],
-        ToolKind::RefPlane | ToolKind::Beam => &[Line, PickLines],
+        ToolKind::RefPlane | ToolKind::Beam | ToolKind::Brace | ToolKind::Truss => &[Line, PickLines],
         _ => &[],
     }
 }
@@ -990,6 +990,28 @@ fn commit_segs(app: &mut App, view: &View, segs: &[Seg]) -> bool {
                         w.base_offset = o.wall_base_offset;
                         w.top_level = None;
                         w.unconnected_height = o.wall_height;
+                    }
+                }
+                Ok(())
+            })
+            .is_some()
+        }
+        ToolKind::Brace | ToolKind::Truss => {
+            let Some(level) = level else { return false };
+            // Braces run from this level up to the next; trusses stand on this level.
+            let up = app.doc.data.level_above(level).map(|(_, l)| l.elevation - app.doc.data.level_elevation(level)).unwrap_or(3000.0);
+            let truss = app.tool.kind == ToolKind::Truss;
+            let depth = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1524.0 } else { 1500.0 };
+            app.run(if truss { "Create Truss" } else { "Create Brace" }, |p| {
+                for s in segs {
+                    match *s {
+                        Seg::Line(a, b) if truss => {
+                            edit::add_truss(p, o.beam_type, level, a, b, depth)?;
+                        }
+                        Seg::Line(a, b) => {
+                            edit::add_brace(p, o.beam_type, level, a, b, 0.0, up)?;
+                        }
+                        Seg::Arc(..) => return Err("Draw straight segments.".into()),
                     }
                 }
                 Ok(())
