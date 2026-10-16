@@ -13,7 +13,6 @@ use rc_core::model::*;
 pub enum GripKind {
     WallEnd(bool),
     WallMid,
-    WallShape,
     WallFlip,
     Vertex(usize),
     LineMid,
@@ -85,8 +84,8 @@ pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
                         }
                         None => ((w.start + w.end) / 2.0, w.normal()),
                     };
+                    // In plan the reference app shows the ends and the flip control only.
                     if app.selection.len() == 1 {
-                        out.push(Grip { id, kind: GripKind::WallShape, pos: mid - n * (t / 2.0 + px(10.0)), dir: -n, on: false });
                         out.push(Grip { id, kind: GripKind::WallFlip, pos: mid + n * (t / 2.0 + px(14.0)), dir: n, on: false });
                     }
                 }
@@ -107,12 +106,13 @@ pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
                     out.push(g(id, GripKind::Vertex(1), s.end));
                 }
                 ElementKind::Grid(gr) if plan_view => {
-                    out.push(g(id, GripKind::GridEnd(true), gr.start));
-                    out.push(g(id, GripKind::GridEnd(false), gr.end));
+                    // Model ends (hollow circles with their 3D extents label) and the bubble
+                    // checkboxes beyond them, along the grid.
                     let d = (gr.end - gr.start).normalize_or_zero();
-                    let n = geom::perp(d);
-                    out.push(Grip { id, kind: GripKind::GridBubble(true), pos: gr.start + n * px(16.0), dir: d, on: gr.bubble_start });
-                    out.push(Grip { id, kind: GripKind::GridBubble(false), pos: gr.end + n * px(16.0), dir: d, on: gr.bubble_end });
+                    out.push(Grip { id, kind: GripKind::GridEnd(true), pos: gr.start, dir: -d, on: false });
+                    out.push(Grip { id, kind: GripKind::GridEnd(false), pos: gr.end, dir: d, on: false });
+                    out.push(Grip { id, kind: GripKind::GridBubble(true), pos: gr.start - d * px(30.0), dir: d, on: gr.bubble_start });
+                    out.push(Grip { id, kind: GripKind::GridBubble(false), pos: gr.end + d * px(30.0), dir: d, on: gr.bubble_end });
                 }
                 ElementKind::Instance(i) if plan_view => {
                     if let Some(end) = i.end {
@@ -221,16 +221,27 @@ pub fn paint(painter: &egui::Painter, xf: &Xf, grips: &[Grip], hover: Option<&Gr
         let st = Stroke::new(1.5, style::SELECT);
         match &gr.kind {
             GripKind::WallFlip | GripKind::FlipFacing | GripKind::FlipHand | GripKind::SectionFlip => {
-                // Double arrow.
+                // The flip control: a thin double arrow.
                 let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
                 let n = vec2(-d.y, d.x);
                 let c = if hot { style::PRESELECT } else { style::SELECT };
+                let st = Stroke::new(1.6, c);
+                painter.line_segment([p - d * 8.0, p + d * 8.0], st);
                 for s in [1.0f32, -1.0] {
-                    let tip = p + d * 9.0 * s;
-                    painter.add(egui::Shape::convex_polygon(vec![tip, p + d * 2.0 * s + n * 5.0, p + d * 2.0 * s - n * 5.0], c, Stroke::NONE));
+                    let tip = p + d * 8.0 * s;
+                    painter.add(egui::Shape::line(vec![tip - d * 4.0 * s + n * 3.5, tip, tip - d * 4.0 * s - n * 3.5], st));
                 }
             }
-            GripKind::WallShape | GripKind::SectionDepth => {
+            GripKind::GridEnd(_) => {
+                // Hollow end circle, and "3D" (the model extents) beside it.
+                let fill = if hot { Color32::from_rgb(120, 190, 255) } else { Color32::WHITE };
+                painter.circle(p, 4.5, fill, Stroke::new(1.5, style::SELECT));
+                let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
+                let side = vec2(-d.y, d.x);
+                let at = p + side * 14.0 - d * 2.0;
+                painter.text(at, egui::Align2::CENTER_CENTER, "3D", style::bold(10.0), style::SELECT);
+            }
+            GripKind::SectionDepth => {
                 let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
                 let n = vec2(-d.y, d.x);
                 painter.add(egui::Shape::convex_polygon(vec![p + d * 8.0, p - d * 4.0 + n * 6.0, p - d * 4.0 - n * 6.0], fill, st));
@@ -321,7 +332,7 @@ fn constrained(p: &Project, id: Id, kind: &GripKind, start: DVec2, pt: DVec2) ->
             }
             pt
         }
-        GripKind::WallShape | GripKind::SectionDepth => {
+        GripKind::SectionDepth => {
             let n = match p.element(id).map(|e| &e.kind) {
                 Some(ElementKind::Wall(w)) => w.normal(),
                 _ => match p.view(id).map(|v| &v.kind) {
@@ -358,11 +369,6 @@ pub fn preview(app: &App, painter: &egui::Painter, xf: &Xf, view: &View, id: Id,
                 canvas::temp_dim(painter, xf, a.center, pt, &format!("R {}", units.length(a.radius)), 14.0);
             }
         }
-        (Some(ElementKind::Wall(w)), GripKind::WallShape) => {
-            let delta = pt - start;
-            painter.line_segment([xf.s(w.start + delta), xf.s(w.end + delta)], st);
-            canvas::temp_dim(painter, xf, start, pt, &units.length(start.distance(pt)), -16.0);
-        }
         _ => {
             painter.extend(egui::Shape::dashed_line(&[xf.s(start), xf.s(pt)], Stroke::new(1.0, style::PREVIEW), 5.0, 3.0));
             painter.circle_stroke(xf.s(pt), 5.0, st);
@@ -383,9 +389,6 @@ pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, 
     let view_id = view.id;
     app.run("Drag", move |p| {
         if p.element(id).is_some() {
-            if let GripKind::WallShape = kind {
-                return move_wall_with_joins(p, id, pt - start);
-            }
             if let GripKind::WallEnd(s) = kind {
                 let old = { let w = p.wall(id).ok_or("Wall not found.")?; if s { w.start } else { w.end } };
                 let joined = walls_joined_at(p, old, id);
