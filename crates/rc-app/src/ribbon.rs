@@ -141,7 +141,7 @@ fn insert() -> Vec<Panel> {
         panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
         panel("Link", vec![Big(C::LinkCad), Big(C::LinkImage)]),
         panel("Import", vec![Big(C::ImportCad), Big(C::ImportImage), Big(C::ImportIfc)]),
-        panel("Load from Library", vec![Big(C::LoadFamily), Labeled("Load as\nGroup", C::LoadAsGroup, vec![])]),
+        panel("Load from Library", vec![Big(C::LoadFamily), Labeled("Load as\nGroup", C::LoadAsGroup, vec![]), Labeled("Insert\nfrom File", C::InsertViews, vec![C::InsertViews])]),
     ]
 }
 

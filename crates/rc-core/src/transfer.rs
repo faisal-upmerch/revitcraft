@@ -287,6 +287,96 @@ fn merge_by_name<T: Clone>(dst: &mut Vec<T>, src: &[T], name: impl Fn(&T) -> Str
     n
 }
 
+/// The `dst` line style for a `src` one (user styles matched by name, copied when missing).
+fn map_line_style(dst: &mut Project, src: &Project, st: LineStyle) -> LineStyle {
+    let LineStyle::Custom(k) = st else { return st };
+    let Some(def) = src.line_styles.get(k as usize) else { return LineStyle::Medium };
+    let idx = match dst.line_styles.iter().position(|d| d.name == def.name) {
+        Some(i) => i,
+        None => {
+            dst.line_styles.push(def.clone());
+            dst.line_styles.len() - 1
+        }
+    };
+    LineStyle::Custom(idx as u16)
+}
+
+/// The views Insert Views from File can bring in: drafting views, legends and schedules.
+pub fn insertable_views(src: &Project) -> Vec<(Id, String)> {
+    src.views
+        .iter()
+        .filter(|v| !v.is_template && matches!(v.kind, ViewKind::Drafting | ViewKind::Legend | ViewKind::Schedule(_)))
+        .map(|v| (v.id, format!("{}: {}", v.type_label(), v.name)))
+        .collect()
+}
+
+/// Insert > Insert from File > Insert Views from File: copies the chosen drafting views,
+/// legends and schedules with their 2D content (lines, text, regions, components, dimensions).
+pub fn insert_views(dst: &mut Project, src: &Project, views: &[Id]) -> Vec<Id> {
+    let mut out = Vec::new();
+    for vid in views {
+        let Some(v) = src.view(*vid).cloned() else { continue };
+        if !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend | ViewKind::Schedule(_)) {
+            continue;
+        }
+        let nid = dst.new_id();
+        let mut nv = v.clone();
+        nv.id = nid;
+        nv.name = unique_name(dst.views.iter().map(|x| x.name.clone()), &v.name);
+        nv.template = None;
+        nv.parent = None;
+        nv.underlay = None;
+        nv.scope_box = None;
+        nv.hidden_elements.clear();
+        nv.phase = dst.phases.last().map(|p| p.id);
+        dst.views.push(nv);
+        out.push(nid);
+        let els: Vec<Element> = src.elements.iter().filter(|e| e.view == Some(*vid) && !matches!(e.kind, ElementKind::GroupInstance(_))).cloned().collect();
+        let map: HashMap<Id, Id> = els.iter().map(|e| (e.id, dst.new_id())).collect();
+        for mut e in els {
+            e.id = map[&e.id];
+            e.uid = uuid::Uuid::new_v4().to_string();
+            e.view = Some(nid);
+            e.group = None;
+            e.phase_created = None;
+            e.phase_demolished = None;
+            match &mut e.kind {
+                ElementKind::Dimension(d) => {
+                    for r in d.refs.iter_mut() {
+                        r.element = r.element.and_then(|x| map.get(&x).copied());
+                    }
+                }
+                ElementKind::Tag(t) => t.host = map.get(&t.host).copied().unwrap_or(t.host),
+                ElementKind::Line(l) => l.style = map_line_style(dst, src, l.style),
+                ElementKind::Region(r) => r.boundary_style = map_line_style(dst, src, r.boundary_style),
+                ElementKind::Text(t) => {
+                    t.type_id = t.type_id.and_then(|tid| {
+                        let tt = src.text_types.iter().find(|x| x.id == tid)?.clone();
+                        match dst.text_types.iter().find(|x| x.name == tt.name) {
+                            Some(d) => Some(d.id),
+                            None => {
+                                let id = dst.new_id();
+                                dst.text_types.push(TextType { id, ..tt });
+                                Some(id)
+                            }
+                        }
+                    })
+                }
+                ElementKind::RasterImage(im) => {
+                    if let Some(a) = src.images.iter().find(|a| a.id == im.asset).cloned() {
+                        let id = dst.new_id();
+                        dst.images.push(ImageAsset { id, ..a });
+                        im.asset = id;
+                    }
+                }
+                _ => {}
+            }
+            dst.elements.push(e);
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -315,5 +405,20 @@ mod tests {
         assert_eq!(transfer_standards(&mut dst, &src, &["Wall Types"], false), 0);
         assert!(transfer_standards(&mut dst, &src, &["Wall Types"], true) > 0);
         assert_eq!(dst.types_of(Category::Walls).count(), walls_before + 1);
+    }
+
+    #[test]
+    fn insert_views_copies_drafting_views_with_their_lines() {
+        let mut src = crate::defaults::new_project(UnitSystem::Metric);
+        let dv = src.new_id();
+        src.views.push(View::new(dv, "Wall Detail", 5.0, ViewKind::Drafting));
+        let l = crate::edit::add_line(&mut src, Some(dv), None, vec![glam::DVec2::ZERO, glam::DVec2::new(100.0, 0.0)], None, LineStyle::Medium).unwrap();
+        let _ = l;
+        let mut dst = crate::defaults::new_project(UnitSystem::Metric);
+        assert!(insertable_views(&src).iter().any(|v| v.0 == dv));
+        let made = insert_views(&mut dst, &src, &[dv]);
+        assert_eq!(made.len(), 1);
+        assert!(dst.elements.iter().any(|e| e.view == Some(made[0]) && matches!(e.kind, ElementKind::Line(_))));
+        assert_eq!(dst.view(made[0]).unwrap().name, "Wall Detail");
     }
 }

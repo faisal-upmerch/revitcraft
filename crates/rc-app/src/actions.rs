@@ -538,6 +538,22 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 }
             }
         }
+        InsertViews => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
+                match io::load(&path) {
+                    Ok(src) => {
+                        let views = rc_core::transfer::insertable_views(&src);
+                        if views.is_empty() {
+                            app.error("The file has no drafting views, legends or schedules to insert.");
+                        } else {
+                            let checks = vec![false; views.len()];
+                            app.dialogs.insert_views = Some(Box::new(dialogs::InsertViewsState { src, views, checks }));
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
         TransferStandards => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
                 match io::load(&path) {

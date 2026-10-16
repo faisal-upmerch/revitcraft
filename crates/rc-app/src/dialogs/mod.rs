@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Insert Views from File: the source project and its views.
+    pub insert_views: Option<Box<InsertViewsState>>,
     /// Edit Shared Parameters.
     pub shared_params: Option<Box<SharedParamsState>>,
     /// Transfer Project Standards: the source project and what to copy.
@@ -452,6 +454,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     starting_view_dialog(app, ctx);
     transfer_dialog(app, ctx);
     shared_params_dialog(app, ctx);
+    insert_views_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -769,6 +772,68 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+pub struct InsertViewsState {
+    pub src: rc_core::model::Project,
+    pub views: Vec<(Id, String)>,
+    pub checks: Vec<bool>,
+}
+
+/// Insert Views: pick the drafting views, legends and schedules to copy in.
+fn insert_views_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut st) = app.dialogs.insert_views.take() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Insert Views").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Views:");
+            egui::ComboBox::from_id_salt("iv-filter").selected_text("Show all views and sheets").width(260.0).show_ui(ui, |ui| {
+                let _ = ui.selectable_label(true, "Show all views and sheets");
+            });
+        });
+        ui.add_space(4.0);
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
+                for (k, (_, name)) in st.views.iter().enumerate() {
+                    crate::style::check(ui, &mut st.checks[k], name.as_str());
+                }
+            });
+        });
+        ui.add_space(6.0);
+        ui.horizontal(|ui| {
+            if ui.button("Check All").clicked() {
+                st.checks.iter_mut().for_each(|c| *c = true);
+            }
+            if ui.button("Check None").clicked() {
+                st.checks.iter_mut().for_each(|c| *c = false);
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, st.checks.iter().any(|c| *c)) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let ids: Vec<Id> = st.views.iter().zip(&st.checks).filter(|(_, c)| **c).map(|(v, _)| v.0).collect();
+        let src = &st.src;
+        let mut made = Vec::new();
+        app.run("Insert Views from File", |p| {
+            made = rc_core::transfer::insert_views(p, src, &ids);
+            Ok(())
+        });
+        app.info(format!("Inserted {} view(s).", made.len()));
+        return;
+    }
+    if !(cancel || !open) {
+        app.dialogs.insert_views = Some(st);
     }
 }
 

@@ -116,6 +116,7 @@ pub enum Cmd {
     LinkImage,
     LoadFamily,
     LoadAsGroup,
+    InsertViews,
     TransferStandards,
     // Annotate
     DimAligned,
@@ -493,6 +494,7 @@ impl Cmd {
             LinkCad => ci("Link CAD", I::LinkCad, "Links a DXF drawing into the current view as a halftone underlay.", ""),
             ImportCad => ci("Import CAD", I::ImportCad, "Imports a DXF drawing into the current view.", ""),
             LoadFamily => ci("Load Family", I::LoadFamily, "Loads a family file (.rcfa) into the project.", ""),
+            InsertViews => ci("Insert Views from File", I::TransferStandards, "Copies drafting views, legends and schedules (with their 2D content) from another project file.", ""),
             LoadAsGroup => ci("Load as Group", I::LoadAsGroup, "Loads the model of another project file as a group (placed from Model Group).", ""),
             TransferStandards => ci("Transfer Project Standards", I::TransferStandards, "Copies types, materials, styles and parameters from another project file.", ""),
 
@@ -753,7 +755,7 @@ impl Cmd {
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelText, Cmd::Ramp, Cmd::PlaceRoomsAuto, Cmd::HighlightBoundaries, Cmd::RampRun, Cmd::RampBoundary, Cmd::RampRiser, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,
         Cmd::Shaft, Cmd::WallOpening, Cmd::VerticalOpening, Cmd::FaceOpening, Cmd::DormerOpening, Cmd::FeExtrusion, Cmd::FeBlend, Cmd::FeRevolve, Cmd::FeSweep, Cmd::FeSweptBlend, Cmd::FeVoidExtrusion, Cmd::FeVoidBlend, Cmd::FeVoidRevolve, Cmd::FeVoidSweep, Cmd::FeModelLine, Cmd::FeComponent, Cmd::FeModelText, Cmd::FeOpening, Cmd::FeModelGroup, Cmd::FeControl, Cmd::FeRefLine, Cmd::FeRefPlane, Cmd::FeDimension, Cmd::FeSymbolicLine, Cmd::FeFamilyTypes, Cmd::FeFamilyCategory, Cmd::FeLoadIntoProject, Cmd::FeLoadAndClose, Cmd::FeFinishSketch, Cmd::FeCancelSketch, Cmd::FeDefault3D, Cmd::Print, Cmd::PrintPreview, Cmd::PrintSetup, Cmd::Subdivide, Cmd::Mullion, Cmd::MullionGridLine, Cmd::MullionSegment, Cmd::MullionAllLines, Cmd::Level, Cmd::Grid, Cmd::GridMultiSegment, Cmd::RefPlane, Cmd::Beam, Cmd::Brace, Cmd::Truss, Cmd::BeamSystem, Cmd::WallFoundation, Cmd::IsolatedFoundation, Cmd::LinkCad, Cmd::ImportCad, Cmd::ImportImage, Cmd::SpanSymbol, Cmd::TreadNumber, Cmd::LinkImage,
-        Cmd::LoadFamily, Cmd::LoadAsGroup, Cmd::TransferStandards, Cmd::SharedParameters, Cmd::DimAligned, Cmd::DimLinear, Cmd::DimAngular, Cmd::DimRadial, Cmd::DimDiameter, Cmd::DimArcLength, Cmd::SpotElevation, Cmd::DetailLine,
+        Cmd::LoadFamily, Cmd::LoadAsGroup, Cmd::InsertViews, Cmd::TransferStandards, Cmd::SharedParameters, Cmd::DimAligned, Cmd::DimLinear, Cmd::DimAngular, Cmd::DimRadial, Cmd::DimDiameter, Cmd::DimArcLength, Cmd::SpotElevation, Cmd::DetailLine,
         Cmd::FilledRegion, Cmd::MaskingRegion, Cmd::RevisionCloud, Cmd::Text, Cmd::TagByCategory, Cmd::TagAll, Cmd::Symbol, Cmd::ViewTemplates, Cmd::TemplateFromView,
         Cmd::VisibilityGraphics, Cmd::ThinLines, Cmd::Default3D, Cmd::Camera, Cmd::StartingView, Cmd::Location, Cmd::SpecifyCoordinates, Cmd::ReportCoordinates, Cmd::RelocateProject, Cmd::RotateTrueNorth, Cmd::Section, Cmd::Callout, Cmd::NewFloorPlan, Cmd::NewCeilingPlan, Cmd::NewAreaPlan,
         Cmd::ElevationView, Cmd::DraftingView, Cmd::DuplicateView, Cmd::DuplicateWithDetailing, Cmd::Legend, Cmd::Schedule, Cmd::MaterialTakeoff, Cmd::SheetList,
