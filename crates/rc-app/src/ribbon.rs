@@ -54,6 +54,8 @@ enum Item {
     /// A big button with its own ribbon label ("\n" breaks the line) and optional
     /// alternatives under the arrow.
     Labeled(&'static str, Cmd, Vec<Cmd>),
+    /// Tool options shown in the ribbon (the reference app's Align panel).
+    AlignOptions,
 }
 
 struct Panel {
@@ -430,6 +432,10 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::StructColumn) {
             v.push(panel("Tag", vec![Labeled("Tag on\nPlacement", C::TagOnPlacement, vec![])]));
         }
+        if kind == ToolKind::Align {
+            v.push(panel("Align", vec![AlignOptions]));
+            return Some(("Align".to_string(), v));
+        }
         let title = match kind {
             ToolKind::Move | ToolKind::Copy | ToolKind::Rotate | ToolKind::Align | ToolKind::Offset | ToolKind::MirrorPick | ToolKind::MirrorDraw | ToolKind::Array | ToolKind::Scale | ToolKind::TrimCorner | ToolKind::TrimSingle | ToolKind::TrimMulti | ToolKind::Split | ToolKind::SplitGap => {
                 return None;
@@ -759,6 +765,29 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                                     for c in cs {
                                         small_button(ui, app, *c, w);
                                     }
+                                }
+                                AlignOptions => {
+                                    // Two rows: Multiple Alignment + Prefer, Lock + Pattern.
+                                    ui.spacing_mut().item_spacing = vec2(6.0, 4.0);
+                                    ui.add_space(4.0);
+                                    egui::Grid::new("align-opts").num_columns(3).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
+                                        crate::style::check(ui, &mut app.opts.align_multiple, "Multiple Alignment");
+                                        ui.label("Prefer:");
+                                        let mut pr = app.opts.align_prefer;
+                                        egui::ComboBox::from_id_salt("align-pref-rb").selected_text(pr.label()).width(130.0).show_ui(ui, |ui| {
+                                            for w in crate::tools::WallRefPref::ALL {
+                                                ui.selectable_value(&mut pr, w, w.label());
+                                            }
+                                        });
+                                        app.opts.align_prefer = pr;
+                                        ui.end_row();
+                                        crate::style::check(ui, &mut app.opts.align_lock, "Lock");
+                                        ui.label("Pattern:");
+                                        ui.add_enabled_ui(false, |ui| {
+                                            egui::ComboBox::from_id_salt("align-pat-rb").selected_text("Entire Surface").width(130.0).show_ui(ui, |_| {});
+                                        });
+                                        ui.end_row();
+                                    });
                                 }
                                 Icons(cs) => {
                                     let rows = if cs.len() > 6 { 3 } else { 2 };

@@ -2683,10 +2683,29 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
                     if let Some((a, b)) = line {
                         let b = if a.distance(b) < 1e-6 { a + DVec2::Y } else { b };
                         app.tool.pts = vec![a, b];
+                        // Remember the reference itself, for a locked alignment.
+                        app.tool.refs = dim_ref_at(app, view, d, c, xf).map(|r| vec![r.0]).unwrap_or_default();
                     }
                 } else if let Some(target) = canvas::pick_candidates(app, view, d, c, tol).first().copied() {
                     let (ra, rb) = (app.tool.pts[0], app.tool.pts[1]);
-                    app.run("Align", |p| edit::align(p, ra, rb, target, c));
+                    let lock = app.opts.align_lock;
+                    let first = app.tool.refs.first().cloned();
+                    let second = dim_ref_at(app, view, d, c, xf).map(|r| r.0);
+                    let vid = view.id;
+                    app.run("Align", |p| {
+                        edit::align(p, ra, rb, target, c)?;
+                        // Lock: a zero-length locked dimension keeps the two references aligned.
+                        if let (true, Some(r0), Some(r1)) = (lock, first, second) {
+                            let across = geom::perp((rb - ra).normalize_or(DVec2::X));
+                            let at = geom::project_on_line(c, ra, rb);
+                            let id = edit::add_dimension(p, vid, vec![r0, r1], across, at)?;
+                            if let Some(ElementKind::Dimension(dm)) = p.element_mut(id).map(|e| &mut e.kind) {
+                                dm.locks = vec![true];
+                                dm.alignment = true;
+                            }
+                        }
+                        Ok(())
+                    });
                     if !app.opts.align_multiple {
                         app.tool.reset();
                     }

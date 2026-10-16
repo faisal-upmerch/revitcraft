@@ -510,17 +510,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
                 crate::style::check(ui, &mut app.opts.offset_copy, "Copy");
             }
-            ToolKind::Align => {
-                crate::style::check(ui, &mut app.opts.align_multiple, "Multiple Alignment");
-                ui.label("Prefer:");
-                let mut pr = app.opts.align_prefer;
-                egui::ComboBox::from_id_salt("align-pref").selected_text(pr.label()).width(130.0).show_ui(ui, |ui| {
-                    for w in WallRefPref::ALL {
-                        ui.selectable_value(&mut pr, w, w.label());
-                    }
-                });
-                app.opts.align_prefer = pr;
-            }
+            // Align's options sit in its ribbon panel, as in the reference app.
+            ToolKind::Align => {}
             ToolKind::SplitGap => {
                 ui.label("Joint Gap:");
                 let mut g = app.opts.split_gap;

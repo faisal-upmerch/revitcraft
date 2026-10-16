@@ -602,6 +602,7 @@ pub fn add_dimension(p: &mut Project, view: Id, refs: Vec<DimRef>, direction: DV
             suffix: String::new(),
             label: String::new(),
             style,
+            alignment: false,
         }),
     ))
 }

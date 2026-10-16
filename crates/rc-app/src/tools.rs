@@ -709,6 +709,8 @@ pub struct ToolOptions {
     /// Offset by two clicked points instead of a typed distance.
     pub offset_graphical: bool,
     pub align_multiple: bool,
+    /// Align: lock the alignment (the aligned references keep moving together).
+    pub align_lock: bool,
     pub align_prefer: WallRefPref,
     pub split_gap: f64,
     pub tag_leader: bool,
@@ -842,7 +844,9 @@ impl ToolOptions {
             offset_copy: true,
             offset_graphical: false,
             align_multiple: false,
-            align_prefer: WallRefPref::Faces,
+            align_lock: false,
+            // The reference app prefers wall centerlines by default.
+            align_prefer: WallRefPref::Centers,
             split_gap: if imperial { 25.4 } else { 25.0 },
             tag_leader: false,
             tag_horizontal: true,

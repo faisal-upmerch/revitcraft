@@ -2071,6 +2071,19 @@ fn special_dimension(p: &Project, id: Id, dim: &Dimension, scale: f64, d: &mut D
 }
 
 pub fn dimension_graphics(p: &Project, id: Id, dim: &Dimension, scale: f64, d: &mut Drawing) {
+    if dim.alignment {
+        // The closed padlock the reference app leaves where an alignment is locked.
+        let c = dim.line_point;
+        let s = 1.4 * scale;
+        let body = vec![c + DVec2::new(-s, -s), c + DVec2::new(s, -s), c + DVec2::new(s, s * 0.4), c + DVec2::new(-s, s * 0.4)];
+        d.line(Some(id), body, true, Stroke::new(0.18, [40, 40, 40], Dash::Solid));
+        let arc: Vec<DVec2> = (0..=8).map(|k| {
+            let a = std::f64::consts::PI * k as f64 / 8.0;
+            c + DVec2::new(a.cos() * s * 0.65, s * 0.4 + a.sin() * s * 0.85)
+        }).collect();
+        d.line(Some(id), arc, false, Stroke::new(0.18, [40, 40, 40], Dash::Solid));
+        return;
+    }
     if !matches!(dim.kind, DimKind::Aligned | DimKind::Linear) {
         special_dimension(p, id, dim, scale, d);
         return;

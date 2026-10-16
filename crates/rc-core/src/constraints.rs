@@ -219,3 +219,43 @@ fn move_ref(p: &mut Project, r: &DimRef, delta: DVec2) -> bool {
         None => true,
     }
 }
+
+#[cfg(test)]
+mod align_lock_tests {
+    use super::*;
+    use crate::units::UnitSystem;
+
+    /// An Align lock keeps the two references aligned: moving one wall drags the other.
+    #[test]
+    fn locked_alignment_follows() {
+        let mut doc = Document::new(crate::defaults::new_project(UnitSystem::Metric));
+        let l1 = doc.data.levels()[0].0;
+        let ty = doc.data.types_of(Category::Walls).next().unwrap().id;
+        let view = doc.data.views.iter().find(|v| v.plan_level() == Some(l1)).unwrap().id;
+        let (a, b) = doc
+            .transact("walls", |p| {
+                let a = edit::add_wall(p, l1, ty, DVec2::new(0.0, 0.0), DVec2::new(0.0, 4000.0), 3000.0)?;
+                let b = edit::add_wall(p, l1, ty, DVec2::new(0.0, 6000.0), DVec2::new(0.0, 9000.0), 3000.0)?;
+                Ok((a, b))
+            })
+            .unwrap();
+        doc.transact("lock", |p| {
+            let r0 = DimRef { element: Some(a), part: RefPart::WallCenter, point: DVec2::new(0.0, 2000.0) };
+            let r1 = DimRef { element: Some(b), part: RefPart::WallCenter, point: DVec2::new(0.0, 7000.0) };
+            let id = edit::add_dimension(p, view, vec![r0, r1], DVec2::X, DVec2::new(0.0, 5000.0))?;
+            if let Some(ElementKind::Dimension(d)) = p.element_mut(id).map(|e| &mut e.kind) {
+                d.locks = vec![true];
+                d.alignment = true;
+            }
+            Ok(())
+        })
+        .unwrap();
+        doc.transact("move", |p| {
+            edit::move_elements(p, &[a], DVec2::new(500.0, 0.0));
+            Ok(())
+        })
+        .unwrap();
+        let wb = doc.data.wall(b).unwrap();
+        assert!((wb.start.x - 500.0).abs() < 1e-6, "wall b at {}", wb.start.x);
+    }
+}

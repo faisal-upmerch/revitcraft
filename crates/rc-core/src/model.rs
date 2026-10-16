@@ -1131,6 +1131,9 @@ pub struct Dimension {
     pub label: String,
     #[serde(default)]
     pub style: Option<Id>,
+    /// An Align lock: two references kept aligned, drawn as a padlock instead of a dimension.
+    #[serde(default)]
+    pub alignment: bool,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

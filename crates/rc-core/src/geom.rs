@@ -9,6 +9,15 @@ pub fn rotate(v: DVec2, a: f64) -> DVec2 {
 }
 
 /// Distance from `q` to the segment `a`–`b`.
+/// The foot of `q` on the infinite line through `a` and `b`.
+pub fn project_on_line(q: DVec2, a: DVec2, b: DVec2) -> DVec2 {
+    let ab = b - a;
+    if ab.length_squared() == 0.0 {
+        return a;
+    }
+    a + ab * ((q - a).dot(ab) / ab.length_squared())
+}
+
 pub fn seg_dist(q: DVec2, a: DVec2, b: DVec2) -> f64 {
     let ab = b - a;
     let t = if ab.length_squared() > 0.0 { ((q - a).dot(ab) / ab.length_squared()).clamp(0.0, 1.0) } else { 0.0 };
