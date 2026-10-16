@@ -119,6 +119,9 @@ pub struct Dialogs {
     pub new_plan: Option<PlanKind>,
     pub new_plan_sel: BTreeSet<Id>,
     pub new_schedule: Option<bool>,
+    /// A schedule made by New Schedule, created when Schedule Properties is OK'd:
+    /// (definition, name, phase).
+    pub new_schedule_pending: Option<(ScheduleDef, String, Option<Id>)>,
     pub new_sheet: bool,
     pub place_view: Option<Id>,
     pub revisions: bool,

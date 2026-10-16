@@ -601,201 +601,771 @@ fn new_plan(app: &mut App, ctx: &egui::Context) {
     }
 }
 
+/// New Schedule: the category (searchable), the name, building components or keys, and the phase.
+#[derive(Clone, Default)]
+struct NewSchedState {
+    search: String,
+    category: Option<Category>,
+    name: String,
+    name_edited: bool,
+    phase: usize,
+}
+
 fn new_schedule(app: &mut App, ctx: &egui::Context) {
     let Some(takeoff) = app.dialogs.new_schedule else { return };
-    let mut open = true;
-    let mut chosen: Option<Category> = None;
-    window(if takeoff { "New Material Takeoff" } else { "New Schedule" }).open(&mut open).default_width(320.0).show(ctx, |ui| {
-        ui.label("Category:");
-        egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
-            for c in Category::SCHEDULABLE {
-                if ui.selectable_label(false, c.label()).clicked() {
-                    chosen = Some(c);
+    let key = egui::Id::new(("new-schedule", takeoff));
+    let mut st: NewSchedState = ctx.data(|m| m.get_temp(key)).unwrap_or_else(|| NewSchedState { phase: app.doc.data.phases.len().saturating_sub(1), ..Default::default() });
+    let suffix = if takeoff { "Material Takeoff" } else { "Schedule" };
+    let mut cats: Vec<Category> = Category::SCHEDULABLE.to_vec();
+    cats.sort_by_key(|c| c.label());
+    if st.category.is_none() {
+        st.category = cats.first().copied();
+    }
+    if !st.name_edited {
+        st.name = st.category.map(|c| format!("{} {suffix}", c.singular())).unwrap_or_default();
+    }
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window(if takeoff { "New Material Takeoff" } else { "New Schedule" }).open(&mut open).resizable(false).default_width(560.0).show(ctx, |ui| {
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                ui.set_width(260.0);
+                ui.horizontal(|ui| {
+                    ui.label("Filter list:");
+                    egui::ComboBox::from_id_salt("sched-disc").selected_text("Architecture, Structure").width(170.0).show_ui(ui, |ui| {
+                        let mut on = true;
+                        crate::style::check(ui, &mut on, "Architecture");
+                        crate::style::check(ui, &mut on, "Structure");
+                    });
+                });
+                ui.add_space(4.0);
+                ui.label("Category:");
+                ui.add(egui::TextEdit::singleline(&mut st.search).hint_text("Search").desired_width(254.0));
+                egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, style::border())).inner_margin(2.0).show(ui, |ui| {
+                    ui.set_min_size(vec2(250.0, 300.0));
+                    egui::ScrollArea::vertical().max_height(300.0).auto_shrink([false, false]).show(ui, |ui| {
+                        ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                            ui.add_enabled(false, egui::Button::selectable(false, "<Multi-Category>"));
+                            for c in &cats {
+                                if !st.search.is_empty() && !c.label().to_lowercase().contains(&st.search.to_lowercase()) {
+                                    continue;
+                                }
+                                let r = ui.selectable_label(st.category == Some(*c), c.label());
+                                if r.clicked() {
+                                    st.category = Some(*c);
+                                }
+                                if r.double_clicked() {
+                                    ok = true;
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+            ui.add_space(12.0);
+            ui.vertical(|ui| {
+                ui.add_space(26.0);
+                ui.label("Name:");
+                if ui.add(egui::TextEdit::singleline(&mut st.name).desired_width(250.0)).changed() {
+                    st.name_edited = true;
                 }
+                ui.add_space(10.0);
+                let _ = ui.radio(true, "Schedule building components");
+                ui.add_enabled_ui(false, |ui| {
+                    let _ = ui.radio(false, "Schedule keys");
+                    ui.horizontal(|ui| {
+                        ui.add_space(20.0);
+                        ui.label("Key name:");
+                        let mut k = String::new();
+                        ui.add(egui::TextEdit::singleline(&mut k).desired_width(160.0));
+                    });
+                });
+                ui.add_space(10.0);
+                ui.label("Phase:");
+                let phases: Vec<String> = app.doc.data.phases.iter().map(|p| p.name.clone()).collect();
+                egui::ComboBox::from_id_salt("sched-phase").selected_text(phases.get(st.phase).cloned().unwrap_or_default()).width(250.0).show_ui(ui, |ui| {
+                    for (k, name) in phases.iter().enumerate() {
+                        ui.selectable_value(&mut st.phase, k, name);
+                    }
+                });
+            });
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            cancel = super::dlg_button(ui, "Cancel", false, true);
+            if super::dlg_button(ui, "OK", true, st.category.is_some() && !st.name.trim().is_empty()) {
+                ok = true;
             }
         });
     });
-    if let Some(c) = chosen {
-        if let Some(id) = app.run("New Schedule", |p| Ok(if takeoff { edit::new_material_takeoff(p, c) } else { edit::new_schedule(p, c) })) {
-            app.open_view(id);
-            app.dialogs.schedule_props = Some((id, 0));
+    if ok {
+        let Some(c) = st.category else { return };
+        let name = st.name.trim().to_string();
+        if app.doc.data.views.iter().any(|v| v.name == name) {
+            app.error("The name is already in use.");
+            ok = false;
+        } else {
+            let phase = app.doc.data.phases.get(st.phase).map(|p| p.id);
+            if !takeoff {
+                // As in the reference app, the schedule exists once Schedule Properties is OK'd.
+                let def = ScheduleDef { category: c, itemize: true, grand_total: false, ..Default::default() };
+                app.dialogs.new_schedule_pending = Some((def, name.clone(), phase));
+                app.dialogs.schedule_props = Some((0, 0));
+                app.dialogs.new_schedule = None;
+                ctx.data_mut(|m| m.remove::<NewSchedState>(key));
+                return;
+            }
+            let made = app.run("New Schedule", |p| {
+                let id = if takeoff { edit::new_material_takeoff(p, c) } else { edit::new_schedule(p, c) };
+                if let Some(v) = p.view_mut(id) {
+                    v.name = name.clone();
+                    v.phase = phase.or(v.phase);
+                    // The fields are picked next, in Schedule Properties.
+                    if let ViewKind::Schedule(d) = &mut v.kind {
+                        if !takeoff {
+                            d.fields.clear();
+                        }
+                    }
+                }
+                Ok(id)
+            });
+            if let Some(id) = made {
+                app.open_view(id);
+                app.dialogs.schedule_props = Some((id, 0));
+            }
         }
     }
-    if !open || chosen.is_some() {
+    if ok || cancel || !open {
         app.dialogs.new_schedule = None;
+        ctx.data_mut(|m| m.remove::<NewSchedState>(key));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(key, st));
     }
+}
+
+/// Working state of Schedule Properties: the definition being edited and list selections.
+#[derive(Clone)]
+struct SchedPropsState {
+    def: ScheduleDef,
+    search: String,
+    avail_sel: Option<String>,
+    field_sel: Option<usize>,
+    format_sel: usize,
+    /// Calculated Value: (name, kind index, formula) while its dialog is open.
+    calc: Option<(String, usize, String)>,
+}
+
+const CALC_KINDS: [(&str, ParamKind); 6] = [("Number", ParamKind::Number), ("Integer", ParamKind::Integer), ("Length", ParamKind::Length), ("Area", ParamKind::Area), ("Volume", ParamKind::Volume), ("Currency", ParamKind::Currency)];
+const FOOTER_MODES: [&str; 4] = ["Title, count, and totals", "Title and totals", "Count and totals", "Totals only"];
+
+/// A bordered list box of fixed size.
+fn list_frame<R>(ui: &mut egui::Ui, salt: &str, size: egui::Vec2, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, style::border())).inner_margin(2.0).show(ui, |ui| {
+        ui.set_min_size(size);
+        ui.set_max_width(size.x);
+        egui::ScrollArea::vertical().id_salt(salt).max_height(size.y).auto_shrink([false, false]).show(ui, |ui| {
+            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), add).inner
+        }).inner
+    }).inner
+}
+
+fn field_combo(ui: &mut egui::Ui, salt: impl std::hash::Hash + std::fmt::Debug, value: &mut String, fields: &[String], width: f32) {
+    let shown = if value.is_empty() { "(none)".to_string() } else { value.clone() };
+    egui::ComboBox::from_id_salt(salt).selected_text(shown).width(width).show_ui(ui, |ui| {
+        if ui.selectable_label(value.is_empty(), "(none)").clicked() {
+            value.clear();
+        }
+        for f in fields {
+            if ui.selectable_label(value == f, f).clicked() {
+                *value = f.clone();
+            }
+        }
+    });
 }
 
 fn schedule_props(app: &mut App, ctx: &egui::Context) {
     let Some((vid, mut tab)) = app.dialogs.schedule_props else { return };
-    let Some(v) = app.doc.data.view(vid).cloned() else {
-        app.dialogs.schedule_props = None;
-        return;
+    let pending = if vid == 0 { app.dialogs.new_schedule_pending.clone() } else { None };
+    let v = match &pending {
+        Some((def, name, phase)) => {
+            let mut v = View::new(0, name.clone(), 100.0, ViewKind::Schedule(def.clone()));
+            v.phase = *phase;
+            v
+        }
+        None => match app.doc.data.view(vid).cloned() {
+            Some(v) => v,
+            None => {
+                app.dialogs.schedule_props = None;
+                return;
+            }
+        },
     };
-    let ViewKind::Schedule(mut def) = v.kind.clone() else { return };
-    let mut open = true;
-    let available = rc_core::schedule::available_fields(&app.doc.data, &def);
-    window("Schedule Properties").open(&mut open).default_size(vec2(620.0, 460.0)).show(ctx, |ui| {
+    let ViewKind::Schedule(orig) = v.kind.clone() else { return };
+    let key = egui::Id::new(("sched-props", vid));
+    let mut st: SchedPropsState = ctx.data(|m| m.get_temp(key)).unwrap_or(SchedPropsState { def: orig.clone(), search: String::new(), avail_sel: None, field_sel: None, format_sel: 0, calc: None });
+    let available = rc_core::schedule::available_fields(&app.doc.data, &st.def);
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Schedule Properties").open(&mut open).resizable(false).default_width(640.0).show(ctx, |ui| {
         ui.horizontal(|ui| {
-            ui.selectable_value(&mut tab, 0, "Fields");
-            ui.selectable_value(&mut tab, 1, "Filter");
-            ui.selectable_value(&mut tab, 2, "Sorting/Grouping");
+            for (k, name) in ["Fields", "Filter", "Sorting/Grouping", "Formatting", "Appearance"].iter().enumerate() {
+                ui.selectable_value(&mut tab, k, *name);
+            }
         });
         ui.separator();
-        match tab {
-            0 => {
-                ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.set_width(250.0);
-                        ui.label(egui::RichText::new("Available fields:").strong());
-                        egui::ScrollArea::vertical().id_salt("avail").max_height(320.0).show(ui, |ui| {
-                            for f in &available {
-                                if def.fields.contains(&f.name) {
-                                    continue;
+        let def = &mut st.def;
+        ui.allocate_ui(vec2(620.0, 400.0), |ui| {
+            ui.set_min_size(vec2(620.0, 400.0));
+            match tab {
+                0 => {
+                    ui.horizontal(|ui| {
+                        ui.label("Select available fields from:");
+                        egui::ComboBox::from_id_salt("sched-from").selected_text(def.category.label()).width(200.0).show_ui(ui, |ui| {
+                            let _ = ui.selectable_label(true, def.category.label());
+                        });
+                    });
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.label("Parameter Name Search:");
+                        ui.add(egui::TextEdit::singleline(&mut st.search).desired_width(330.0));
+                    });
+                    ui.add_space(4.0);
+                    let search = st.search.to_lowercase();
+                    let shown: Vec<&rc_core::params::ParamDef> = available.iter().filter(|f| !def.fields.contains(&f.name) && (search.is_empty() || f.name.to_lowercase().contains(&search))).collect();
+                    ui.horizontal_top(|ui| {
+                        ui.vertical(|ui| {
+                            ui.horizontal(|ui| {
+                                ui.set_width(250.0);
+                                ui.label("Available fields:");
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| ui.label(format!("{} items", shown.len())));
+                            });
+                            let mut add: Option<String> = None;
+                            list_frame(ui, "sched-avail", vec2(250.0, 280.0), |ui| {
+                                for f in &shown {
+                                    let r = ui.selectable_label(st.avail_sel.as_deref() == Some(&f.name), &f.name);
+                                    if r.clicked() {
+                                        st.avail_sel = Some(f.name.clone());
+                                    }
+                                    if r.double_clicked() {
+                                        add = Some(f.name.clone());
+                                    }
                                 }
-                                if ui.selectable_label(false, format!("+  {}", f.name)).clicked() {
-                                    def.fields.push(f.name.clone());
+                            });
+                            ui.horizontal(|ui| {
+                                if ui.button("fx").on_hover_text("Add calculated parameter").clicked() {
+                                    st.calc = Some((String::new(), 0, String::new()));
+                                }
+                            });
+                            if let Some(f) = add {
+                                def.fields.push(f);
+                                st.avail_sel = None;
+                            }
+                        });
+                        ui.vertical(|ui| {
+                            ui.add_space(130.0);
+                            let can_add = st.avail_sel.as_ref().is_some_and(|f| !def.fields.contains(f));
+                            if ui.add_enabled(can_add, egui::Button::new("  ➡  ")).on_hover_text("Add parameter(s)").clicked() {
+                                if let Some(f) = st.avail_sel.take() {
+                                    def.fields.push(f);
+                                    st.field_sel = Some(def.fields.len() - 1);
+                                }
+                            }
+                            ui.add_space(6.0);
+                            if ui.add_enabled(st.field_sel.is_some_and(|k| k < def.fields.len()), egui::Button::new("  ⬅  ")).on_hover_text("Remove parameter(s)").clicked() {
+                                if let Some(k) = st.field_sel.take() {
+                                    let f = def.fields.remove(k);
+                                    def.calculated.retain(|c| c.name != f);
                                 }
                             }
                         });
+                        ui.vertical(|ui| {
+                            ui.label("Scheduled fields (in order):");
+                            let mut remove: Option<usize> = None;
+                            ui.add_space(2.0);
+                            list_frame(ui, "sched-fields", vec2(250.0, 280.0), |ui| {
+                                for (k, f) in def.fields.iter().enumerate() {
+                                    let r = ui.selectable_label(st.field_sel == Some(k), f);
+                                    if r.clicked() {
+                                        st.field_sel = Some(k);
+                                    }
+                                    if r.double_clicked() {
+                                        remove = Some(k);
+                                    }
+                                }
+                            });
+                            if let Some(k) = remove {
+                                def.fields.remove(k);
+                                st.field_sel = None;
+                            }
+                            ui.horizontal(|ui| {
+                                let sel = st.field_sel.filter(|k| *k < def.fields.len());
+                                if ui.add_enabled(sel.is_some_and(|k| k > 0), egui::Button::new("Move Up")).clicked() {
+                                    let k = sel.unwrap();
+                                    def.fields.swap(k, k - 1);
+                                    st.field_sel = Some(k - 1);
+                                }
+                                if ui.add_enabled(sel.is_some_and(|k| k + 1 < def.fields.len()), egui::Button::new("Move Down")).clicked() {
+                                    let k = sel.unwrap();
+                                    def.fields.swap(k, k + 1);
+                                    st.field_sel = Some(k + 1);
+                                }
+                            });
+                        });
                     });
-                    ui.separator();
-                    ui.vertical(|ui| {
-                        ui.label(egui::RichText::new("Scheduled fields (in order):").strong());
-                        let mut action: Option<(usize, i32)> = None;
-                        egui::ScrollArea::vertical().id_salt("sched").max_height(300.0).show(ui, |ui| {
-                            for (k, f) in def.fields.iter().enumerate() {
-                                ui.horizontal(|ui| {
-                                    ui.label(f);
-                                    if ui.small_button("▲").clicked() {
-                                        action = Some((k, -1));
-                                    }
-                                    if ui.small_button("▼").clicked() {
-                                        action = Some((k, 1));
-                                    }
-                                    if ui.small_button("Remove").clicked() {
-                                        action = Some((k, 0));
+                    ui.add_space(4.0);
+                    let mut links = false;
+                    ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut links, "Include elements in links"));
+                    let _ = &search;
+                }
+                1 => {
+                    // Filter by / And: up to eight rules; "(none)" ends the list.
+                    let names: Vec<String> = available.iter().map(|f| f.name.clone()).collect();
+                    let rows = 8;
+                    let mut remove: Option<usize> = None;
+                    egui::Grid::new("sched-filter").num_columns(4).spacing(vec2(8.0, 8.0)).show(ui, |ui| {
+                        for k in 0..rows {
+                            ui.label(if k == 0 { "Filter by:" } else { "And:" });
+                            let enabled = k <= def.filters.len();
+                            ui.add_enabled_ui(enabled, |ui| {
+                                let mut field = def.filters.get(k).map(|f| f.field.clone()).unwrap_or_default();
+                                field_combo(ui, ("sf", k), &mut field, &names, 180.0);
+                                match (def.filters.get_mut(k), field.is_empty()) {
+                                    (Some(_), true) => remove = Some(k),
+                                    (Some(f), false) => f.field = field,
+                                    (None, false) => def.filters.push(ScheduleFilter { field, op: FilterOp::Equals, value: String::new() }),
+                                    (None, true) => {}
+                                }
+                            });
+                            if let Some(f) = def.filters.get_mut(k) {
+                                egui::ComboBox::from_id_salt(("so", k)).selected_text(f.op.label()).width(150.0).show_ui(ui, |ui| {
+                                    for o in FilterOp::ALL {
+                                        ui.selectable_value(&mut f.op, o, o.label());
                                     }
                                 });
+                                ui.add(egui::TextEdit::singleline(&mut f.value).desired_width(170.0));
+                            } else {
+                                ui.add_enabled_ui(false, |ui| {
+                                    egui::ComboBox::from_id_salt(("so-off", k)).selected_text("").width(150.0).show_ui(ui, |_| {});
+                                });
+                                let mut blank = String::new();
+                                ui.add_enabled(false, egui::TextEdit::singleline(&mut blank).desired_width(170.0));
                             }
-                        });
-                        match action {
-                            Some((k, 0)) => {
-                                def.fields.remove(k);
-                            }
-                            Some((k, d)) => {
-                                let j = (k as i32 + d).clamp(0, def.fields.len() as i32 - 1) as usize;
-                                def.fields.swap(k, j);
-                            }
-                            None => {}
-                        }
-                        ui.separator();
-                        ui.label(egui::RichText::new("Calculated value").strong());
-                        let key = egui::Id::new(("calc", vid));
-                        let mut st: (String, String) = ui.memory(|m| m.data.get_temp(key)).unwrap_or_default();
-                        ui.horizontal(|ui| {
-                            ui.label("Name:");
-                            ui.add(egui::TextEdit::singleline(&mut st.0).desired_width(100.0));
-                            ui.label("Formula:");
-                            ui.add(egui::TextEdit::singleline(&mut st.1).desired_width(140.0));
-                            if ui.button("Add").clicked() && !st.0.is_empty() && !st.1.is_empty() {
-                                def.calculated.push(CalculatedField { name: st.0.clone(), formula: st.1.clone(), kind: ParamKind::Number });
-                                def.fields.push(st.0.clone());
-                                st = Default::default();
-                            }
-                        });
-                        ui.memory_mut(|m| m.data.insert_temp(key, st));
-                        crate::style::check(ui, &mut def.itemize, "Itemize every instance");
-                        crate::style::check(ui, &mut def.grand_total, "Grand totals");
-                    });
-                });
-            }
-            1 => {
-                let mut remove: Option<usize> = None;
-                for (k, f) in def.filters.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        egui::ComboBox::from_id_salt(("ff", k)).selected_text(&f.field).width(150.0).show_ui(ui, |ui| {
-                            for a in &available {
-                                ui.selectable_value(&mut f.field, a.name.clone(), &a.name);
-                            }
-                        });
-                        egui::ComboBox::from_id_salt(("fo", k)).selected_text(f.op.label()).width(120.0).show_ui(ui, |ui| {
-                            for o in FilterOp::ALL {
-                                ui.selectable_value(&mut f.op, o, o.label());
-                            }
-                        });
-                        ui.add(egui::TextEdit::singleline(&mut f.value).desired_width(120.0));
-                        if ui.small_button("Remove").clicked() {
-                            remove = Some(k);
+                            ui.end_row();
                         }
                     });
-                }
-                if let Some(k) = remove {
-                    def.filters.remove(k);
-                }
-                if ui.button("Add Filter").clicked() {
-                    def.filters.push(ScheduleFilter { field: available.first().map(|f| f.name.clone()).unwrap_or_default(), op: FilterOp::Equals, value: String::new() });
-                }
-            }
-            _ => {
-                ui.horizontal(|ui| {
-                    ui.label("Sort by:");
-                    let cur = def.sort_by.first().cloned().unwrap_or_else(|| "(none)".into());
-                    egui::ComboBox::from_id_salt("sort").selected_text(cur).width(180.0).show_ui(ui, |ui| {
-                        if ui.selectable_label(def.sort_by.is_empty(), "(none)").clicked() {
-                            def.sort_by.clear();
-                        }
-                        for f in def.fields.clone() {
-                            if ui.selectable_label(def.sort_by.first() == Some(&f), &f).clicked() {
-                                def.sort_by = vec![f];
-                            }
-                        }
-                    });
-                    ui.radio_value(&mut def.descending, false, "Ascending");
-                    ui.radio_value(&mut def.descending, true, "Descending");
-                });
-                crate::style::check(ui, &mut def.group_headers, "Header and footer (group by the sort field)");
-                ui.label("Totals for:");
-                for f in def.fields.clone() {
-                    let mut on = def.total_fields.contains(&f);
-                    if crate::style::check(ui, &mut on, &f).changed() {
-                        if on {
-                            def.total_fields.push(f);
-                        } else {
-                            def.total_fields.retain(|x| *x != f);
-                        }
+                    if let Some(k) = remove {
+                        def.filters.truncate(k);
                     }
+                    ui.add_space(6.0);
+                    let mut by_sheet = false;
+                    ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut by_sheet, "Filter by sheet"));
+                }
+                2 => {
+                    // Sort by / Then by: four levels with direction, header, footer and blank line.
+                    let names = def.fields.clone();
+                    for k in 0..4 {
+                        let enabled = k <= def.sort_by.len();
+                        ui.add_enabled_ui(enabled, |ui| {
+                            ui.horizontal(|ui| {
+                                ui.add_sized(vec2(56.0, 18.0), egui::Label::new(if k == 0 { "Sort by:" } else { "Then by:" }));
+                                let mut field = def.sort_by.get(k).cloned().unwrap_or_default();
+                                field_combo(ui, ("sort", k), &mut field, &names, 200.0);
+                                if field.is_empty() {
+                                    if k < def.sort_by.len() {
+                                        def.sort_by.truncate(k);
+                                        def.levels.truncate(k);
+                                    }
+                                } else if k < def.sort_by.len() {
+                                    def.sort_by[k] = field;
+                                } else {
+                                    def.sort_by.push(field);
+                                }
+                                while def.levels.len() < def.sort_by.len() {
+                                    let n = def.levels.len();
+                                    def.levels.push(def.level(n));
+                                }
+                                let active = k < def.sort_by.len();
+                                let mut lv = def.levels.get(k).cloned().unwrap_or_default();
+                                ui.add_enabled_ui(active, |ui| {
+                                    ui.radio_value(&mut lv.descending, false, "Ascending");
+                                    ui.radio_value(&mut lv.descending, true, "Descending");
+                                });
+                                if let Some(l) = def.levels.get_mut(k) {
+                                    *l = lv;
+                                }
+                            });
+                            let active = k < def.sort_by.len();
+                            let mut lv = def.levels.get(k).cloned().unwrap_or_default();
+                            ui.add_enabled_ui(active, |ui| {
+                                ui.horizontal(|ui| {
+                                    ui.add_space(62.0);
+                                    crate::style::check(ui, &mut lv.header, "Header");
+                                    crate::style::check(ui, &mut lv.footer, "Footer:");
+                                    ui.add_enabled_ui(lv.footer, |ui| {
+                                        egui::ComboBox::from_id_salt(("foot", k)).selected_text(FOOTER_MODES[lv.footer_mode.min(3) as usize]).width(170.0).show_ui(ui, |ui| {
+                                            for (m, label) in FOOTER_MODES.iter().enumerate() {
+                                                ui.selectable_value(&mut lv.footer_mode, m as u8, *label);
+                                            }
+                                        });
+                                    });
+                                    crate::style::check(ui, &mut lv.blank_line, "Blank line");
+                                });
+                            });
+                            if let Some(l) = def.levels.get_mut(k) {
+                                *l = lv;
+                            }
+                        });
+                        ui.add_space(6.0);
+                    }
+                    if let Some(l0) = def.levels.first() {
+                        def.descending = l0.descending;
+                        def.group_headers = l0.header && l0.footer;
+                    }
+                    ui.separator();
+                    ui.horizontal(|ui| {
+                        crate::style::check(ui, &mut def.grand_total, "Grand totals:");
+                        ui.add_enabled_ui(def.grand_total, |ui| {
+                            egui::ComboBox::from_id_salt("grand").selected_text(FOOTER_MODES[def.grand_mode.min(3) as usize]).width(170.0).show_ui(ui, |ui| {
+                                for (m, label) in FOOTER_MODES.iter().enumerate() {
+                                    ui.selectable_value(&mut def.grand_mode, m as u8, *label);
+                                }
+                            });
+                        });
+                    });
+                    ui.horizontal(|ui| {
+                        ui.add_space(22.0);
+                        ui.label("Custom grand total title:");
+                        if def.grand_title.is_empty() {
+                            def.grand_title = "Grand total".into();
+                        }
+                        ui.add_enabled(def.grand_total, egui::TextEdit::singleline(&mut def.grand_title).desired_width(200.0));
+                    });
+                    crate::style::check(ui, &mut def.itemize, "Itemize every instance");
+                }
+                3 => {
+                    // Formatting: per-field heading, alignment, hidden and totals.
+                    ui.horizontal_top(|ui| {
+                        ui.vertical(|ui| {
+                            ui.label("Fields:");
+                            list_frame(ui, "sched-fmt", vec2(220.0, 340.0), |ui| {
+                                for (k, f) in def.fields.iter().enumerate() {
+                                    if ui.selectable_label(st.format_sel == k, f).clicked() {
+                                        st.format_sel = k;
+                                    }
+                                }
+                            });
+                        });
+                        ui.add_space(10.0);
+                        let Some(name) = def.fields.get(st.format_sel).cloned() else { return };
+                        let mut fm = def.format(&name);
+                        if fm.heading.is_empty() {
+                            fm.heading = name.clone();
+                        }
+                        ui.vertical(|ui| {
+                            egui::Grid::new("sched-fmt-grid").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
+                                ui.label("Heading:");
+                                ui.add(egui::TextEdit::singleline(&mut fm.heading).desired_width(240.0));
+                                ui.end_row();
+                                ui.label("Heading orientation:");
+                                egui::ComboBox::from_id_salt("fmt-orient").selected_text("Horizontal").width(150.0).show_ui(ui, |ui| {
+                                    let _ = ui.selectable_label(true, "Horizontal");
+                                });
+                                ui.end_row();
+                                ui.label("Alignment:");
+                                egui::ComboBox::from_id_salt("fmt-align").selected_text(["Left", "Center", "Right"][fm.align.min(2) as usize]).width(150.0).show_ui(ui, |ui| {
+                                    for (k, a) in ["Left", "Center", "Right"].iter().enumerate() {
+                                        ui.selectable_value(&mut fm.align, k as u8, *a);
+                                    }
+                                });
+                                ui.end_row();
+                            });
+                            ui.add_space(6.0);
+                            egui::Grid::new("sched-fmt-grid2").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
+                                ui.label("Field formatting:");
+                                ui.add_enabled(false, egui::Button::new("Field Format...").min_size(vec2(150.0, 22.0)));
+                                ui.end_row();
+                                ui.label("Conditional formatting:");
+                                ui.add_enabled(false, egui::Button::new("Conditional Format...").min_size(vec2(150.0, 22.0)));
+                                ui.end_row();
+                                ui.label("Show conditional format on\nsheets:");
+                                let mut on = true;
+                                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut on, ""));
+                                ui.end_row();
+                                ui.label("Hidden field:");
+                                crate::style::check(ui, &mut fm.hidden, "");
+                                ui.end_row();
+                            });
+                            ui.add_space(10.0);
+                            let numeric = available.iter().find(|f| f.name == name).is_some_and(|f| matches!(f.kind, rc_core::params::PKind::Value(k) if k.is_numeric()));
+                            let mut totals = def.total_fields.contains(&name);
+                            ui.add_enabled_ui(numeric, |ui| {
+                                egui::ComboBox::from_id_salt("fmt-totals").selected_text(if totals { "Calculate totals" } else { "No calculation" }).width(160.0).show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut totals, false, "No calculation");
+                                    ui.selectable_value(&mut totals, true, "Calculate totals");
+                                });
+                            });
+                            ui.add_space(4.0);
+                            ui.label("Multiple values indication");
+                            let _ = ui.radio(true, "Use project settings");
+                            ui.add_enabled_ui(false, |ui| {
+                                let _ = ui.radio(false, "Display as <varies>");
+                                let _ = ui.radio(false, "Display custom text:");
+                            });
+                            if totals && !def.total_fields.contains(&name) {
+                                def.total_fields.push(name.clone());
+                            } else if !totals {
+                                def.total_fields.retain(|f| *f != name);
+                            }
+                        });
+                        if fm.heading == name {
+                            fm.heading.clear();
+                        }
+                        if fm == FieldFormat::default() {
+                            def.formats.remove(&name);
+                        } else {
+                            def.formats.insert(name, fm);
+                        }
+                    });
+                }
+                _ => {
+                    // Appearance: graphics and text.
+                    let look = &mut def.look;
+                    ui.label(egui::RichText::new("Graphics").strong());
+                    egui::Grid::new("sched-look").num_columns(2).spacing(vec2(12.0, 8.0)).show(ui, |ui| {
+                        ui.label("Build schedule:");
+                        ui.horizontal(|ui| {
+                            let _ = ui.radio(true, "Top-down");
+                            ui.add_enabled_ui(false, |ui| {
+                                let _ = ui.radio(false, "Bottom-up");
+                            });
+                        });
+                        ui.end_row();
+                        ui.label("Grid lines:");
+                        ui.horizontal(|ui| {
+                            crate::style::check(ui, &mut look.grid_lines, "");
+                            egui::ComboBox::from_id_salt("look-grid").selected_text("<Thin Lines>").width(140.0).show_ui(ui, |ui| {
+                                let _ = ui.selectable_label(true, "<Thin Lines>");
+                            });
+                            let mut g = false;
+                            ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut g, "Grid in headers/footers/spacers"));
+                        });
+                        ui.end_row();
+                        ui.label("Outline:");
+                        ui.horizontal(|ui| {
+                            crate::style::check(ui, &mut look.outline, "");
+                            ui.add_enabled_ui(look.outline, |ui| {
+                                egui::ComboBox::from_id_salt("look-outline").selected_text("<Thin Lines>").width(140.0).show_ui(ui, |ui| {
+                                    let _ = ui.selectable_label(true, "<Thin Lines>");
+                                });
+                            });
+                        });
+                        ui.end_row();
+                        ui.label("Height:");
+                        ui.horizontal(|ui| {
+                            ui.add_enabled_ui(false, |ui| {
+                                egui::ComboBox::from_id_salt("look-height").selected_text("Variable").width(140.0).show_ui(ui, |_| {});
+                            });
+                            crate::style::check(ui, &mut look.blank_row, "Blank row before data");
+                        });
+                        ui.end_row();
+                        ui.label("Stripe Rows:");
+                        ui.horizontal(|ui| {
+                            crate::style::check(ui, &mut look.stripe_rows, "");
+                            egui::ComboBox::from_id_salt("look-stripe").selected_text("First Row Stripe Color").width(160.0).show_ui(ui, |ui| {
+                                let _ = ui.selectable_label(true, "First Row Stripe Color");
+                            });
+                            let (r, _) = ui.allocate_exact_size(vec2(20.0, 18.0), egui::Sense::hover());
+                            ui.painter().rect(r, 0.0, egui::Color32::from_rgb(240, 244, 250), egui::Stroke::new(1.0, style::border()), egui::StrokeKind::Inside);
+                        });
+                        ui.end_row();
+                        ui.label("");
+                        let mut on_sheets = true;
+                        ui.add_enabled_ui(look.stripe_rows, |ui| crate::style::check(ui, &mut on_sheets, "Show Stripe Rows on Sheets"));
+                        ui.end_row();
+                    });
+                    ui.add_space(8.0);
+                    ui.label(egui::RichText::new("Text").strong());
+                    egui::Grid::new("sched-text").num_columns(2).spacing(vec2(12.0, 8.0)).show(ui, |ui| {
+                        ui.label("");
+                        crate::style::check(ui, &mut look.show_title, "Show Title");
+                        ui.end_row();
+                        ui.label("");
+                        crate::style::check(ui, &mut look.show_headers, "Show Headers");
+                        ui.end_row();
+                        for (k, label) in ["Title text:", "Header text:", "Body text:"].iter().enumerate() {
+                            ui.label(*label);
+                            egui::ComboBox::from_id_salt(("look-text", k)).selected_text("Schedule Default").width(160.0).show_ui(ui, |ui| {
+                                let _ = ui.selectable_label(true, "Schedule Default");
+                            });
+                            ui.end_row();
+                        }
+                    });
                 }
             }
-        }
+        });
+        ui.add_space(6.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            cancel = super::dlg_button(ui, "Cancel", false, true);
+            ok = super::dlg_button(ui, "OK", true, true);
+        });
     });
-    let mut nv = v.clone();
-    nv.kind = ViewKind::Schedule(def);
-    update_view(app, vid, "Schedule Properties", nv);
-    app.dialogs.schedule_props = if open { Some((vid, tab)) } else { None };
+    // Calculated Value.
+    if let Some((mut name, mut kind, mut formula)) = st.calc.take() {
+        let (mut done, mut quit) = (false, false);
+        window("Calculated Value").resizable(false).default_width(340.0).show(ctx, |ui| {
+            egui::Grid::new("calc-grid").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
+                ui.label("Name:");
+                ui.add(egui::TextEdit::singleline(&mut name).desired_width(220.0));
+                ui.end_row();
+                ui.label("");
+                ui.horizontal(|ui| {
+                    let _ = ui.radio(true, "Formula");
+                    ui.add_enabled_ui(false, |ui| {
+                        let _ = ui.radio(false, "Percentage");
+                    });
+                });
+                ui.end_row();
+                ui.label("Discipline:");
+                egui::ComboBox::from_id_salt("calc-disc").selected_text("Common").width(160.0).show_ui(ui, |ui| {
+                    let _ = ui.selectable_label(true, "Common");
+                });
+                ui.end_row();
+                ui.label("Type:");
+                egui::ComboBox::from_id_salt("calc-kind").selected_text(CALC_KINDS[kind].0).width(160.0).show_ui(ui, |ui| {
+                    for (k, (label, _)) in CALC_KINDS.iter().enumerate() {
+                        ui.selectable_value(&mut kind, k, *label);
+                    }
+                });
+                ui.end_row();
+                ui.label("Formula:");
+                ui.add(egui::TextEdit::singleline(&mut formula).desired_width(220.0));
+                ui.end_row();
+            });
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                quit = super::dlg_button(ui, "Cancel", false, true);
+                done = super::dlg_button(ui, "OK", true, !name.trim().is_empty() && !formula.trim().is_empty());
+            });
+        });
+        if done {
+            let name = name.trim().to_string();
+            if st.def.fields.contains(&name) || available.iter().any(|f| f.name == name) {
+                app.error("The name is already in use.");
+                st.calc = Some((name, kind, formula));
+            } else {
+                st.def.calculated.push(CalculatedField { name: name.clone(), formula: formula.trim().to_string(), kind: CALC_KINDS[kind].1 });
+                st.def.fields.push(name);
+            }
+        } else if !quit {
+            st.calc = Some((name, kind, formula));
+        }
+    }
+    if ok && pending.is_some() {
+        let (def, name, phase) = (st.def.clone(), v.name.clone(), v.phase);
+        let made = app.run("New Schedule", |p| {
+            let id = edit::new_schedule(p, def.category);
+            if let Some(nv) = p.view_mut(id) {
+                nv.name = name.clone();
+                nv.phase = phase.or(nv.phase);
+                nv.kind = ViewKind::Schedule(def.clone());
+            }
+            Ok(id)
+        });
+        if let Some(id) = made {
+            app.open_view(id);
+        }
+    } else if ok {
+        let mut nv = v.clone();
+        nv.kind = ViewKind::Schedule(st.def.clone());
+        update_view(app, vid, "Schedule Properties", nv);
+    }
+    if ok || cancel || !open {
+        app.dialogs.schedule_props = None;
+        app.dialogs.new_schedule_pending = None;
+        ctx.data_mut(|m| m.remove::<SchedPropsState>(key));
+    } else {
+        app.dialogs.schedule_props = Some((vid, tab));
+        ctx.data_mut(|m| m.insert_temp(key, st));
+    }
 }
 
+/// New Sheet: the title block and the placeholder sheet ("New").
 fn new_sheet(app: &mut App, ctx: &egui::Context) {
     if !app.dialogs.new_sheet {
         return;
     }
-    let mut open = true;
-    let mut chosen: Option<SheetSize> = None;
-    window("New Sheet").open(&mut open).resizable(false).show(ctx, |ui| {
-        ui.label("Select title block:");
-        for s in SheetSize::ALL {
-            if ui.selectable_label(false, format!("Title Block {}", s.label())).clicked() {
-                chosen = Some(s);
-            }
-        }
+    let key = egui::Id::new("new-sheet");
+    let mut sel: usize = ctx.data(|m| m.get_temp(key)).unwrap_or_else(|| {
+        // The template's usual title block: A1 metric, ARCH E1 imperial.
+        let want = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { SheetSize::ArchE1 } else { SheetSize::A1 };
+        SheetSize::ALL.iter().position(|s| *s == want).unwrap_or(0)
     });
-    if let Some(s) = chosen {
-        if let Some(id) = app.run("New Sheet", |p| Ok(edit::new_sheet(p, s))) {
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("New Sheet").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
+        ui.label("Select titleblocks:");
+        ui.horizontal_top(|ui| {
+            egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, style::border())).inner_margin(2.0).show(ui, |ui| {
+                ui.set_min_size(vec2(300.0, 130.0));
+                egui::ScrollArea::vertical().id_salt("tb").max_height(130.0).auto_shrink([false, false]).show(ui, |ui| {
+                    ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                        for (k, s) in SheetSize::ALL.iter().enumerate() {
+                            let r = ui.selectable_label(sel == k, s.label());
+                            if r.clicked() {
+                                sel = k;
+                            }
+                            if r.double_clicked() {
+                                ok = true;
+                            }
+                        }
+                        let none = SheetSize::ALL.len();
+                        let r = ui.selectable_label(sel == none, "None");
+                        if r.clicked() {
+                            sel = none;
+                        }
+                        if r.double_clicked() {
+                            ok = true;
+                        }
+                    });
+                });
+            });
+            ui.add_enabled(false, egui::Button::new("Load...").min_size(vec2(70.0, 22.0)));
+        });
+        ui.add_space(8.0);
+        ui.label("Select placeholder sheets:");
+        egui::Frame::new().fill(style::field()).stroke(egui::Stroke::new(1.0, style::border())).inner_margin(2.0).show(ui, |ui| {
+            ui.set_min_size(vec2(300.0, 90.0));
+            ui.with_layout(egui::Layout::top_down_justified(egui::Align::Min), |ui| {
+                let _ = ui.selectable_label(true, "New");
+            });
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            cancel = super::dlg_button(ui, "Cancel", false, true);
+            if super::dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let none = sel >= SheetSize::ALL.len();
+        let s = SheetSize::ALL[sel.min(SheetSize::ALL.len() - 1)];
+        if let Some(id) = app.run("New Sheet", |p| {
+            let id = edit::new_sheet(p, s);
+            if let Some(ViewKind::Sheet(sh)) = p.view_mut(id).map(|v| &mut v.kind) {
+                sh.no_title_block = none;
+            }
+            Ok(id)
+        }) {
             app.open_view(id);
         }
     }
-    if !open || chosen.is_some() {
+    if ok || cancel || !open {
         app.dialogs.new_sheet = false;
+        ctx.data_mut(|m| m.remove::<usize>(key));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(key, sel));
     }
 }
 

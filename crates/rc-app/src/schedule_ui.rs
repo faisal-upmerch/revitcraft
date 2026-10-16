@@ -31,7 +31,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     // Column widths from the content.
     let widths: Vec<f32> = (0..table.columns.len())
         .map(|ci| {
-            let mut w = ui.painter().layout_no_wrap(table.columns[ci].def.name.clone(), font.clone(), Color32::BLACK).size().x;
+            let mut w = ui.painter().layout_no_wrap(table.columns[ci].heading.clone(), font.clone(), Color32::BLACK).size().x;
             for r in &table.rows {
                 if let Some(c) = r.cells.get(ci) {
                     w = w.max(ui.painter().layout_no_wrap(c.clone(), font.clone(), Color32::BLACK).size().x);
@@ -43,13 +43,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let total_w: f32 = widths.iter().sum::<f32>().max(200.0);
     let mut edits: Vec<(Id, String, String)> = Vec::new();
     let mut select_rows: Option<Vec<Id>> = None;
-    let grid = Stroke::new(1.0, Color32::from_gray(200));
+    let look = def.look.clone();
+    let grid = Stroke::new(1.0, if look.grid_lines { Color32::from_gray(200) } else { Color32::TRANSPARENT });
+    // Rows above the body: column letters, then the title and headers when shown.
+    let top_rows = 1 + look.show_title as usize + look.show_headers as usize;
     egui::Frame::new().fill(style::canvas(app.settings.black_canvas)).show(ui, |ui| {
         ui.set_min_size(ui.available_size());
         egui::ScrollArea::both().auto_shrink([false, false]).show(ui, |ui| {
             let origin = ui.cursor().min + vec2(10.0, 10.0);
             let rows_n = table.rows.len();
-            let height = ROW_H * (3 + rows_n) as f32 + 20.0;
+            let height = ROW_H * (top_rows + rows_n) as f32 + 20.0;
             ui.allocate_exact_size(vec2(total_w + 20.0, height), Sense::hover());
             let p = ui.painter().clone();
             let xs: Vec<f32> = widths
@@ -69,19 +72,28 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
             }
             // Title row.
-            let tr = Rect::from_min_size(origin + vec2(0.0, ROW_H), vec2(total_w, ROW_H));
-            p.rect_stroke(tr, 0.0, grid, egui::StrokeKind::Inside);
-            p.text(tr.center(), egui::Align2::CENTER_CENTER, format!("<{}>", view.name), style::font(12.5), style::text());
+            let mut row_y = origin.y + ROW_H;
+            if look.show_title {
+                let tr = Rect::from_min_size(pos2(origin.x, row_y), vec2(total_w, ROW_H));
+                p.rect_stroke(tr, 0.0, grid, egui::StrokeKind::Inside);
+                p.text(tr.center(), egui::Align2::CENTER_CENTER, format!("<{}>", view.name), style::font(12.5), style::text());
+                row_y += ROW_H;
+            }
             // Headers.
-            for (k, x) in xs.iter().enumerate() {
-                let cell = Rect::from_min_size(pos2(*x, origin.y + ROW_H * 2.0), vec2(widths[k], ROW_H));
-                p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
-                p.text(cell.center(), egui::Align2::CENTER_CENTER, &table.columns[k].def.name, font.clone(), style::text());
+            if look.show_headers {
+                for (k, x) in xs.iter().enumerate() {
+                    let cell = Rect::from_min_size(pos2(*x, row_y), vec2(widths[k], ROW_H));
+                    p.rect_stroke(cell, 0.0, grid, egui::StrokeKind::Inside);
+                    p.text(cell.center(), egui::Align2::CENTER_CENTER, &table.columns[k].heading, font.clone(), style::text());
+                }
             }
             // Body.
             for (ri, row) in table.rows.iter().enumerate() {
-                let y = origin.y + ROW_H * (3 + ri) as f32;
+                let y = origin.y + ROW_H * (top_rows + ri) as f32;
                 let rr = Rect::from_min_size(pos2(origin.x, y), vec2(total_w, ROW_H));
+                if look.stripe_rows && ri % 2 == 1 {
+                    p.rect_filled(rr, 0.0, Color32::from_rgb(240, 244, 250));
+                }
                 let selected = !row.ids.is_empty() && row.ids.iter().all(|id| app.selection.contains(id));
                 if selected {
                     p.rect_filled(rr, 0.0, Color32::from_rgb(204, 228, 247));
@@ -109,7 +121,12 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                         }
                     } else {
                         let f = if strong { style::bold(12.0) } else { font.clone() };
-                        p.text(cr.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER, cell, f, style::text());
+                        let (at, align) = match table.columns.get(ci).map(|c| c.align).unwrap_or(0) {
+                            1 => (cr.center(), egui::Align2::CENTER_CENTER),
+                            2 => (cr.right_center() - vec2(4.0, 0.0), egui::Align2::RIGHT_CENTER),
+                            _ => (cr.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER),
+                        };
+                        p.text(at, align, cell, f, style::text());
                         let resp = ui.interact(cr, egui::Id::new(("sched-sel", view_id, ri, ci)), Sense::click());
                         if resp.clicked() {
                             select_rows = Some(row.ids.clone());

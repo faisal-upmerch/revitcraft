@@ -15,6 +15,8 @@ pub enum RowKind {
     /// Group header (group headers on).
     Header,
     Total,
+    /// Sorting/Grouping "Blank line" after a group.
+    Blank,
 }
 
 #[derive(Clone, Debug)]
@@ -28,6 +30,9 @@ pub struct Row {
 #[derive(Clone, Debug)]
 pub struct Column {
     pub def: ParamDef,
+    /// Formatting: the heading shown and the alignment (0 left, 1 center, 2 right).
+    pub heading: String,
+    pub align: u8,
 }
 
 #[derive(Clone, Debug)]
@@ -242,7 +247,16 @@ pub fn rule_passes(p: &Project, op: FilterOp, target: &str, value: &Option<Value
 
 pub fn build(p: &Project, def: &ScheduleDef) -> Table {
     let available = available_fields(p, def);
-    let columns: Vec<Column> = def.fields.iter().map(|f| Column { def: field_def(&available, f) }).collect();
+    // Hidden fields still sort and filter, but are not shown.
+    let columns: Vec<Column> = def
+        .fields
+        .iter()
+        .filter(|f| !def.format(f).hidden)
+        .map(|f| {
+            let fm = def.format(f);
+            Column { def: field_def(&available, f), heading: if fm.heading.is_empty() { f.clone() } else { fm.heading }, align: fm.align }
+        })
+        .collect();
 
     // (sort keys, record, values)
     let mut items: Vec<(Vec<Option<Value>>, Rec, Vec<Option<Value>>)> = Vec::new();
@@ -257,17 +271,27 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
         let keys = def.sort_by.iter().map(|f| raw_get(p, def, &r, f)).collect();
         items.push((keys, r, values));
     }
+    let levels: Vec<SortLevel> = (0..def.sort_by.len()).map(|k| def.level(k)).collect();
     items.sort_by(|a, b| {
-        let mut ord = Ordering::Equal;
-        for (x, y) in a.0.iter().zip(&b.0) {
-            ord = compare(x, y);
+        for (k, (x, y)) in a.0.iter().zip(&b.0).enumerate() {
+            let ord = compare(x, y);
             if ord != Ordering::Equal {
-                break;
+                return if levels[k].descending { ord.reverse() } else { ord };
             }
         }
-        let ord = if ord == Ordering::Equal { a.1.id().cmp(&b.1.id()) } else { ord };
-        if def.descending { ord.reverse() } else { ord }
+        a.1.id().cmp(&b.1.id())
     });
+    let first = levels.first().cloned().unwrap_or_default();
+    let grouped = !def.sort_by.is_empty() && (first.header || first.footer || first.blank_line);
+    // A footer or grand total's first cell: title and/or count, by its mode.
+    let title_cell = |mode: u8, title: &str, count: usize| -> String {
+        match mode {
+            0 => format!("{title}: {count}"),
+            1 => title.to_string(),
+            2 => count.to_string(),
+            _ => String::new(),
+        }
+    };
 
     let summable = |c: &Column| c.def.name == "Count" || def.total_fields.contains(&c.def.name);
     let aggregate = |group: &[&(Vec<Option<Value>>, Rec, Vec<Option<Value>>)]| -> Vec<String> {
@@ -299,7 +323,7 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
 
     let mut rows = Vec::new();
     let same_key = |a: &[Option<Value>], b: &[Option<Value>], n: usize| a.iter().zip(b).take(n).all(|(x, y)| compare(x, y) == Ordering::Equal);
-    if def.itemize && !(def.group_headers && !def.sort_by.is_empty()) {
+    if def.itemize && !grouped {
         rows.extend(items.iter().map(item_row));
     } else {
         let key_len = if def.sort_by.is_empty() { 0 } else if def.itemize { 1 } else { def.sort_by.len() };
@@ -312,19 +336,26 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
             let group: Vec<_> = items[i..j].iter().collect();
             if def.itemize {
                 let label = items[i].0.first().map(|v| format_value(p, v, &field_def(&available, &def.sort_by[0]))).unwrap_or_default();
-                let mut header = vec![String::new(); columns.len()];
-                if let Some(h) = header.first_mut() {
-                    *h = label;
-                }
-                rows.push(Row { kind: RowKind::Header, cells: header, ids: vec![] });
-                rows.extend(group.iter().map(|g| item_row(g)));
-                let mut footer: Vec<String> = aggregate(&group).into_iter().zip(&columns).map(|(s, c)| if summable(c) { s } else { String::new() }).collect();
-                if let Some(f) = footer.first_mut() {
-                    if f.is_empty() {
-                        *f = format!("{}", group.len());
+                if first.header {
+                    let mut header = vec![String::new(); columns.len()];
+                    if let Some(h) = header.first_mut() {
+                        *h = label.clone();
                     }
+                    rows.push(Row { kind: RowKind::Header, cells: header, ids: vec![] });
                 }
-                rows.push(Row { kind: RowKind::Group, cells: footer, ids: group.iter().map(|g| g.1.id()).collect() });
+                rows.extend(group.iter().map(|g| item_row(g)));
+                if first.footer {
+                    let mut footer: Vec<String> = aggregate(&group).into_iter().zip(&columns).map(|(s, c)| if summable(c) { s } else { String::new() }).collect();
+                    if let Some(f) = footer.first_mut() {
+                        if f.is_empty() {
+                            *f = title_cell(first.footer_mode, &label, group.len());
+                        }
+                    }
+                    rows.push(Row { kind: RowKind::Group, cells: footer, ids: group.iter().map(|g| g.1.id()).collect() });
+                }
+                if first.blank_line {
+                    rows.push(Row { kind: RowKind::Blank, cells: vec![String::new(); columns.len()], ids: vec![] });
+                }
             } else {
                 rows.push(Row { kind: RowKind::Group, cells: aggregate(&group), ids: group.iter().map(|g| g.1.id()).collect() });
             }
@@ -337,7 +368,8 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
         let mut cells: Vec<String> = aggregate(&all).into_iter().zip(&columns).map(|(s, c)| if summable(c) { s } else { String::new() }).collect();
         if let Some(first) = cells.first_mut() {
             if first.is_empty() {
-                *first = format!("Grand total: {}", items.len());
+                let title = if def.grand_title.is_empty() { "Grand total" } else { def.grand_title.as_str() };
+                *first = title_cell(def.grand_mode, title, items.len());
             }
         }
         rows.push(Row { kind: RowKind::Total, cells, ids: vec![] });
@@ -355,7 +387,7 @@ pub fn to_csv(view_name: &str, t: &Table) -> String {
         }
     };
     let mut out = format!("{}\n", esc(view_name));
-    out.push_str(&t.columns.iter().map(|c| esc(&c.def.name)).collect::<Vec<_>>().join(","));
+    out.push_str(&t.columns.iter().map(|c| esc(&c.heading)).collect::<Vec<_>>().join(","));
     out.push('\n');
     for r in &t.rows {
         out.push_str(&r.cells.iter().map(|c| esc(c)).collect::<Vec<_>>().join(","));
@@ -393,6 +425,32 @@ mod tests {
             total_fields: vec!["Cost".into()],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn sorting_grouping_and_formatting() {
+        let p = project_with_doors();
+        let mut d = door_def();
+        d.sort_by = vec!["Type".into(), "Mark".into()];
+        d.levels = vec![SortLevel { header: true, footer: true, footer_mode: 0, blank_line: true, ..Default::default() }, SortLevel { descending: true, ..Default::default() }];
+        d.formats.insert("Cost".into(), FieldFormat { hidden: true, ..Default::default() });
+        d.formats.insert("Mark".into(), FieldFormat { heading: "No.".into(), align: 1, ..Default::default() });
+        d.grand_title = "All doors".into();
+        let t = build(&p, &d);
+        assert!(t.columns.iter().all(|c| c.def.name != "Cost"));
+        assert_eq!(t.columns[0].heading, "No.");
+        assert_eq!(t.rows[0].kind, RowKind::Header);
+        assert!(t.rows.iter().any(|r| r.kind == RowKind::Blank));
+        let footer = t.rows.iter().find(|r| r.kind == RowKind::Group).unwrap();
+        assert!(footer.cells[0].contains(": "), "{:?}", footer.cells);
+        let total = t.rows.last().unwrap();
+        assert!(total.cells[0].starts_with("All doors: "), "{:?}", total.cells);
+        // Marks run downward within a type.
+        let marks: Vec<&String> = t.rows.iter().take_while(|r| r.kind != RowKind::Group).filter(|r| r.kind == RowKind::Item).map(|r| &r.cells[0]).collect();
+        let mut sorted = marks.clone();
+        sorted.sort();
+        sorted.reverse();
+        assert_eq!(marks, sorted);
     }
 
     #[test]

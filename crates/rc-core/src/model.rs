@@ -2023,6 +2023,9 @@ pub struct Viewport {
 pub struct Sheet {
     pub number: String,
     pub size: SheetSize,
+    /// New Sheet > "None": no title block or border.
+    #[serde(default)]
+    pub no_title_block: bool,
     pub drawn_by: String,
     pub checked_by: String,
     pub issue_date: String,
@@ -2086,6 +2089,82 @@ pub struct ScheduleDef {
     /// Keynote legend: one row per keynote used in the project.
     #[serde(default)]
     pub keynote_legend: bool,
+    /// Sorting/Grouping per sort level (index of `sort_by`).
+    #[serde(default)]
+    pub levels: Vec<SortLevel>,
+    /// Formatting per field name.
+    #[serde(default)]
+    pub formats: BTreeMap<String, FieldFormat>,
+    #[serde(default)]
+    pub look: ScheduleLook,
+    /// Grand totals: 0 title, count and totals; 1 title and totals; 2 count and totals; 3 totals only.
+    #[serde(default)]
+    pub grand_mode: u8,
+    /// Custom grand total title (empty = "Grand total").
+    #[serde(default)]
+    pub grand_title: String,
+}
+
+/// Schedule Properties > Sorting/Grouping: one sort level.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SortLevel {
+    #[serde(default)]
+    pub descending: bool,
+    #[serde(default)]
+    pub header: bool,
+    #[serde(default)]
+    pub footer: bool,
+    /// Footer: 0 title, count and totals; 1 title and totals; 2 count and totals; 3 totals only.
+    #[serde(default)]
+    pub footer_mode: u8,
+    #[serde(default)]
+    pub blank_line: bool,
+}
+
+/// Schedule Properties > Formatting: one field.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct FieldFormat {
+    /// Column heading (empty = the field name).
+    #[serde(default)]
+    pub heading: String,
+    /// 0 left, 1 center, 2 right.
+    #[serde(default)]
+    pub align: u8,
+    #[serde(default)]
+    pub hidden: bool,
+}
+
+/// Schedule Properties > Appearance.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ScheduleLook {
+    #[serde(default = "yes")]
+    pub show_title: bool,
+    #[serde(default = "yes")]
+    pub show_headers: bool,
+    #[serde(default = "yes")]
+    pub grid_lines: bool,
+    #[serde(default)]
+    pub outline: bool,
+    #[serde(default = "yes")]
+    pub blank_row: bool,
+    #[serde(default)]
+    pub stripe_rows: bool,
+}
+
+impl Default for ScheduleLook {
+    fn default() -> Self {
+        ScheduleLook { show_title: true, show_headers: true, grid_lines: true, outline: false, blank_row: true, stripe_rows: false }
+    }
+}
+
+impl ScheduleDef {
+    /// Sort level `k`, falling back to the older single-level settings.
+    pub fn level(&self, k: usize) -> SortLevel {
+        self.levels.get(k).cloned().unwrap_or_else(|| SortLevel { descending: k == 0 && self.descending, header: k == 0 && self.group_headers, footer: k == 0 && self.group_headers, footer_mode: 0, blank_line: false })
+    }
+    pub fn format(&self, field: &str) -> FieldFormat {
+        self.formats.get(field).cloned().unwrap_or_default()
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

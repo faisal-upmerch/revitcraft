@@ -1348,7 +1348,7 @@ fn view_properties(app: &mut App, ui: &mut egui::Ui, vid: Id) {
         let mut which: Option<usize> = None;
         if section(ui, "Other") {
             prop_grid(ui, "view-sched").show(ui, |ui| {
-                for (k, label) in ["Fields", "Filter", "Sorting/Grouping"].iter().enumerate() {
+                for (k, label) in ["Fields", "Filter", "Sorting/Grouping", "Formatting", "Appearance"].iter().enumerate() {
                     row_label(ui, label);
                     if edit_button(ui).clicked() {
                         which = Some(k);

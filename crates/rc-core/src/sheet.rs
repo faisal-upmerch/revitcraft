@@ -65,7 +65,7 @@ fn schedule_size(t: &schedule::Table) -> (Vec<f64>, f64, f64) {
         .iter()
         .enumerate()
         .map(|(ci, c)| {
-            let longest = t.rows.iter().map(|r| r.cells[ci].chars().count()).max().unwrap_or(0).max(c.def.name.chars().count());
+            let longest = t.rows.iter().map(|r| r.cells[ci].chars().count()).max().unwrap_or(0).max(c.heading.chars().count());
             longest as f64 * 1.9 + 4.0
         })
         .collect();
@@ -196,7 +196,10 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
     let (pw, ph) = sheet.size.paper();
     let mut out = Vec::new();
 
-    // Border and title block.
+    // Border and title block (none for a sheet made without one).
+    if sheet.no_title_block {
+        return viewports_layout(p, view, sheet, footprints, out);
+    }
     line(&mut out, rect(DVec2::new(MARGIN + 10.0, MARGIN), DVec2::new(pw - MARGIN, ph - MARGIN)), true, 0.7);
     let tb0 = DVec2::new(pw - MARGIN - TITLE_W, MARGIN);
     let tb1 = DVec2::new(pw - MARGIN, MARGIN + TITLE_H);
@@ -237,6 +240,11 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
         }
     }
 
+    viewports_layout(p, view, sheet, footprints, out)
+}
+
+/// The viewports of a sheet: views, schedules and their titles.
+fn viewports_layout(p: &Project, view: &View, sheet: &Sheet, footprints: &HashMap<Id, Footprint>, mut out: Vec<SheetPrim>) -> Vec<SheetPrim> {
     for vb in viewport_boxes(p, sheet, footprints) {
         let Some(v) = p.view(vb.view) else { continue };
         let vp = &sheet.viewports[vb.index];
@@ -249,28 +257,54 @@ pub fn layout(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> 
             ViewKind::Schedule(def) => {
                 let t = schedule::build(p, def);
                 let (widths, w, _) = schedule_size(&t);
+                let look = &def.look;
                 let row_h = 6.0;
                 let top = vb.max.y;
                 let left = vb.min.x;
-                line(&mut out, rect(vb.min, DVec2::new(left + w, top)), true, 0.35);
-                text(&mut out, DVec2::new(left + 2.0, top - row_h + 1.8), format!("<{}>", v.name), 3.0, true);
-                let mut y = top - row_h;
-                let rows_all: Vec<(Vec<String>, bool)> = std::iter::once((t.columns.iter().map(|c| c.def.name.clone()).collect(), true))
-                    .chain(t.rows.iter().map(|r| (r.cells.clone(), matches!(r.kind, schedule::RowKind::Total | schedule::RowKind::Header))))
-                    .collect();
-                for (cells, bold) in rows_all {
-                    line(&mut out, vec![DVec2::new(left, y), DVec2::new(left + w, y)], false, 0.18);
+                let mut y = top;
+                if look.show_title {
+                    out.push(SheetPrim::Text { pos: DVec2::new(left + w / 2.0, y - row_h + 1.8), text: format!("<{}>", v.name), size: 3.0, anchor: Anchor::Center, bold: true, angle: 0.0, id: None });
+                    y -= row_h;
+                }
+                let grid_top = y;
+                let mut rows_all: Vec<(Vec<String>, bool, Vec<u8>)> = Vec::new();
+                if look.show_headers {
+                    rows_all.push((t.columns.iter().map(|c| c.heading.clone()).collect(), true, vec![1; t.columns.len()]));
+                }
+                if look.blank_row {
+                    rows_all.push((vec![String::new(); t.columns.len()], false, vec![]));
+                }
+                let aligns: Vec<u8> = t.columns.iter().map(|c| c.align).collect();
+                rows_all.extend(t.rows.iter().map(|r| (r.cells.clone(), matches!(r.kind, schedule::RowKind::Total | schedule::RowKind::Header), aligns.clone())));
+                for (cells, bold, al) in rows_all {
+                    if look.grid_lines {
+                        line(&mut out, vec![DVec2::new(left, y), DVec2::new(left + w, y)], false, 0.18);
+                    }
                     let mut x = left;
                     for (ci, c) in cells.iter().enumerate() {
-                        text(&mut out, DVec2::new(x + 1.5, y - row_h + 1.8), c, 2.5, bold);
-                        x += widths.get(ci).copied().unwrap_or(20.0);
+                        let wd = widths.get(ci).copied().unwrap_or(20.0);
+                        let (px, anchor) = match al.get(ci).copied().unwrap_or(0) {
+                            1 => (x + wd / 2.0, Anchor::Center),
+                            2 => (x + wd - 1.5, Anchor::Right),
+                            _ => (x + 1.5, Anchor::Left),
+                        };
+                        out.push(SheetPrim::Text { pos: DVec2::new(px, y - row_h + 1.8), text: c.clone(), size: 2.5, anchor, bold, angle: 0.0, id: None });
+                        x += wd;
                     }
                     y -= row_h;
                 }
-                let mut x = left;
-                for wd in &widths[..widths.len().saturating_sub(1)] {
-                    x += wd;
-                    line(&mut out, vec![DVec2::new(x, top - row_h), DVec2::new(x, vb.min.y)], false, 0.18);
+                if look.grid_lines {
+                    line(&mut out, vec![DVec2::new(left, y), DVec2::new(left + w, y)], false, 0.18);
+                    let mut x = left;
+                    for wd in &widths[..widths.len().saturating_sub(1)] {
+                        x += wd;
+                        line(&mut out, vec![DVec2::new(x, grid_top), DVec2::new(x, y)], false, 0.18);
+                    }
+                    line(&mut out, vec![DVec2::new(left, grid_top), DVec2::new(left, y)], false, 0.18);
+                    line(&mut out, vec![DVec2::new(left + w, grid_top), DVec2::new(left + w, y)], false, 0.18);
+                }
+                if look.outline {
+                    line(&mut out, rect(DVec2::new(left, y), DVec2::new(left + w, grid_top)), true, 0.5);
                 }
                 continue;
             }
