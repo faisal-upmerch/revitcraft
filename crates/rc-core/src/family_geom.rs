@@ -705,6 +705,12 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
                     for (a, b) in def.symbolic_lines(&solved) {
                         out.push(line(vec![f.plan(a.x, a.y), f.plan(b.x, b.y)], false, SymStyle::Projection));
                     }
+                    for l in def.lines.iter().filter(|l| !l.reference) {
+                        let (a, b) = l.ends(&solved);
+                        if DVec2::new(a.x, a.y).distance(DVec2::new(b.x, b.y)) > 1e-6 {
+                            out.push(line(vec![f.plan(a.x, a.y), f.plan(b.x, b.y)], false, SymStyle::Projection));
+                        }
+                    }
                     if def.symbolic.is_empty() {
                         // Outline of the geometry's footprint.
                         let mesh = instance_mesh(p, i);

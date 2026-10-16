@@ -547,6 +547,8 @@ fn is_active(app: &App, cmd: Cmd) -> bool {
         C::FeRevolve => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Revolve && !fe.void_mode),
         C::FeSweep => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Sweep && !fe.void_mode),
         C::FeSweptBlend => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::SweptBlend),
+        C::FeModelLine => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::ModelLine),
+        C::FeRefLine => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::RefLine),
         C::FeRefPlane => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::RefPlane),
         C::FeDimension => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::Dimension),
         C::FeSymbolicLine => app.family_editor.as_ref().is_some_and(|fe| fe.tool == crate::family_editor::FeTool::SymbolicLine),
@@ -1066,11 +1068,14 @@ fn family_contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         F::RefPlane => ("Place Reference Plane".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])])]),
         F::Dimension => ("Place Dimensions".into(), vec![]),
         F::SymbolicLine => ("Place Symbolic Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])])]),
+        F::ModelLine => ("Place Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])]), wp()]),
+        F::RefLine => ("Place Reference Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])]), wp()]),
         F::Select => match fe.sel {
             crate::family_editor::FeSel::Form(k) => (fe.family.definition.as_ref().and_then(|d| d.forms.get(k)).map(|f| f.form.kind_label().to_string()).unwrap_or_else(|| "Form".into()), vec![]),
             crate::family_editor::FeSel::Plane(_) => ("Reference Planes".into(), vec![]),
             crate::family_editor::FeSel::Dim(_) => ("Dimensions".into(), vec![]),
             crate::family_editor::FeSel::Sym(_) => ("Lines".into(), vec![]),
+            crate::family_editor::FeSel::Line(k) => (if fe.family.definition.as_ref().and_then(|d| d.lines.get(k)).is_some_and(|l| l.reference) { "Reference Lines" } else { "Lines" }.into(), vec![]),
             crate::family_editor::FeSel::None => return None,
         },
     })

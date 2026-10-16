@@ -136,6 +136,32 @@ pub struct SymLine {
     pub b: SketchPt,
 }
 
+/// A model line or reference line drawn on a work plane (shown in every view).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FamLine {
+    pub plane: SketchPlane,
+    pub a: SketchPt,
+    pub b: SketchPt,
+    /// A reference line (green, never shown in projects) rather than a model line.
+    #[serde(default)]
+    pub reference: bool,
+}
+
+impl FamLine {
+    /// The line's ends in family coordinates (on the plane through the origin).
+    pub fn ends(&self, solved: &Solved) -> (DVec3, DVec3) {
+        let at = |p: SketchPt| {
+            let (u, v) = (loc(p.a, solved), loc(p.b, solved));
+            match self.plane {
+                SketchPlane::XY => DVec3::new(u, v, 0.0),
+                SketchPlane::XZ => DVec3::new(u, 0.0, v),
+                SketchPlane::YZ => DVec3::new(0.0, u, v),
+            }
+        };
+        (at(self.a), at(self.b))
+    }
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyDef {
     pub planes: Vec<RefPlaneDef>,
@@ -144,6 +170,9 @@ pub struct FamilyDef {
     /// Plan-only symbolic lines (XY).
     #[serde(default)]
     pub symbolic: Vec<SymLine>,
+    /// Model and reference lines.
+    #[serde(default)]
+    pub lines: Vec<FamLine>,
 }
 
 pub type Solved = HashMap<u32, f64>;
@@ -544,6 +573,7 @@ pub fn empty_template() -> FamilyDef {
         dims: vec![],
         forms: vec![],
         symbolic: vec![],
+        lines: vec![],
     }
 }
 
@@ -576,6 +606,7 @@ pub fn generic_template() -> FamilyDef {
             visible: String::new(),
         }],
         symbolic: vec![],
+        lines: vec![],
     }
 }
 

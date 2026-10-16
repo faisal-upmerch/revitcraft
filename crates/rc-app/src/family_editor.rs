@@ -59,6 +59,8 @@ pub enum FeTool {
     Sweep,
     SweptBlend,
     SymbolicLine,
+    ModelLine,
+    RefLine,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -68,6 +70,8 @@ pub enum FeSel {
     Dim(usize),
     Form(usize),
     Sym(usize),
+    /// A model or reference line.
+    Line(usize),
 }
 
 pub struct FamilyEditor {
@@ -450,6 +454,7 @@ pub fn properties_palette(app: &mut App, ui: &mut egui::Ui) {
             FeSel::Plane(_) => "Reference Planes (1)".into(),
             FeSel::Dim(_) => "Dimensions (1)".into(),
             FeSel::Sym(_) => "Symbolic Lines (1)".into(),
+            FeSel::Line(k) => if fe.def().and_then(|d| d.lines.get(k)).is_some_and(|l| l.reference) { "Reference Lines (1)".into() } else { "Model Lines (1)".into() },
             FeSel::None => format!("Family: {}", fe.family.category.label()),
         }
     };
@@ -707,6 +712,44 @@ fn selection_properties(app: &App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 fe.family.definition.as_mut().unwrap().forms[k] = nf;
             }
         }
+        FeSel::Line(k) => {
+            let l = fe.def().and_then(|d| d.lines.get(k)).cloned();
+            if let Some(l) = l {
+                let (solved, _) = fe.solved();
+                let (a, b) = l.ends(&solved);
+                style::group_header_ui(ui, "Constraints", true);
+                pgrid(ui, "fe-line-c", |ui| {
+                    ui.label("Work Plane");
+                    ro(ui, match l.plane {
+                        SketchPlane::XY => "Level : Ref. Level",
+                        SketchPlane::XZ => "Reference Plane : Center (Front/Back)",
+                        SketchPlane::YZ => "Reference Plane : Center (Left/Right)",
+                    });
+                    ui.end_row();
+                });
+                style::group_header_ui(ui, "Graphics", true);
+                pgrid(ui, "fe-line-g", |ui| {
+                    ui.label("Visible");
+                    ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, ""));
+                    ui.end_row();
+                });
+                style::group_header_ui(ui, "Identity Data", true);
+                pgrid(ui, "fe-line-i", |ui| {
+                    ui.label("Subcategory");
+                    ro(ui, if l.reference { "<None>" } else { "Generic Models" });
+                    ui.end_row();
+                    ui.label("Is Reference");
+                    ro(ui, "Not a Reference");
+                    ui.end_row();
+                });
+                style::group_header_ui(ui, "Dimensions", true);
+                pgrid(ui, "fe-line-d", |ui| {
+                    ui.label("Length");
+                    ro(ui, &app.doc.data.units.length(a.distance(b)));
+                    ui.end_row();
+                });
+            }
+        }
         FeSel::Sym(_) => {
             style::group_header_ui(ui, "Graphics", true);
             pgrid(ui, "fe-sym", |ui| {
@@ -773,9 +816,11 @@ pub fn options_bar(app: &mut App, ui: &mut egui::Ui) {
             FeTool::RefPlane => "Modify | Place Reference Plane".into(),
             FeTool::Dimension => "Modify | Place Dimensions".into(),
             FeTool::SymbolicLine => "Modify | Place Symbolic Lines".into(),
+            FeTool::ModelLine => "Modify | Place Lines".into(),
+            FeTool::RefLine => "Modify | Place Reference Lines".into(),
         };
         ui.label(title);
-        if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::RefPlane) {
+        if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine | FeTool::RefPlane) {
             ui.separator();
             crate::style::check(ui, &mut app.opts.chain, "Chain");
             ui.label("Offset:");
@@ -999,6 +1044,7 @@ fn prompt(fe: &FamilyEditor, mode: crate::tools::DrawMode) -> String {
         FeTool::Dimension => if fe.dim_planes.is_empty() { "Click on a reference to dimension.".into() } else { "Click on another reference, or click empty space to place the dimension.".into() },
         FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
         FeTool::Sweep | FeTool::SweptBlend if fe.sweep_path.is_none() => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
+        FeTool::ModelLine | FeTool::RefLine => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
         FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine | FeTool::Sweep | FeTool::SweptBlend => match mode {
             DrawMode::Rect => if first { "Click to enter rectangle start point.".into() } else { "Click to enter rectangle end point.".into() },
             DrawMode::Circle => if first { "Click to enter circle center.".into() } else { "Click to enter circle radius.".into() },
@@ -1211,6 +1257,17 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             painter.text(pts[0] + vec2(-14.0, 0.0), egui::Align2::CENTER_CENTER, "🔒", egui::FontId::proportional(10.0), col);
         }
     }
+    // Model lines (black) and reference lines (green), on their work planes, in every view.
+    for (k, l) in def.lines.iter().enumerate() {
+        let (a, b) = l.ends(&solved);
+        let (a, b) = (to2(a), to2(b));
+        if a.distance(b) < 1e-6 {
+            continue;
+        }
+        let selected = fe.sel == FeSel::Line(k);
+        let col = if selected { style::SELECT } else if l.reference { green } else { Color32::BLACK };
+        painter.line_segment([xf.s(a), xf.s(b)], Stroke::new(if selected { 2.0 } else { 1.2 }, col));
+    }
     // Symbolic lines (plan).
     if matches!(fe.view, FeView::Plan | FeView::Ceiling) {
         for (k, l) in def.symbolic.iter().enumerate() {
@@ -1303,6 +1360,15 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                                 break;
                             }
                         }
+                        if hit == FeSel::None {
+                            for (k, l) in def.lines.iter().enumerate() {
+                                let (a, b) = l.ends(&solved);
+                                let (a, b) = (to2(a), to2(b));
+                                if a.distance(b) > 1e-6 && rc_core::geom::distance_to_segment(a, b, c) < tol {
+                                    hit = FeSel::Line(k);
+                                }
+                            }
+                        }
                         if hit == FeSel::None && matches!(fe.view, FeView::Plan | FeView::Ceiling) {
                             for (k, l) in def.symbolic.iter().enumerate() {
                                 if rc_core::geom::distance_to_segment(pt2(l.a, &solved), pt2(l.b, &solved), c) < tol {
@@ -1382,7 +1448,7 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 }
             }
         }
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine => {
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine => {
             let mode = app.opts.draw_mode;
             let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve) || (matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) && fe.sweep_path.is_some());
             if let (true, Some(s), false) = (clicked, snapped, fe.closed) {
@@ -1409,13 +1475,18 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 } else {
                     fe.chain_ended = false;
                     fe.pts.push(s);
-                    if fe.tool == FeTool::SymbolicLine && fe.pts.len() == 2 {
+                    if matches!(fe.tool, FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine) && fe.pts.len() == 2 {
                         fe.checkpoint();
                         let (a, b) = (fe.pts[0], fe.pts[1]);
+                        let (tool, plane) = (fe.tool, fe.view.sketch_plane().unwrap_or(SketchPlane::XY));
                         if let Some(def) = fe.family.definition.as_mut() {
-                            def.symbolic.push(SymLine { a, b });
+                            match tool {
+                                FeTool::SymbolicLine => def.symbolic.push(SymLine { a, b }),
+                                _ => def.lines.push(family_def::FamLine { plane, a, b, reference: tool == FeTool::RefLine }),
+                            }
                         }
-                        fe.pts.clear();
+                        // Chain: the next line starts where this one ended.
+                        fe.pts = if app.opts.chain { vec![b] } else { Vec::new() };
                     }
                 }
             }
@@ -1555,6 +1626,10 @@ fn delete_selected(fe: &mut FamilyEditor) {
         FeSel::Form(k) => {
             fe.checkpoint();
             fe.family.definition.as_mut().unwrap().forms.remove(k);
+        }
+        FeSel::Line(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().lines.remove(k);
         }
         FeSel::Sym(k) => {
             fe.checkpoint();

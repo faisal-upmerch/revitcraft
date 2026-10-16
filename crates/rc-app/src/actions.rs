@@ -27,10 +27,10 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         let custom = fe.family.definition.is_some();
         let sketching = matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Sweep | F::SweptBlend);
         return match cmd {
-            FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => custom,
+            FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine | FeModelLine | FeRefLine => custom,
             FeFinishSketch | FeCancelSketch => sketching,
             FeFamilyTypes | FeFamilyCategory | FeLoadIntoProject | FeLoadAndClose | FeDefault3D => true,
-            DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine),
+            DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine | F::ModelLine | F::RefLine),
             DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve) || (matches!(fe.tool, F::Sweep | F::SweptBlend) && fe.sweep_path.is_some()),
             Modify | ToggleProperties | ToggleBrowser | ToggleStatusBar | ToggleOptionsBar | ThinLines | Undo | Redo | Exit | Options | Save | SaveAs => match cmd {
                 Undo => !fe.undo.is_empty(),
@@ -202,7 +202,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 fe.pts.clear();
             }
         }
-        FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine => {
+        FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine | FeModelLine | FeRefLine => {
             use crate::family_editor::FeTool as F;
             let (t, void) = match cmd {
                 FeExtrusion => (F::Extrusion, false),
@@ -216,6 +216,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 FeVoidSweep => (F::Sweep, true),
                 FeRefPlane => (F::RefPlane, false),
                 FeDimension => (F::Dimension, false),
+                FeModelLine => (F::ModelLine, false),
+                FeRefLine => (F::RefLine, false),
                 _ => (F::SymbolicLine, false),
             };
             app.opts.draw_mode = DrawMode::Line;
@@ -253,7 +255,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         FeLoadIntoProject => crate::family_editor::load(app, false),
         FeLoadAndClose => crate::family_editor::load(app, true),
-        FeModelLine | FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl | FeRefLine => {}
+        FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl => {}
         Undo => app.undo(),
         Redo => app.redo(),
 
