@@ -88,8 +88,17 @@ pub enum Form {
     Blend { bottom: Vec<SketchPt>, top: Vec<SketchPt>, start: Loc, end: Loc },
     /// A profile in the XZ plane (a = x, b = z) revolved about the vertical axis through `axis`.
     Revolve { profile: Vec<SketchPt>, axis: SketchPt, angle_deg: f64 },
-    /// A rectangular profile swept along a plan path at height `z`.
-    Sweep { path: Vec<SketchPt>, z: Loc, width: f64, height: f64 },
+    /// A profile swept along a plan path at height `z`. The profile is sketched in the plane
+    /// across the path's first segment: x runs along the path's left normal from the path,
+    /// y up from `z`. Without a profile, a `width` x `height` rectangle centred on the path.
+    Sweep {
+        path: Vec<SketchPt>,
+        z: Loc,
+        width: f64,
+        height: f64,
+        #[serde(default)]
+        profile: Vec<DVec2>,
+    },
 }
 
 impl Form {
@@ -365,9 +374,13 @@ pub fn form_mesh(form: &Form, solved: &Solved, material: &str) -> MeshSet {
                 m.add_polygon_facing(&end, DVec3::new(-ang.sin(), ang.cos(), 0.0));
             }
         }
-        Form::Sweep { path, z, width, height } => {
+        Form::Sweep { path, z, width, height, profile } => {
             let pts: Vec<DVec2> = path.iter().map(|p| DVec2::new(loc(p.a, solved), loc(p.b, solved))).collect();
             let z0 = loc(*z, solved);
+            if profile.len() >= 3 {
+                sweep_profile(set.mesh(material), &pts, z0, profile);
+                return set;
+            }
             for w in pts.windows(2) {
                 let d = (w[1] - w[0]).normalize_or_zero();
                 if d == DVec2::ZERO {
@@ -380,6 +393,67 @@ pub fn form_mesh(form: &Form, solved: &Solved, material: &str) -> MeshSet {
         }
     }
     set
+}
+
+/// Sweeps a closed profile (x along the left normal, y up) along a polyline path at `z0`,
+/// mitring the corners and capping both ends.
+fn sweep_profile(m: &mut crate::mesh::Mesh, path: &[DVec2], z0: f64, profile: &[DVec2]) {
+    let mut pts: Vec<DVec2> = Vec::new();
+    for q in path {
+        if pts.last().is_none_or(|l: &DVec2| l.distance(*q) > 1e-6) {
+            pts.push(*q);
+        }
+    }
+    if pts.len() < 2 {
+        return;
+    }
+    let closed = pts.len() > 3 && pts[0].distance(pts[pts.len() - 1]) < 1e-6;
+    if closed {
+        pts.pop();
+    }
+    let n = pts.len();
+    let seg = |i: usize| (pts[(i + 1) % n] - pts[i]).normalize();
+    // Mitre direction and scale at each station.
+    let station = |i: usize| -> (DVec2, f64) {
+        let (din, dout) = if closed {
+            (seg((i + n - 1) % n), seg(i))
+        } else if i == 0 {
+            (seg(0), seg(0))
+        } else if i == n - 1 {
+            (seg(n - 2), seg(n - 2))
+        } else {
+            (seg(i - 1), seg(i))
+        };
+        let (nin, nout) = (geom::perp(din), geom::perp(dout));
+        let bis = (nin + nout).normalize_or_zero();
+        if bis == DVec2::ZERO {
+            return (nout, 1.0);
+        }
+        (bis, 1.0 / bis.dot(nout).max(0.2))
+    };
+    let ring = |i: usize| -> Vec<DVec3> {
+        let (nrm, k) = station(i);
+        profile.iter().map(|p| { let q = pts[i] + nrm * (p.x * k); DVec3::new(q.x, q.y, z0 + p.y) }).collect()
+    };
+    let rings: Vec<Vec<DVec3>> = (0..n).map(ring).collect();
+    let pc = geom::centroid(profile);
+    let count = if closed { n } else { n - 1 };
+    for i in 0..count {
+        let (r0, r1) = (&rings[i], &rings[(i + 1) % n]);
+        let nrm = geom::perp(seg(i));
+        for a in 0..profile.len() {
+            let b = (a + 1) % profile.len();
+            let e = (profile[a] + profile[b]) / 2.0 - pc;
+            let out = DVec3::new(nrm.x * e.x, nrm.y * e.x, e.y);
+            m.add_quad_facing(r0[a], r0[b], r1[b], r1[a], out);
+        }
+    }
+    if !closed {
+        let d0 = seg(0);
+        let d1 = seg(n - 2);
+        m.add_polygon_facing(&rings[0], DVec3::new(-d0.x, -d0.y, 0.0));
+        m.add_polygon_facing(&rings[n - 1], DVec3::new(d1.x, d1.y, 0.0));
+    }
 }
 
 /// Resamples a closed polygon to `n` vertices by splitting its longest edges.
@@ -479,6 +553,23 @@ pub fn generic_template() -> FamilyDef {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn profile_sweep_follows_the_path_with_mitred_corners() {
+        let mut def = FamilyDef::default();
+        let p = |a: f64, b: f64| SketchPt { a: Loc::Value(a), b: Loc::Value(b) };
+        // An L path with a 100 x 50 profile left of the path, starting 20 above the path.
+        let profile = vec![DVec2::new(0.0, 20.0), DVec2::new(100.0, 20.0), DVec2::new(100.0, 70.0), DVec2::new(0.0, 70.0)];
+        def.forms.push(FormDef { name: "S".into(), form: Form::Sweep { path: vec![p(0.0, 0.0), p(1000.0, 0.0), p(1000.0, 1000.0)], z: Loc::Value(0.0), width: 50.0, height: 50.0, profile }, void: false, material: String::new(), visible: String::new() });
+        let mesh = def.build(&Solved::new(), &|_| "Wood".into(), &|_| true);
+        let (mn, mx) = mesh.bounds().unwrap();
+        // Left of an eastward path is +y; the mitred corner reaches x = 1000 - 100.
+        assert!((mn - DVec3::new(0.0, 0.0, 20.0)).length() < 1e-6, "{mn:?}");
+        assert!((mx - DVec3::new(1000.0, 1000.0, 70.0)).length() < 1e-6, "{mx:?}");
+        let tris = mesh.by_material.values().map(|m| m.indices.len() / 3).sum::<usize>();
+        // 2 segments x 4 sides x 2 triangles + 2 caps x 2 triangles.
+        assert_eq!(tris, 20);
+    }
 
     #[test]
     fn solver_handles_eq_and_labels() {

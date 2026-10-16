@@ -15,7 +15,7 @@ const DEFAULT_EYES: [DVec3; 3] = [DVec3::new(-12000.0, -16000.0, 12000.0), DVec3
 
 /// The default view direction (from the eye towards nothing in particular): the south-east
 /// corner of the ViewCube, Top + Front + Right, an exact isometric.
-const HOME_DIR: DVec3 = DVec3::new(1.0, -1.0, 1.0);
+pub const HOME_DIR: DVec3 = DVec3::new(1.0, -1.0, 1.0);
 
 /// A ViewCube or Home transition, interpolated over a short time.
 #[derive(Clone, Copy)]
