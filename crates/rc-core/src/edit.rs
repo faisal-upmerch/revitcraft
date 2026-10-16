@@ -2490,6 +2490,19 @@ mod tests {
     }
 
     #[test]
+    fn shared_coordinates_follow_specify_at_point() {
+        let (mut p, ..) = project();
+        let pt = DVec3::new(1000.0, 2000.0, 0.0);
+        p.specify_shared(pt, 50000.0, 30000.0, 100.0, 30.0);
+        let (n, e, z) = p.to_shared(pt);
+        assert!((n - 50000.0).abs() < 1e-6 && (e - 30000.0).abs() < 1e-6 && (z - 100.0).abs() < 1e-6);
+        // A point 1 m along true north reads 1 m further north and the same east.
+        let t = 30f64.to_radians();
+        let (n2, e2, _) = p.to_shared(pt + DVec3::new(t.sin(), t.cos(), 0.0) * 1000.0);
+        assert!((n2 - 51000.0).abs() < 1e-6 && (e2 - 30000.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn braces_trusses_and_beam_systems() {
         let (mut p, lvl, _) = project();
         let bt = p.families.iter().find(|f| f.is_framing()).and_then(|f| f.types.first()).map(|t| t.id).unwrap();

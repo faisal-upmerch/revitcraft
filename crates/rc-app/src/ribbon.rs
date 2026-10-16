@@ -225,7 +225,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
         panel(
             "Create",
             vec![
-                Labeled("3D\nView", C::Default3D, vec![]),
+                Labeled("3D\nView", C::Default3D, vec![C::Default3D, C::Camera]),
                 Big(C::Section),
                 Big(C::Callout),
                 Labeled("Plan\nViews", C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
@@ -280,9 +280,9 @@ fn manage() -> Vec<Panel> {
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],
         ),
-        panel("Project Location", vec![Labeled("Sun\nSettings", C::Sun, vec![])]),
+        panel("Project Location", vec![Labeled("Location", C::Location, vec![]), Labeled("Coordinates", C::SpecifyCoordinates, vec![C::SpecifyCoordinates, C::ReportCoordinates])]),
         panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![])]),
-        panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
+        panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),
         panel("Selection", vec![Stack(vec![C::SaveSelection, C::LoadSelection, C::EditSelection])]),
         panel("Inquiry", vec![Stack(vec![C::IdsOfSelection, C::SelectById, C::Warnings])]),

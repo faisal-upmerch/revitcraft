@@ -2622,6 +2622,20 @@ pub struct Project {
     /// Keynote tags show 0 the key, 1 the text, 2 both.
     #[serde(default)]
     pub keynote_display: u8,
+    /// Shared coordinates of the project origin (the rotation is `true_north`).
+    #[serde(default)]
+    pub shared: SharedCoordinates,
+    /// The view opened with the project (None = the last viewed).
+    #[serde(default)]
+    pub starting_view: Option<Id>,
+}
+
+/// Where the project's internal origin sits in shared (survey) coordinates.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct SharedCoordinates {
+    pub north: f64,
+    pub east: f64,
+    pub elevation: f64,
 }
 
 /// Line graphics of a category (Object Styles). None keeps the built-in default.
@@ -2672,6 +2686,8 @@ impl Project {
             keynotes: Vec::new(),
             keynote_file: String::new(),
             keynote_display: 0,
+            shared: SharedCoordinates::default(),
+            starting_view: None,
         }
     }
 
@@ -2755,6 +2771,25 @@ impl Project {
 
     pub fn level_name(&self, id: Id) -> String {
         self.level(id).map(|l| l.name.clone()).unwrap_or_else(|| "<none>".into())
+    }
+
+    /// A project point in shared coordinates: (North/South, East/West, Elevation). True north
+    /// is `true_north` degrees east of project north.
+    pub fn to_shared(&self, pt: DVec3) -> (f64, f64, f64) {
+        let t = self.true_north.to_radians();
+        let north = DVec2::new(t.sin(), t.cos());
+        let east = DVec2::new(t.cos(), -t.sin());
+        let q = DVec2::new(pt.x, pt.y);
+        (self.shared.north + q.dot(north), self.shared.east + q.dot(east), self.shared.elevation + pt.z)
+    }
+
+    /// Sets the shared coordinates so the project point `pt` reads (n, e, z), with true north
+    /// `angle` degrees east of project north.
+    pub fn specify_shared(&mut self, pt: DVec3, n: f64, e: f64, z: f64, angle: f64) {
+        self.true_north = angle;
+        self.shared = SharedCoordinates::default();
+        let (n0, e0, z0) = self.to_shared(pt);
+        self.shared = SharedCoordinates { north: n - n0, east: e - e0, elevation: z - z0 };
     }
 
     pub fn level_above(&self, id: Id) -> Option<(Id, &Level)> {

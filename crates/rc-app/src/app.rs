@@ -206,6 +206,8 @@ pub struct App {
     pub thumbs: HashMap<String, Option<egui::TextureHandle>>,
     /// When the project was last saved or the save reminder last answered.
     pub save_reminder_at: f64,
+    /// A view to open once the dock is back (views opened while the dock is drawn).
+    pub open_pending: Option<Id>,
 }
 
 impl App {
@@ -264,6 +266,7 @@ impl App {
             settings_dirty: false,
             thumbs: HashMap::new(),
             save_reminder_at: 0.0,
+            open_pending: None,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
@@ -375,7 +378,9 @@ impl App {
     }
 
     pub fn open_first_plan(&mut self) {
-        let first = self.doc.data.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. }) && !v.is_template).map(|v| v.id);
+        // The project's Starting View when it has one.
+        let start = self.doc.data.starting_view.filter(|id| self.doc.data.view(*id).is_some());
+        let first = start.or_else(|| self.doc.data.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. }) && !v.is_template).map(|v| v.id));
         if let Some(id) = first {
             self.open_view(id);
         }
@@ -568,7 +573,10 @@ impl App {
     // ------------------------------------------------------------ views
 
     pub fn open_view(&mut self, id: Id) {
-        let Some(dock) = self.dock.as_mut() else { return };
+        let Some(dock) = self.dock.as_mut() else {
+            self.open_pending = Some(id);
+            return;
+        };
         match dock.find_tab(&id) {
             Some(path) => {
                 let _ = dock.set_active_tab(path);
@@ -1227,6 +1235,9 @@ impl App {
             self.active = dock.iter_all_tabs().map(|(_, t)| *t).last();
         }
         self.dock = Some(dock);
+        if let Some(id) = self.open_pending.take() {
+            self.open_view(id);
+        }
     }
 
     fn show_toast(&mut self, ctx: &egui::Context) {

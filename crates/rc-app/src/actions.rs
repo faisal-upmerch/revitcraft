@@ -617,6 +617,11 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         Section => app.set_tool(ToolKind::Section),
+        Camera => app.set_tool(ToolKind::Camera),
+        StartingView => app.dialogs.starting_view = true,
+        Location => app.dialogs.location = true,
+        SpecifyCoordinates => app.set_tool(ToolKind::SpecifyCoords),
+        ReportCoordinates => app.set_tool(ToolKind::ReportCoords),
         Callout => app.set_tool(ToolKind::Callout),
         NewFloorPlan => app.dialogs.new_plan = Some(dialogs::PlanKind::Floor),
         NewCeilingPlan => app.dialogs.new_plan = Some(dialogs::PlanKind::Ceiling),

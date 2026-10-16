@@ -67,6 +67,11 @@ pub struct Dialogs {
     pub model_text: Option<String>,
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
+    pub starting_view: bool,
+    /// Location, Weather and Site.
+    pub location: bool,
+    /// Specify Coordinates at Point: the point and its N/S, E/W, Elevation and angle texts.
+    pub specify_coords: Option<(rc_core::geom::DVec3, [String; 4])>,
     pub options: bool,
     pub exit: bool,
     pub create_group: Option<String>,
@@ -438,6 +443,9 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     print_preview(app, ctx);
     model_text_dialog(app, ctx);
     plan_view_types_dialog(app, ctx);
+    starting_view_dialog(app, ctx);
+    location_dialog(app, ctx);
+    specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -753,6 +761,249 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+/// Starting View: the view shown when the project opens.
+fn starting_view_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.starting_view {
+        return;
+    }
+    let id = egui::Id::new("starting-view");
+    let mut pick: Option<Id> = ctx.data(|m| m.get_temp(id)).unwrap_or(app.doc.data.starting_view);
+    let label = |v: &View| format!("{}: {}", v.type_label(), v.name);
+    let mut views: Vec<(Id, String)> = app.doc.data.views.iter().filter(|v| !v.is_template).map(|v| (v.id, label(v))).collect();
+    views.sort_by(|a, b| a.1.cmp(&b.1));
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Starting View").open(&mut open).resizable(false).default_width(340.0).show(ctx, |ui| {
+        ui.label("Specify the view that will be displayed when this project is opened:");
+        ui.add_space(4.0);
+        let current = pick.and_then(|p| views.iter().find(|v| v.0 == p)).map(|v| v.1.clone()).unwrap_or_else(|| "<Last Viewed>".into());
+        egui::ComboBox::from_id_salt("starting-view-combo").selected_text(current).width(310.0).show_ui(ui, |ui| {
+            ui.selectable_value(&mut pick, None, "<Last Viewed>");
+            for (vid, name) in &views {
+                ui.selectable_value(&mut pick, Some(*vid), name);
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(id, pick));
+    if ok && pick != app.doc.data.starting_view {
+        app.run("Starting View", |p| {
+            p.starting_view = pick;
+            Ok(())
+        });
+    }
+    if ok || cancel || !open {
+        app.dialogs.starting_view = false;
+        ctx.data_mut(|m| m.remove::<Option<Id>>(id));
+    }
+}
+
+/// Location, Weather and Site: the project's place on earth and its angle to true north.
+fn location_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.location {
+        return;
+    }
+    #[derive(Clone)]
+    struct St {
+        tab: u8,
+        lat: String,
+        lon: String,
+        zone: f64,
+        address: String,
+        angle: String,
+        east: bool,
+    }
+    let id = egui::Id::new("location-dialog");
+    let p0 = &app.doc.data;
+    let mut st: St = ctx.data(|m| m.get_temp(id)).unwrap_or_else(|| St {
+        tab: 0,
+        lat: format!("{:.6}", p0.sun.latitude),
+        lon: format!("{:.6}", p0.sun.longitude),
+        zone: (p0.sun.longitude / 15.0).round(),
+        address: p0.info.address.clone(),
+        angle: format!("{:.2}", p0.true_north.abs()),
+        east: p0.true_north >= 0.0,
+    });
+    // A few cities for "Default City List", as the reference app offers.
+    const CITIES: [(&str, f64, f64, f64); 10] = [
+        ("Boston, MA", 42.3584, -71.0598, -5.0),
+        ("Chicago, IL", 41.8756, -87.6244, -6.0),
+        ("Dubai, United Arab Emirates", 25.2697, 55.3094, 4.0),
+        ("London, United Kingdom", 51.5072, -0.1276, 0.0),
+        ("Los Angeles, CA", 34.0522, -118.2437, -8.0),
+        ("New York, NY", 40.7128, -74.006, -5.0),
+        ("Paris, France", 48.8566, 2.3522, 1.0),
+        ("San Francisco, CA", 37.7749, -122.4194, -8.0),
+        ("Sydney, Australia", -33.8688, 151.2093, 10.0),
+        ("Tokyo, Japan", 35.6762, 139.6503, 9.0),
+    ];
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Location Weather and Site").open(&mut open).resizable(false).default_width(470.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            for (k, t) in ["Location", "Weather", "Site"].iter().enumerate() {
+                if ui.selectable_label(st.tab == k as u8, *t).clicked() {
+                    st.tab = k as u8;
+                }
+            }
+        });
+        ui.separator();
+        ui.set_min_height(230.0);
+        match st.tab {
+            0 => {
+                ui.horizontal(|ui| {
+                    ui.label("Define Location by:");
+                    egui::ComboBox::from_id_salt("loc-by").selected_text("Default City List").width(200.0).show_ui(ui, |ui| {
+                        let _ = ui.selectable_label(true, "Default City List");
+                    });
+                });
+                ui.add_space(6.0);
+                egui::Grid::new("loc-grid").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                    ui.label("City:");
+                    let city = CITIES.iter().find(|c| (c.1 - st.lat.parse::<f64>().unwrap_or(f64::NAN)).abs() < 1e-3 && (c.2 - st.lon.parse::<f64>().unwrap_or(f64::NAN)).abs() < 1e-3).map(|c| c.0).unwrap_or("<User Defined>");
+                    egui::ComboBox::from_id_salt("loc-city").selected_text(city).width(260.0).show_ui(ui, |ui| {
+                        for c in CITIES {
+                            if ui.selectable_label(c.0 == city, c.0).clicked() {
+                                st.lat = format!("{:.6}", c.1);
+                                st.lon = format!("{:.6}", c.2);
+                                st.zone = c.3;
+                            }
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Latitude:");
+                    ui.add(egui::TextEdit::singleline(&mut st.lat).desired_width(120.0));
+                    ui.end_row();
+                    ui.label("Longitude:");
+                    ui.add(egui::TextEdit::singleline(&mut st.lon).desired_width(120.0));
+                    ui.end_row();
+                    ui.label("Time Zone:");
+                    let zl = |z: f64| format!("(UTC{}{:02}:00)", if z < 0.0 { "-" } else { "+" }, z.abs() as i32);
+                    egui::ComboBox::from_id_salt("loc-zone").selected_text(zl(st.zone)).width(260.0).show_ui(ui, |ui| {
+                        for z in -12..=14 {
+                            ui.selectable_value(&mut st.zone, z as f64, zl(z as f64));
+                        }
+                    });
+                    ui.end_row();
+                    ui.label("Project Address:");
+                    ui.add(egui::TextEdit::singleline(&mut st.address).desired_width(260.0));
+                    ui.end_row();
+                });
+            }
+            1 => {
+                ui.label("Cooling Design Temperatures and Heating Design Temperature come from the");
+                ui.label("closest weather station to the project location.");
+                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut true, "Use closest weather station"));
+            }
+            _ => {
+                ui.label("Define a site for each unique location in this project.");
+                egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+                    ui.set_width(ui.available_width());
+                    let _ = ui.selectable_label(true, "Internal (current)");
+                });
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    ui.label("Angle from Project North to True North:");
+                    ui.add(egui::TextEdit::singleline(&mut st.angle).desired_width(70.0));
+                    ui.label("°");
+                    egui::ComboBox::from_id_salt("loc-ew").selected_text(if st.east { "East" } else { "West" }).width(70.0).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut st.east, true, "East");
+                        ui.selectable_value(&mut st.east, false, "West");
+                    });
+                });
+            }
+        }
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            let _ = dlg_button(ui, "Help", false, false);
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let (lat, lon, ang) = (st.lat.trim().parse::<f64>(), st.lon.trim().parse::<f64>(), st.angle.trim().parse::<f64>());
+        match (lat, lon, ang) {
+            (Ok(lat), Ok(lon), Ok(ang)) if lat.abs() <= 90.0 && lon.abs() <= 180.0 => {
+                let (addr, angle) = (st.address.clone(), if st.east { ang } else { -ang });
+                app.run("Location", |p| {
+                    p.sun.latitude = lat;
+                    p.sun.longitude = lon;
+                    p.info.address = addr;
+                    p.true_north = angle;
+                    Ok(())
+                });
+            }
+            _ => {
+                app.error("Enter a latitude between -90 and 90, a longitude between -180 and 180 and an angle in degrees.");
+                ok = false;
+            }
+        }
+    }
+    if ok || cancel || !open {
+        app.dialogs.location = false;
+        ctx.data_mut(|m| m.remove::<St>(id));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(id, st));
+    }
+}
+
+/// Specify Shared Coordinates: the clicked point's shared position and the angle to true north.
+fn specify_coords_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some((pt, mut f)) = app.dialogs.specify_coords.clone() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Specify Shared Coordinates").open(&mut open).resizable(false).default_width(360.0).show(ctx, |ui| {
+        ui.label("Relocate this project in Shared Coordinates by specifying known values at the current point.");
+        ui.add_space(6.0);
+        egui::Grid::new("spec-coords").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+            for (k, l) in ["North/South:", "East/West:", "Elevation:", "Angle from Project North to True North (East):"].iter().enumerate() {
+                ui.label(*l);
+                ui.add(egui::TextEdit::singleline(&mut f[k]).desired_width(110.0));
+                ui.end_row();
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let u = app.doc.data.units.clone();
+        let len = |t: &str| u.parse(t, ParamKind::Length);
+        match (len(&f[0]), len(&f[1]), len(&f[2]), f[3].trim().trim_end_matches('°').parse::<f64>()) {
+            (Some(n), Some(e), Some(z), Ok(a)) => {
+                app.run("Specify Coordinates", |p| {
+                    p.specify_shared(pt, n, e, z, a);
+                    Ok(())
+                });
+                app.dialogs.specify_coords = None;
+            }
+            _ => app.error("Enter lengths for North/South, East/West and Elevation, and an angle in degrees."),
+        }
+    } else if cancel || !open {
+        app.dialogs.specify_coords = None;
+    } else {
+        app.dialogs.specify_coords = Some((pt, f));
     }
 }
 

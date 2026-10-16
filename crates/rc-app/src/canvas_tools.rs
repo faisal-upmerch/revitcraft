@@ -157,6 +157,9 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Section => if n == 0 { "Click the start of the section line.".into() } else { "Click the end of the section line.".into() },
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
+        ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
+        ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
+        ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
         ToolKind::ModelText => "Click to place model text.".into(),
         ToolKind::Mullion => "Select a grid line to create mullion.".into(),
@@ -439,7 +442,27 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 }
             }
         }
-        ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::SpecifyCoords | ToolKind::ReportCoords => {
+            let Some(pt) = point else { return };
+            let z = view.plan_level().map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);
+            let (n, e, el) = app.doc.data.to_shared(rc_core::geom::DVec3::new(pt.x, pt.y, z));
+            let u = &app.doc.data.units;
+            painter.circle_stroke(xf.s(pt), 5.0, preview_stroke());
+            if app.tool.kind == ToolKind::ReportCoords {
+                let txt = format!("N/S {}\nE/W {}\nElev {}", u.length(n), u.length(e), u.length(el));
+                for (k, l) in txt.lines().enumerate() {
+                    painter.text(xf.s(pt) + vec2(14.0, -36.0 + k as f32 * 14.0), egui::Align2::LEFT_BOTTOM, l, egui::FontId::proportional(12.0), style::TEMP_DIM);
+                }
+                if clicked {
+                    app.info(txt.replace('\n', ", "));
+                }
+            } else if clicked {
+                let f = |v: f64| u.length(v);
+                app.dialogs.specify_coords = Some((rc_core::geom::DVec3::new(pt.x, pt.y, z), [f(n), f(e), f(el), format!("{:.2}", app.doc.data.true_north)]));
+                app.tool.reset();
+            }
+        }
         ToolKind::ColorLegend => {
             if let Some(pt) = point {
                 let r = egui::Rect::from_min_size(xf.s(pt), vec2(90.0, 60.0));
@@ -2067,7 +2090,9 @@ fn dim_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
     match kind {
         DimKind::SpotCoordinate => {
             let Some(pt) = point else { return };
-            let txt = format!("N {}\nE {}", units.length(pt.y), units.length(pt.x));
+            let z = view.plan_level().map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);
+            let (n, e, _) = app.doc.data.to_shared(rc_core::geom::DVec3::new(pt.x, pt.y, z));
+            let txt = format!("N {}\nE {}", units.length(n), units.length(e));
             for (k, l) in txt.lines().enumerate() {
                 painter.text(xf.s(pt) + vec2(14.0, -26.0 + k as f32 * 14.0), egui::Align2::LEFT_BOTTOM, l, egui::FontId::proportional(12.0), style::TEMP_DIM);
             }
@@ -2417,6 +2442,17 @@ fn view_marker_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View
         (ToolKind::Callout, Some(a)) => {
             painter.rect_stroke(egui::Rect::from_two_pos(xf.s(a), xf.s(pt)), 0.0, Stroke::new(1.5, style::PREVIEW), egui::StrokeKind::Middle);
         }
+        (ToolKind::Camera, Some(a)) => {
+            // Eye, line of sight and the field of view.
+            let d = (pt - a).normalize_or_zero();
+            let len = a.distance(pt);
+            painter.circle_filled(xf.s(a), 4.0, style::PREVIEW);
+            painter.line_segment([xf.s(a), xf.s(pt)], preview_stroke());
+            for k in [-1.0, 1.0] {
+                let r = rc_core::geom::rotate(d, k * 25.0f64.to_radians());
+                painter.line_segment([xf.s(a), xf.s(a + r * len)], Stroke::new(1.0, style::PREVIEW));
+            }
+        }
         (ToolKind::ElevationMarker, _) => {
             let dir = elevation_dir_toward(app, pt);
             let look = dir.look().truncate();
@@ -2430,7 +2466,30 @@ fn view_marker_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View
         return;
     }
     match (kind, a) {
-        (ToolKind::Section, None) | (ToolKind::Callout, None) => app.tool.pts.push(pt),
+        (ToolKind::Section, None) | (ToolKind::Callout, None) | (ToolKind::Camera, None) => app.tool.pts.push(pt),
+        (ToolKind::Camera, Some(a)) => {
+            app.tool.reset();
+            // The eye and target at eye height (5' 6" / 1750 mm) above the view's level.
+            let z = view.plan_level().map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);
+            let h = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1676.4 } else { 1750.0 };
+            if a.distance(pt) < 10.0 {
+                app.error("Click the camera target away from the camera.");
+                return;
+            }
+            if let Some(id) = app.run("Create Camera", |p| {
+                let id = edit::new_3d_view(p);
+                // Cameras are numbered: 3D View 1, 3D View 2...
+                let name = (1..).map(|n| format!("3D View {n}")).find(|n| !p.views.iter().any(|v| &v.name == n)).unwrap();
+                if let Some(v) = p.view_mut(id) {
+                    v.name = name;
+                    v.kind = ViewKind::ThreeD { eye: rc_core::geom::DVec3::new(a.x, a.y, z + h), target: rc_core::geom::DVec3::new(pt.x, pt.y, z + h), perspective: true };
+                }
+                Ok(id)
+            }) {
+                app.tool = Tool::select();
+                app.open_view(id);
+            }
+        }
         (ToolKind::Section, Some(a)) => {
             app.tool.reset();
             let depth = app.opts.section_depth;

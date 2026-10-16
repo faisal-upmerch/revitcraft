@@ -54,6 +54,8 @@ pub enum Icon {
     RefPlane,
     WorkPlane,
     Beam,
+    Globe,
+    StartingView,
     Brace,
     Truss,
     BeamSystem,
@@ -882,6 +884,18 @@ fn draw(g: &Pen, icon: Icon) {
             g.poly(&[(0.06, 0.48), (0.7, 0.26), (0.94, 0.36), (0.3, 0.58)], LBLUE, ink);
             g.poly(&[(0.06, 0.48), (0.3, 0.58), (0.3, 0.74), (0.06, 0.64)], BLUE, ink);
             g.poly(&[(0.3, 0.58), (0.94, 0.36), (0.94, 0.52), (0.3, 0.74)], Color32::from_rgb(90, 150, 220), ink);
+        }
+        Globe => {
+            // A globe with a meridian and the equator.
+            g.circle((0.5, 0.5), 0.38, LBLUE, ink);
+            g.thin_line(&[(0.12, 0.5), (0.88, 0.5)], ink);
+            let m = g.ellipse_pts((0.5, 0.5), 0.16, 0.38, 0.0, TAU, 24);
+            g.thin_line(&m, ink);
+        }
+        StartingView => {
+            // A view with a play mark.
+            g.rect(0.1, 0.18, 0.9, 0.82, Color32::WHITE, ink);
+            g.poly(&[(0.4, 0.34), (0.66, 0.5), (0.4, 0.66)], Color32::from_rgb(40, 150, 70), ink);
         }
         Brace => {
             // A diagonal member between two posts.
