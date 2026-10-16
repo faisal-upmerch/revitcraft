@@ -2629,6 +2629,17 @@ mod tests {
     }
 
     #[test]
+    fn ifc_files_load_as_links() {
+        let (mut src, lvl, wt) = project();
+        add_wall(&mut src, lvl, wt, DVec2::ZERO, DVec2::new(5000.0, 0.0), 3000.0).unwrap();
+        let path = std::env::temp_dir().join(format!("rc_link_test_{}.ifc", std::process::id()));
+        std::fs::write(&path, crate::ifc::export(&src, "link.ifc", "2026-01-01T00:00:00")).unwrap();
+        let model = crate::io::load_link(&path).unwrap();
+        let _ = std::fs::remove_file(&path);
+        assert!(model.elements.iter().any(|e| matches!(e.kind, ElementKind::Wall(_))));
+    }
+
+    #[test]
     fn linked_models_draw_in_plans_and_3d() {
         let (mut src, lvl, wt) = project();
         add_wall(&mut src, lvl, wt, DVec2::ZERO, DVec2::new(5000.0, 0.0), 3000.0).unwrap();

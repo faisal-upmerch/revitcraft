@@ -79,10 +79,16 @@ pub fn load(path: &Path) -> Result<Project, String> {
     Ok(p)
 }
 
-/// Reads a linked project file (its own links are not followed).
+/// Reads a linked file: a project, or an IFC model (Link IFC). Links of links are not followed.
 pub fn load_link(path: &Path) -> Result<std::sync::Arc<Project>, String> {
-    let s = std::fs::read_to_string(path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
-    from_json(&s).map(std::sync::Arc::new)
+    let bytes = std::fs::read(path).map_err(|e| format!("Could not read {}: {e}", path.display()))?;
+    let text = String::from_utf8_lossy(&bytes);
+    let ifc = path.extension().is_some_and(|e| e.eq_ignore_ascii_case("ifc"));
+    if ifc {
+        crate::ifc::import(&text).map(|r| std::sync::Arc::new(r.project))
+    } else {
+        from_json(&text).map(std::sync::Arc::new)
+    }
 }
 
 /// Family files carry the family and the materials it references.

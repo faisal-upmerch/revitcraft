@@ -562,6 +562,21 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 }
             }
         }
+        LinkIfc => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("IFC", &["ifc"]).pick_file() {
+                match io::load_link(&path) {
+                    Ok(model) => {
+                        let name = path.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+                        let file = path.display().to_string();
+                        let model = (*model).clone();
+                        if let Some(id) = app.run("Link IFC", |p| edit::add_link(p, &name, &file, model)) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
         LoadAsGroup => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Project", &[io::EXTENSION]).pick_file() {
                 match io::load(&path) {
