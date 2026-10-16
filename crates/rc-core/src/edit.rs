@@ -807,6 +807,14 @@ fn tri_area(poly: &[DVec2], [a, b, c]: [usize; 3]) -> f64 {
     geom::cross2(poly[b] - poly[a], poly[c] - poly[a]).abs() / 2.0
 }
 
+/// Places Model Text lying on `level` at `at`.
+pub fn add_model_text(p: &mut Project, level: Id, at: DVec2, text: &str, size: f64, depth: f64) -> Result<Id, String> {
+    if text.trim().is_empty() {
+        return Err("Type the text to place.".into());
+    }
+    Ok(push(p, ElementKind::ModelText(ModelText { level, position: at, elevation: 0.0, rotation_deg: 0.0, text: text.to_string(), size, depth, align: 0, material: String::new(), vertical: false })))
+}
+
 /// Creates a ramp from its runs (from the base level to the level above), with railings along
 /// both sides when requested.
 pub fn add_ramp(p: &mut Project, base_level: Id, type_id: Id, runs: Vec<StairRun>, railing_type: Option<Id>) -> Result<Id, String> {
@@ -1082,6 +1090,11 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
                 r.start = f(r.start);
                 r.end = f(r.end);
             }
+        }
+        ElementKind::ModelText(t) => {
+            let x = vec(DVec2::from_angle(t.rotation_deg.to_radians()));
+            t.position = f(t.position);
+            t.rotation_deg = x.y.atan2(x.x).to_degrees().rem_euclid(360.0);
         }
         ElementKind::Railing(r) => poly(&mut r.path),
         ElementKind::Line(l) => {
@@ -1642,6 +1655,7 @@ pub fn copy_to_levels(p: &mut Project, ids: &[Id], levels: &[Id]) -> Result<Vec<
                         r.base_level = lv;
                         r.top_level = above_dst;
                     }
+                    ElementKind::ModelText(t) => t.level = lv,
                     ElementKind::Railing(r) => r.level = lv,
                     ElementKind::Shaft(s) => s.base_level = lv,
                     ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => s.level = lv,

@@ -51,6 +51,7 @@ pub enum ToolKind {
     Level,
     RefPlane,
     ModelLine,
+    ModelText,
     DetailLine,
     RoomSeparator,
     AreaBoundary,
@@ -129,6 +130,7 @@ impl ToolKind {
             ToolKind::Level => "Level",
             ToolKind::RefPlane => "Reference Plane",
             ToolKind::ModelLine => "Lines",
+            ToolKind::ModelText => "Model Text",
             ToolKind::DetailLine => "Detail Lines",
             ToolKind::RoomSeparator => "Room Separation",
             ToolKind::AreaBoundary => "Area Boundary",
@@ -223,7 +225,8 @@ impl ToolKind {
     pub fn needs_plan(self) -> bool {
         matches!(
             self,
-            ToolKind::Wall
+            ToolKind::ModelText
+                | ToolKind::Wall
                 | ToolKind::Component
                 | ToolKind::Column
                 | ToolKind::StructColumn
@@ -656,6 +659,13 @@ pub struct ToolOptions {
     pub ceiling_offset: f64,
     /// Structural columns: Slanted Column placement (base click, then top click).
     pub column_slanted: bool,
+    /// Level tool: Plan View Types to create (floor plan, ceiling plan) and the Offset.
+    pub level_plan_types: (bool, bool),
+    pub level_offset: f64,
+    /// Model Text being placed: its text, Text Size (capital height) and Depth.
+    pub model_text: String,
+    pub model_text_size: f64,
+    pub model_text_depth: f64,
     /// Mullion placement: 0 = Grid Line, 1 = Grid Line Segment, 2 = All Grid Lines.
     pub mullion_mode: u8,
     /// Options bar "Radius" while chaining lines: corners are filleted with `radius`.
@@ -801,6 +811,11 @@ impl ToolOptions {
             ceiling_offset: if imperial { 2743.2 } else { 2600.0 },
             use_radius: false,
             mullion_mode: 0,
+            model_text: String::new(),
+            level_plan_types: (true, true),
+            level_offset: 0.0,
+            model_text_size: if imperial { 304.8 } else { 300.0 },
+            model_text_depth: if imperial { 25.4 } else { 50.0 },
             column_slanted: false,
             stair_location: StairLocation::RunCenter,
             stair_base_offset: 0.0,

@@ -119,17 +119,28 @@ pub fn add_level(p: &mut Project, name: &str, elevation: f64, with_plan: bool) -
     let id = p.new_id();
     p.elements.push(Element::new(id, ElementKind::Level(Level { name: name.into(), elevation, building_story: true })));
     if with_plan {
+        add_level_views(p, id, true, true);
+    }
+    id
+}
+
+/// The plan views of a new level: a floor plan and/or a reflected ceiling plan.
+pub fn add_level_views(p: &mut Project, id: Id, floor: bool, ceiling: bool) {
+    let name = p.level_name(id);
+    let name = name.as_str();
+    if floor {
         let vid = p.new_id();
         let mut v = View::new(vid, name, 100.0, ViewKind::FloorPlan { level: id, cut_height: 1200.0, room_colors: false });
         v.phase = p.phases.last().map(|ph| ph.id);
         p.views.push(v);
+    }
+    if ceiling {
         let cid = p.new_id();
         let mut c = View::new(cid, name, 100.0, ViewKind::CeilingPlan { level: id });
         c.phase = p.phases.last().map(|ph| ph.id);
         c.view_range = ViewRange { top: 3000.0, cut: 2300.0, bottom: 0.0, depth: 0.0 };
         p.views.push(c);
     }
-    id
 }
 
 fn schedule(p: &mut Project, name: &str, category: Category, fields: &[&str], sort: &[&str], totals: &[&str]) {

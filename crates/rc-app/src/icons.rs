@@ -723,9 +723,6 @@ fn draw(g: &Pen, icon: Icon) {
             g.rect_thin(0.08, 0.76, 0.16, 0.84, Color32::WHITE, ink);
             g.rect_thin(0.74, 0.16, 0.82, 0.24, Color32::WHITE, ink);
         }
-        ModelText => {
-            g.text_bold((0.5, 0.5), "3D", 0.52, BLUE);
-        }
         PlaceGroup | CreateGroup => {
             g.rect(0.12, 0.2, 0.52, 0.56, LBLUE, ink);
             g.circle((0.66, 0.66), 0.2, LGREEN, ink);
@@ -796,6 +793,13 @@ fn draw(g: &Pen, icon: Icon) {
                 g.rect(x - 0.05, 0.08, x + 0.05, 0.92, BLUE, ink);
             }
             g.rect(0.12, 0.45, 0.88, 0.55, BLUE, ink);
+        }
+        ModelText => {
+            // A raised "A" in perspective.
+            g.shade(&[(0.12, 0.88), (0.42, 0.1), (0.58, 0.1), (0.88, 0.88), (0.7, 0.88), (0.5, 0.32), (0.3, 0.88)], G1, G3, false);
+            g.closed(&[(0.12, 0.88), (0.42, 0.1), (0.58, 0.1), (0.88, 0.88), (0.7, 0.88), (0.5, 0.32), (0.3, 0.88)], ink);
+            g.line(&[(0.36, 0.62), (0.64, 0.62)], ink);
+            g.line(&[(0.58, 0.1), (0.66, 0.05), (0.96, 0.82), (0.88, 0.88)], BLUE);
         }
         PrintPreview => {
             g.sheet(0.12, 0.06, 0.7, 0.86);

@@ -89,7 +89,7 @@ fn architecture() -> Vec<Panel> {
             ],
         ),
         panel("Circulation", vec![Big(C::Railing), Big(C::Ramp), Big(C::Stair)]),
-        panel("Model", vec![Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
+        panel("Model", vec![Labeled("Model\nText", C::ModelText, vec![]), Labeled("Model\nLine", C::ModelLine, vec![]), Labeled("Model\nGroup", C::PlaceGroup, vec![C::PlaceGroup, C::CreateGroup])]),
         panel(
             "Room & Area",
             vec![

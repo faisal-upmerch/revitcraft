@@ -705,6 +705,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
     walls_graphics(c, d);
     stairs_graphics(c, d);
     ramps_graphics(c, d);
+    model_text_graphics(c, d);
 
     // Roofs: overhead (dashed) when above the cut on this level, projection when below.
     for e in &p.elements {
@@ -1428,6 +1429,37 @@ fn stairs_graphics(c: &Ctx, d: &mut Drawing) {
             // Landings above the cut plane show dashed, like the runs above it.
             let above = base_level && *z > c.cut_z;
             d.line(Some(e.id), poly.clone(), true, if above { HIDDEN } else { MEDIUM });
+        }
+        style_element(c, e, d, start);
+    }
+}
+
+// ---------------------------------------------------------------- model text
+
+/// Model text in plan: lying text as its glyph outlines, upright text as its footprint.
+fn model_text_graphics(c: &Ctx, d: &mut Drawing) {
+    let p = c.p;
+    for e in &p.elements {
+        let ElementKind::ModelText(t) = &e.kind else { continue };
+        if t.level != c.level || !analysis::visible_in(p, c.view, e) {
+            continue;
+        }
+        let start = d.prims.len();
+        let z = p.level_elevation(t.level) + t.elevation;
+        if t.vertical {
+            let cs = crate::model_text::plan_contours(&ModelText { vertical: false, ..t.clone() });
+            let xs: Vec<f64> = cs.iter().flatten().map(|q| (*q - t.position).dot(DVec2::from_angle(t.rotation_deg.to_radians()))).collect();
+            if let (Some(lo), Some(hi)) = (xs.iter().cloned().reduce(f64::min), xs.iter().cloned().reduce(f64::max)) {
+                let dir = DVec2::from_angle(t.rotation_deg.to_radians());
+                let n = geom::perp(dir);
+                let rect = vec![t.position + dir * lo, t.position + dir * hi, t.position + dir * hi - n * t.depth, t.position + dir * lo - n * t.depth];
+                let cut = z <= c.cut_z && c.cut_z <= z + t.size * 1.4;
+                d.line(Some(e.id), rect, true, if cut { MEDIUM } else { THIN });
+            }
+        } else {
+            for contour in crate::model_text::plan_contours(t) {
+                d.line(Some(e.id), contour, true, THIN);
+            }
         }
         style_element(c, e, d, start);
     }
@@ -2210,6 +2242,15 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
             v.extend(lay.landings.into_iter().map(|(poly, _)| poly));
             v
         }
+        ElementKind::ModelText(t) => {
+            let pts: Vec<DVec2> = crate::model_text::plan_contours(t).into_iter().flatten().collect();
+            if pts.is_empty() {
+                vec![circle(t.position, 300.0, 12)]
+            } else {
+                let (mn, mx) = geom::bounds(pts.into_iter());
+                vec![vec![mn, DVec2::new(mx.x, mn.y), mx, DVec2::new(mn.x, mx.y)]]
+            }
+        }
         ElementKind::Railing(r) => vec![r.path.clone()],
         ElementKind::WallFoundation(f) => p.wall(f.wall).map(|w| vec![analysis::wall_path(w)]).unwrap_or_default(),
         ElementKind::Dimension(dim) => {
@@ -2277,6 +2318,7 @@ pub fn in_plan(p: &Project, view: &View, e: &Element) -> bool {
         ElementKind::Line(l) => l.level.is_none_or(|lv| lv == level),
         ElementKind::Stair(s) => s.base_level == level || s.top_level == Some(level),
         ElementKind::Ramp(r) => r.base_level == level || r.top_level == Some(level),
+        ElementKind::ModelText(t) => t.level == level,
         ElementKind::Ceiling(c) => c.level == level && matches!(view.kind, ViewKind::CeilingPlan { .. }),
         ElementKind::Area(a) => a.level == level && matches!(view.kind, ViewKind::AreaPlan { .. }),
         ElementKind::AreaBoundary(s) => s.level == level && matches!(view.kind, ViewKind::AreaPlan { .. }),

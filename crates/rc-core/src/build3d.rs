@@ -45,6 +45,7 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         ElementKind::Ceiling(c) => ceiling(p, e.id, c),
         ElementKind::Stair(s) => stair(p, s),
         ElementKind::Ramp(r) => ramp(p, r),
+        ElementKind::ModelText(t) => crate::model_text::mesh(p, t),
         ElementKind::Railing(r) => railing(p, r),
         ElementKind::WallFoundation(f) => wall_foundation(p, f),
         ElementKind::Instance(i) => family_geom::instance_mesh(p, i),

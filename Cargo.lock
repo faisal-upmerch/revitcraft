@@ -2194,6 +2194,7 @@ dependencies = [
  "glam",
  "serde",
  "serde_json",
+ "skrifa",
  "uuid",
 ]
 

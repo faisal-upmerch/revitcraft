@@ -157,6 +157,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::Callout => if n == 0 { "Click the first corner of the callout.".into() } else { "Click the opposite corner.".into() },
         ToolKind::ElevationMarker => "Click to place the elevation marker; it looks towards the building.".into(),
         ToolKind::CurtainGrid => "Click on a curtain wall to add a grid line.".into(),
+        ToolKind::ModelText => "Click to place model text.".into(),
         ToolKind::Mullion => "Select a grid line to create mullion.".into(),
         ToolKind::VerticalOpening => "Select a roof, floor, or ceiling.".into(),
         ToolKind::DormerOpening => "Select the roof to be cut by the dormer opening.".into(),
@@ -402,6 +403,22 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
         }
         ToolKind::Level => level_tool(app, painter, xf, view, point, clicked),
         ToolKind::Text => text_tool(app, ui, xf, view, point, clicked),
+        ToolKind::ModelText => {
+            // The text's outline follows the cursor; a click places it on the level.
+            let Some(pt) = point else { return };
+            let Some(level) = view.plan_level() else { return };
+            let t = ModelText { level, position: pt, elevation: 0.0, rotation_deg: 0.0, text: app.opts.model_text.clone(), size: app.opts.model_text_size, depth: app.opts.model_text_depth, align: 0, material: String::new(), vertical: false };
+            for c in rc_core::model_text::plan_contours(&t) {
+                painter.add(egui::Shape::closed_line(c.iter().map(|q| xf.s(*q)).collect(), preview_stroke()));
+            }
+            if clicked {
+                let (text, size, depth) = (t.text.clone(), t.size, t.depth);
+                if let Some(id) = app.run("Model Text", |p| edit::add_model_text(p, level, pt, &text, size, depth)) {
+                    app.set_tool(ToolKind::Select);
+                    app.select(vec![id]);
+                }
+            }
+        }
         ToolKind::Dimension(k) => dim_tool(app, painter, xf, view, d, k, cursor, point, clicked),
         ToolKind::Symbol => {
             if let Some(pt) = point {
@@ -1864,7 +1881,7 @@ fn level_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, poin
         return;
     }
     let Some(pt) = point else { return };
-    let y = pt.y;
+    let y = pt.y + app.opts.level_offset;
     let a = app.tool.pts.first().copied().unwrap_or(pt);
     painter.extend(egui::Shape::dashed_line(&[xf.s(DVec2::new(a.x, y)), xf.s(DVec2::new(pt.x, y))], Stroke::new(1.5, style::PREVIEW), 10.0, 4.0));
     let units = app.doc.data.units.clone();
@@ -1878,13 +1895,18 @@ fn level_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, poin
     }
     app.tool.reset();
     let make_plan = app.opts.make_plan;
+    let (floor, ceiling) = app.opts.level_plan_types;
     app.run("Create Level", |p| {
         let n = p.levels().len() + 1;
         let name = edit::unique_name(p.levels().iter().map(|(_, l)| l.name.clone()), &format!("Level {n}"));
         if p.levels().iter().any(|(_, l)| (l.elevation - y).abs() < 1.0) {
             return Err("A level already exists at this elevation.".into());
         }
-        Ok(rc_core::defaults::add_level(p, &name, y, make_plan))
+        let id = rc_core::defaults::add_level(p, &name, y, false);
+        if make_plan {
+            rc_core::defaults::add_level_views(p, id, floor, ceiling);
+        }
+        Ok(id)
     });
 }
 

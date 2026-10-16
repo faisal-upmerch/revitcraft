@@ -19,6 +19,7 @@ pub mod keynote;
 pub mod library;
 pub mod mesh;
 pub mod model;
+pub mod model_text;
 pub mod params;
 pub mod pdf;
 pub mod plan;

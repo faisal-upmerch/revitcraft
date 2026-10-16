@@ -192,6 +192,17 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             mark_comments(&mut d);
             phasing(p, &mut d);
         }
+        ElementKind::ModelText(_) => {
+            d.push(def("Work Plane", CONSTRAINTS, v(Text), true, false));
+            d.push(def("Elevation", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Text", GRAPHICS, v(Text), false, false));
+            d.push(def("Horizontal Align", GRAPHICS, choice(&[0u8, 1, 2], |a: u8| ["Left", "Center", "Right"][a as usize]), false, false));
+            d.push(def("Material", MATERIALS, v(Material), false, false));
+            d.push(def("Depth", DIMENSIONS, v(Length), false, false));
+            d.push(def("Text Size", DIMENSIONS, v(Length), false, false));
+            mark_comments(&mut d);
+            phasing(p, &mut d);
+        }
         ElementKind::Ramp(_) => {
             type_identity(&mut d);
             d.push(def("Base Level", CONSTRAINTS, PKind::Level, false, false));
@@ -665,6 +676,16 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
                 _ => sys_common(st, name),
             }
         }
+        ElementKind::ModelText(t) => match name {
+            "Work Plane" => text(format!("{} : {}", if t.vertical { "Vertical" } else { "Level" }, p.level_name(t.level))),
+            "Elevation" => num(t.elevation),
+            "Text" => text(t.text.clone()),
+            "Horizontal Align" => text(["Left", "Center", "Right"][t.align.min(2) as usize]),
+            "Material" => text(if t.material.is_empty() { "<By Category>".to_string() } else { t.material.clone() }),
+            "Depth" => num(t.depth),
+            "Text Size" => num(t.size),
+            _ => None,
+        },
         ElementKind::Ramp(r) => match name {
             "Base Level" => text(p.level_name(r.base_level)),
             "Base Offset" => num(r.base_offset),
@@ -1109,6 +1130,20 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
                 }
                 s.desired_risers = r as u32;
             }
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::ModelText(m) => match name {
+            "Elevation" => m.elevation = n(),
+            "Text" => {
+                if t().trim().is_empty() {
+                    return Err("Model text cannot be empty.".into());
+                }
+                m.text = t();
+            }
+            "Horizontal Align" => m.align = ["Left", "Center", "Right"].iter().position(|x| *x == t()).unwrap_or(0) as u8,
+            "Material" => m.material = if t() == "<By Category>" { String::new() } else { t() },
+            "Depth" => m.depth = positive(n(), "Depth")?,
+            "Text Size" => m.size = positive(n(), "Text size")?,
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Ramp(r) => match name {

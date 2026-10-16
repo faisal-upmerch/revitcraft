@@ -342,6 +342,7 @@ pub enum ElementKind {
     Ceiling(Ceiling),
     Stair(Stair),
     Ramp(Ramp),
+    ModelText(ModelText),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -402,6 +403,7 @@ impl Element {
             ElementKind::Ceiling(_) => Category::Ceilings,
             ElementKind::Stair(_) => Category::Stairs,
             ElementKind::Ramp(_) => Category::Ramps,
+            ElementKind::ModelText(_) => Category::GenericModels,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -437,6 +439,7 @@ impl Element {
             ElementKind::Ceiling(c) => Some(c.level),
             ElementKind::Stair(s) => Some(s.base_level),
             ElementKind::Ramp(r) => Some(r.base_level),
+            ElementKind::ModelText(t) => Some(t.level),
             ElementKind::Railing(r) => Some(r.level),
             ElementKind::Shaft(s) => Some(s.base_level),
             ElementKind::RoomSeparation(s) | ElementKind::AreaBoundary(s) => Some(s.level),
@@ -838,6 +841,32 @@ pub struct Stair {
     /// Multistory Top Level: the stair repeats storey by storey up to this level.
     #[serde(default)]
     pub multistory_top: Option<Id>,
+}
+
+/// Model Text: 3D text on a work plane — lying on its level, or upright (signage on a wall).
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ModelText {
+    pub level: Id,
+    /// Insertion point: the first baseline's left end, centre or right end (by `align`).
+    pub position: DVec2,
+    /// Height of the work plane above the level.
+    #[serde(default)]
+    pub elevation: f64,
+    /// Direction of the text line (degrees from the x axis).
+    #[serde(default)]
+    pub rotation_deg: f64,
+    pub text: String,
+    /// Text Size: capital height.
+    pub size: f64,
+    pub depth: f64,
+    /// Horizontal Align: 0 left, 1 centre, 2 right.
+    #[serde(default)]
+    pub align: u8,
+    #[serde(default)]
+    pub material: String,
+    /// Upright on a vertical work plane (else lying on the level).
+    #[serde(default)]
+    pub vertical: bool,
 }
 
 /// A ramp: straight runs at one slope from its base to its top, with landings between runs.

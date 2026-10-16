@@ -63,6 +63,10 @@ pub struct Dialogs {
     pub print_selected: bool,
     pub print_setup: bool,
     pub print_preview: Option<Id>,
+    /// Model Text's Edit Text dialog.
+    pub model_text: Option<String>,
+    /// The Level tool's Plan View Types.
+    pub plan_view_types: bool,
     pub options: bool,
     pub exit: bool,
     pub create_group: Option<String>,
@@ -427,6 +431,8 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     print_dialog(app, ctx);
     print_setup_dialog(app, ctx);
     print_preview(app, ctx);
+    model_text_dialog(app, ctx);
+    plan_view_types_dialog(app, ctx);
     new_family_dialog(app, ctx);
     in_place_dialog(app, ctx);
     work_plane_viewer(app, ctx);
@@ -703,6 +709,75 @@ fn print_settings_ui(ui: &mut egui::Ui, st: &mut rc_core::sheet::PrintSettings) 
             crate::style::check(ui, &mut st.hide_scope_boxes, "Hide scope boxes");
         }
     }
+}
+
+/// The Level tool's Plan View Types: which plans each new level gets.
+fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.plan_view_types {
+        return;
+    }
+    let id = egui::Id::new("plan-view-types");
+    let mut pick: (bool, bool) = ctx.data(|m| m.get_temp(id)).unwrap_or(app.opts.level_plan_types);
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Plan View Types").open(&mut open).resizable(false).default_width(280.0).show(ctx, |ui| {
+        ui.label("Select view types to create:");
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(4.0).show(ui, |ui| {
+            ui.set_min_width(250.0);
+            if ui.selectable_label(pick.1, "Ceiling Plan").clicked() {
+                pick.1 = !pick.1;
+            }
+            if ui.selectable_label(pick.0, "Floor Plan").clicked() {
+                pick.0 = !pick.0;
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, pick.0 || pick.1) {
+                ok = true;
+            }
+        });
+    });
+    ctx.data_mut(|m| m.insert_temp(id, pick));
+    if ok {
+        app.opts.level_plan_types = pick;
+    }
+    if ok || cancel || !open {
+        app.dialogs.plan_view_types = false;
+        ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+/// Model Text's "Edit Text": the text to place (several lines allowed).
+fn model_text_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(mut text) = app.dialogs.model_text.clone() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Edit Text").open(&mut open).resizable(false).default_width(380.0).show(ctx, |ui| {
+        let r = ui.add(egui::TextEdit::multiline(&mut text).desired_rows(6).desired_width(350.0));
+        if !r.has_focus() && text.is_empty() {
+            r.request_focus();
+        }
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, !text.trim().is_empty()) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        app.dialogs.model_text = None;
+        app.opts.model_text = text;
+        app.set_tool(crate::tools::ToolKind::ModelText);
+        return;
+    }
+    app.dialogs.model_text = if cancel || !open { None } else { Some(text) };
 }
 
 /// File > Print: printer (PDF), file, print range and settings, as in the reference app.

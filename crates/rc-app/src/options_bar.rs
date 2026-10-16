@@ -401,7 +401,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                 }
             }
             ToolKind::Level => {
+                // As in the reference app: Make Plan View, Plan View Types..., Offset.
                 crate::style::check(ui, &mut app.opts.make_plan, "Make Plan View");
+                if ui.add_enabled(app.opts.make_plan, egui::Button::new("Plan View Types...")).clicked() {
+                    app.dialogs.plan_view_types = true;
+                }
+                ui.label("Offset:");
+                let mut o = app.opts.level_offset;
+                if length_field(ui, app, "lvl-off", &mut o, 70.0) {
+                    app.opts.level_offset = o;
+                }
             }
             ToolKind::Section => {
                 ui.label("Far Clip Offset:");
