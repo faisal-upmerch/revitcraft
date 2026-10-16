@@ -14,6 +14,9 @@ use std::collections::HashSet;
 /// Is a command available right now (greys out ribbon buttons)?
 pub fn enabled(app: &App, cmd: Cmd) -> bool {
     use Cmd::*;
+    if let Some(e) = dialogs::schedule_tools::enabled(app, cmd) {
+        return e;
+    }
     let view = app.active_view();
     let plan = view.is_some_and(|v| v.plan_level().is_some());
     let graphical_2d = view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. }));
@@ -106,9 +109,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         ViewRange => plan,
         DuplicateView | DuplicateWithDetailing | TemplateFromView | VisibilityGraphics | ZoomFit | ZoomRegion | ZoomOut => view.is_some(),
         PrevPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, true)),
-        ScheduleFields | ScheduleFilter | ScheduleSorting | SchedCalculated | SchedColInsert | SchedColUnhide => app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
-        SchedColDelete | SchedColHide | SchedAlignLeft | SchedAlignCenter | SchedAlignRight => app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_)) && app.sched_column.as_ref().is_some_and(|(id, _)| *id == v.id)),
-        SchedFormatUnit | SchedCombine | SchedColResize | SchedRowInsert | SchedRowInsertData | SchedRowDelete | SchedRowResize | SchedMerge | SchedInsertImage | SchedClearCell | SchedGroup | SchedUngroup | SchedFreeze | SchedShading | SchedBorders | SchedReset | SchedFont | SchedAlignVertical | SchedSplit => false,
+        ScheduleFields | ScheduleFilter | ScheduleSorting => app.active_view().is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
         HighlightInModel => !app.selection.is_empty(),
         NextPanZoom => app.active.is_some_and(|v| canvas::can_step(app, v, false)),
         _ => true,
@@ -116,6 +117,9 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
 }
 
 pub fn exec(app: &mut App, cmd: Cmd) {
+    if dialogs::schedule_tools::exec(app, cmd) {
+        return;
+    }
     // In the family editor, RP and DI draw family reference planes and dimensions.
     let cmd = match cmd {
         Cmd::RefPlane if app.family_editor.is_some() => Cmd::FeRefPlane,
@@ -658,55 +662,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         SpotCoordinate => app.set_tool(ToolKind::Dimension(DimKind::SpotCoordinate)),
         SpotSlope => app.set_tool(ToolKind::Dimension(DimKind::SpotSlope)),
         FindReplace => app.dialogs.find_replace = Some(Default::default()),
-        SchedFormatUnit | SchedCombine | SchedColResize | SchedRowInsert | SchedRowInsertData | SchedRowDelete | SchedRowResize | SchedMerge | SchedInsertImage | SchedClearCell | SchedGroup | SchedUngroup | SchedFreeze | SchedShading | SchedBorders | SchedReset | SchedFont | SchedAlignVertical | SchedSplit => {}
-        SchedCalculated | SchedColInsert => {
-            if let Some(v) = app.active_view().filter(|v| matches!(v.kind, ViewKind::Schedule(_))).map(|v| v.id) {
-                app.dialogs.schedule_props = Some((v, 0));
-            }
-        }
-        SchedColDelete | SchedColHide | SchedColUnhide | SchedAlignLeft | SchedAlignCenter | SchedAlignRight => {
-            let Some(v) = app.active_view().filter(|v| matches!(v.kind, ViewKind::Schedule(_))).cloned() else { return };
-            let field = app.sched_column.clone().filter(|(id, _)| *id == v.id).map(|(_, f)| f);
-            let mut nv = v.clone();
-            let ViewKind::Schedule(def) = &mut nv.kind else { return };
-            let name = match cmd {
-                SchedColDelete => {
-                    let Some(f) = &field else { return };
-                    def.fields.retain(|x| x != f);
-                    def.formats.remove(f);
-                    app.sched_column = None;
-                    "Delete Column"
-                }
-                SchedColHide => {
-                    let Some(f) = &field else { return };
-                    def.formats.entry(f.clone()).or_default().hidden = true;
-                    app.sched_column = None;
-                    "Hide Column"
-                }
-                SchedColUnhide => {
-                    for fm in def.formats.values_mut() {
-                        fm.hidden = false;
-                    }
-                    "Unhide All Columns"
-                }
-                _ => {
-                    let Some(f) = &field else { return };
-                    def.formats.entry(f.clone()).or_default().align = match cmd {
-                        SchedAlignCenter => 1,
-                        SchedAlignRight => 2,
-                        _ => 0,
-                    };
-                    "Align Horizontal"
-                }
-            };
-            let vid = v.id;
-            app.run(name, |p| {
-                if let Some(x) = p.view_mut(vid) {
-                    *x = nv;
-                }
-                Ok(())
-            });
-        }
+        // Handled by dialogs::schedule_tools.
+        SchedFormatUnit | SchedCalculated | SchedCombine | SchedColInsert | SchedColDelete | SchedColResize | SchedColHide | SchedColUnhide | SchedRowInsert | SchedRowInsertAbove | SchedRowInsertBelow | SchedRowInsertData | SchedRowDelete | SchedRowResize | SchedMerge | SchedInsertImage | SchedClearCell | SchedGroup | SchedUngroup | SchedFreeze | SchedShading | SchedBorders | SchedReset | SchedFont | SchedAlignLeft | SchedAlignCenter | SchedAlignRight | SchedAlignVertical | SchedAlignTop | SchedAlignMiddle | SchedAlignBottom | SchedSplit => {}
         BeamAnnotations => {
             if app.active_view().is_some_and(|v| v.plan_level().is_some()) {
                 app.dialogs.beam_annotations = Some(dialogs::BeamAnnoState::new(app));

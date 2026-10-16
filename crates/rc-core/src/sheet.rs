@@ -14,7 +14,7 @@ pub enum SheetPrim {
     /// `id`: the element drawn (None for the sheet's own graphics), for export layers.
     Line { pts: Vec<DVec2>, closed: bool, width: f32, color: [u8; 3], dash: plan::Dash, id: Option<Id> },
     Fill { tris: Vec<[DVec2; 3]>, color: [u8; 4], id: Option<Id> },
-    Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32, id: Option<Id> },
+    Text { pos: DVec2, text: String, size: f32, anchor: Anchor, bold: bool, angle: f32, id: Option<Id>, color: [u8; 3] },
     /// A rendered 3D image of `view` fills this rectangle.
     Image { view: Id, min: DVec2, max: DVec2 },
     /// A project image asset (Import/Link Image) fills this rectangle.
@@ -59,30 +59,69 @@ pub fn view_drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint
     Some(d)
 }
 
-fn schedule_size(t: &schedule::Table) -> (Vec<f64>, f64, f64) {
-    let widths: Vec<f64> = t
-        .columns
-        .iter()
-        .enumerate()
-        .map(|(ci, c)| {
-            let longest = t.rows.iter().map(|r| r.cells[ci].chars().count()).max().unwrap_or(0).max(c.heading.chars().count());
-            longest as f64 * 1.9 + 4.0
-        })
-        .collect();
-    let row_h = 6.0;
-    let w: f64 = widths.iter().sum();
-    let h = row_h * (t.rows.len() as f64 + 2.0);
-    (widths, w.max(40.0), h)
+/// Paper size of a schedule's grid.
+fn grid_size(g: &schedule::Grid) -> DVec2 {
+    DVec2::new(g.widths.iter().sum::<f64>().max(40.0), g.rows.iter().map(|r| r.height).sum::<f64>().max(6.0))
+}
+
+/// Draws a schedule grid with its top-left corner at `origin` (paper mm): shading, borders,
+/// text (aligned, sized, coloured, underlined) and images.
+pub fn draw_grid(out: &mut Vec<SheetPrim>, g: &schedule::Grid, origin: DVec2, outline: bool) {
+    let mut y = origin.y;
+    for row in &g.rows {
+        let mut ci = 0;
+        let mut x = origin.x;
+        for c in &row.cells {
+            let w: f64 = g.widths[ci.min(g.widths.len() - 1)..(ci + c.span).min(g.widths.len())].iter().sum();
+            let (a, b) = (DVec2::new(x, y - row.height), DVec2::new(x + w, y));
+            if let Some(col) = c.shading {
+                out.push(SheetPrim::Fill { tris: vec![[a, DVec2::new(b.x, a.y), b], [a, b, DVec2::new(a.x, b.y)]], color: [col[0], col[1], col[2], 255], id: None });
+            }
+            if c.border > 0 {
+                let wt = [0.0, 0.18, 0.35, 0.5][c.border.min(3) as usize];
+                out.push(SheetPrim::Line { pts: vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)], closed: true, width: wt, color: [0, 0, 0], dash: plan::Dash::Solid, id: None });
+            }
+            if let Some(asset) = c.image {
+                out.push(SheetPrim::Picture { asset, min: a + DVec2::splat(0.5), max: b - DVec2::splat(0.5), id: None });
+            }
+            if !c.text.is_empty() {
+                let ty = match c.valign {
+                    0 => b.y - c.size - 0.8,
+                    2 => a.y + 1.0,
+                    _ => (a.y + b.y) / 2.0 - c.size * 0.35,
+                };
+                let (tx, anchor) = match c.halign {
+                    1 => ((a.x + b.x) / 2.0, Anchor::Center),
+                    2 => (b.x - 1.5, Anchor::Right),
+                    _ => (a.x + 1.5, Anchor::Left),
+                };
+                out.push(SheetPrim::Text { pos: DVec2::new(tx, ty), text: c.text.clone(), size: c.size as f32, anchor, bold: c.bold, angle: 0.0, id: None, color: c.color });
+                if c.underline {
+                    let tw = c.text.chars().count() as f64 * c.size * 0.55;
+                    let x0 = match anchor {
+                        Anchor::Center => tx - tw / 2.0,
+                        Anchor::Right => tx - tw,
+                        _ => tx,
+                    };
+                    out.push(SheetPrim::Line { pts: vec![DVec2::new(x0, ty - 0.4), DVec2::new(x0 + tw, ty - 0.4)], closed: false, width: 0.18, color: c.color, dash: plan::Dash::Solid, id: None });
+                }
+            }
+            x += w;
+            ci += c.span;
+        }
+        y -= row.height;
+    }
+    if outline {
+        let w: f64 = g.widths.iter().sum();
+        out.push(SheetPrim::Line { pts: rect(DVec2::new(origin.x, y), DVec2::new(origin.x + w, origin.y)), closed: true, width: 0.5, color: [0, 0, 0], dash: plan::Dash::Solid, id: None });
+    }
 }
 
 /// Paper size of a view placed on a sheet.
 pub fn viewport_size(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> DVec2 {
     match &view.kind {
         ViewKind::ThreeD { .. } => DVec2::new(160.0, 120.0),
-        ViewKind::Schedule(def) => {
-            let (_, w, h) = schedule_size(&schedule::build(p, def));
-            DVec2::new(w, h)
-        }
+        ViewKind::Schedule(def) => grid_size(&schedule::layout(p, def, &view.name, None)),
         ViewKind::Sheet(_) => DVec2::ZERO,
         _ => match view_drawing(p, view, footprints).and_then(|d| d.bounds()) {
             Some((mn, mx)) => (mx - mn) / view.scale + DVec2::splat(10.0),
@@ -98,7 +137,10 @@ pub fn viewport_boxes(p: &Project, sheet: &Sheet, footprints: &HashMap<Id, Footp
         .enumerate()
         .filter_map(|(index, vp)| {
             let v = p.view(vp.view)?;
-            let size = viewport_size(p, v, footprints);
+            let size = match (&v.kind, vp.segment) {
+                (ViewKind::Schedule(def), Some(seg)) => grid_size(&schedule::layout(p, def, &v.name, Some(seg))),
+                _ => viewport_size(p, v, footprints),
+            };
             let c = DVec2::new(vp.cx, vp.cy);
             Some(ViewportBox { index, view: vp.view, min: c - size / 2.0, max: c + size / 2.0 })
         })
@@ -110,7 +152,7 @@ fn line(out: &mut Vec<SheetPrim>, pts: Vec<DVec2>, closed: bool, width: f32) {
 }
 
 fn text(out: &mut Vec<SheetPrim>, pos: DVec2, s: impl Into<String>, size: f32, bold: bool) {
-    out.push(SheetPrim::Text { pos, text: s.into(), size, anchor: Anchor::Left, bold, angle: 0.0, id: None });
+    out.push(SheetPrim::Text { pos, text: s.into(), size, anchor: Anchor::Left, bold, angle: 0.0, id: None, color: [0, 0, 0] });
 }
 
 fn rect(a: DVec2, b: DVec2) -> Vec<DVec2> {
@@ -179,7 +221,7 @@ fn place_drawing(out: &mut Vec<SheetPrim>, d: Drawing, center: DVec2, scale: f64
             }
             Prim::Text { pos, text, size, anchor, angle, bold, .. } => {
                 if inside(pos) {
-                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle, id });
+                    out.push(SheetPrim::Text { pos: map(pos), text, size, anchor, bold, angle, id, color: [0, 0, 0] });
                 }
             }
             Prim::Image { asset, min, max } => {
@@ -255,57 +297,8 @@ fn viewports_layout(p: &Project, view: &View, sheet: &Sheet, footprints: &HashMa
                 line(&mut out, rect(vb.min, vb.max), true, 0.18);
             }
             ViewKind::Schedule(def) => {
-                let t = schedule::build(p, def);
-                let (widths, w, _) = schedule_size(&t);
-                let look = &def.look;
-                let row_h = 6.0;
-                let top = vb.max.y;
-                let left = vb.min.x;
-                let mut y = top;
-                if look.show_title {
-                    out.push(SheetPrim::Text { pos: DVec2::new(left + w / 2.0, y - row_h + 1.8), text: format!("<{}>", v.name), size: 3.0, anchor: Anchor::Center, bold: true, angle: 0.0, id: None });
-                    y -= row_h;
-                }
-                let grid_top = y;
-                let mut rows_all: Vec<(Vec<String>, bool, Vec<u8>)> = Vec::new();
-                if look.show_headers {
-                    rows_all.push((t.columns.iter().map(|c| c.heading.clone()).collect(), true, vec![1; t.columns.len()]));
-                }
-                if look.blank_row {
-                    rows_all.push((vec![String::new(); t.columns.len()], false, vec![]));
-                }
-                let aligns: Vec<u8> = t.columns.iter().map(|c| c.align).collect();
-                rows_all.extend(t.rows.iter().map(|r| (r.cells.clone(), matches!(r.kind, schedule::RowKind::Total | schedule::RowKind::Header), aligns.clone())));
-                for (cells, bold, al) in rows_all {
-                    if look.grid_lines {
-                        line(&mut out, vec![DVec2::new(left, y), DVec2::new(left + w, y)], false, 0.18);
-                    }
-                    let mut x = left;
-                    for (ci, c) in cells.iter().enumerate() {
-                        let wd = widths.get(ci).copied().unwrap_or(20.0);
-                        let (px, anchor) = match al.get(ci).copied().unwrap_or(0) {
-                            1 => (x + wd / 2.0, Anchor::Center),
-                            2 => (x + wd - 1.5, Anchor::Right),
-                            _ => (x + 1.5, Anchor::Left),
-                        };
-                        out.push(SheetPrim::Text { pos: DVec2::new(px, y - row_h + 1.8), text: c.clone(), size: 2.5, anchor, bold, angle: 0.0, id: None });
-                        x += wd;
-                    }
-                    y -= row_h;
-                }
-                if look.grid_lines {
-                    line(&mut out, vec![DVec2::new(left, y), DVec2::new(left + w, y)], false, 0.18);
-                    let mut x = left;
-                    for wd in &widths[..widths.len().saturating_sub(1)] {
-                        x += wd;
-                        line(&mut out, vec![DVec2::new(x, grid_top), DVec2::new(x, y)], false, 0.18);
-                    }
-                    line(&mut out, vec![DVec2::new(left, grid_top), DVec2::new(left, y)], false, 0.18);
-                    line(&mut out, vec![DVec2::new(left + w, grid_top), DVec2::new(left + w, y)], false, 0.18);
-                }
-                if look.outline {
-                    line(&mut out, rect(DVec2::new(left, y), DVec2::new(left + w, grid_top)), true, 0.5);
-                }
+                let g = schedule::layout(p, def, &v.name, vp.segment);
+                draw_grid(&mut out, &g, DVec2::new(vb.min.x, vb.max.y), def.look.outline);
                 continue;
             }
             ViewKind::Sheet(_) => continue,
@@ -323,8 +316,8 @@ fn viewports_layout(p: &Project, view: &View, sheet: &Sheet, footprints: &HashMa
         let bubble = DVec2::new(vb.min.x + 4.5, ty + 1.0);
         line(&mut out, plan::circle(bubble, 4.5, 24), true, 0.35);
         line(&mut out, vec![bubble - DVec2::new(4.5, 0.0), bubble + DVec2::new(4.5, 0.0)], false, 0.25);
-        out.push(SheetPrim::Text { pos: bubble + DVec2::new(0.0, 2.0), text: vp.detail_number.clone(), size: 2.5, anchor: Anchor::Center, bold: true, angle: 0.0, id: None });
-        out.push(SheetPrim::Text { pos: bubble - DVec2::new(0.0, 2.4), text: sheet.number.clone(), size: 1.8, anchor: Anchor::Center, bold: false, angle: 0.0, id: None });
+        out.push(SheetPrim::Text { pos: bubble + DVec2::new(0.0, 2.0), text: vp.detail_number.clone(), size: 2.5, anchor: Anchor::Center, bold: true, angle: 0.0, id: None, color: [0, 0, 0] });
+        out.push(SheetPrim::Text { pos: bubble - DVec2::new(0.0, 2.4), text: sheet.number.clone(), size: 1.8, anchor: Anchor::Center, bold: false, angle: 0.0, id: None, color: [0, 0, 0] });
         let title = if v.title_on_sheet.is_empty() { v.name.clone() } else { v.title_on_sheet.clone() };
         let tx = vb.min.x + 11.0;
         text(&mut out, DVec2::new(tx, ty + 1.0), title, 3.5, true);
@@ -344,7 +337,7 @@ fn viewports_layout(p: &Project, view: &View, sheet: &Sheet, footprints: &HashMa
                 out.push(SheetPrim::Line { pts, closed: false, width: stroke.width, color: stroke.color, dash: stroke.dash, id });
             }
             Prim::Fill { tris, color } => out.push(SheetPrim::Fill { tris, color, id }),
-            Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle, id }),
+            Prim::Text { pos, text, size, anchor, angle, .. } => out.push(SheetPrim::Text { pos, text, size, anchor, bold: false, angle, id, color: [0, 0, 0] }),
             Prim::Image { asset, min, max } => out.push(SheetPrim::Picture { asset, min, max, id }),
         }
     }
@@ -479,7 +472,7 @@ pub fn to_pdf_page_with(
                     page.fill(&t.iter().map(xy).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle, color, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, color, anchor, bold, angle as f64),
             SheetPrim::Picture { asset, min, max, .. } => {
                 if let Some(img) = picture(p, asset, settings.colors != PrintColors::Color) {
                     page.image(min.x, min.y, max.x - min.x, max.y - min.y, img);
@@ -556,7 +549,7 @@ pub fn view_to_pdf_page_with(p: &Project, view: &View, footprints: &HashMap<Id, 
                     page.fill(&t.iter().map(|q| (q.x, q.y)).collect::<Vec<_>>(), c);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, bold, angle, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, [0, 0, 0], anchor, bold, angle as f64),
+            SheetPrim::Text { pos, text, size, anchor, bold, angle, color, .. } => page.text_anchored(pos.x, pos.y, size as f64, &text, color, anchor, bold, angle as f64),
             SheetPrim::Image { .. } => {}
             SheetPrim::Picture { asset, min, max, .. } => {
                 if let Some(img) = picture(p, asset, settings.colors != PrintColors::Color) {

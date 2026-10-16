@@ -130,6 +130,7 @@ pub struct Cache {
     pub frames: HashMap<Id, Option<ViewFrame>>,
     pub snap: HashMap<Id, Rc<SnapGeom>>,
     pub tables: HashMap<Id, Rc<rc_core::schedule::Table>>,
+    pub grids: HashMap<Id, Rc<rc_core::schedule::Grid>>,
     pub bounds: Option<Option<(DVec3, DVec3)>>,
     /// Element id → index in `Project::elements`.
     pub index: Rc<HashMap<Id, usize>>,
@@ -211,8 +212,10 @@ pub struct App {
     pub save_reminder_at: f64,
     /// A walkthrough playing: (view, time of the last frame).
     pub walk_play: Option<(Id, f64)>,
-    /// The column selected in a schedule view: (view, field name).
-    pub sched_column: Option<(Id, String)>,
+    /// Cells selected in a schedule view (a run along one row with Shift).
+    pub sched_cells: Option<(Id, Vec<rc_core::schedule::CellKey>)>,
+    /// A schedule cell whose text should open for editing (after Group, for its name).
+    pub sched_edit_request: Option<(Id, rc_core::schedule::CellKey)>,
     /// Self-test runs toggle every setting: they must not save them.
     pub no_save_settings: bool,
     /// A view to open once the dock is back (views opened while the dock is drawn).
@@ -278,7 +281,8 @@ impl App {
             open_pending: None,
             no_save_settings: false,
             walk_play: None,
-            sched_column: None,
+            sched_cells: None,
+            sched_edit_request: None,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
@@ -460,6 +464,7 @@ impl App {
         self.cache.frames.clear();
         self.cache.snap.clear();
         self.cache.tables.clear();
+        self.cache.grids.clear();
         self.cache.bounds = None;
         self.cache.snapshot = None;
         self.cache.picks.clear();
@@ -572,6 +577,18 @@ impl App {
         let b = rc_core::sheet::model_bounds(&self.doc.data, &fp);
         self.cache.bounds = Some(b);
         b
+    }
+
+    /// A schedule view laid out as on a sheet (cached until the project changes).
+    pub fn grid(&mut self, view: Id) -> Option<Rc<rc_core::schedule::Grid>> {
+        if let Some(g) = self.cache.grids.get(&view) {
+            return Some(g.clone());
+        }
+        let v = self.doc.data.view(view)?;
+        let ViewKind::Schedule(def) = &v.kind else { return None };
+        let g = Rc::new(rc_core::schedule::layout(&self.doc.data, def, &v.name, None));
+        self.cache.grids.insert(view, g.clone());
+        Some(g)
     }
 
     pub fn table(&mut self, view: Id) -> Option<Rc<rc_core::schedule::Table>> {

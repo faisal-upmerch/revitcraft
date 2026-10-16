@@ -753,6 +753,9 @@ struct SchedPropsState {
     format_sel: usize,
     /// Calculated Value: (name, kind index, formula) while its dialog is open.
     calc: Option<(String, usize, String)>,
+    /// Field Format / Conditional Format open for this field.
+    fmt_open: Option<(String, FieldFormat)>,
+    cond_open: Option<(String, FieldFormat)>,
 }
 
 const CALC_KINDS: [(&str, ParamKind); 6] = [("Number", ParamKind::Number), ("Integer", ParamKind::Integer), ("Length", ParamKind::Length), ("Area", ParamKind::Area), ("Volume", ParamKind::Volume), ("Currency", ParamKind::Currency)];
@@ -802,7 +805,10 @@ fn schedule_props(app: &mut App, ctx: &egui::Context) {
     };
     let ViewKind::Schedule(orig) = v.kind.clone() else { return };
     let key = egui::Id::new(("sched-props", vid));
-    let mut st: SchedPropsState = ctx.data(|m| m.get_temp(key)).unwrap_or(SchedPropsState { def: orig.clone(), search: String::new(), avail_sel: None, field_sel: None, format_sel: 0, calc: None });
+    let mut st: SchedPropsState = ctx.data(|m| m.get_temp(key)).unwrap_or(SchedPropsState { def: orig.clone(), search: String::new(), avail_sel: None, field_sel: None, format_sel: 0, calc: None, fmt_open: None, cond_open: None });
+    if std::mem::take(&mut app.dialogs.sched_calc_pending) {
+        st.calc = Some((String::new(), 0, String::new()));
+    }
     let available = rc_core::schedule::available_fields(&app.doc.data, &st.def);
     let (mut open, mut ok, mut cancel) = (true, false, false);
     window("Schedule Properties").open(&mut open).resizable(false).default_width(640.0).show(ctx, |ui| {
@@ -1080,15 +1086,19 @@ fn schedule_props(app: &mut App, ctx: &egui::Context) {
                             });
                             ui.add_space(6.0);
                             egui::Grid::new("sched-fmt-grid2").num_columns(2).spacing(vec2(10.0, 8.0)).show(ui, |ui| {
+                                let numeric_field = available.iter().find(|f| f.name == name).is_some_and(|f| matches!(f.kind, rc_core::params::PKind::Value(k) if k.is_numeric()));
                                 ui.label("Field formatting:");
-                                ui.add_enabled(false, egui::Button::new("Field Format...").min_size(vec2(150.0, 22.0)));
+                                if ui.add_enabled(numeric_field, egui::Button::new("Field Format...").min_size(vec2(150.0, 22.0))).clicked() {
+                                    st.fmt_open = Some((name.clone(), fm.clone()));
+                                }
                                 ui.end_row();
                                 ui.label("Conditional formatting:");
-                                ui.add_enabled(false, egui::Button::new("Conditional Format...").min_size(vec2(150.0, 22.0)));
+                                if ui.add(egui::Button::new("Conditional Format...").min_size(vec2(150.0, 22.0))).clicked() {
+                                    st.cond_open = Some((name.clone(), fm.clone()));
+                                }
                                 ui.end_row();
                                 ui.label("Show conditional format on\nsheets:");
-                                let mut on = true;
-                                ui.add_enabled_ui(false, |ui| crate::style::check(ui, &mut on, ""));
+                                crate::style::check(ui, &mut fm.cond_on_sheets, "");
                                 ui.end_row();
                                 ui.label("Hidden field:");
                                 crate::style::check(ui, &mut fm.hidden, "");
@@ -1209,6 +1219,78 @@ fn schedule_props(app: &mut App, ctx: &egui::Context) {
             ok = super::dlg_button(ui, "OK", true, true);
         });
     });
+    // Field Format (the column's units).
+    if let Some((field, mut fm)) = st.fmt_open.take() {
+        let kind = available.iter().find(|f| f.name == field).and_then(|f| match f.kind {
+            rc_core::params::PKind::Value(k) => Some(k),
+            _ => None,
+        }).unwrap_or(ParamKind::Number);
+        let (mut done, mut quit) = (false, false);
+        window("Format").resizable(false).default_width(300.0).show(ctx, |ui| {
+            super::schedule_tools::format_ui(ui, &mut fm.units, kind, &app.doc.data.units);
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                quit = super::dlg_button(ui, "Cancel", false, true);
+                done = super::dlg_button(ui, "OK", true, true);
+            });
+        });
+        if done {
+            let mut cur = st.def.format(&field);
+            cur.units = fm.units.clone();
+            st.def.formats.insert(field.clone(), cur);
+        } else if !quit {
+            st.fmt_open = Some((field, fm));
+        }
+    }
+    // Conditional Format: shading rules for the column's cells.
+    if let Some((field, mut fm)) = st.cond_open.take() {
+        let names: Vec<String> = available.iter().map(|f| f.name.clone()).collect();
+        let (mut done, mut quit) = (false, false);
+        window("Conditional Formatting").resizable(false).default_width(520.0).show(ctx, |ui| {
+            ui.label(format!("Field: {field}"));
+            let mut remove = None;
+            egui::Grid::new("cond-grid").num_columns(5).spacing(vec2(8.0, 6.0)).show(ui, |ui| {
+                for h in ["Field", "Test", "Value", "Background Color", ""] {
+                    ui.label(egui::RichText::new(h).strong());
+                }
+                ui.end_row();
+                for (k, rule) in fm.conditional.iter_mut().enumerate() {
+                    field_combo(ui, ("cond-f", k), &mut rule.field, &names, 140.0);
+                    egui::ComboBox::from_id_salt(("cond-op", k)).selected_text(rule.op.label()).width(120.0).show_ui(ui, |ui| {
+                        for o in FilterOp::ALL {
+                            ui.selectable_value(&mut rule.op, o, o.label());
+                        }
+                    });
+                    ui.add(egui::TextEdit::singleline(&mut rule.value).desired_width(90.0));
+                    ui.color_edit_button_srgb(&mut rule.color);
+                    if ui.small_button("Remove").clicked() {
+                        remove = Some(k);
+                    }
+                    ui.end_row();
+                }
+            });
+            if let Some(k) = remove {
+                fm.conditional.remove(k);
+            }
+            if ui.button("Add").clicked() {
+                fm.conditional.push(CondFormat { field: field.clone(), op: FilterOp::Equals, value: String::new(), color: [255, 230, 150] });
+            }
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                quit = super::dlg_button(ui, "Cancel", false, true);
+                done = super::dlg_button(ui, "OK", true, true);
+            });
+        });
+        if done {
+            let mut cur = st.def.format(&field);
+            cur.conditional = fm.conditional.clone();
+            st.def.formats.insert(field.clone(), cur);
+        } else if !quit {
+            st.cond_open = Some((field, fm));
+        }
+    }
     // Calculated Value.
     if let Some((mut name, mut kind, mut formula)) = st.calc.take() {
         let (mut done, mut quit) = (false, false);

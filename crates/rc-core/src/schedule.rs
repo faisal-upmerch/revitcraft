@@ -25,6 +25,8 @@ pub struct Row {
     pub cells: Vec<String>,
     /// Elements represented by the row.
     pub ids: Vec<Id>,
+    /// Conditional Format shading per cell (item rows).
+    pub colors: Vec<Option<[u8; 3]>>,
 }
 
 #[derive(Clone, Debug)]
@@ -33,6 +35,7 @@ pub struct Column {
     /// Formatting: the heading shown and the alignment (0 left, 1 center, 2 right).
     pub heading: String,
     pub align: u8,
+    pub format: FieldFormat,
 }
 
 #[derive(Clone, Debug)]
@@ -83,7 +86,74 @@ pub fn available_fields(p: &Project, def: &ScheduleDef) -> Vec<ParamDef> {
     for c in &def.calculated {
         v.push(text_def(&c.name, c.kind));
     }
+    for c in &def.combined {
+        v.push(text_def(&c.name, ParamKind::Text));
+    }
     v
+}
+
+/// A number in a column's own units (Format Unit), or in the project's.
+pub fn format_with(p: &Project, x: f64, kind: ParamKind, uf: Option<&UnitFormat>) -> String {
+    let Some(uf) = uf else { return p.units.format(x, kind) };
+    let mut u = p.units.clone();
+    if let Some(l) = uf.length {
+        u.length = l;
+    }
+    u.length_decimals = uf.decimals;
+    u.area_decimals = uf.decimals;
+    let d = uf.decimals as usize;
+    let mut out = match kind {
+        // Decimal units keep the chosen rounding (no trimmed zeros).
+        ParamKind::Length => match u.length {
+            crate::units::LengthUnit::Millimeters => format!("{x:.d$}"),
+            crate::units::LengthUnit::Centimeters => format!("{:.d$}", x / 10.0),
+            crate::units::LengthUnit::Meters => format!("{:.d$}", x / 1000.0),
+            crate::units::LengthUnit::DecimalFeet => format!("{:.d$}'", x / 304.8),
+            crate::units::LengthUnit::DecimalInches => format!("{:.d$}\"", x / 25.4),
+            _ => u.length(x),
+        },
+        ParamKind::Area => u.area(x),
+        ParamKind::Number | ParamKind::Currency => format!("{x:.*}", uf.decimals as usize),
+        _ => u.format(x, kind),
+    };
+    // Unit symbols: lengths in metric units carry none by default.
+    if !uf.symbol {
+        for sym in [" m²", " SF", " m³", " CF"] {
+            if out.ends_with(sym) && kind != ParamKind::Length {
+                out.truncate(out.len() - sym.len());
+            }
+        }
+    } else if kind == ParamKind::Length {
+        match u.length {
+            crate::units::LengthUnit::Millimeters => out.push_str(" mm"),
+            crate::units::LengthUnit::Centimeters => out.push_str(" cm"),
+            crate::units::LengthUnit::Meters => out.push_str(" m"),
+            _ => {}
+        }
+    }
+    if uf.suppress_zeros && out.contains('.') {
+        let (num, rest) = out.split_at(out.find(|c: char| !(c.is_ascii_digit() || c == '.' || c == '-')).unwrap_or(out.len()));
+        let num = num.trim_end_matches('0').trim_end_matches('.').to_string();
+        out = format!("{num}{rest}");
+    }
+    if uf.grouping {
+        let end = out.find(|c: char| !(c.is_ascii_digit() || c == '-')).unwrap_or(out.len());
+        let (int, rest) = out.split_at(end);
+        let neg = int.starts_with('-');
+        let digits: Vec<char> = int.trim_start_matches('-').chars().collect();
+        let mut g = String::new();
+        for (k, c) in digits.iter().enumerate() {
+            if k > 0 && (digits.len() - k) % 3 == 0 {
+                g.push(',');
+            }
+            g.push(*c);
+        }
+        out = format!("{}{g}{rest}", if neg { "-" } else { "" });
+    }
+    if uf.plus && x > 0.0 {
+        out.insert(0, '+');
+    }
+    out
 }
 
 fn field_def(available: &[ParamDef], name: &str) -> ParamDef {
@@ -216,6 +286,21 @@ fn raw_get(p: &Project, def: &ScheduleDef, r: &Rec, field: &str) -> Option<Value
 }
 
 fn get_field(p: &Project, def: &ScheduleDef, e: &Element, field: &str) -> Option<Value> {
+    if let Some(c) = def.combined.iter().find(|c| c.name == field) {
+        // Prefix, value and suffix of each part, separated as set.
+        let available = available_fields(p, def);
+        let mut out = String::new();
+        for (k, part) in c.parts.iter().enumerate() {
+            let v = get_field(p, def, e, &part.field);
+            out.push_str(&part.prefix);
+            out.push_str(&format_value(p, &v, &field_def(&available, &part.field)));
+            out.push_str(&part.suffix);
+            if k + 1 < c.parts.len() {
+                out.push_str(&part.separator);
+            }
+        }
+        return Some(Value::Text(out));
+    }
     if let Some(c) = def.calculated.iter().find(|c| c.name == field) {
         let mut resolve = |n: &str| -> Result<f64, formula::FormulaError> {
             if n == field {
@@ -254,7 +339,7 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
         .filter(|f| !def.format(f).hidden)
         .map(|f| {
             let fm = def.format(f);
-            Column { def: field_def(&available, f), heading: if fm.heading.is_empty() { f.clone() } else { fm.heading }, align: fm.align }
+            Column { def: field_def(&available, f), heading: if fm.heading.is_empty() { f.clone() } else { fm.heading.clone() }, align: fm.align, format: fm }
         })
         .collect();
 
@@ -305,10 +390,10 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
                 }
                 if summable(c) {
                     let sum: f64 = group.iter().filter_map(|g| g.2[ci].as_ref().and_then(Value::as_num)).sum();
-                    return format_value(p, &Some(Value::Num(sum)), &c.def);
+                    return format_col(p, &Some(Value::Num(sum)), c);
                 }
                 if group.iter().all(|g| compare(&g.2[ci], first) == Ordering::Equal) {
-                    format_value(p, first, &c.def)
+                    format_col(p, first, c)
                 } else {
                     String::new()
                 }
@@ -317,8 +402,17 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
     };
     let item_row = |it: &(Vec<Option<Value>>, Rec, Vec<Option<Value>>)| Row {
         kind: RowKind::Item,
-        cells: columns.iter().zip(&it.2).map(|(c, v)| if c.def.name == "Count" { "1".into() } else { format_value(p, v, &c.def) }).collect(),
+        cells: columns.iter().zip(&it.2).map(|(c, v)| if c.def.name == "Count" { "1".into() } else { format_col(p, v, c) }).collect(),
         ids: vec![it.1.id()],
+        colors: columns
+            .iter()
+            .map(|c| {
+                c.format.conditional.iter().find_map(|rule| {
+                    let fd = field_def(&available, &rule.field);
+                    rule_passes(p, rule.op, &rule.value, &raw_get(p, def, &it.1, &rule.field), &fd).then_some(rule.color)
+                })
+            })
+            .collect(),
     };
 
     let mut rows = Vec::new();
@@ -341,7 +435,7 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
                     if let Some(h) = header.first_mut() {
                         *h = label.clone();
                     }
-                    rows.push(Row { kind: RowKind::Header, cells: header, ids: vec![] });
+                    rows.push(Row { kind: RowKind::Header, cells: header, ids: vec![], colors: vec![] });
                 }
                 rows.extend(group.iter().map(|g| item_row(g)));
                 if first.footer {
@@ -351,13 +445,13 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
                             *f = title_cell(first.footer_mode, &label, group.len());
                         }
                     }
-                    rows.push(Row { kind: RowKind::Group, cells: footer, ids: group.iter().map(|g| g.1.id()).collect() });
+                    rows.push(Row { kind: RowKind::Group, cells: footer, ids: group.iter().map(|g| g.1.id()).collect(), colors: vec![] });
                 }
                 if first.blank_line {
-                    rows.push(Row { kind: RowKind::Blank, cells: vec![String::new(); columns.len()], ids: vec![] });
+                    rows.push(Row { kind: RowKind::Blank, cells: vec![String::new(); columns.len()], ids: vec![], colors: vec![] });
                 }
             } else {
-                rows.push(Row { kind: RowKind::Group, cells: aggregate(&group), ids: group.iter().map(|g| g.1.id()).collect() });
+                rows.push(Row { kind: RowKind::Group, cells: aggregate(&group), ids: group.iter().map(|g| g.1.id()).collect(), colors: vec![] });
             }
             i = j;
         }
@@ -372,9 +466,205 @@ pub fn build(p: &Project, def: &ScheduleDef) -> Table {
                 *first = title_cell(def.grand_mode, title, items.len());
             }
         }
-        rows.push(Row { kind: RowKind::Total, cells, ids: vec![] });
+        rows.push(Row { kind: RowKind::Total, cells, ids: vec![], colors: vec![] });
     }
     Table { columns, rows }
+}
+
+fn format_col(p: &Project, v: &Option<Value>, c: &Column) -> String {
+    match (v, c.format.units.as_ref(), &c.def.kind) {
+        (Some(Value::Num(x)), Some(uf), PKind::Value(k)) => format_with(p, *x, *k, Some(uf)),
+        _ => format_value(p, v, &c.def),
+    }
+}
+
+// ---------------------------------------------------------------- layout
+
+/// Which cell of a schedule's layout (for selection and styles).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum CellKey {
+    Title,
+    /// An inserted header row's cell (row, column).
+    Extra(usize, usize),
+    /// A header group (index into `groups`).
+    Group(usize),
+    /// A column heading (field name).
+    Header(String),
+    /// A body cell: (table row, field name).
+    Body(usize, String),
+    Blank,
+}
+
+impl CellKey {
+    /// The key its appearance is stored under: body cells share their column's style.
+    pub fn style_key(&self) -> Option<String> {
+        match self {
+            CellKey::Title => Some("title".into()),
+            CellKey::Extra(r, c) => Some(format!("x{r}:{c}")),
+            CellKey::Group(g) => Some(format!("g{g}")),
+            CellKey::Header(f) => Some(format!("h:{f}")),
+            CellKey::Body(_, f) => Some(format!("b:{f}")),
+            CellKey::Blank => None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct GridCell {
+    pub key: CellKey,
+    pub text: String,
+    /// Columns covered.
+    pub span: usize,
+    pub bold: bool,
+    /// Text height (paper mm).
+    pub size: f64,
+    pub color: [u8; 3],
+    pub italic: bool,
+    pub underline: bool,
+    pub shading: Option<[u8; 3]>,
+    pub border: u8,
+    pub halign: u8,
+    pub valign: u8,
+    pub image: Option<Id>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum GridRowKind {
+    Title,
+    Extra,
+    Groups,
+    Headers,
+    Blank,
+    Body(RowKind),
+}
+
+#[derive(Clone, Debug)]
+pub struct GridRow {
+    pub kind: GridRowKind,
+    pub cells: Vec<GridCell>,
+    /// Paper mm.
+    pub height: f64,
+    /// Elements of a body row.
+    pub ids: Vec<Id>,
+    /// Index into the table rows (body rows).
+    pub table_row: Option<usize>,
+}
+
+/// A schedule laid out as on a sheet: column widths and rows of cells, in paper mm.
+#[derive(Clone, Debug)]
+pub struct Grid {
+    pub widths: Vec<f64>,
+    pub rows: Vec<GridRow>,
+    /// Rows before the body (title, inserted rows, groups, headings, blank row).
+    pub head_rows: usize,
+    pub table: Table,
+}
+
+pub const ROW_MM: f64 = 6.0;
+
+/// The schedule's grid: `segment` limits the body to table rows first..=last (Split & Place);
+/// later segments repeat the headings but not the title.
+pub fn layout(p: &Project, def: &ScheduleDef, title: &str, segment: Option<(u32, u32)>) -> Grid {
+    let table = build(p, def);
+    let n = table.columns.len().max(1);
+    let widths: Vec<f64> = (0..n)
+        .map(|ci| match table.columns.get(ci) {
+            Some(c) => c.format.width.unwrap_or_else(|| {
+                let longest = table.rows.iter().map(|r| r.cells.get(ci).map(|s| s.chars().count()).unwrap_or(0)).max().unwrap_or(0).max(c.heading.chars().count());
+                longest as f64 * 1.9 + 4.0
+            }),
+            None => 40.0,
+        })
+        .collect();
+    let field_of = |ci: usize| table.columns.get(ci).map(|c| c.def.name.clone()).unwrap_or_default();
+    let cell = |key: CellKey, text: String, span: usize, bold: bool, size: f64, align: u8| -> GridCell {
+        let st = key.style_key().and_then(|k| def.styles.get(&k)).cloned().unwrap_or_default();
+        let font = st.font.clone();
+        GridCell {
+            key,
+            text,
+            span,
+            bold: font.as_ref().map(|f| f.bold).unwrap_or(bold),
+            size: font.as_ref().map(|f| f.size).unwrap_or(size),
+            color: font.as_ref().map(|f| f.color).unwrap_or([0, 0, 0]),
+            italic: font.as_ref().is_some_and(|f| f.italic),
+            underline: font.as_ref().is_some_and(|f| f.underline),
+            shading: st.shading,
+            border: st.border.unwrap_or(if def.look.grid_lines { 1 } else { 0 }),
+            halign: st.halign.unwrap_or(align),
+            valign: st.valign.unwrap_or(1),
+            image: None,
+        }
+    };
+    let first_segment = segment.is_none_or(|(a, _)| a == 0);
+    let mut rows = Vec::new();
+    if def.look.show_title && first_segment {
+        let mut c = cell(CellKey::Title, format!("<{title}>"), n, true, 3.0, 1);
+        c.image = def.title_image;
+        if c.image.is_some() {
+            c.text.clear();
+        }
+        rows.push(GridRow { kind: GridRowKind::Title, cells: vec![c], height: def.title_height.unwrap_or(ROW_MM + 1.0), ids: vec![], table_row: None });
+    }
+    if first_segment {
+        for (r, hr) in def.header_rows.iter().enumerate() {
+            let mut cells = Vec::new();
+            let mut ci = 0;
+            while ci < n {
+                let span = hr.merges.iter().find(|(a, _)| *a == ci).map(|(a, b)| b.saturating_sub(*a) + 1).unwrap_or(1).min(n - ci);
+                let mut c = cell(CellKey::Extra(r, ci), hr.cells.get(ci).cloned().unwrap_or_default(), span, false, 2.5, 1);
+                c.image = hr.images.get(&ci).copied();
+                cells.push(c);
+                ci += span;
+            }
+            rows.push(GridRow { kind: GridRowKind::Extra, cells, height: hr.height.unwrap_or(ROW_MM), ids: vec![], table_row: None });
+        }
+    }
+    if def.look.show_headers {
+        if !def.groups.is_empty() {
+            // A row of group headings over their columns; other columns span both rows' worth.
+            let mut cells = Vec::new();
+            let mut ci = 0;
+            while ci < n {
+                let name = field_of(ci);
+                let g = def.groups.iter().enumerate().find(|(_, g)| g.first == name);
+                match g {
+                    Some((gi, g)) => {
+                        let last = table.columns.iter().position(|c| c.def.name == g.last).unwrap_or(ci).max(ci);
+                        cells.push(cell(CellKey::Group(gi), g.text.clone(), last - ci + 1, true, 2.5, 1));
+                        ci = last + 1;
+                    }
+                    None => {
+                        cells.push(cell(CellKey::Blank, String::new(), 1, false, 2.5, 1));
+                        ci += 1;
+                    }
+                }
+            }
+            rows.push(GridRow { kind: GridRowKind::Groups, cells, height: ROW_MM, ids: vec![], table_row: None });
+        }
+        let cells = (0..n).map(|ci| cell(CellKey::Header(field_of(ci)), table.columns.get(ci).map(|c| c.heading.clone()).unwrap_or_default(), 1, true, 2.5, 1)).collect();
+        rows.push(GridRow { kind: GridRowKind::Headers, cells, height: ROW_MM, ids: vec![], table_row: None });
+    }
+    if def.look.blank_row {
+        rows.push(GridRow { kind: GridRowKind::Blank, cells: (0..n).map(|_| cell(CellKey::Blank, String::new(), 1, false, 2.5, 0)).collect(), height: ROW_MM, ids: vec![], table_row: None });
+    }
+    let head_rows = rows.len();
+    let (lo, hi) = segment.map(|(a, b)| (a as usize, b as usize)).unwrap_or((0, usize::MAX));
+    for (ri, r) in table.rows.iter().enumerate().filter(|(ri, _)| *ri >= lo && *ri <= hi) {
+        let strong = matches!(r.kind, RowKind::Total | RowKind::Header | RowKind::Group);
+        let cells = (0..n)
+            .map(|ci| {
+                let align = table.columns.get(ci).map(|c| c.align).unwrap_or(0);
+                let mut c = cell(CellKey::Body(ri, field_of(ci)), r.cells.get(ci).cloned().unwrap_or_default(), 1, strong, 2.5, align);
+                if let Some(Some(col)) = r.colors.get(ci) {
+                    c.shading = Some(*col);
+                }
+                c
+            })
+            .collect();
+        rows.push(GridRow { kind: GridRowKind::Body(r.kind.clone()), cells, height: ROW_MM, ids: r.ids.clone(), table_row: Some(ri) });
+    }
+    Grid { widths, rows, head_rows, table }
 }
 
 /// CSV export (Revit's "Export > Reports > Schedule").
@@ -425,6 +715,30 @@ mod tests {
             total_fields: vec!["Cost".into()],
             ..Default::default()
         }
+    }
+
+    #[test]
+    fn layout_has_inserted_rows_groups_combined_fields_and_segments() {
+        let p = project_with_doors();
+        let mut d = door_def();
+        d.combined.push(CombinedField { name: "Size".into(), parts: vec![CombinedPart { field: "Width".into(), separator: " x ".into(), ..Default::default() }, CombinedPart { field: "Mark".into(), ..Default::default() }] });
+        d.fields.push("Size".into());
+        d.header_rows.push(HeaderRow { cells: vec!["A".into(), "B".into()], merges: vec![(0, 1)], ..Default::default() });
+        d.groups.push(HeaderGroup { first: "Type".into(), last: "Width".into(), text: "Door".into() });
+        d.formats.insert("Width".into(), FieldFormat { units: Some(UnitFormat { length: None, decimals: 1, symbol: true, suppress_zeros: false, plus: false, grouping: true }), ..Default::default() });
+        let g = layout(&p, &d, "Doors", None);
+        assert_eq!(g.rows[0].kind, GridRowKind::Title);
+        assert_eq!(g.rows[1].cells[0].span, 2, "merged header cells");
+        assert!(g.rows.iter().any(|r| r.kind == GridRowKind::Groups && r.cells.iter().any(|c| c.text == "Door" && c.span == 2)));
+        let wi = g.table.columns.iter().position(|c| c.def.name == "Width").unwrap();
+        let si = g.table.columns.iter().position(|c| c.def.name == "Size").unwrap();
+        let body = &g.rows[g.head_rows];
+        assert!(body.cells[wi].text.ends_with(" mm") && body.cells[wi].text.contains('.'), "{}", body.cells[wi].text);
+        assert!(body.cells[si].text.contains(" x "), "{}", body.cells[si].text);
+        // A later segment repeats the headings without the title.
+        let seg = layout(&p, &d, "Doors", Some((1, 1)));
+        assert_eq!(seg.rows[0].kind, GridRowKind::Groups);
+        assert_eq!(seg.rows.len() - seg.head_rows, 1);
     }
 
     #[test]

@@ -1,6 +1,7 @@
 //! Dialogs. Each is shown while its field in `Dialogs` is set.
 
 mod annotate;
+pub mod schedule_tools;
 mod manage;
 mod settings;
 mod type_props;
@@ -75,6 +76,10 @@ pub struct Dialogs {
     pub beam_annotations: Option<BeamAnnoState>,
     pub beam_slots: BeamSlots,
     pub beam_end_offset: f64,
+    /// Modify Schedule/Quantities tool dialogs.
+    pub sched_tool: Option<schedule_tools::SchedTool>,
+    /// Calculated: Schedule Properties opens on the Calculated Value dialog.
+    pub sched_calc_pending: bool,
     /// Check Spelling.
     pub spelling: Option<SpellState>,
     /// Decal Types.
@@ -483,6 +488,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     project_turn_dialog(app, ctx);
     decal_types_dialog(app, ctx);
     annotate::show(app, ctx);
+    schedule_tools::show(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -2226,8 +2232,8 @@ fn print_preview(app: &mut App, ctx: &egui::Context) {
                     }
                     painter.add(egui::Shape::mesh(mesh));
                 }
-                rc_core::sheet::SheetPrim::Text { pos, text, size, anchor, angle, bold, .. } => {
-                    crate::canvas::paint_text_ex(&painter, xf.s(*pos), text, (*size as f64 * zoom) as f32, egui::Color32::BLACK, *anchor, *angle, *bold);
+                rc_core::sheet::SheetPrim::Text { pos, text, size, anchor, angle, bold, color, .. } => {
+                    crate::canvas::paint_text_ex(&painter, xf.s(*pos), text, (*size as f64 * zoom) as f32, egui::Color32::from_rgb(color[0], color[1], color[2]), *anchor, *angle, *bold);
                 }
                 rc_core::sheet::SheetPrim::Picture { asset, min, max, .. } => {
                     if let Some(t) = crate::images::texture(*asset) {

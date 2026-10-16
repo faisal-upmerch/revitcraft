@@ -2886,7 +2886,7 @@ pub fn place_on_sheet(p: &mut Project, sheet: Id, view: Id, cx: f64, cy: f64) ->
     match p.view_mut(sheet).map(|s| &mut s.kind) {
         Some(ViewKind::Sheet(s)) => {
             let number = (s.viewports.len() + 1).to_string();
-            s.viewports.push(Viewport { view, cx, cy, detail_number: number, show_title: true });
+            s.viewports.push(Viewport { view, cx, cy, detail_number: number, show_title: true, segment: None });
             Ok(())
         }
         _ => Err("Not a sheet.".into()),
@@ -3055,7 +3055,7 @@ mod tests {
         let [a, b, ..] = dc.corners();
         // Seen from the front (from -y), the bottom edge runs left to right: +x.
         assert!(b.x > a.x && (a.z - (1500.0 - dc.height / 2.0)).abs() < 1e-9);
-        delete_elements(&mut p, &[w]);
+        delete_elements(&mut p, &[w]).unwrap();
         assert!(p.element(d).is_none());
     }
 

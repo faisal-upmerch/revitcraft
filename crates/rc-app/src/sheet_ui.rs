@@ -65,9 +65,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 }
                 painter.add(egui::Shape::mesh(mesh));
             }
-            SheetPrim::Text { pos, text, size, anchor, angle, bold, .. } => {
+            SheetPrim::Text { pos, text, size, anchor, angle, bold, color, .. } => {
                 let h = (*size as f64 * xf.zoom) as f32;
-                canvas::paint_text_ex(&painter, xf.s(*pos), text, h, Color32::BLACK, *anchor, *angle, *bold);
+                canvas::paint_text_ex(&painter, xf.s(*pos), text, h, Color32::from_rgb(color[0], color[1], color[2]), *anchor, *angle, *bold);
             }
             SheetPrim::Picture { asset, min, max, .. } => {
                 if let Some(t) = crate::images::texture(*asset) {

@@ -2017,6 +2017,9 @@ pub struct Viewport {
     pub detail_number: String,
     #[serde(default = "yes")]
     pub show_title: bool,
+    /// Split & Place: the rows (first, last) of a schedule this viewport shows.
+    #[serde(default)]
+    pub segment: Option<(u32, u32)>,
 }
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -2103,6 +2106,125 @@ pub struct ScheduleDef {
     /// Custom grand total title (empty = "Grand total").
     #[serde(default)]
     pub grand_title: String,
+    /// Combine Parameters: columns made of several parameters' values.
+    #[serde(default)]
+    pub combined: Vec<CombinedField>,
+    /// Rows > Insert: rows of free text between the title and the column headings.
+    #[serde(default)]
+    pub header_rows: Vec<HeaderRow>,
+    /// Titles & Headers > Group: shared headings over runs of columns.
+    #[serde(default)]
+    pub groups: Vec<HeaderGroup>,
+    /// Appearance of cells, by cell key ("title", "x{row}:{col}", "g{index}", "h:{field}", "b:{field}").
+    #[serde(default)]
+    pub styles: BTreeMap<String, CellStyle>,
+    /// Rows > Resize of the title row (paper mm).
+    #[serde(default)]
+    pub title_height: Option<f64>,
+    /// Titles & Headers > Insert Image in the title cell.
+    #[serde(default)]
+    pub title_image: Option<Id>,
+}
+
+/// One part of a combined parameter.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CombinedPart {
+    pub field: String,
+    #[serde(default)]
+    pub prefix: String,
+    #[serde(default)]
+    pub suffix: String,
+    #[serde(default)]
+    pub separator: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CombinedField {
+    pub name: String,
+    pub parts: Vec<CombinedPart>,
+}
+
+/// A row of text cells in the header (one per column), with merged runs.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HeaderRow {
+    pub cells: Vec<String>,
+    /// Merged runs of columns (first, last), inclusive.
+    #[serde(default)]
+    pub merges: Vec<(usize, usize)>,
+    #[serde(default)]
+    pub height: Option<f64>,
+    /// Images by column.
+    #[serde(default)]
+    pub images: BTreeMap<usize, Id>,
+}
+
+/// A heading over the columns of `first`..=`last` (field names).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct HeaderGroup {
+    pub first: String,
+    pub last: String,
+    pub text: String,
+}
+
+/// Edit Font.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FontSpec {
+    pub family: String,
+    /// Text height in paper mm.
+    pub size: f64,
+    pub bold: bool,
+    pub italic: bool,
+    pub underline: bool,
+    pub color: [u8; 3],
+}
+
+impl Default for FontSpec {
+    fn default() -> Self {
+        FontSpec { family: "Arial".into(), size: 2.5, bold: false, italic: false, underline: false, color: [0, 0, 0] }
+    }
+}
+
+/// Appearance of a cell (or a column's body cells): Shading, Font, Borders and alignment.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CellStyle {
+    #[serde(default)]
+    pub shading: Option<[u8; 3]>,
+    #[serde(default)]
+    pub font: Option<FontSpec>,
+    /// Borders: line weight (0 none, 1 thin, 2 medium, 3 wide).
+    #[serde(default)]
+    pub border: Option<u8>,
+    /// 0 left, 1 center, 2 right.
+    #[serde(default)]
+    pub halign: Option<u8>,
+    /// 0 top, 1 middle, 2 bottom.
+    #[serde(default)]
+    pub valign: Option<u8>,
+}
+
+/// Format Unit / Field Format: a column's own units (otherwise the project's).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct UnitFormat {
+    #[serde(default)]
+    pub length: Option<crate::units::LengthUnit>,
+    pub decimals: u8,
+    #[serde(default)]
+    pub symbol: bool,
+    #[serde(default)]
+    pub suppress_zeros: bool,
+    #[serde(default)]
+    pub plus: bool,
+    #[serde(default)]
+    pub grouping: bool,
+}
+
+/// Conditional Format: cells of the column shaded where the rule holds.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct CondFormat {
+    pub field: String,
+    pub op: FilterOp,
+    pub value: String,
+    pub color: [u8; 3],
 }
 
 /// Schedule Properties > Sorting/Grouping: one sort level.
@@ -2122,7 +2244,7 @@ pub struct SortLevel {
 }
 
 /// Schedule Properties > Formatting: one field.
-#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FieldFormat {
     /// Column heading (empty = the field name).
     #[serde(default)]
@@ -2132,6 +2254,16 @@ pub struct FieldFormat {
     pub align: u8,
     #[serde(default)]
     pub hidden: bool,
+    #[serde(default)]
+    pub units: Option<UnitFormat>,
+    /// Columns > Resize: width in paper mm.
+    #[serde(default)]
+    pub width: Option<f64>,
+    #[serde(default)]
+    pub conditional: Vec<CondFormat>,
+    /// Show conditional format on sheets.
+    #[serde(default = "yes")]
+    pub cond_on_sheets: bool,
 }
 
 /// Schedule Properties > Appearance.
@@ -2149,11 +2281,20 @@ pub struct ScheduleLook {
     pub blank_row: bool,
     #[serde(default)]
     pub stripe_rows: bool,
+    /// Titles & Headers > Freeze Header: the title and headings stay in view.
+    #[serde(default)]
+    pub freeze_header: bool,
+}
+
+impl Default for FieldFormat {
+    fn default() -> Self {
+        FieldFormat { heading: String::new(), align: 0, hidden: false, units: None, width: None, conditional: Vec::new(), cond_on_sheets: true }
+    }
 }
 
 impl Default for ScheduleLook {
     fn default() -> Self {
-        ScheduleLook { show_title: true, show_headers: true, grid_lines: true, outline: false, blank_row: true, stripe_rows: false }
+        ScheduleLook { show_title: true, show_headers: true, grid_lines: true, outline: false, blank_row: true, stripe_rows: false, freeze_header: false }
     }
 }
 
