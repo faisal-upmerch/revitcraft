@@ -451,6 +451,9 @@ fn feature_edges(set: &MeshSet) -> Vec<(DVec3, DVec3)> {
 /// Builds the drawing for a section or elevation view.
 pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Drawing {
     let mut d = Drawing::default();
+    if view.crop_active {
+        d.crop = view.crop;
+    }
     let Some(f) = view_frame(p, view, footprints) else { return d };
     let shaded = matches!(view.style, VisualStyle::Shaded | VisualStyle::ConsistentColors | VisualStyle::Realistic);
     // Gather geometry in view space.

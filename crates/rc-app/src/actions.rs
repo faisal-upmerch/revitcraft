@@ -681,6 +681,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         Section => app.set_tool(ToolKind::Section),
         Camera => app.set_tool(ToolKind::Camera),
+        FramingElevation => app.set_tool(ToolKind::FramingElevation),
         StartingView => app.dialogs.starting_view = true,
         Location => {
             app.dialogs.location_tab = 0;

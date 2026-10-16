@@ -230,7 +230,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Big(C::Section),
                 Big(C::Callout),
                 Labeled("Plan\nViews", C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
-                Labeled("Elevation", C::ElevationView, vec![]),
+                Labeled("Elevation", C::ElevationView, vec![C::ElevationView, C::FramingElevation]),
                 Labeled("Drafting\nView", C::DraftingView, vec![]),
                 Labeled("Duplicate\nView", C::DuplicateView, vec![C::DuplicateView, C::DuplicateWithDetailing]),
                 Labeled("Legends", C::Legend, vec![C::Legend, C::KeynoteLegend]),

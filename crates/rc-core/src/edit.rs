@@ -767,6 +767,43 @@ pub fn add_beam(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVec
     Ok(push(p, ElementKind::Instance(inst)))
 }
 
+/// View > Elevation > Framing Elevation: an elevation beside `grid`, on the side of `side_pt`,
+/// looking at the grid and cropped to its length and the levels.
+pub fn new_framing_elevation(p: &mut Project, grid: Id, side_pt: DVec2, scale: f64) -> Result<Id, String> {
+    let Some(ElementKind::Grid(g)) = p.element(grid).map(|e| &e.kind) else { return Err("Pick a grid.".into()) };
+    if g.arc_mid.is_some() || !g.vertices.is_empty() {
+        return Err("Framing elevations are placed on straight grids.".into());
+    }
+    let (a, b) = (g.start, g.end);
+    let d = (b - a).normalize_or_zero();
+    let n = geom::perp(d);
+    let side = if (side_pt - a).dot(n) >= 0.0 { 1.0 } else { -1.0 };
+    let (foot, _) = geom::closest_on_segment(a, b, side_pt);
+    let origin = foot + n * side * 1500.0;
+    let look = -n * side;
+    let dir = *ElevationDir::ALL.iter().max_by(|x, y| x.look().truncate().dot(look).total_cmp(&y.look().truncate().dot(look))).unwrap();
+    // Crop: the grid's length across, the levels (with room above) up.
+    let right = geom::at(look, 0.0).cross(DVec3::Z).truncate().normalize();
+    let (u0, u1) = {
+        let (ua, ub) = ((a - origin).dot(right), (b - origin).dot(right));
+        (ua.min(ub), ua.max(ub))
+    };
+    let levels = p.levels();
+    let z0 = levels.first().map(|l| l.1.elevation).unwrap_or(0.0) - 1000.0;
+    let z1 = levels.last().map(|l| l.1.elevation).unwrap_or(3000.0) + 3000.0;
+    let n_el = p.views.iter().filter(|v| matches!(v.kind, ViewKind::Elevation { .. })).count() + 1;
+    let name = unique_name(p.views.iter().map(|v| v.name.clone()), &format!("Elevation {n_el} - a"));
+    let id = p.new_id();
+    let mut v = View::new(id, name, scale, ViewKind::Elevation { dir });
+    v.marker = Some((origin, look));
+    v.crop = Some((DVec2::new(u0, z0), DVec2::new(u1, z1)));
+    v.crop_active = true;
+    v.crop_visible = true;
+    v.phase = p.phases.last().map(|ph| ph.id);
+    p.views.push(v);
+    Ok(id)
+}
+
 /// Places an image (already in `p.images`) in a view or on a sheet, `width` wide with its
 /// proportions, its lower-left corner at `at`.
 pub fn add_image(p: &mut Project, view: Id, asset: Id, at: DVec2, width: f64) -> Result<Id, String> {
@@ -2502,6 +2539,19 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn framing_elevation_looks_at_its_grid() {
+        let (mut p, ..) = project();
+        let g = add_grid(&mut p, DVec2::new(0.0, 0.0), DVec2::new(0.0, 6000.0)).unwrap();
+        // Clicked east of a north-south grid: the view looks west at it, cropped to its length.
+        let v = new_framing_elevation(&mut p, g, DVec2::new(2000.0, 3000.0), 100.0).unwrap();
+        let view = p.view(v).unwrap();
+        let (o, look) = view.marker.unwrap();
+        assert!((o - DVec2::new(1500.0, 3000.0)).length() < 1e-6 && (look - DVec2::new(-1.0, 0.0)).length() < 1e-9);
+        let (mn, mx) = view.crop.unwrap();
+        assert!((mx.x - mn.x - 6000.0).abs() < 1e-6 && view.crop_active);
     }
 
     #[test]

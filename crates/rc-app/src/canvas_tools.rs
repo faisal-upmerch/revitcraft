@@ -160,6 +160,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::PlaceImage => "Click to place the image.".into(),
         ToolKind::SpanSymbol => "Select a floor to place the span direction symbol.".into(),
         ToolKind::TreadNumber => "Select a stair run to number its treads.".into(),
+        ToolKind::FramingElevation => "Click near a grid, on the side to look from.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -524,6 +525,32 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::FramingElevation => {
+            let Some(c) = cursor else { return };
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Grid(_)));
+            app.interact.hover = hit;
+            // Preview: the marker beside the grid, looking at it.
+            if let Some(ElementKind::Grid(g)) = hit.and_then(|h| app.el(h)).map(|e| e.kind.clone()) {
+                let n = rc_core::geom::perp((g.end - g.start).normalize_or_zero());
+                let side = if (c - g.start).dot(n) >= 0.0 { 1.0 } else { -1.0 };
+                let (foot, _) = rc_core::geom::closest_on_segment(g.start, g.end, c);
+                let o = foot + n * side * 1500.0;
+                let r = 5.0 * view.scale;
+                painter.circle_stroke(xf.s(o), (r * xf.zoom) as f32, preview_stroke());
+                painter.line_segment([xf.s(o), xf.s(o - n * side * r * 1.8)], preview_stroke());
+            }
+            if clicked {
+                let Some(gid) = hit else {
+                    app.error("Click near a grid.");
+                    return;
+                };
+                let scale = view.scale;
+                if let Some(id) = app.run("Create Framing Elevation", |p| edit::new_framing_elevation(p, gid, c, scale)) {
+                    app.select(vec![]);
+                    let _ = id;
+                }
+            }
+        }
         ToolKind::Relocate => {
             let Some(pt) = point else { return };
             if let Some(a) = app.tool.pts.first().copied() {
