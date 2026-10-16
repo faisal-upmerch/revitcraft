@@ -888,6 +888,27 @@ fn prompt(fe: &FamilyEditor, mode: crate::tools::DrawMode) -> String {
     }
 }
 
+/// The screen transform of a 2D family view. Back and Left look the other way, so their
+/// horizontal axis runs mirrored (model coordinates stay as they are).
+struct ViewXf {
+    xf: Xf,
+    flip: bool,
+    zoom: f64,
+}
+
+impl ViewXf {
+    fn s(&self, w: DVec2) -> Pos2 {
+        self.xf.s(if self.flip { DVec2::new(-w.x, w.y) } else { w })
+    }
+    fn w(&self, s: Pos2) -> DVec2 {
+        let w = self.xf.w(s);
+        if self.flip { DVec2::new(-w.x, w.y) } else { w }
+    }
+    fn len(&self, px: f32) -> f64 {
+        self.xf.len(px)
+    }
+}
+
 fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     let (rect, resp) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
     let key = fe.view as u8;
@@ -910,7 +931,7 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
         cam.center += DVec2::new(-d.x as f64, d.y as f64) / cam.zoom;
     }
     fe.cams.insert(key, cam);
-    let xf = Xf { rect, center: cam.center, zoom: cam.zoom, scale: 20.0, thin: false };
+    let xf = ViewXf { xf: Xf { rect, center: cam.center, zoom: cam.zoom, scale: 20.0, thin: false }, flip: matches!(fe.view, FeView::Back | FeView::Left), zoom: cam.zoom };
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 0.0, Color32::WHITE);
     let Some(def) = fe.def().cloned() else { return };
@@ -995,10 +1016,36 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             hover_plane = Some(p.id);
         }
         let selected = fe.sel == FeSel::Plane(p.id) || fe.dim_planes.contains(&p.id);
+        // In elevations the reference level is a level: a finite dash-dot line ending in a
+        // target head with its name above and elevation below.
+        if p.axis == Axis::Z && va == Axis::Z && p.name == "Ref. Level" {
+            let col = if selected { style::SELECT } else if near { style::PRESELECT } else { Color32::from_rgb(20, 20, 20) };
+            // Past the family geometry on both sides.
+            let (u0, u1) = mesh.by_material.values().flat_map(|m| m.positions.iter()).map(|q| to2(*q).x).fold((-1200.0f64, 1200.0f64), |(a, b), x| (a.min(x - 600.0), b.max(x + 600.0)));
+            let (sa, sb) = (xf.s(DVec2::new(u0, v)), xf.s(DVec2::new(u1, v)));
+            let (l, r) = if sa.x < sb.x { (sa, sb) } else { (sb, sa) };
+            canvas::paint_polyline(&painter, &[l, r], false, Stroke::new(1.0, col), rc_core::plan::Dash::DashDot, &xf.xf);
+            let rad = 7.0;
+            let c = r + vec2(rad, 0.0);
+            painter.circle_stroke(c, rad, Stroke::new(1.0, col));
+            for q in [0.0f32, 2.0] {
+                let mut pts = vec![c];
+                for k in 0..=8 {
+                    let t = (q + k as f32 / 8.0) * std::f32::consts::FRAC_PI_2;
+                    pts.push(c + vec2(t.cos(), -t.sin()) * rad);
+                }
+                painter.add(egui::Shape::convex_polygon(pts, col, Stroke::NONE));
+            }
+            let size = 12.0;
+            let x = c.x - rad * 1.5;
+            painter.text(pos2(x, c.y - 3.0), egui::Align2::RIGHT_BOTTOM, &p.name, egui::FontId::proportional(size), col);
+            painter.text(pos2(x, c.y + 3.0), egui::Align2::RIGHT_TOP, app.doc.data.units.length(v), egui::FontId::proportional(size), col);
+            continue;
+        }
         // Halftone while sketching, as the reference app shows everything but the sketch.
         let idle = if matches!(fe.tool, FeTool::Select | FeTool::Dimension | FeTool::RefPlane) { green } else { Color32::from_rgb(170, 200, 178) };
         let col = if selected { style::SELECT } else if near { style::PRESELECT } else { idle };
-        canvas::paint_polyline(&painter, &[xf.s(a), xf.s(b)], false, Stroke::new(1.0, col), rc_core::plan::Dash::DashDot, &xf);
+        canvas::paint_polyline(&painter, &[xf.s(a), xf.s(b)], false, Stroke::new(1.0, col), rc_core::plan::Dash::DashDot, &xf.xf);
         // Plane names show only on the selected or highlighted plane.
         if !p.name.is_empty() && (selected || near) {
             let lp = if p.axis == ha { xf.s(DVec2::new(v, 0.0)) } else { xf.s(DVec2::new(0.0, v)) };
