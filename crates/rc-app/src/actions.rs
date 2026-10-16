@@ -80,6 +80,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DeactivateView => app.sheet_activation.is_some(),
         Matchline => plan && !in_sketch,
         ViewReference => graphical_2d && !in_sketch,
+        AddToSet => !app.doc.data.option_sets.is_empty() && sel && app.active_option.is_none() && !in_sketch,
+        PickToEdit => !app.doc.data.option_sets.is_empty() && !in_sketch,
         Render => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
         SpanSymbol | TreadNumber => view.is_some_and(|v| v.plan_level().is_some()) && !in_sketch,
         Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
@@ -299,6 +301,8 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.set_tool(ToolKind::AreaReinfHost);
         }
         RebarCover => app.dialogs.rebar_cover = true,
+        AddToSet => app.dialogs.add_to_set = true,
+        PickToEdit => app.set_tool(ToolKind::PickToEdit),
         Truss => start_drawing(app, ToolKind::Truss),
         BeamSystem => start_sketch(app, SketchKind::BeamSystem, DrawMode::Line),
         IsolatedFoundation => app.set_tool(ToolKind::IsolatedFooting),

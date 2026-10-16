@@ -61,6 +61,8 @@ enum Item {
     AlignOptions,
     /// The family editor's Extrusion Depth, in the ribbon as the reference app shows it.
     FeDepth,
+    /// The design option being edited (Manage > Design Options).
+    OptionCombo,
 }
 
 struct Panel {
@@ -284,7 +286,7 @@ fn manage() -> Vec<Panel> {
             ],
         ),
         panel("Project Location", vec![Labeled("Location", C::Location, vec![]), Labeled("Coordinates", C::SpecifyCoordinates, vec![C::SpecifyCoordinates, C::ReportCoordinates]), Labeled("Position", C::RelocateProject, vec![C::RelocateProject, C::RotateTrueNorth])]),
-        panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![])]),
+        panel("Design Options", vec![Labeled("Design\nOptions", C::DesignOptions, vec![]), Stack(vec![C::AddToSet, C::PickToEdit]), OptionCombo]),
         panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
         panel("Phasing", vec![Big(C::Phases)]),
         panel("Selection", vec![Stack(vec![C::SaveSelection, C::LoadSelection, C::EditSelection])]),
@@ -796,6 +798,26 @@ fn show_panels(ui: &mut egui::Ui, app: &mut App, panels: Vec<Panel>) {
                                     for c in cs {
                                         small_button(ui, app, *c, w);
                                     }
+                                }
+                                OptionCombo => {
+                                    ui.add_space(14.0);
+                                    let p = &app.doc.data;
+                                    let label = app
+                                        .active_option
+                                        .and_then(|o| p.option_sets.iter().find_map(|s| s.options.iter().find(|x| x.id == o).map(|x| format!("{} : {}", s.name, x.name))))
+                                        .unwrap_or_else(|| "Main Model".into());
+                                    let mut active = app.active_option;
+                                    ui.add_enabled_ui(!p.option_sets.is_empty(), |ui| {
+                                        egui::ComboBox::from_id_salt("ribbon-design-option").selected_text(label).width(150.0).show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut active, None, "Main Model");
+                                            for set in &p.option_sets {
+                                                for o in &set.options {
+                                                    ui.selectable_value(&mut active, Some(o.id), format!("{} : {}{}", set.name, o.name, if o.primary { " (primary)" } else { "" }));
+                                                }
+                                            }
+                                        });
+                                    });
+                                    app.active_option = active;
                                 }
                                 FeDepth => {
                                     ui.add_space(6.0);

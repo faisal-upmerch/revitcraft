@@ -68,6 +68,8 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Add to Design Option Set.
+    pub add_to_set: bool,
     /// Rebar Cover Settings.
     pub rebar_cover: bool,
     /// Rendering (View > Render).
@@ -461,6 +463,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     insert_views_dialog(app, ctx);
     render_dialog(app, ctx);
     rebar_cover_dialog(app, ctx);
+    add_to_set_dialog(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);
@@ -778,6 +781,65 @@ fn plan_view_types_dialog(app: &mut App, ctx: &egui::Context) {
     if ok || cancel || !open {
         app.dialogs.plan_view_types = false;
         ctx.data_mut(|m| m.remove::<(bool, bool)>(id));
+    }
+}
+
+/// Add to Design Option Set: the set and the options the selection goes into.
+fn add_to_set_dialog(app: &mut App, ctx: &egui::Context) {
+    if !app.dialogs.add_to_set {
+        return;
+    }
+    let id = egui::Id::new("add-to-set");
+    let sets = app.doc.data.option_sets.clone();
+    if sets.is_empty() {
+        app.dialogs.add_to_set = false;
+        return;
+    }
+    let (mut set_k, mut checks): (usize, Vec<bool>) = ctx.data(|m| m.get_temp(id)).unwrap_or((0, vec![true; sets[0].options.len()]));
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    window("Add to Design Option Set").open(&mut open).resizable(false).default_width(320.0).show(ctx, |ui| {
+        ui.horizontal(|ui| {
+            ui.label("Design option set:");
+            egui::ComboBox::from_id_salt("ats-set").selected_text(&sets[set_k.min(sets.len() - 1)].name).width(170.0).show_ui(ui, |ui| {
+                for (k, st) in sets.iter().enumerate() {
+                    if ui.selectable_label(set_k == k, &st.name).clicked() {
+                        set_k = k;
+                        checks = vec![true; st.options.len()];
+                    }
+                }
+            });
+        });
+        ui.add_space(4.0);
+        ui.label("Add selected elements to:");
+        egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).fill(style::field()).inner_margin(4.0).show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            for (k, o) in sets[set_k.min(sets.len() - 1)].options.iter().enumerate() {
+                if k < checks.len() {
+                    crate::style::check(ui, &mut checks[k], format!("{}{}", o.name, if o.primary { " (primary)" } else { "" }));
+                }
+            }
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if dlg_button(ui, "OK", true, checks.iter().any(|c| *c)) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        let opts: Vec<Id> = sets[set_k.min(sets.len() - 1)].options.iter().zip(&checks).filter(|(_, c)| **c).map(|(o, _)| o.id).collect();
+        let ids = app.selection.clone();
+        app.run("Add to Set", |p| rc_core::edit::add_to_set(p, &ids, &opts));
+    }
+    if ok || cancel || !open {
+        app.dialogs.add_to_set = false;
+        ctx.data_mut(|m| m.remove::<(usize, Vec<bool>)>(id));
+    } else {
+        ctx.data_mut(|m| m.insert_temp(id, (set_k, checks)));
     }
 }
 

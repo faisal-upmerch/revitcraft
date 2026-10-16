@@ -163,6 +163,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::FramingElevation => "Click near a grid, on the side to look from.".into(),
         ToolKind::RebarSet => if n == 0 { "Click inside a floor or slab to start the bar.".into() } else { "Click to end the bar.".into() },
         ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
+        ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -527,6 +528,20 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::PickToEdit => {
+            let Some(c) = cursor else { return };
+            let hit = hover_of(app, view, d, c, xf, &|e| e.design_option.is_some());
+            app.interact.hover = hit;
+            if clicked {
+                match hit.and_then(|h| app.el(h)).and_then(|e| e.design_option) {
+                    Some(o) => {
+                        app.active_option = Some(o);
+                        app.tool = Tool::select();
+                    }
+                    None => app.error("Pick an element in a design option."),
+                }
+            }
+        }
         ToolKind::AreaReinfHost => {
             // Pick the slab (by its edge or inside it), then sketch the boundary.
             let Some(c) = cursor else { return };

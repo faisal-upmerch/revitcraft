@@ -2571,6 +2571,22 @@ pub fn add_option(p: &mut Project, set: Id, name: &str) -> Result<Id, String> {
     Ok(id)
 }
 
+/// Manage > Add to Set: main model elements move into the first chosen option and copies go
+/// into each of the others.
+pub fn add_to_set(p: &mut Project, ids: &[Id], options: &[Id]) -> Result<(), String> {
+    let main: Vec<Id> = ids.iter().copied().filter(|id| p.element(*id).is_some_and(|e| e.design_option.is_none() && e.view.is_none())).collect();
+    if main.is_empty() {
+        return Err("Select main model elements to add to the option set.".into());
+    }
+    let Some((first, rest)) = options.split_first() else { return Err("Choose at least one option.".into()) };
+    for o in rest {
+        let copies = copy_elements(p, &main, DVec2::ZERO);
+        set_design_option(p, &copies, Some(*o));
+    }
+    set_design_option(p, &main, Some(*first));
+    Ok(())
+}
+
 pub fn set_design_option(p: &mut Project, ids: &[Id], option: Option<Id>) {
     for e in p.elements.iter_mut().filter(|e| ids.contains(&e.id)) {
         e.design_option = option;
@@ -2596,6 +2612,20 @@ mod tests {
         let lvl = p.levels()[0].0;
         let wt = p.types_of(Category::Walls).next().unwrap().id;
         (p, lvl, wt)
+    }
+
+    #[test]
+    fn add_to_set_moves_and_copies_into_options() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::ZERO, DVec2::new(3000.0, 0.0), 3000.0).unwrap();
+        let set = add_option_set(&mut p, "Option Set 1");
+        let o2 = add_option(&mut p, set, "Option 2").unwrap();
+        let o1 = p.option_sets[0].options[0].id;
+        add_to_set(&mut p, &[w], &[o1, o2]).unwrap();
+        assert_eq!(p.element(w).unwrap().design_option, Some(o1));
+        let walls: Vec<Option<Id>> = p.elements.iter().filter(|e| matches!(e.kind, ElementKind::Wall(_))).map(|e| e.design_option).collect();
+        assert_eq!(walls.len(), 2);
+        assert!(walls.contains(&Some(o2)) && !walls.contains(&None));
     }
 
     #[test]
