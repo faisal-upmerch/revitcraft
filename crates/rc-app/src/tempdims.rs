@@ -17,6 +17,9 @@ pub struct TempDim {
     pub b: DVec2,
     pub value: f64,
     pub offset_px: f32,
+    /// A segment of a permanent dimension of the selected element: its text's centre and
+    /// (width, height) in world units. Its value is edited in place, as in the reference app.
+    pub perm: Option<(DVec2, DVec2, f64)>,
 }
 
 /// Straight parallel references (walls, grids, reference planes, lines) on the view.
@@ -161,7 +164,7 @@ pub fn hosted_dims_on(p: &Project, id: Id, i: &FamilyInstance, w: &Wall, along: 
         let dw = (b - a).normalize_or_zero();
         // A positive screen offset moves towards the world's -perp of the dimension.
         let sign = if (-geom::perp(dw)).dot(n) >= 0.0 { 1.0 } else { -1.0 };
-        out.push(TempDim { a, b, value: (e - r).abs(), offset_px: 26.0 * sign });
+        out.push(TempDim { a, b, value: (e - r).abs(), offset_px: 26.0 * sign, perm: None });
     }
     out
 }
@@ -194,7 +197,7 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
             let n = w.normal();
             let mid = (w.start + w.end) / 2.0;
             for (foot, dist) in nearest_each_side(&parallel_refs(p, level, id, d), mid, n, 60000.0) {
-                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0 });
+                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0, perm: None });
             }
         }
         ElementKind::Grid(g) if level.is_some() && g.arc_mid.is_none() => {
@@ -202,7 +205,7 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
             let n = geom::perp(d);
             let mid = (g.start + g.end) / 2.0;
             for (foot, dist) in nearest_each_side(&parallel_refs(p, None, id, d), mid, n, 100000.0) {
-                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0 });
+                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0, perm: None });
             }
         }
         ElementKind::RefPlane(r) => {
@@ -210,7 +213,7 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
             let n = geom::perp(d);
             let mid = (r.start + r.end) / 2.0;
             for (foot, dist) in nearest_each_side(&parallel_refs(p, level, id, d), mid, n, 60000.0) {
-                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0 });
+                out.push(TempDim { a: foot, b: mid, value: dist, offset_px: 0.0, perm: None });
             }
         }
         ElementKind::Instance(i) if level.is_some() => {
@@ -220,7 +223,7 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
                 let loc = analysis::instance_location(p, i);
                 for dir in [DVec2::X, -DVec2::X, DVec2::Y, -DVec2::Y] {
                     if let Some((hit, dist)) = ray_hit(p, i.level, id, loc, dir, 30000.0) {
-                        out.push(TempDim { a: hit, b: loc, value: dist, offset_px: 0.0 });
+                        out.push(TempDim { a: hit, b: loc, value: dist, offset_px: 0.0, perm: None });
                     }
                 }
             }
@@ -230,10 +233,52 @@ pub fn compute(app: &App, view: &View, _xf: &Xf) -> Vec<TempDim> {
             let above = p.levels().into_iter().find(|(lid, x)| *lid != id && x.elevation > l.elevation);
             let x = app.cache.drawings.get(&view.id).and_then(|d| d.bounds()).map(|(mn, mx)| mn.x + (mx.x - mn.x) * 0.15).unwrap_or(0.0);
             for (_, o) in below.into_iter().chain(above) {
-                out.push(TempDim { a: DVec2::new(x, o.elevation), b: DVec2::new(x, l.elevation), value: (l.elevation - o.elevation).abs(), offset_px: 0.0 });
+                out.push(TempDim { a: DVec2::new(x, o.elevation), b: DVec2::new(x, l.elevation), value: (l.elevation - o.elevation).abs(), offset_px: 0.0, perm: None });
             }
         }
         _ => {}
+    }
+    out.extend(permanent_dims(p, view, id));
+    out
+}
+
+/// Segments of the view's aligned and linear dimensions between the selected element and
+/// another reference: typing a new value there moves the element.
+fn permanent_dims(p: &Project, view: &View, id: Id) -> Vec<TempDim> {
+    let mut out = Vec::new();
+    for e in p.elements.iter().filter(|e| e.view == Some(view.id)) {
+        let ElementKind::Dimension(dim) = &e.kind else { continue };
+        if !matches!(dim.kind, DimKind::Aligned | DimKind::Linear) || dim.refs.len() < 2 || dim.alignment {
+            continue;
+        }
+        let dir = dim.direction.normalize_or(DVec2::X);
+        let n = geom::perp(dir);
+        let line_off = dim.line_point.dot(n);
+        let mut refs: Vec<(f64, Option<Id>)> = dim.refs.iter().map(|r| (rc_core::annotation::resolve(p, r).point.dot(dir), r.element)).collect();
+        refs.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut angle = dir.y.atan2(dir.x);
+        if angle > std::f64::consts::FRAC_PI_2 + 1e-6 {
+            angle -= std::f64::consts::PI;
+        }
+        if angle < -std::f64::consts::FRAC_PI_2 + 1e-6 {
+            angle += std::f64::consts::PI;
+        }
+        let up = geom::perp(DVec2::new(angle.cos(), angle.sin()));
+        let at = |u: f64| dir * u + n * line_off;
+        for w in refs.windows(2) {
+            let (mine0, mine1) = (w[0].1 == Some(id), w[1].1 == Some(id));
+            if mine0 == mine1 {
+                continue;
+            }
+            let value = w[1].0 - w[0].0;
+            let text = rc_core::annotation::segment_text(p, dim, value);
+            let h = 2.5 * view.scale;
+            let size = DVec2::new(text.chars().count() as f64 * 0.62 * h, 1.3 * h);
+            let centre = at((w[0].0 + w[1].0) / 2.0) + up * (1.6 * view.scale + 0.5 * h);
+            // `a` is the other reference, `b` the selected element's.
+            let (a, b) = if mine1 { (at(w[0].0), at(w[1].0)) } else { (at(w[1].0), at(w[0].0)) };
+            out.push(TempDim { a, b, value: value.abs(), offset_px: 0.0, perm: Some((centre, size, angle)) });
+        }
     }
     out
 }
@@ -248,15 +293,24 @@ pub fn editor(app: &mut App, ui: &egui::Ui, xf: &Xf, dims: &[TempDim]) {
     let (sa, sb) = (xf.s(td.a), xf.s(td.b));
     let d = (sb - sa).normalized();
     let n = egui::vec2(-d.y, d.x);
-    let mid = sa + (sb - sa) / 2.0 + n * (td.offset_px + 9.0);
+    let mid = match td.perm {
+        Some((c, ..)) => xf.s(c),
+        None => sa + (sb - sa) / 2.0 + n * (td.offset_px + 9.0),
+    };
     let mut done: Option<bool> = None;
     egui::Area::new(egui::Id::new("temp-dim-edit"))
         .fixed_pos(mid - egui::vec2(45.0, 10.0))
         .order(egui::Order::Foreground)
         .show(ui.ctx(), |ui| {
-            let r = ui.add(egui::TextEdit::singleline(&mut ed.text).desired_width(90.0));
+            let out = egui::TextEdit::singleline(&mut ed.text).desired_width(90.0).show(ui);
+            let r = out.response;
             if ed.focus {
+                // The value starts selected, so typing replaces it.
                 r.request_focus();
+                let mut state = out.state;
+                let all = egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(ed.text.chars().count()));
+                state.cursor.set_char_range(Some(all));
+                state.store(ui.ctx(), r.id);
                 ed.focus = false;
             }
             if r.lost_focus() {
@@ -266,6 +320,10 @@ pub fn editor(app: &mut App, ui: &egui::Ui, xf: &Xf, dims: &[TempDim]) {
                 done = Some(false);
             }
         });
+    // An unchanged value leaves the element where it is (the shown value is rounded).
+    if done == Some(true) && ed.text.trim() == app.doc.data.units.length(td.value) {
+        done = Some(false);
+    }
     match done {
         Some(true) => {
             app.interact.temp_dim_edit = None;

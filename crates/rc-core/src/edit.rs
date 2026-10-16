@@ -687,6 +687,8 @@ pub fn add_dimension(p: &mut Project, view: Id, refs: Vec<DimRef>, direction: DV
             text_override: String::new(),
             prefix: String::new(),
             suffix: String::new(),
+            above: String::new(),
+            below: String::new(),
             label: String::new(),
             style,
             alignment: false,

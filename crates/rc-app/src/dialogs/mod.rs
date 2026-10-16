@@ -3018,39 +3018,85 @@ fn renames(app: &mut App, ctx: &egui::Context) {
             return;
         };
         let key = egui::Id::new(("dim-text", id));
-        let mut st: (String, String, String) = ctx.memory(|m| m.data.get_temp(key)).unwrap_or((d.text_override.clone(), d.prefix.clone(), d.suffix.clone()));
-        let mut open = true;
-        let mut ok = false;
-        window("Dimension Text").open(&mut open).resizable(false).show(ctx, |ui| {
-            egui::Grid::new("dimtext").num_columns(2).show(ui, |ui| {
-                ui.label("Replace with text:");
-                ui.text_edit_singleline(&mut st.0);
-                ui.end_row();
-                ui.label("Prefix:");
-                ui.text_edit_singleline(&mut st.1);
-                ui.end_row();
-                ui.label("Suffix:");
-                ui.text_edit_singleline(&mut st.2);
-                ui.end_row();
+        // (replace?, replacement, above, prefix, suffix, below)
+        type DimTextState = (bool, String, String, String, String, String);
+        let mut st: DimTextState = ctx.memory(|m| m.data.get_temp(key)).unwrap_or((!d.text_override.is_empty(), d.text_override.clone(), d.above.clone(), d.prefix.clone(), d.suffix.clone(), d.below.clone()));
+        // The measured value of the (first) segment.
+        let value = {
+            let c = rc_core::annotation::coordinates(&app.doc.data, &d);
+            let mut c = c.clone();
+            c.sort_by(f64::total_cmp);
+            if c.len() >= 2 { app.doc.data.units.length(c[1] - c[0]) } else { String::new() }
+        };
+        let (mut open, mut ok, mut apply, mut cancel) = (true, false, false, false);
+        window("Dimension Text").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
+            ui.label(egui::RichText::new("Note: This tool replaces or appends dimension values with text and has no effect on model geometry.").color(style::SELECT));
+            ui.add_space(6.0);
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(8.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label("Dimension Value");
+                egui::Grid::new("dimtext-value").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                    ui.radio_value(&mut st.0, false, "Use Actual Value");
+                    let mut v = value.clone();
+                    ui.add_enabled(false, egui::TextEdit::singleline(&mut v).desired_width(200.0));
+                    ui.end_row();
+                    ui.radio_value(&mut st.0, true, "Replace With Text");
+                    ui.add_enabled(st.0, egui::TextEdit::singleline(&mut st.1).desired_width(200.0));
+                    ui.end_row();
+                });
             });
-            if ui.button("OK").clicked() {
-                ok = true;
-            }
+            ui.add_space(6.0);
+            egui::Frame::new().stroke(egui::Stroke::new(1.0, style::border())).inner_margin(8.0).show(ui, |ui| {
+                ui.set_width(ui.available_width());
+                ui.label("Text Fields");
+                egui::Grid::new("dimtext-fields").num_columns(2).spacing(vec2(10.0, 6.0)).show(ui, |ui| {
+                    ui.label("Above:");
+                    ui.add(egui::TextEdit::singleline(&mut st.2).desired_width(260.0));
+                    ui.end_row();
+                    ui.label("Prefix:");
+                    ui.horizontal(|ui| {
+                        ui.add(egui::TextEdit::singleline(&mut st.3).desired_width(70.0));
+                        ui.label("Value:");
+                        let mut v = if st.0 { st.1.clone() } else { value.clone() };
+                        ui.add_enabled(false, egui::TextEdit::singleline(&mut v).desired_width(70.0));
+                        ui.label("Suffix:");
+                        ui.add(egui::TextEdit::singleline(&mut st.4).desired_width(50.0));
+                    });
+                    ui.end_row();
+                    ui.label("Below:");
+                    ui.add(egui::TextEdit::singleline(&mut st.5).desired_width(260.0));
+                    ui.end_row();
+                });
+            });
+            ui.add_space(8.0);
+            ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.spacing_mut().item_spacing.x = 8.0;
+                apply = dlg_button(ui, "Apply", false, true);
+                cancel = dlg_button(ui, "Cancel", false, true);
+                ok = dlg_button(ui, "OK", true, true);
+            });
         });
         ctx.memory_mut(|m| m.data.insert_temp(key, st.clone()));
-        if ok {
-            app.run("Dimension Text", |p| {
-                if let Some(ElementKind::Dimension(d)) = p.element_mut(id).map(|e| &mut e.kind) {
-                    d.text_override = st.0.clone();
-                    d.prefix = st.1.clone();
-                    d.suffix = st.2.clone();
-                }
-                Ok(())
-            });
+        if ok || apply {
+            if st.0 && st.1.trim().is_empty() {
+                app.error("Enter the text that replaces the value.");
+                ok = false;
+            } else {
+                app.run("Dimension Text", |p| {
+                    if let Some(ElementKind::Dimension(d)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        d.text_override = if st.0 { st.1.clone() } else { String::new() };
+                        d.above = st.2.clone();
+                        d.prefix = st.3.clone();
+                        d.suffix = st.4.clone();
+                        d.below = st.5.clone();
+                    }
+                    Ok(())
+                });
+            }
         }
-        if ok || !open {
+        if ok || cancel || !open {
             app.dialogs.dim_text = None;
-            ctx.memory_mut(|m| m.data.remove::<(String, String, String)>(key));
+            ctx.memory_mut(|m| m.data.remove::<DimTextState>(key));
         }
     }
     if let Some(id) = app.dialogs.rename_element {

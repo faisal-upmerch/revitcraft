@@ -1386,6 +1386,16 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
     let mut tdim_hit: Option<usize> = None;
     let mut perm_hit: Option<usize> = None;
     for (k, td) in temp_dims.iter().enumerate() {
+        if let Some((c, size, angle)) = td.perm {
+            // A permanent dimension's value: editable where it is drawn.
+            let (w, h) = (size.x as f32 / xf.len(1.0) as f32, size.y as f32 / xf.len(1.0) as f32);
+            let r = Rect::from_center_size(xf.s(c), if angle.abs() > 1.0 { vec2(h, w) } else { vec2(w, h) });
+            if cursor.is_some_and(|q| r.contains(xf.s(q))) && app.interact.temp_dim_edit.is_none() {
+                tdim_hit = Some(k);
+                painter.rect_stroke(r, 2.0, Stroke::new(1.0, style::ACCENT), egui::StrokeKind::Outside);
+            }
+            continue;
+        }
         let txt = app.doc.data.units.length(td.value);
         let r = temp_dim(painter, xf, td.a, td.b, &txt, td.offset_px);
         // "Make this temporary dimension permanent" control beside the value.

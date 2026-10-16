@@ -1237,6 +1237,11 @@ pub struct Dimension {
     pub prefix: String,
     #[serde(default)]
     pub suffix: String,
+    /// Dimension Text: text above the value and below the dimension line.
+    #[serde(default)]
+    pub above: String,
+    #[serde(default)]
+    pub below: String,
     /// Label (family editor dimensions): parameter name.
     #[serde(default)]
     pub label: String,

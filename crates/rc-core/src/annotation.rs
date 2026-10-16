@@ -98,10 +98,14 @@ pub fn segments(p: &Project, d: &Dimension) -> Vec<f64> {
 
 /// Text for one segment.
 pub fn segment_text(p: &Project, d: &Dimension, value: f64) -> String {
-    if !d.text_override.is_empty() {
-        return d.text_override.clone();
-    }
-    let core = if d.equal { "EQ".to_string() } else { p.units.length(value) };
+    // Replace With Text keeps the prefix and suffix, as in the reference app.
+    let core = if !d.text_override.is_empty() {
+        d.text_override.clone()
+    } else if d.equal {
+        "EQ".to_string()
+    } else {
+        p.units.length(value)
+    };
     format!("{}{}{}", d.prefix, core, d.suffix)
 }
 

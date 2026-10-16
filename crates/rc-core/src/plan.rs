@@ -2376,6 +2376,13 @@ pub fn dimension_graphics(p: &Project, id: Id, dim: &Dimension, scale: f64, d: &
         let mid = at((w[0] + w[1]) / 2.0) + up * (1.6 * scale);
         let text = annotation::segment_text(p, dim, value);
         d.text_rot(Some(id), mid, text, 2.5, angle as f32);
+        // Dimension Text: Above over the value, Below under the dimension line.
+        if !dim.above.is_empty() {
+            d.text_rot(Some(id), mid + up * (3.2 * scale), dim.above.clone(), 2.5, angle as f32);
+        }
+        if !dim.below.is_empty() {
+            d.text_rot(Some(id), at((w[0] + w[1]) / 2.0) - up * (2.4 * scale), dim.below.clone(), 2.5, angle as f32);
+        }
         if dim.locks.get(k).copied().unwrap_or(false) {
             let lp = mid + up * (2.4 * scale);
             d.line(Some(id), circle(lp, 0.5 * scale, 12), true, ANNO);
