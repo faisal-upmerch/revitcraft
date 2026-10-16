@@ -165,6 +165,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
         ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
         ToolKind::CutProfileHost => "Select a wall to edit its cut profile.".into(),
+        ToolKind::Walkthrough => if n < 2 { "Click to place the walkthrough's camera positions.".into() } else { "Click the next camera position, or Finish Walkthrough.".into() },
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -529,6 +530,19 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::Walkthrough => {
+            let Some(pt) = point else { return };
+            // The path so far, its rubber band and the camera points.
+            let mut pts: Vec<egui::Pos2> = app.tool.pts.iter().map(|q| xf.s(*q)).collect();
+            for q in &pts {
+                painter.circle_stroke(*q, 4.0, preview_stroke());
+            }
+            pts.push(xf.s(pt));
+            painter.add(egui::Shape::line(pts, preview_stroke()));
+            if clicked {
+                app.tool.pts.push(pt);
+            }
+        }
         ToolKind::CutProfileHost => {
             let Some(c) = cursor else { return };
             let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Wall(_)));

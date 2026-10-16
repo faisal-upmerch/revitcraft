@@ -2362,6 +2362,9 @@ pub struct View {
     /// A sketched (non-rectangular) crop boundary; `crop` is then its bounding box.
     #[serde(default)]
     pub crop_shape: Vec<DVec2>,
+    /// A walkthrough: its camera path and frames (the view's camera is the current frame's).
+    #[serde(default)]
+    pub walk: Option<Walkthrough>,
     #[serde(default)]
     pub phase: Option<Id>,
     #[serde(default)]
@@ -2424,6 +2427,7 @@ impl View {
             crop_active: false,
             crop_visible: false,
             crop_shape: Vec::new(),
+            walk: None,
             phase: None,
             phase_filter: PhaseFilter::ShowAll,
             template: None,
@@ -2694,6 +2698,45 @@ pub struct CutProfile {
     pub region: Vec<DVec2>,
     /// The region joins the cut shape (else it is cut away).
     pub add: bool,
+}
+
+/// View > 3D View > Walkthrough: the camera moves along `path` (eye positions) over `frames`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Walkthrough {
+    pub path: Vec<DVec3>,
+    pub frames: u32,
+    /// The frame shown (1-based).
+    pub frame: u32,
+}
+
+impl Walkthrough {
+    /// The eye and target at a frame: evenly along the path, looking a little ahead along it.
+    pub fn camera(&self, frame: u32) -> (DVec3, DVec3) {
+        let pts = &self.path;
+        if pts.len() < 2 {
+            let e = pts.first().copied().unwrap_or(DVec3::ZERO);
+            return (e, e + DVec3::Y * 1000.0);
+        }
+        let lens: Vec<f64> = pts.windows(2).map(|w| w[0].distance(w[1])).collect();
+        let total: f64 = lens.iter().sum();
+        let at = |s: f64| -> DVec3 {
+            let mut s = s.clamp(0.0, total);
+            for (k, l) in lens.iter().enumerate() {
+                if s <= *l || k == lens.len() - 1 {
+                    let t = if *l > 0.0 { (s / l).min(1.0) } else { 0.0 };
+                    return pts[k] + (pts[k + 1] - pts[k]) * t;
+                }
+                s -= l;
+            }
+            pts[pts.len() - 1]
+        };
+        let f = (frame.clamp(1, self.frames.max(1)) - 1) as f64 / (self.frames.max(2) - 1) as f64;
+        let s = f * total;
+        let eye = at(s);
+        // Look 1 m ahead (at the end, along the last segment).
+        let ahead = if total - s > 1000.0 { at(s + 1000.0) } else { eye + (pts[pts.len() - 1] - pts[pts.len() - 2]).normalize_or(DVec3::Y) * 1000.0 };
+        (eye, ahead)
+    }
 }
 
 /// One layer of an area reinforcement.

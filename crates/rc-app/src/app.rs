@@ -209,6 +209,8 @@ pub struct App {
     pub thumbs: HashMap<String, Option<egui::TextureHandle>>,
     /// When the project was last saved or the save reminder last answered.
     pub save_reminder_at: f64,
+    /// A walkthrough playing: (view, time of the last frame).
+    pub walk_play: Option<(Id, f64)>,
     /// Self-test runs toggle every setting: they must not save them.
     pub no_save_settings: bool,
     /// A view to open once the dock is back (views opened while the dock is drawn).
@@ -273,6 +275,7 @@ impl App {
             save_reminder_at: 0.0,
             open_pending: None,
             no_save_settings: false,
+            walk_play: None,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
@@ -1107,6 +1110,21 @@ impl App {
                 self.quit_requested = true;
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
+        }
+        // A playing walkthrough advances at 15 frames per second.
+        if let Some((v, last)) = self.walk_play {
+            if self.now - last >= 1.0 / 15.0 {
+                let next = self.doc.data.view(v).and_then(|x| x.walk.as_ref()).map(|w| (w.frame + 1, w.frames));
+                match next {
+                    Some((f, n)) if f <= n => {
+                        rc_core::edit::set_walk_frame(&mut self.doc.data, v, f);
+                        self.cams3d.remove(&v);
+                        self.walk_play = Some((v, self.now));
+                    }
+                    _ => self.walk_play = None,
+                }
+            }
+            ctx.request_repaint();
         }
         if style::is_dark() != self.settings.dark {
             style::apply(&ctx, self.settings.dark);

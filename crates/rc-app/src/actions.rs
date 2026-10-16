@@ -80,6 +80,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         DeactivateView => app.sheet_activation.is_some(),
         Matchline => plan && !in_sketch,
         ViewReference => graphical_2d && !in_sketch,
+        FinishWalkthrough => app.tool.kind == ToolKind::Walkthrough && app.tool.pts.len() >= 2,
+        WalkPrevious | WalkNext | WalkPlay | WalkExport => view.is_some_and(|v| v.walk.is_some()),
         AddToSet => !app.doc.data.option_sets.is_empty() && sel && app.active_option.is_none() && !in_sketch,
         PickToEdit => !app.doc.data.option_sets.is_empty() && !in_sketch,
         Render => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
@@ -738,6 +740,61 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         Section => app.set_tool(ToolKind::Section),
         Camera => app.set_tool(ToolKind::Camera),
         CutProfile => app.set_tool(ToolKind::CutProfileHost),
+        Walkthrough => app.set_tool(ToolKind::Walkthrough),
+        FinishWalkthrough => {
+            let pts = app.tool.pts.clone();
+            let z = app.active_view().and_then(|v| v.plan_level()).map(|l| app.doc.data.level_elevation(l)).unwrap_or(0.0);
+            let h = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1676.4 } else { 1750.0 };
+            let path: Vec<rc_core::geom::DVec3> = pts.iter().map(|q| rc_core::geom::DVec3::new(q.x, q.y, z + h)).collect();
+            if let Some(id) = app.run("Create Walkthrough", |p| edit::new_walkthrough(p, path)) {
+                app.tool = Tool::select();
+                app.open_view(id);
+            }
+        }
+        WalkPrevious | WalkNext => {
+            if let Some(v) = app.active.filter(|v| app.doc.data.view(*v).is_some_and(|x| x.walk.is_some())) {
+                let f = app.doc.data.view(v).and_then(|x| x.walk.as_ref()).map(|w| w.frame).unwrap_or(1);
+                let f = if cmd == WalkNext { f + 1 } else { f.saturating_sub(1).max(1) };
+                rc_core::edit::set_walk_frame(&mut app.doc.data, v, f);
+                app.cams3d.remove(&v);
+                let n = app.doc.data.view(v).and_then(|x| x.walk.as_ref()).map(|w| (w.frame, w.frames)).unwrap_or((1, 1));
+                app.info(format!("Frame {} of {}", n.0, n.1));
+            }
+        }
+        WalkPlay => {
+            if app.walk_play.is_some() {
+                app.walk_play = None;
+            } else if let Some(v) = app.active.filter(|v| app.doc.data.view(*v).is_some_and(|x| x.walk.is_some())) {
+                // From the start when at the end.
+                if app.doc.data.view(v).and_then(|x| x.walk.as_ref()).is_some_and(|w| w.frame >= w.frames) {
+                    rc_core::edit::set_walk_frame(&mut app.doc.data, v, 1);
+                }
+                app.walk_play = Some((v, app.now));
+            }
+        }
+        WalkExport => {
+            if let Some(v) = app.active.filter(|v| app.doc.data.view(*v).is_some_and(|x| x.walk.is_some())) {
+                if let Some(dir) = crate::files::FileDialog::new().set_title("Choose a folder for the walkthrough frames").pick_folder() {
+                    let name = app.doc.data.view(v).map(|x| x.name.clone()).unwrap_or_default();
+                    let n = app.doc.data.view(v).and_then(|x| x.walk.as_ref()).map(|w| w.frames).unwrap_or(0);
+                    let keep = app.doc.data.view(v).and_then(|x| x.walk.as_ref()).map(|w| w.frame).unwrap_or(1);
+                    let mut written = 0;
+                    for f in 1..=n {
+                        rc_core::edit::set_walk_frame(&mut app.doc.data, v, f);
+                        app.cams3d.remove(&v);
+                        if let Some(img) = crate::view3d::render_image(app, v, 1280, 720) {
+                            let file = dir.join(format!("{name}_{f:04}.png"));
+                            if std::fs::write(&file, rc_core::png::encode(img.width, img.height, 3, &img.rgb)).is_ok() {
+                                written += 1;
+                            }
+                        }
+                    }
+                    rc_core::edit::set_walk_frame(&mut app.doc.data, v, keep);
+                    app.cams3d.remove(&v);
+                    app.info(format!("Exported {written} frames to {}", dir.display()));
+                }
+            }
+        }
         CalloutSketch => {
             if app.active_view().is_some_and(|v| v.plan_level().is_some()) {
                 start_sketch(app, SketchKind::Callout, DrawMode::Line);

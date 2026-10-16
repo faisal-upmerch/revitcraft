@@ -2487,6 +2487,37 @@ pub fn new_callout(p: &mut Project, parent: Id, a: DVec2, b: DVec2) -> Result<Id
     Ok(id)
 }
 
+/// View > 3D View > Walkthrough: a perspective view moving along `path` (eye points) over 300
+/// frames, named "Walkthrough n".
+pub fn new_walkthrough(p: &mut Project, path: Vec<DVec3>) -> Result<Id, String> {
+    if path.len() < 2 || path.windows(2).map(|w| w[0].distance(w[1])).sum::<f64>() < 100.0 {
+        return Err("Click at least two points along the walkthrough path.".into());
+    }
+    let walk = Walkthrough { path, frames: 300, frame: 1 };
+    let (eye, target) = walk.camera(1);
+    let name = (1..).map(|n| format!("Walkthrough {n}")).find(|n| !p.views.iter().any(|v| &v.name == n)).unwrap();
+    let id = p.new_id();
+    let mut v = View::new(id, name, 100.0, ViewKind::ThreeD { eye, target, perspective: true });
+    v.walk = Some(walk);
+    v.phase = p.phases.last().map(|ph| ph.id);
+    p.views.push(v);
+    Ok(id)
+}
+
+/// Moves a walkthrough to a frame (its camera follows).
+pub fn set_walk_frame(p: &mut Project, view: Id, frame: u32) {
+    if let Some(v) = p.view_mut(view) {
+        if let Some(w) = v.walk.as_mut() {
+            w.frame = frame.clamp(1, w.frames.max(1));
+            let (eye, target) = w.camera(w.frame);
+            if let ViewKind::ThreeD { eye: e, target: t, .. } = &mut v.kind {
+                *e = eye;
+                *t = target;
+            }
+        }
+    }
+}
+
 /// View > Cut Profile: a sketched region reshapes a wall's cut in `view` only. A region lying
 /// mostly inside the wall cuts it away; otherwise it joins the wall.
 pub fn add_cut_profile(p: &mut Project, view: Id, host: Id, region: Vec<DVec2>) -> Result<Id, String> {
@@ -2765,6 +2796,25 @@ mod tests {
         mirror_project(&mut p, true);
         let Some(ViewKind::Section { start, end, .. }) = p.view(s).map(|v| v.kind.clone()) else { panic!() };
         assert!((start - DVec2::new(-3000.0, -1000.0)).length() < 1e-6 && (end - DVec2::new(0.0, -1000.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn walkthroughs_move_their_camera_along_the_path() {
+        let (mut p, ..) = project();
+        let path = vec![DVec3::new(0.0, 0.0, 1750.0), DVec3::new(10000.0, 0.0, 1750.0), DVec3::new(10000.0, 10000.0, 1750.0)];
+        let v = new_walkthrough(&mut p, path).unwrap();
+        let eye = |p: &Project| match p.view(v).map(|x| &x.kind) {
+            Some(ViewKind::ThreeD { eye, target, .. }) => (*eye, *target),
+            _ => panic!(),
+        };
+        assert!((eye(&p).0 - DVec3::new(0.0, 0.0, 1750.0)).length() < 1e-6);
+        set_walk_frame(&mut p, v, 150);
+        // Frame 150 of 300 is near the corner, looking along the path.
+        let (e, t) = eye(&p);
+        assert!((e.x - 10000.0).abs() < 200.0 && e.y.abs() < 200.0, "{e:?}");
+        assert!(t.distance(e) > 900.0);
+        set_walk_frame(&mut p, v, 300);
+        assert!((eye(&p).0 - DVec3::new(10000.0, 10000.0, 1750.0)).length() < 1e-6);
     }
 
     #[test]

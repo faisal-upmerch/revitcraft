@@ -56,6 +56,9 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    ArrowLeft,
+    ArrowRight,
+    Play,
     CutProfile,
     Render,
     LoadAsGroup,
@@ -942,6 +945,13 @@ fn draw(g: &Pen, icon: Icon) {
             // A cut wall with a notched profile.
             g.poly(&[(0.1, 0.3), (0.9, 0.3), (0.9, 0.7), (0.62, 0.7), (0.62, 0.52), (0.38, 0.52), (0.38, 0.7), (0.1, 0.7)], LGREY, ink);
             g.line(&[(0.38, 0.7), (0.38, 0.52), (0.62, 0.52), (0.62, 0.7)], Color32::from_rgb(220, 0, 160));
+        }
+        ArrowLeft | ArrowRight => {
+            let (a, b) = if icon == ArrowLeft { (0.78, 0.22) } else { (0.22, 0.78) };
+            g.poly(&[(a, 0.24), (b, 0.5), (a, 0.76)], BLUE, ink);
+        }
+        Play => {
+            g.poly(&[(0.28, 0.18), (0.82, 0.5), (0.28, 0.82)], Color32::from_rgb(40, 150, 70), ink);
         }
         Picture => {
             // A framed picture: sky, sun and hills.

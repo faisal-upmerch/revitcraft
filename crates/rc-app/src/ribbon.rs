@@ -231,7 +231,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
         panel(
             "Create",
             vec![
-                Labeled("3D\nView", C::Default3D, vec![C::Default3D, C::Camera]),
+                Labeled("3D\nView", C::Default3D, vec![C::Default3D, C::Camera, C::Walkthrough]),
                 Big(C::Section),
                 Labeled("Callout", C::Callout, vec![C::Callout, C::CalloutSketch]),
                 Labeled("Plan\nViews", C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
@@ -455,6 +455,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if matches!(kind, ToolKind::Door | ToolKind::Window | ToolKind::Room | ToolKind::StructColumn) {
             v.push(panel("Tag", vec![Labeled("Tag on\nPlacement", C::TagOnPlacement, vec![])]));
         }
+        if kind == ToolKind::Walkthrough {
+            v.push(panel("Walkthrough", vec![Labeled("Finish\nWalkthrough", C::FinishWalkthrough, vec![])]));
+        }
         if kind == ToolKind::Align {
             v.push(panel("Align", vec![AlignOptions]));
             return Some(("Align".to_string(), v));
@@ -474,6 +477,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
             "Schedule/Quantities".into(),
             vec![panel("Parameters", vec![Big(C::ScheduleFields), Big(C::ScheduleFilter), Big(C::ScheduleSorting)]), panel("Element", vec![Big(C::HighlightInModel)])],
         ));
+    }
+    if app.selection.is_empty() && app.active_view().is_some_and(|v| v.walk.is_some()) {
+        return Some(("Edit Walkthrough".into(), vec![panel("Navigation", vec![Big(C::WalkPrevious), Big(C::WalkNext), Big(C::WalkPlay)]), panel("Walkthrough", vec![Labeled("Export", C::WalkExport, vec![])])]));
     }
     if app.selection.is_empty() {
         return None;

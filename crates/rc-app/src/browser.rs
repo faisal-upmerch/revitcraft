@@ -253,10 +253,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
         let p = app.snapshot();
         let open_default = !f.is_empty();
         tree_node(ui, "Views (all)", "Views (all)", Some(Icon::FloorPlan), true, open_default, |ui| {
-            let groups: [(&str, fn(&View) -> bool); 9] = [
+            let groups: [(&str, fn(&View) -> bool); 10] = [
                 ("Floor Plans", |v| matches!(v.kind, ViewKind::FloorPlan { .. })),
                 ("Ceiling Plans", |v| matches!(v.kind, ViewKind::CeilingPlan { .. })),
-                ("3D Views", |v| matches!(v.kind, ViewKind::ThreeD { .. })),
+                ("3D Views", |v| matches!(v.kind, ViewKind::ThreeD { .. }) && v.walk.is_none()),
+                ("Walkthroughs", |v| v.walk.is_some()),
                 ("Elevations (Building Elevation)", |v| matches!(v.kind, ViewKind::Elevation { .. })),
                 ("Sections (Building Section)", |v| matches!(v.kind, ViewKind::Section { .. })),
                 ("Drafting Views (Detail)", |v| matches!(v.kind, ViewKind::Drafting)),
