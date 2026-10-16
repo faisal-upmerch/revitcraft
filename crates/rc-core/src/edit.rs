@@ -311,6 +311,68 @@ pub fn tag_all(p: &mut Project, view: Id, categories: &[Category]) -> Result<usi
     Ok(n)
 }
 
+/// Annotate > Beam Annotations: tags (1) and spot elevations (2) at the start, middle and end
+/// of each beam, above (places 0-2) and below (3-5) it; level beams take `level_slots`,
+/// sloped ones `sloped_slots`. Beams already tagged in the view are skipped unless
+/// `remove` clears their tags first. Returns the number placed.
+pub fn annotate_beams(p: &mut Project, view: Id, beams: &[Id], level_slots: [u8; 6], sloped_slots: [u8; 6], remove: bool, end_offset: f64) -> Result<usize, String> {
+    let v = p.view(view).ok_or("View not found.")?.clone();
+    let tags_of = |p: &Project, b: Id| -> Vec<Id> {
+        p.elements.iter().filter(|e| e.view == Some(view) && matches!(&e.kind, ElementKind::Tag(t) if t.host == b)).map(|e| e.id).collect()
+    };
+    let mut placed = 0;
+    for &b in beams {
+        let Some(ElementKind::Instance(i)) = p.element(b).map(|e| e.kind.clone()) else { continue };
+        let Some(end) = i.end else { continue };
+        let existing = tags_of(p, b);
+        if !existing.is_empty() {
+            if !remove {
+                continue;
+            }
+            delete_elements(p, &existing)?;
+        }
+        let (a, len) = (i.location, i.location.distance(end));
+        if len < 1.0 {
+            continue;
+        }
+        let dir = (end - a) / len;
+        // "Above" is the side towards the top of the view (or its left for vertical beams).
+        let mut n = geom::perp(dir);
+        if n.y < -1e-9 || (n.y.abs() <= 1e-9 && n.x > 0.0) {
+            n = -n;
+        }
+        let slots = if (i.end_elevation - i.elevation).abs() > 1.0 { sloped_slots } else { level_slots };
+        let inset = (end_offset + 4.0 * v.scale).min(len / 3.0);
+        let along = [inset, len / 2.0, len - inset];
+        let base = p.level_elevation(i.level);
+        for (k, kind) in slots.iter().enumerate() {
+            let t = along[k % 3];
+            let q = a + dir * t;
+            let side = if k < 3 { n } else { -n };
+            match kind {
+                1 => {
+                    let id = add_tag(p, view, b, q + side * (150.0 + 3.5 * v.scale), false)?;
+                    if let Some(ElementKind::Tag(tag)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        tag.vertical = dir.y.abs() > dir.x.abs();
+                    }
+                    placed += 1;
+                }
+                2 => {
+                    let z = base + i.elevation + (i.end_elevation - i.elevation) * t / len;
+                    let text = p.units.length(z);
+                    let id = add_symbol(p, view, SymbolKind::SpotElevation, q);
+                    if let Some(ElementKind::Symbol(sym)) = p.element_mut(id).map(|e| &mut e.kind) {
+                        sym.value = text;
+                    }
+                    placed += 1;
+                }
+                _ => {}
+            }
+        }
+    }
+    Ok(placed)
+}
+
 pub fn add_mass(p: &mut Project, level: Id, boundary: Vec<DVec2>, height: f64) -> Result<Id, String> {
     if boundary.len() < 3 || geom::area(&boundary).abs() < 1.0 {
         return Err("The mass needs a closed boundary.".into());
@@ -2952,6 +3014,27 @@ mod tests {
         assert!(t.distance(e) > 900.0);
         set_walk_frame(&mut p, v, 300);
         assert!((eye(&p).0 - DVec3::new(10000.0, 10000.0, 1750.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn beam_annotations_tag_the_middle_and_spot_the_ends() {
+        let (mut p, lvl, _) = project();
+        let bt = p.families.iter().find(|f| f.is_framing()).and_then(|f| f.types.first()).map(|t| t.id);
+        let bt = bt.expect("a structural framing type");
+        let b = add_beam(&mut p, bt, lvl, DVec2::new(0.0, 0.0), DVec2::new(6000.0, 0.0)).unwrap();
+        let plan = p.views.iter().find(|v| v.plan_level() == Some(lvl)).unwrap().id;
+        // A tag above the middle and spot elevations below both ends.
+        let n = annotate_beams(&mut p, plan, &[b], [0, 1, 0, 2, 0, 2], [0; 6], false, 0.0).unwrap();
+        assert_eq!(n, 3);
+        let tag = p.elements.iter().find_map(|e| match &e.kind {
+            ElementKind::Tag(t) if t.host == b => Some(t.position),
+            _ => None,
+        }).unwrap();
+        assert!((tag.x - 3000.0).abs() < 1e-6 && tag.y > 0.0);
+        // Tagged beams are skipped unless their tags are removed first.
+        assert_eq!(annotate_beams(&mut p, plan, &[b], [0, 1, 0, 0, 0, 0], [0; 6], false, 0.0).unwrap(), 0);
+        assert_eq!(annotate_beams(&mut p, plan, &[b], [0, 1, 0, 0, 0, 0], [0; 6], true, 0.0).unwrap(), 1);
+        assert_eq!(p.elements.iter().filter(|e| matches!(&e.kind, ElementKind::Tag(t) if t.host == b)).count(), 1);
     }
 
     #[test]

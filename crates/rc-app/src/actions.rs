@@ -656,6 +656,14 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         SpotCoordinate => app.set_tool(ToolKind::Dimension(DimKind::SpotCoordinate)),
         SpotSlope => app.set_tool(ToolKind::Dimension(DimKind::SpotSlope)),
         FindReplace => app.dialogs.find_replace = Some(Default::default()),
+        BeamAnnotations => {
+            if app.active_view().is_some_and(|v| v.plan_level().is_some()) {
+                app.dialogs.beam_annotations = Some(dialogs::BeamAnnoState::new(app));
+            } else {
+                app.error("Beam annotations are placed in plan views.");
+            }
+        }
+        CheckSpelling => app.dialogs.spelling = Some(dialogs::SpellState::new(app)),
         Text => app.set_tool(ToolKind::Text),
         TagByCategory => {
             app.opts.tag_mode = 0;

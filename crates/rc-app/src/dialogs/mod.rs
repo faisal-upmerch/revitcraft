@@ -1,5 +1,6 @@
 //! Dialogs. Each is shown while its field in `Dialogs` is set.
 
+mod annotate;
 mod manage;
 mod settings;
 mod type_props;
@@ -13,6 +14,8 @@ use eframe::egui::{self, Sense, vec2};
 use rc_core::model::*;
 use rc_core::units::UnitSystem;
 use std::collections::BTreeSet;
+
+pub use annotate::{BeamAnnoState, BeamSlots, SpellState};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Pending {
@@ -68,6 +71,12 @@ pub struct Dialogs {
     /// The Level tool's Plan View Types.
     pub plan_view_types: bool,
     pub starting_view: bool,
+    /// Beam Annotations, and what it last placed where.
+    pub beam_annotations: Option<BeamAnnoState>,
+    pub beam_slots: BeamSlots,
+    pub beam_end_offset: f64,
+    /// Check Spelling.
+    pub spelling: Option<SpellState>,
     /// Decal Types.
     pub decal_types: Option<DecalTypesState>,
     /// Rotate Project (false) or Mirror Project (true).
@@ -470,6 +479,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     add_to_set_dialog(app, ctx);
     project_turn_dialog(app, ctx);
     decal_types_dialog(app, ctx);
+    annotate::show(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);
     new_family_dialog(app, ctx);

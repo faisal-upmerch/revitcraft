@@ -56,6 +56,8 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    BeamAnnotations,
+    CheckSpelling,
     PathReinforcement,
     FabricArea,
     FabricSheet,
@@ -1021,6 +1023,19 @@ fn draw(g: &Pen, icon: Icon) {
             g.line(&[(0.04, 0.5), (0.6, 0.5)], ink);
             g.rect(0.56, 0.36, 0.9, 0.64, LGREY, ink);
             g.thin_line(&[(0.66, 0.36), (0.66, 0.64)], ink);
+        }
+        BeamAnnotations => {
+            // A beam with a tag above and a spot elevation below.
+            g.rect(0.06, 0.44, 0.94, 0.58, Color32::from_rgb(222, 165, 125), ink);
+            g.rect(0.36, 0.12, 0.64, 0.32, Color32::WHITE, ink);
+            g.thin_line(&[(0.5, 0.32), (0.5, 0.44)], ink);
+            g.poly(&[(0.14, 0.62), (0.22, 0.76), (0.06, 0.76)], Color32::WHITE, ink);
+            g.thin_line(&[(0.22, 0.76), (0.5, 0.76)], ink);
+        }
+        CheckSpelling => {
+            // ABC over a check mark.
+            g.text((0.5, 0.3), "ABC", 0.34, Color32::from_rgb(40, 60, 120));
+            g.line(&[(0.26, 0.66), (0.42, 0.84), (0.78, 0.5)], Color32::from_rgb(40, 150, 60));
         }
         Picture => {
             // A framed picture: sky, sun and hills.

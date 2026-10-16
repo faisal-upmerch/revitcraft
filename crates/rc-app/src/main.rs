@@ -26,6 +26,7 @@ mod script;
 mod selftest;
 mod sheet_ui;
 mod snap;
+mod spelling;
 mod statusbar;
 mod style;
 mod tempdims;
