@@ -204,6 +204,55 @@ impl Drawing {
             }
         }
     }
+    /// Clips everything to a polygon (a sketched crop region): lines to their inside pieces,
+    /// fills to their overlap, text and images by their position.
+    pub fn clip_to(&mut self, poly: &[DVec2]) {
+        if poly.len() < 3 {
+            return;
+        }
+        let crop = to_geo(&geom::ensure_ccw(poly));
+        let inside = |q: DVec2| geom::contains(poly, q);
+        let pieces = |a: DVec2, b: DVec2| -> Vec<(DVec2, DVec2)> {
+            let mut ts = vec![0.0, 1.0];
+            for i in 0..poly.len() {
+                if let Some((t, _)) = geom::segment_intersection(a, b, poly[i], poly[(i + 1) % poly.len()]) {
+                    ts.push(t);
+                }
+            }
+            ts.sort_by(|x, y| x.total_cmp(y));
+            ts.windows(2).filter(|w| w[1] - w[0] > 1e-9 && inside(a + (b - a) * ((w[0] + w[1]) / 2.0))).map(|w| (a + (b - a) * w[0], a + (b - a) * w[1])).collect()
+        };
+        let mut out = Vec::new();
+        for (id, prim) in std::mem::take(&mut self.prims) {
+            match prim {
+                Prim::Line { pts, closed, stroke } => {
+                    let mut pts = pts;
+                    if closed && pts.len() > 2 {
+                        pts.push(pts[0]);
+                    }
+                    for w in pts.windows(2) {
+                        for (a, b) in pieces(w[0], w[1]) {
+                            out.push((id, Prim::Line { pts: vec![a, b], closed: false, stroke }));
+                        }
+                    }
+                }
+                Prim::Fill { tris, color } => {
+                    let polys: Vec<Polygon<f64>> = tris.iter().map(|t| to_geo(&geom::ensure_ccw(&t[..]))).collect();
+                    let mp = MultiPolygon::new(polys);
+                    let clipped = geo::BooleanOps::intersection(&mp, &MultiPolygon::new(vec![crop.clone()]));
+                    let tris = fill_tris(&clipped);
+                    if !tris.is_empty() {
+                        out.push((id, Prim::Fill { tris, color }));
+                    }
+                }
+                Prim::Text { pos, .. } if !inside(pos) => {}
+                Prim::Image { min, max, .. } if !inside((min + max) / 2.0) => {}
+                other => out.push((id, other)),
+            }
+        }
+        self.prims = out;
+    }
+
     pub fn fill(&mut self, id: Option<Id>, poly: &[DVec2], color: [u8; 4]) {
         if poly.len() < 3 {
             return;
@@ -1094,7 +1143,7 @@ fn markers(p: &Project, view: &View, scale: f64, d: &mut Drawing) {
         }
         if v.parent == Some(view.id) {
             if let Some((a, b)) = v.crop {
-                let pts = vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)];
+                let pts = if v.crop_shape.len() >= 3 { v.crop_shape.clone() } else { vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)] };
                 d.line(Some(v.id), pts, true, Stroke::new(0.25, [0, 0, 0], Dash::Dashed));
                 d.text(Some(v.id), DVec2::new(b.x, b.y) + DVec2::new(2.0, 2.0) * scale, v.name.clone(), 2.5, Anchor::Left);
             }
@@ -1148,7 +1197,17 @@ fn walls_graphics(c: &Ctx, d: &mut Drawing) {
                 _ => 0,
             };
             let entry = cut.entry(key).or_default();
-            entry.0.push(to_geo(&fp.polygon()));
+            // Cut profiles of this view reshape the wall's cut.
+            let mut shape = MultiPolygon::new(vec![to_geo(&fp.polygon())]);
+            for x in p.elements.iter().filter(|x| x.view == Some(view.id)) {
+                if let ElementKind::CutProfile(cp) = &x.kind {
+                    if cp.host == e.id && cp.region.len() >= 3 {
+                        let r = MultiPolygon::new(vec![to_geo(&geom::ensure_ccw(&cp.region))]);
+                        shape = if cp.add { shape.union(&r) } else { shape.difference(&r) };
+                    }
+                }
+            }
+            entry.0.extend(shape.0);
             entry.2.push(e.id);
             for (_, i) in p.hosted_by(e.id) {
                 if let Some(o) = plan_opening(p, w, i, c.cut_z) {
@@ -2312,6 +2371,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         }
         ElementKind::Grid(g) => vec![g.polyline()],
         ElementKind::RasterImage(im) => vec![vec![im.min, DVec2::new(im.max.x, im.min.y), im.max, DVec2::new(im.min.x, im.max.y)]],
+        ElementKind::CutProfile(cp) => vec![cp.region.clone()],
         ElementKind::AreaReinforcement(a) => vec![a.boundary.clone()],
         ElementKind::Rebar(r) => crate::rebar::rebar_bars(p, r).into_iter().map(|(a, b, _)| vec![a.truncate(), b.truncate()]).collect(),
         ElementKind::Link(l) => match p.link_model(l.link) {

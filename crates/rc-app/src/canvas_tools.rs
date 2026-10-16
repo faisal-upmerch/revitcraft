@@ -164,6 +164,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::RebarSet => if n == 0 { "Click inside a floor or slab to start the bar.".into() } else { "Click to end the bar.".into() },
         ToolKind::AreaReinfHost => "Select a floor or slab to reinforce.".into(),
         ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
+        ToolKind::CutProfileHost => "Select a wall to edit its cut profile.".into(),
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
         ToolKind::ReportCoords => "Click a point to report its shared coordinates.".into(),
@@ -528,6 +529,24 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::Section | ToolKind::Callout | ToolKind::ElevationMarker | ToolKind::Camera => view_marker_tool(app, painter, xf, view, point, clicked),
+        ToolKind::CutProfileHost => {
+            let Some(c) = cursor else { return };
+            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Wall(_)));
+            app.interact.hover = hit;
+            if clicked {
+                match hit {
+                    Some(host) => {
+                        let level = app.el(host).and_then(|e| e.level()).unwrap_or(0);
+                        app.sketch = Some(tools::Sketch::new(SketchKind::CutProfile(host), view.id, level));
+                        app.opts.draw_mode = DrawMode::Line;
+                        app.opts.sketch_sub = SketchSub::Boundary;
+                        app.tool = Tool::new(ToolKind::SketchLine);
+                        app.select(vec![]);
+                    }
+                    None => app.error("Select a wall cut in this view."),
+                }
+            }
+        }
         ToolKind::PickToEdit => {
             let Some(c) = cursor else { return };
             let hit = hover_of(app, view, d, c, xf, &|e| e.design_option.is_some());

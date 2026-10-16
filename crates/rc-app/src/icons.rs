@@ -56,6 +56,7 @@ pub enum Icon {
     Beam,
     Globe,
     Picture,
+    CutProfile,
     Render,
     LoadAsGroup,
     TransferStandards,
@@ -936,6 +937,11 @@ fn draw(g: &Pen, icon: Icon) {
             g.circle((0.5, 0.52), 0.36, Color32::from_rgb(120, 160, 210), ink);
             g.circle((0.4, 0.4), 0.1, Color32::from_rgb(235, 242, 252), Color32::from_rgb(235, 242, 252));
             g.thin_line(&[(0.1, 0.92), (0.9, 0.92)], ink);
+        }
+        CutProfile => {
+            // A cut wall with a notched profile.
+            g.poly(&[(0.1, 0.3), (0.9, 0.3), (0.9, 0.7), (0.62, 0.7), (0.62, 0.52), (0.38, 0.52), (0.38, 0.7), (0.1, 0.7)], LGREY, ink);
+            g.line(&[(0.38, 0.7), (0.38, 0.52), (0.62, 0.52), (0.62, 0.7)], Color32::from_rgb(220, 0, 160));
         }
         Picture => {
             // A framed picture: sky, sun and hills.

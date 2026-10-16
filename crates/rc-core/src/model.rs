@@ -363,6 +363,8 @@ pub enum ElementKind {
     AreaReinforcement(AreaReinforcement),
     /// A set of straight bars in a host (Structure > Rebar).
     Rebar(Rebar),
+    /// View > Cut Profile: a region added to or cut from an element's cut shape in one view.
+    CutProfile(CutProfile),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -428,6 +430,7 @@ impl Element {
             ElementKind::Link(_) => Category::Links,
             ElementKind::AreaReinforcement(_) => Category::AreaReinforcement,
             ElementKind::Rebar(_) => Category::StructuralRebar,
+            ElementKind::CutProfile(_) => Category::Lines,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -2356,6 +2359,9 @@ pub struct View {
     pub crop_active: bool,
     #[serde(default)]
     pub crop_visible: bool,
+    /// A sketched (non-rectangular) crop boundary; `crop` is then its bounding box.
+    #[serde(default)]
+    pub crop_shape: Vec<DVec2>,
     #[serde(default)]
     pub phase: Option<Id>,
     #[serde(default)]
@@ -2417,6 +2423,7 @@ impl View {
             crop: None,
             crop_active: false,
             crop_visible: false,
+            crop_shape: Vec::new(),
             phase: None,
             phase_filter: PhaseFilter::ShowAll,
             template: None,
@@ -2679,6 +2686,14 @@ pub struct LinkedModel {
     pub path: String,
     #[serde(skip)]
     pub data: Option<std::sync::Arc<Project>>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct CutProfile {
+    pub host: Id,
+    pub region: Vec<DVec2>,
+    /// The region joins the cut shape (else it is cut away).
+    pub add: bool,
 }
 
 /// One layer of an area reinforcement.

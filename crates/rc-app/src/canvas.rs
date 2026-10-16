@@ -1060,9 +1060,13 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     // Crop region.
     if view.crop_visible {
         if let Some((a, b)) = view.crop {
-            let r = Rect::from_two_pos(xf.s(a), xf.s(b));
             let sel = app.selection.contains(&view_id);
-            painter.rect_stroke(r, 0.0, Stroke::new(if sel { 2.0 } else { 1.0 }, if sel { style::SELECT } else { ink(app, [40, 40, 40]) }), egui::StrokeKind::Middle);
+            let stroke = Stroke::new(if sel { 2.0 } else { 1.0 }, if sel { style::SELECT } else { ink(app, [40, 40, 40]) });
+            if view.crop_shape.len() >= 3 {
+                painter.add(egui::Shape::closed_line(view.crop_shape.iter().map(|q| xf.s(*q)).collect(), stroke));
+            } else {
+                painter.rect_stroke(Rect::from_two_pos(xf.s(a), xf.s(b)), 0.0, stroke, egui::StrokeKind::Middle);
+            }
         }
     }
 

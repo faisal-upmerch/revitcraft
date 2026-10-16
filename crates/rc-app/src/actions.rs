@@ -737,6 +737,14 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         Section => app.set_tool(ToolKind::Section),
         Camera => app.set_tool(ToolKind::Camera),
+        CutProfile => app.set_tool(ToolKind::CutProfileHost),
+        CalloutSketch => {
+            if app.active_view().is_some_and(|v| v.plan_level().is_some()) {
+                start_sketch(app, SketchKind::Callout, DrawMode::Line);
+            } else {
+                app.error("Callouts are sketched in plan views.");
+            }
+        }
         FramingElevation => app.set_tool(ToolKind::FramingElevation),
         StartingView => app.dialogs.starting_view = true,
         Location => {
@@ -1563,6 +1571,8 @@ pub fn finish_sketch(app: &mut App) {
                         })
                     }
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
+                    SketchKind::Callout => app.run("Create Callout", |p| edit::new_sketch_callout(p, vid, outer)),
+                    SketchKind::CutProfile(host) => app.run("Cut Profile", |p| edit::add_cut_profile(p, vid, host, outer)),
                     SketchKind::AreaReinforcement(host) => {
                         let spacing = o.rebar_spacing;
                         app.run("Create Area Reinforcement", |p| {

@@ -224,6 +224,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Thin\nLines", C::ThinLines, vec![]),
                 Labeled("Show\nHidden Lines", C::ShowHiddenLines, vec![]),
                 Labeled("Remove\nHidden Lines", C::RemoveHiddenLines, vec![]),
+                Labeled("Cut\nProfile", C::CutProfile, vec![]),
             ],
         ),
         panel("Presentation", vec![Big(C::Render)]),
@@ -232,7 +233,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
             vec![
                 Labeled("3D\nView", C::Default3D, vec![C::Default3D, C::Camera]),
                 Big(C::Section),
-                Big(C::Callout),
+                Labeled("Callout", C::Callout, vec![C::Callout, C::CalloutSketch]),
                 Labeled("Plan\nViews", C::NewFloorPlan, vec![C::NewFloorPlan, C::NewCeilingPlan, C::NewAreaPlan]),
                 Labeled("Elevation", C::ElevationView, vec![C::ElevationView, C::FramingElevation]),
                 Labeled("Drafting\nView", C::DraftingView, vec![]),

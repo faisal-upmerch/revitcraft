@@ -205,6 +205,9 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Spacing", CONSTRAINTS, v(Length), false, false));
             d.push(def("Bar Length", DIMENSIONS, v(Length), true, false));
         }
+        ElementKind::CutProfile(_) => {
+            d.push(def("Profile", CONSTRAINTS, v(Text), true, false));
+        }
         ElementKind::Link(_) => {
             d.push(def("Name", IDENTITY, v(Text), true, false));
             d.push(def("Shared Site", OTHER, v(Text), true, false));
@@ -713,6 +716,10 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             "Quantity" => num(r.count as f64),
             "Spacing" => num(r.spacing),
             "Bar Length" => num(r.start.distance(r.end)),
+            _ => None,
+        },
+        ElementKind::CutProfile(cp) => match name {
+            "Profile" => text(if cp.add { "Added" } else { "Cut away" }.to_string()),
             _ => None,
         },
         ElementKind::Link(l) => match name {

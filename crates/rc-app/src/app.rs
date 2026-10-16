@@ -209,6 +209,8 @@ pub struct App {
     pub thumbs: HashMap<String, Option<egui::TextureHandle>>,
     /// When the project was last saved or the save reminder last answered.
     pub save_reminder_at: f64,
+    /// Self-test runs toggle every setting: they must not save them.
+    pub no_save_settings: bool,
     /// A view to open once the dock is back (views opened while the dock is drawn).
     pub open_pending: Option<Id>,
 }
@@ -270,6 +272,7 @@ impl App {
             thumbs: HashMap::new(),
             save_reminder_at: 0.0,
             open_pending: None,
+            no_save_settings: false,
         };
         app.open_first_plan();
         app.dialogs.home = std::env::args().skip(1).all(|a| a.is_empty()) && app.screenshot.is_none();
@@ -289,7 +292,10 @@ impl App {
             };
             match args[k].as_str() {
                 "--sample" => self.open_sample(),
-                "--selftest" => self.selftest = Some(crate::selftest::SelfTest::new(self)),
+                "--selftest" => {
+                    self.selftest = Some(crate::selftest::SelfTest::new(self));
+                    self.no_save_settings = true;
+                }
                 "--new-family" => crate::family_editor::new_family(self, "Family1", Category::GenericModels, None),
                 "--sample-site" => self.replace_document(rc_core::sample::sample_site(), None),
                 "--imperial" => self.replace_document(defaults::new_project(UnitSystem::Imperial), None),
@@ -1370,13 +1376,13 @@ impl eframe::App for App {
     }
 
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
-        if self.screenshot.is_none() {
+        if self.screenshot.is_none() && !self.no_save_settings {
             eframe::set_value(storage, "settings", &self.settings);
         }
     }
 
     fn persist_egui_memory(&self) -> bool {
-        self.screenshot.is_none()
+        self.screenshot.is_none() && !self.no_save_settings
     }
 
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {

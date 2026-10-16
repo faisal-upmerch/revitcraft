@@ -1143,6 +1143,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::Shaft(s) => s.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&s.base_level),
                 ElementKind::Toposolid(t) => t.host.is_some_and(|h| doomed.contains(&h)) || doomed.contains(&t.level),
                 ElementKind::AreaReinforcement(a) => doomed.contains(&a.host),
+                ElementKind::CutProfile(cp) => doomed.contains(&cp.host),
                 ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
@@ -1233,6 +1234,7 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             r.start = f(r.start);
             r.end = f(r.end);
         }
+        ElementKind::CutProfile(cp) => cp.region = cp.region.iter().map(|q| f(*q)).collect(),
         ElementKind::Grid(g) => {
             g.start = f(g.start);
             g.end = f(g.end);
@@ -2485,6 +2487,42 @@ pub fn new_callout(p: &mut Project, parent: Id, a: DVec2, b: DVec2) -> Result<Id
     Ok(id)
 }
 
+/// View > Cut Profile: a sketched region reshapes a wall's cut in `view` only. A region lying
+/// mostly inside the wall cuts it away; otherwise it joins the wall.
+pub fn add_cut_profile(p: &mut Project, view: Id, host: Id, region: Vec<DVec2>) -> Result<Id, String> {
+    let region = geom::ensure_ccw(&geom::clean(&region, 1.0));
+    if region.len() < 3 {
+        return Err("Sketch a closed profile.".into());
+    }
+    let fp = analysis::wall_footprints(p);
+    let wall = fp.get(&host).map(|f| f.polygon()).ok_or("Pick a wall cut in this view.")?;
+    let inside = {
+        use geo::{Area, BooleanOps};
+        let to = |pts: &[DVec2]| geo::Polygon::new(geo::LineString::from(pts.iter().map(|q| geo::Coord { x: q.x, y: q.y }).collect::<Vec<_>>()), vec![]);
+        let r = to(&region);
+        let overlap = r.intersection(&to(&geom::ensure_ccw(&wall))).unsigned_area();
+        if overlap < 1.0 && r.intersection(&to(&geom::offset(&geom::ensure_ccw(&wall), 1.0))).unsigned_area() < 1.0 {
+            return Err("The profile must touch the wall.".into());
+        }
+        overlap > r.unsigned_area() / 2.0
+    };
+    Ok(push_in_view(p, view, ElementKind::CutProfile(CutProfile { host, region, add: !inside })))
+}
+
+/// View > Callout > Sketch: a callout cropped to a sketched boundary.
+pub fn new_sketch_callout(p: &mut Project, parent: Id, shape: Vec<DVec2>) -> Result<Id, String> {
+    let shape = geom::ensure_ccw(&geom::clean(&shape, 1.0));
+    if shape.len() < 3 || geom::area(&shape).abs() < 10_000.0 {
+        return Err("Sketch a closed callout boundary.".into());
+    }
+    let (a, b) = geom::bounds(shape.iter().copied());
+    let id = new_callout(p, parent, a, b)?;
+    if let Some(v) = p.view_mut(id) {
+        v.crop_shape = shape;
+    }
+    Ok(id)
+}
+
 pub fn new_drafting_view(p: &mut Project, name: &str, scale: f64) -> Id {
     let id = p.new_id();
     p.views.push(View::new(id, unique_name(p.views.iter().map(|v| v.name.clone()), name), scale, ViewKind::Drafting));
@@ -2727,6 +2765,48 @@ mod tests {
         mirror_project(&mut p, true);
         let Some(ViewKind::Section { start, end, .. }) = p.view(s).map(|v| v.kind.clone()) else { panic!() };
         assert!((start - DVec2::new(-3000.0, -1000.0)).length() < 1e-6 && (end - DVec2::new(0.0, -1000.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn cut_profiles_reshape_a_wall_in_one_view() {
+        let (mut p, lvl, wt) = project();
+        let w = add_wall(&mut p, lvl, wt, DVec2::new(0.0, 0.0), DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let plans: Vec<Id> = p.views.iter().filter(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).map(|v| v.id).collect();
+        // A bump of 500 added to the wall's north face, in the first plan only.
+        let bump = vec![DVec2::new(1000.0, 0.0), DVec2::new(2000.0, 0.0), DVec2::new(2000.0, 800.0), DVec2::new(1000.0, 800.0)];
+        let cp = add_cut_profile(&mut p, plans[0], w, bump).unwrap();
+        assert!(matches!(p.element(cp).map(|e| &e.kind), Some(ElementKind::CutProfile(c)) if c.add));
+        let fp = analysis::wall_footprints(&p);
+        let maxy = |v: Id| -> f64 {
+            let d = crate::plan::floor_plan(&p, p.view(v).unwrap(), &fp);
+            d.prims.iter().filter(|(id, _)| id.is_none()).flat_map(|(_, pr)| match pr {
+                crate::plan::Prim::Line { pts, .. } => pts.clone(),
+                _ => vec![],
+            }).map(|q| q.y).fold(f64::MIN, f64::max)
+        };
+        assert!((maxy(plans[0]) - 800.0).abs() < 1e-6, "{}", maxy(plans[0]));
+        if plans.len() > 1 {
+            assert!(maxy(plans[1]) < 500.0);
+        }
+    }
+
+    #[test]
+    fn sketch_callouts_clip_to_their_boundary() {
+        let (mut p, lvl, wt) = project();
+        add_wall(&mut p, lvl, wt, DVec2::new(-5000.0, 0.0), DVec2::new(5000.0, 0.0), 3000.0).unwrap();
+        let plan = p.views.iter().find(|v| matches!(v.kind, ViewKind::FloorPlan { .. })).unwrap().id;
+        // An L-shaped callout over the wall's middle.
+        let shape = vec![DVec2::new(-1000.0, -1000.0), DVec2::new(1000.0, -1000.0), DVec2::new(1000.0, 1000.0), DVec2::new(0.0, 1000.0), DVec2::new(0.0, 0.5), DVec2::new(-1000.0, 0.5)];
+        let c = new_sketch_callout(&mut p, plan, shape).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        let d = crate::sheet::view_drawing(&p, p.view(c).unwrap(), &fp).unwrap();
+        let pts: Vec<DVec2> = d.prims.iter().flat_map(|(_, pr)| match pr {
+            crate::plan::Prim::Line { pts, .. } => pts.clone(),
+            crate::plan::Prim::Fill { tris, .. } => tris.iter().flatten().copied().collect(),
+            _ => vec![],
+        }).collect();
+        assert!(!pts.is_empty());
+        assert!(pts.iter().all(|q| q.x >= -1000.0 - 1e-6 && q.x <= 1000.0 + 1e-6 && q.y >= -1000.0 - 1e-6 && q.y <= 1000.0 + 1e-6));
     }
 
     #[test]

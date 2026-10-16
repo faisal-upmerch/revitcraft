@@ -51,6 +51,10 @@ pub fn view_drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint
         _ if view.is_planar_2d() => plan::floor_plan(p, view, footprints),
         _ => return None,
     };
+    if view.crop_active && view.crop_shape.len() >= 3 {
+        d.clip_to(&view.crop_shape);
+        d.crop = Some(geom::bounds(view.crop_shape.iter().copied()));
+    }
     plan::apply_object_styles(p, &mut d);
     Some(d)
 }

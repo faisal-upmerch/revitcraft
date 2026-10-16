@@ -46,6 +46,7 @@ pub enum ToolKind {
     FramingElevation,
     RebarSet,
     PickToEdit,
+    CutProfileHost,
     AreaReinfHost,
     SpecifyCoords,
     ReportCoords,
@@ -137,6 +138,7 @@ impl ToolKind {
             ToolKind::Camera => "Camera",
             ToolKind::RebarSet => "Rebar",
             ToolKind::PickToEdit => "Pick to Edit",
+            ToolKind::CutProfileHost => "Cut Profile",
             ToolKind::AreaReinfHost => "Area Reinforcement",
             ToolKind::FramingElevation => "Framing Elevation",
             ToolKind::SpecifyCoords => "Specify Coordinates at Point",
@@ -395,6 +397,10 @@ pub enum SketchKind {
     BeamSystem,
     /// An area reinforcement boundary on this floor.
     AreaReinforcement(Id),
+    /// A sketched callout boundary.
+    Callout,
+    /// A cut profile of this element.
+    CutProfile(Id),
     /// A multi-segment grid.
     Grid,
     EditFloor(Id),
@@ -424,6 +430,8 @@ impl SketchKind {
             SketchKind::Grid => "Edit Sketch",
             SketchKind::BeamSystem => "Create Beam System Boundary",
             SketchKind::AreaReinforcement(_) => "Create Reinforcement Boundary",
+            SketchKind::Callout => "Edit Profile",
+            SketchKind::CutProfile(_) => "Create Cut Profile Sketch",
         }
     }
     pub fn is_roof(self) -> bool {
