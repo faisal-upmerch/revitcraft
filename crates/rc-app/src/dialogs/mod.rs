@@ -259,6 +259,11 @@ pub struct Dlg<'a> {
     resizable: bool,
 }
 
+/// A titled group box (for other modules).
+pub fn manage_group<R>(ui: &mut egui::Ui, title: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    manage::group(ui, title, add)
+}
+
 /// A dialog window in the reference app's style (for other modules).
 pub fn window_pub(title: &str) -> Dlg<'static> {
     window(title)

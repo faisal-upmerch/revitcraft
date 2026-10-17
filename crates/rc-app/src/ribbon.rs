@@ -1110,7 +1110,7 @@ fn family_create(app: &App) -> Vec<Panel> {
     let _ = custom;
     vec![
         panel("Select", vec![Big(C::Modify)]),
-        panel("Properties", vec![Stack(vec![C::ToggleProperties, C::FeFamilyCategory, C::FeFamilyTypes])]),
+        panel("Properties", vec![Icons(vec![C::TypeProperties, C::FeFamilyCategory, C::ToggleProperties, C::FeFamilyTypes])]),
         panel(
             "Forms",
             vec![Big(C::FeExtrusion), Big(C::FeBlend), Big(C::FeRevolve), Big(C::FeSweep), Labeled("Swept\nBlend", C::FeSweptBlend, vec![]), Labeled("Void\nForms", C::FeVoidExtrusion, vec![C::FeVoidExtrusion, C::FeVoidBlend, C::FeVoidRevolve, C::FeVoidSweep])],
@@ -1123,13 +1123,57 @@ fn family_create(app: &App) -> Vec<Panel> {
     ]
 }
 
+/// The Family Editor panel every family tab ends with.
+fn fe_panel() -> Panel {
+    panel("Family Editor", vec![Labeled("Load into\nProject", C::FeLoadIntoProject, vec![]), Labeled("Load into\nProject and Close", C::FeLoadAndClose, vec![])])
+}
+
 fn family_tab(tab: Tab, app: &App) -> Vec<Panel> {
     match tab {
         Tab::Create => family_create(app),
-        Tab::Insert => vec![panel("Import", vec![Labeled("Import\nCAD", C::ImportCad, vec![])]), panel("Load from Library", vec![Labeled("Load\nFamily", C::LoadFamily, vec![])])],
-        Tab::Annotate => vec![panel("Dimension", vec![Big(C::FeDimension)]), panel("Detail", vec![Labeled("Symbolic\nLine", C::FeSymbolicLine, vec![])])],
-        Tab::View => vec![panel("Graphics", vec![Labeled("Thin\nLines", C::ThinLines, vec![])]), panel("Create", vec![Labeled("Default\n3D View", C::FeDefault3D, vec![])])],
-        Tab::Manage => vec![panel("Settings", vec![Labeled("Family Category\nand Parameters", C::FeFamilyCategory, vec![])])],
+        Tab::Insert => vec![
+            panel("Select", vec![Big(C::Modify)]),
+            panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
+            panel("Link", vec![Big(C::LinkRevit), Big(C::LinkIfc), Big(C::LinkCad), Labeled("Link\nTopography", C::LinkTopography, vec![]), Labeled("DWF\nMarkup", C::DwfMarkup, vec![]), Labeled("Point\nCloud", C::PointCloud, vec![]), Labeled("Coordination\nModel", C::CoordinationModel, vec![]), Labeled("Link\nPDF", C::LinkPdf, vec![]), Big(C::LinkImage)]),
+            panel("Import", vec![Big(C::ImportCad), Labeled("Import\ngbXML", C::ImportGbxml, vec![]), Labeled("Import\nPDF", C::ImportPdf, vec![]), Big(C::ImportImage)]),
+            panel("Load from Library", vec![Labeled("Load\nFamily", C::LoadFamily, vec![]), Labeled("Load Autodesk\nFamily", C::LoadAutodeskFamily, vec![]), Labeled("Load as\nGroup", C::LoadAsGroup, vec![]), Labeled("Insert\nfrom File", C::InsertViews, vec![])]),
+            fe_panel(),
+        ],
+        Tab::Annotate => vec![
+            panel("Select", vec![Big(C::Modify)]),
+            panel("Dimension", vec![Labeled("Aligned", C::FeDimension, vec![]), Big(C::DimAngular), Big(C::DimRadial), Big(C::DimDiameter), Labeled("Arc\nLength", C::DimArcLength, vec![])]),
+            panel("Detail", vec![Labeled("Symbolic\nLine", C::FeSymbolicLine, vec![]), Labeled("Detail\nComponent", C::DetailComponent, vec![]), Labeled("Detail\nGroup", C::PlaceDetailGroup, vec![]), Big(C::Symbol), Labeled("Masking\nRegion", C::FeMaskingRegion, vec![]), Labeled("Filled\nRegion", C::FeFilledRegion, vec![])]),
+            panel("Text", vec![Labeled("Text", C::FeText, vec![]), Labeled("Check\nSpelling", C::CheckSpelling, vec![]), Labeled("Find/\nReplace", C::FindReplace, vec![])]),
+            fe_panel(),
+        ],
+        Tab::View => vec![
+            panel("Select", vec![Big(C::Modify)]),
+            panel("Graphics", vec![Labeled("Visibility/\nGraphics", C::VisibilityGraphics, vec![]), Labeled("Thin\nLines", C::ThinLines, vec![])]),
+            panel("Create", vec![Labeled("Default\n3D", C::FeDefault3D, vec![]), Big(C::Camera), Big(C::Section)]),
+            panel("Windows", vec![Labeled("Switch\nWindows", C::SwitchWindows, vec![]), Labeled("Close\nInactive", C::CloseInactive, vec![]), Labeled("Tab\nViews", C::TabViews, vec![]), Labeled("Tile\nViews", C::TileViews, vec![]), Labeled("User\nInterface", C::ToggleProperties, vec![C::ToggleProperties, C::ToggleBrowser, C::ToggleStatusBar, C::ToggleOptionsBar])]),
+            panel("", vec![Labeled("Canvas\nTheme", C::CanvasTheme, vec![])]),
+            fe_panel(),
+        ],
+        Tab::Manage => vec![
+            panel("Select", vec![Big(C::Modify)]),
+            panel(
+                "Settings",
+                vec![
+                    Big(C::Materials),
+                    Labeled("Object\nStyles", C::ObjectStyles, vec![]),
+                    Big(C::Snaps),
+                    Labeled("Shared\nParameters", C::SharedParameters, vec![]),
+                    Labeled("Transfer\nProject Standards", C::TransferStandards, vec![]),
+                    Labeled("Purge\nUnused", C::Purge, vec![]),
+                    Labeled("Project\nUnits", C::ProjectUnits, vec![]),
+                    Labeled("Structural\nSettings", C::StructuralSettings, vec![]),
+                    Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles]),
+                ],
+            ),
+            panel("Manage Project", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![]), Labeled("Decal\nTypes", C::DecalTypes, vec![]), Labeled("Starting\nView", C::StartingView, vec![])]),
+            panel("Inquiry", vec![Labeled("IDs of\nSelection", C::IdsOfSelection, vec![]), Labeled("Select\nby ID", C::SelectById, vec![]), Big(C::Warnings)]),
+            fe_panel(),
+        ],
         _ => vec![],
     }
 }
@@ -1154,10 +1198,20 @@ fn family_contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         F::SymbolicLine => ("Place Symbolic Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])])]),
         F::ModelLine => ("Place Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])]), wp()]),
         F::RefLine => ("Place Reference Lines".into(), vec![panel("Draw", vec![Icons(vec![C::DrawLine])]), wp()]),
+        F::Control => ("Place Control".into(), vec![panel("Control Type", vec![Labeled("Single\nVertical", C::FeControlSingleV, vec![]), Labeled("Double\nVertical", C::FeControlDoubleV, vec![]), Labeled("Single\nHorizontal", C::FeControlSingleH, vec![]), Labeled("Double\nHorizontal", C::FeControlDoubleH, vec![])])]),
+        F::ModelText => ("Place Model Text".into(), vec![wp()]),
+        F::Component => ("Place Component".into(), vec![panel("Mode", vec![Labeled("Load\nFamily", C::LoadFamily, vec![])])]),
+        F::Region => (if fe.region_masking { "Create Masking Region Boundary" } else { "Create Filled Region Boundary" }.into(), vec![mode(), draw()]),
+        F::Note => ("Place Text".into(), vec![]),
         F::Select => match fe.sel {
             crate::family_editor::FeSel::Form(k) => (fe.family.definition.as_ref().and_then(|d| d.forms.get(k)).map(|f| f.form.kind_label().to_string()).unwrap_or_else(|| "Form".into()), vec![]),
             crate::family_editor::FeSel::Plane(_) => ("Reference Planes".into(), vec![]),
             crate::family_editor::FeSel::Dim(_) => ("Dimensions".into(), vec![]),
+            crate::family_editor::FeSel::Control(_) => ("Generic Annotations".into(), vec![]),
+            crate::family_editor::FeSel::Text(_) => ("Model Text".into(), vec![]),
+            crate::family_editor::FeSel::Nested(_) => ("Generic Models".into(), vec![]),
+            crate::family_editor::FeSel::Region(_) => ("Detail Items".into(), vec![]),
+            crate::family_editor::FeSel::Note(_) => ("Text Notes".into(), vec![]),
             crate::family_editor::FeSel::Sym(_) => ("Lines".into(), vec![]),
             crate::family_editor::FeSel::Line(k) => (if fe.family.definition.as_ref().and_then(|d| d.lines.get(k)).is_some_and(|l| l.reference) { "Reference Lines" } else { "Lines" }.into(), vec![]),
             crate::family_editor::FeSel::None => return None,

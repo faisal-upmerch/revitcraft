@@ -61,7 +61,10 @@ pub fn instance_frame(p: &Project, i: &FamilyInstance) -> InstanceFrame {
     }
     let a = i.rotation_deg.to_radians();
     let x = DVec2::new(a.cos(), a.sin());
-    InstanceFrame { origin: i.location, z0, x, y: geom::perp(x), depth: 0.0, length: 0.0, rise: 0.0 }
+    // Families with flip controls mirror with the instance's flips.
+    let flips = p.family(i.family_id).and_then(|f| f.definition.as_ref()).is_some_and(|d| !d.controls.is_empty());
+    let (hx, fy) = if flips { (if i.flip_hand { -1.0 } else { 1.0 }, if i.flip_facing { -1.0 } else { 1.0 }) } else { (1.0, 1.0) };
+    InstanceFrame { origin: i.location, z0, x: x * hx, y: geom::perp(x) * fy, depth: 0.0, length: 0.0, rise: 0.0 }
 }
 
 /// Adds boxes and extrusions in an instance frame.
@@ -505,6 +508,8 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
             if let Some(def) = &r.family().definition {
                 if let Ok(solved) = def.solve(&|n| r.number(n).ok()) {
                     let local = def.build(&solved, &|m| if r.family().param(m).is_some() { r.text(m, "Default") } else if m.is_empty() { "Default".into() } else { m.to_string() }, &|v| r.yes_no(v, true));
+                    // A flipped (mirrored) frame reverses the winding.
+                    let mirrored = f.x.perp_dot(f.y) < 0.0;
                     for (name, mesh) in local.by_material {
                         let out = b.set.mesh(&name);
                         for t in mesh.indices.chunks(3) {
@@ -512,7 +517,11 @@ pub fn instance_mesh(p: &Project, i: &FamilyInstance) -> MeshSet {
                                 let v = mesh.positions[*k as usize];
                                 f.world(v.x, v.y, v.z)
                             }).collect();
-                            out.add_triangle(q[0], q[1], q[2]);
+                            if mirrored {
+                                out.add_triangle(q[0], q[2], q[1]);
+                            } else {
+                                out.add_triangle(q[0], q[1], q[2]);
+                            }
                         }
                     }
                 }
@@ -711,7 +720,12 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
                             out.push(line(vec![f.plan(a.x, a.y), f.plan(b.x, b.y)], false, SymStyle::Projection));
                         }
                     }
-                    if def.symbolic.is_empty() {
+                    // Nested components, regions and flat model text.
+                    let extras = def.plan_extras(&solved);
+                    for (pts, closed, fill) in &extras {
+                        out.push(SymLine { pts: pts.iter().map(|q| f.plan(q.x, q.y)).collect(), closed: *closed, style: SymStyle::Projection, fill: *fill });
+                    }
+                    if def.symbolic.is_empty() && extras.is_empty() {
                         // Outline of the geometry's footprint.
                         let mesh = instance_mesh(p, i);
                         if let Some((mn, mx)) = mesh.bounds() {
@@ -767,6 +781,18 @@ pub fn instance_symbol(p: &Project, i: &FamilyInstance, cut_z: f64) -> Vec<SymLi
         }
     }
     out
+}
+
+/// The plan symbol of a family type on its own (nested components).
+pub fn family_type_symbol(family: &Family, ftype: &FamilyType) -> Vec<SymLine> {
+    let mut p = Project::empty();
+    let level = p.new_id();
+    p.elements.push(Element::new(level, ElementKind::Level(Level { name: "L".into(), elevation: 0.0, building_story: true })));
+    let mut fam = family.clone();
+    fam.types = vec![ftype.clone()];
+    p.families.push(fam);
+    let inst = FamilyInstance { family_id: family.id, type_id: ftype.id, category: family.category, level, ..Default::default() };
+    instance_symbol(&p, &inst, 1200.0)
 }
 
 /// Plan outline used for picking and selection highlight.

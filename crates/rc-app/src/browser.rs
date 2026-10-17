@@ -558,12 +558,25 @@ fn family_browser(app: &mut App, ui: &mut egui::Ui) {
                 });
             }
         });
-        tree_node(ui, "fe-legends", "Legends", Some(Icon::Legend), false, false, |_| {});
-        tree_node(ui, "fe-schedules", "Schedules/Quantities (all)", Some(Icon::Schedule), false, false, |_| {});
         tree_node(ui, "fe-sheets", "Sheets (all)", Some(Icon::Sheet), false, false, |_| {});
+        // Families loaded into this family, by category, with their types.
+        let loaded: Vec<(Category, String, Vec<String>)> = fe.def().map(|d| d.loaded.iter().map(|f| (f.category, f.name.clone(), f.types.iter().map(|t| t.name.clone()).collect())).collect()).unwrap_or_default();
         tree_node(ui, "fe-families", "Families", Some(Icon::LoadFamily), false, false, |ui| {
-            for cat in ["Annotation Symbols"] {
-                tree_node(ui, ("fe-fam-cat", cat), cat, None, false, false, |_| {});
+            let mut cats: Vec<Category> = loaded.iter().map(|l| l.0).collect();
+            cats.push(Category::Symbols);
+            cats.sort_by_key(|c| c.label());
+            cats.dedup();
+            for cat in cats {
+                let label = if cat == Category::Symbols { "Annotation Symbols" } else { cat.label() };
+                tree_node(ui, ("fe-fam-cat", label), label, None, false, false, |ui| {
+                    for (_, name, types) in loaded.iter().filter(|l| l.0 == cat) {
+                        tree_node(ui, ("fe-fam", name.as_str()), name, None, false, false, |ui| {
+                            for t in types {
+                                let _ = row(ui, Icon::Component, t, false, false);
+                            }
+                        });
+                    }
+                });
             }
         });
         tree_node(ui, "fe-groups", "Groups", Some(Icon::PlaceGroup), false, false, |_| {});

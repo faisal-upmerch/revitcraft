@@ -10,7 +10,7 @@ use crate::render3d::{self, Camera, DrawSettings};
 use crate::style;
 use eframe::egui::{self, Color32, Pos2, Rect, Sense, Stroke, pos2, vec2};
 use glam::DVec3;
-use rc_core::family_def::{self, Axis, DimDef, FamilyDef, Form, FormDef, Loc, RefPlaneDef, SketchPlane, SketchPt, SymLine};
+use rc_core::family_def::{self, Axis, ControlDef, ControlKind, DimDef, FamNote, FamRegion, FamilyDef, Form, FormDef, Loc, ModelTextDef, NestedDef, RefPlaneDef, SketchPlane, SketchPt, SymLine};
 use rc_core::family_params::Resolver;
 use rc_core::geom::DVec2;
 use rc_core::model::*;
@@ -61,6 +61,16 @@ pub enum FeTool {
     SymbolicLine,
     ModelLine,
     RefLine,
+    /// Create > Control (plan).
+    Control,
+    /// Create > Model Text: the text from Edit Text, placed by a click.
+    ModelText,
+    /// Create > Component: a loaded family placed in plan.
+    Component,
+    /// Annotate > Filled Region / Masking Region (plan sketch).
+    Region,
+    /// Annotate > Text: a note in the current view.
+    Note,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -72,6 +82,11 @@ pub enum FeSel {
     Sym(usize),
     /// A model or reference line.
     Line(usize),
+    Control(usize),
+    Text(usize),
+    Nested(usize),
+    Region(usize),
+    Note(usize),
 }
 
 pub struct FamilyEditor {
@@ -119,6 +134,23 @@ pub struct FamilyEditor {
     pub types_dialog: Option<Family>,
     pub category_dialog: bool,
     pub category_pick: Option<Category>,
+    /// Control Type for new controls.
+    pub control_kind: ControlKind,
+    /// The region being sketched is a masking region.
+    pub region_masking: bool,
+    /// Edit Text open for model text (false) or a note (true), with its text.
+    pub text_dialog: Option<(bool, String)>,
+    /// The text waiting to be placed by Model Text / Text.
+    pub place_text: String,
+    /// Component: the loaded family and type being placed, and its rotation.
+    pub comp: Option<(String, String)>,
+    pub comp_rotation: f64,
+    /// Work Plane Set: the named plane new forms and text start from (None: the view's own).
+    pub work_plane: Option<u32>,
+    pub work_plane_dialog: Option<Option<u32>>,
+    pub show_work_plane: bool,
+    /// "No Component family is loaded" prompt.
+    pub load_prompt: bool,
 }
 
 pub fn open(app: &mut App, family_id: Id) {
@@ -195,7 +227,44 @@ impl FamilyEditor {
             type_name_dialog: None,
             message: None,
             scene_key: 1,
+            control_kind: ControlKind::SingleVertical,
+            region_masking: false,
+            text_dialog: None,
+            place_text: String::new(),
+            comp: None,
+            comp_rotation: 0.0,
+            work_plane: None,
+            work_plane_dialog: None,
+            show_work_plane: false,
+            load_prompt: false,
         }
+    }
+
+    /// Manage > Purge Unused: drops loaded families no component uses.
+    pub fn purge_unused(&mut self) {
+        self.checkpoint();
+        if let Some(d) = self.family.definition.as_mut() {
+            let used: Vec<String> = d.nested.iter().map(|n| n.family.clone()).collect();
+            d.loaded.retain(|f| used.contains(&f.name));
+        }
+        if self.comp.as_ref().is_some_and(|(f, _)| self.def().is_some_and(|d| !d.loaded.iter().any(|l| &l.name == f))) {
+            self.comp = None;
+        }
+    }
+
+    /// Insert > Load Family in the family editor: the family is loaded into this one.
+    pub fn load_nested(&mut self, mut family: Family) -> Option<String> {
+        self.def()?;
+        self.checkpoint();
+        let def = self.family.definition.as_mut()?;
+        if let Some(i) = def.loaded.iter().position(|f| f.name == family.name) {
+            def.loaded[i] = family.clone();
+        } else {
+            family.id = 0;
+            def.loaded.push(family.clone());
+        }
+        self.comp = family.types.first().map(|t| (family.name.clone(), t.name.clone()));
+        Some(family.name)
     }
 
     fn checkpoint(&mut self) {
@@ -208,7 +277,7 @@ impl FamilyEditor {
         self.scene_key += 1;
     }
 
-    fn def(&self) -> Option<&FamilyDef> {
+    pub fn def(&self) -> Option<&FamilyDef> {
         self.family.definition.as_ref()
     }
 
@@ -363,6 +432,126 @@ pub fn view_area(app: &mut App, ui: &mut egui::Ui) {
     family_types_dialog(app, ui.ctx());
     family_category_dialog(app, ui.ctx());
     goto_view_dialog(app, ui.ctx());
+    text_dialog(app, ui.ctx());
+    work_plane_dialog(app, ui.ctx());
+    load_prompt(app, ui.ctx());
+}
+
+/// Edit Text for Model Text and Text: OK starts placing it.
+fn text_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(fe) = app.family_editor.as_mut() else { return };
+    let Some((note, mut text)) = fe.text_dialog.take() else { return };
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    crate::dialogs::window_pub("Edit Text").open(&mut open).resizable(false).default_width(300.0).show(ctx, |ui| {
+        ui.add(egui::TextEdit::multiline(&mut text).desired_width(280.0).desired_rows(6));
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, !text.trim().is_empty()) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        fe.place_text = text;
+        set_tool(fe, if note { FeTool::Note } else { FeTool::ModelText }, false);
+    } else if open && !cancel {
+        fe.text_dialog = Some((note, text));
+    }
+}
+
+/// The family's named work planes: (label, plane id).
+fn named_planes(def: &FamilyDef) -> Vec<(String, u32)> {
+    def.planes
+        .iter()
+        .filter(|p| !p.name.is_empty())
+        .map(|p| (if p.name == "Ref. Level" { format!("Level : {}", p.name) } else { format!("Reference Plane : {}", p.name) }, p.id))
+        .collect()
+}
+
+/// Work Plane Set in the family editor: the named planes.
+fn work_plane_dialog(app: &mut App, ctx: &egui::Context) {
+    let Some(fe) = app.family_editor.as_mut() else { return };
+    let Some(mut pick) = fe.work_plane_dialog.take() else { return };
+    let Some(def) = fe.def().cloned() else { return };
+    let names = named_planes(&def);
+    let label = |id: Option<u32>| id.and_then(|id| names.iter().find(|(_, x)| *x == id)).map(|(n, _)| n.clone()).unwrap_or_else(|| "Level : Ref. Level".into());
+    let (mut open, mut ok, mut cancel) = (true, false, false);
+    crate::dialogs::window_pub("Work Plane").open(&mut open).resizable(false).default_width(330.0).show(ctx, |ui| {
+        crate::dialogs::manage_group(ui, "Current Work Plane", |ui| {
+            ui.label("Name:");
+            ui.label(label(fe.work_plane));
+            ui.horizontal(|ui| {
+                if ui.button("Show").clicked() {
+                    fe.show_work_plane = true;
+                }
+                ui.add_enabled(false, egui::Button::new("Dissociate"));
+            });
+        });
+        crate::dialogs::manage_group(ui, "Specify a new Work Plane", |ui| {
+            ui.horizontal(|ui| {
+                let _ = ui.radio(true, "Name");
+                egui::ComboBox::from_id_salt("fe-wp").selected_text(label(pick)).width(210.0).show_ui(ui, |ui| {
+                    for (n, id) in &names {
+                        ui.selectable_value(&mut pick, Some(*id), n);
+                    }
+                });
+            });
+            ui.add_enabled(false, egui::RadioButton::new(false, "Pick a plane"));
+            ui.add_enabled(false, egui::RadioButton::new(false, "Pick a line and use the work plane it was sketched in"));
+        });
+        ui.add_space(8.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "Cancel", false, true) {
+                cancel = true;
+            }
+            if crate::dialogs::dlg_button(ui, "OK", true, true) {
+                ok = true;
+            }
+        });
+    });
+    if ok {
+        // The level and the centre planes are the views' own planes.
+        fe.work_plane = pick.filter(|id| def.plane(*id).is_some_and(|p| !p.fixed));
+    } else if open && !cancel {
+        fe.work_plane_dialog = Some(pick);
+    }
+}
+
+/// Component with nothing loaded: offer to load a family.
+fn load_prompt(app: &mut App, ctx: &egui::Context) {
+    if !app.family_editor.as_ref().is_some_and(|fe| fe.load_prompt) {
+        return;
+    }
+    let (mut yes, mut no) = (false, false);
+    crate::dialogs::window_pub("RevitCraft").resizable(false).default_width(320.0).show(ctx, |ui| {
+        ui.label(egui::RichText::new("No Component family is loaded in the project.\nWould you like to load one now?").color(style::ACCENT));
+        ui.add_space(10.0);
+        ui.allocate_ui_with_layout(vec2(ui.available_width(), 26.0), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.spacing_mut().item_spacing.x = 8.0;
+            if crate::dialogs::dlg_button(ui, "No", false, true) {
+                no = true;
+            }
+            if crate::dialogs::dlg_button(ui, "Yes", true, true) {
+                yes = true;
+            }
+        });
+    });
+    if yes || no {
+        if let Some(fe) = app.family_editor.as_mut() {
+            fe.load_prompt = false;
+        }
+    }
+    if yes {
+        crate::actions::exec(app, crate::commands::Cmd::LoadFamily);
+        if let Some(fe) = app.family_editor.as_mut().filter(|fe| fe.comp.is_some()) {
+            set_tool(fe, FeTool::Component, false);
+        }
+    }
 }
 
 pub fn undo(fe: &mut FamilyEditor) {
@@ -455,6 +644,11 @@ pub fn properties_palette(app: &mut App, ui: &mut egui::Ui) {
             FeSel::Dim(_) => "Dimensions (1)".into(),
             FeSel::Sym(_) => "Symbolic Lines (1)".into(),
             FeSel::Line(k) => if fe.def().and_then(|d| d.lines.get(k)).is_some_and(|l| l.reference) { "Reference Lines (1)".into() } else { "Model Lines (1)".into() },
+            FeSel::Control(_) => "Generic Annotations (1)".into(),
+            FeSel::Text(_) => "Model Text (1)".into(),
+            FeSel::Nested(k) => fe.def().and_then(|d| d.nested.get(k)).map(|n| format!("{} : {}", n.family, n.type_name)).unwrap_or_default(),
+            FeSel::Region(k) => if fe.def().and_then(|d| d.regions.get(k)).is_some_and(|r| r.masking) { "Masking Region (1)".into() } else { "Filled region (1)".into() },
+            FeSel::Note(_) => "Text Notes (1)".into(),
             FeSel::None => format!("Family: {}", fe.family.category.label()),
         }
     };
@@ -758,6 +952,115 @@ fn selection_properties(app: &App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 ui.end_row();
             });
         }
+        FeSel::Control(k) => {
+            let Some(c) = def.controls.get(k).cloned() else { return };
+            let mut nc = c.clone();
+            style::group_header_ui(ui, "Other", true);
+            pgrid(ui, "fe-ctl", |ui| {
+                ui.label("Control Type");
+                egui::ComboBox::from_id_salt("fe-ctl-kind").selected_text(nc.kind.label()).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                    for kd in ControlKind::ALL {
+                        ui.selectable_value(&mut nc.kind, kd, kd.label());
+                    }
+                });
+                ui.end_row();
+            });
+            if nc != c {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().controls[k] = nc;
+            }
+        }
+        FeSel::Text(k) => {
+            let Some(t) = def.texts.get(k).cloned() else { return };
+            let mut nt = t.clone();
+            style::group_header_ui(ui, "Constraints", true);
+            pgrid(ui, "fe-txt-c", |ui| {
+                ui.label("Work Plane");
+                ro(ui, match t.plane {
+                    SketchPlane::XY => "Level : Ref. Level",
+                    SketchPlane::XZ => "Reference Plane : Center (Front/Back)",
+                    SketchPlane::YZ => "Reference Plane : Center (Left/Right)",
+                });
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Materials and Finishes", true);
+            pgrid(ui, "fe-txt-m", |ui| {
+                ui.label("Material");
+                egui::ComboBox::from_id_salt("fe-txt-mat").selected_text(if nt.material.is_empty() { "<By Category>".to_string() } else { nt.material.clone() }).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                    ui.selectable_value(&mut nt.material, String::new(), "<By Category>");
+                    for n in &mat_params {
+                        ui.selectable_value(&mut nt.material, n.clone(), n);
+                    }
+                    for m in &app.doc.data.materials {
+                        ui.selectable_value(&mut nt.material, m.name.clone(), &m.name);
+                    }
+                });
+                ui.end_row();
+            });
+            style::group_header_ui(ui, "Text", true);
+            pgrid(ui, "fe-txt-t", |ui| {
+                ui.label("Text");
+                ui.add(egui::TextEdit::singleline(&mut nt.text).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+                ui.label("Text Size");
+                ui.add(egui::DragValue::new(&mut nt.size).speed(5.0).range(1.0..=100000.0).suffix(" mm"));
+                ui.end_row();
+                ui.label("Depth");
+                ui.add(egui::DragValue::new(&mut nt.depth).speed(5.0).range(0.1..=100000.0).suffix(" mm"));
+                ui.end_row();
+            });
+            if nt != t {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().texts[k] = nt;
+            }
+        }
+        FeSel::Nested(k) => {
+            let Some(n) = def.nested.get(k).cloned() else { return };
+            let mut nn = n.clone();
+            let types: Vec<String> = def.loaded.iter().find(|f| f.name == n.family).map(|f| f.types.iter().map(|t| t.name.clone()).collect()).unwrap_or_default();
+            style::group_header_ui(ui, "Constraints", true);
+            pgrid(ui, "fe-nest", |ui| {
+                ui.label("Type");
+                egui::ComboBox::from_id_salt("fe-nest-type").selected_text(nn.type_name.clone()).width(ui.available_width() - 4.0).show_ui(ui, |ui| {
+                    for t in &types {
+                        ui.selectable_value(&mut nn.type_name, t.clone(), t);
+                    }
+                });
+                ui.end_row();
+                ui.label("Offset");
+                ui.add(egui::DragValue::new(&mut nn.z).speed(5.0).suffix(" mm"));
+                ui.end_row();
+                ui.label("Rotation");
+                ui.add(egui::DragValue::new(&mut nn.rotation_deg).speed(1.0).suffix("°"));
+                ui.end_row();
+            });
+            if nn != n {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().nested[k] = nn;
+            }
+        }
+        FeSel::Region(_) => {
+            style::group_header_ui(ui, "Identity Data", true);
+            pgrid(ui, "fe-reg", |ui| {
+                ui.label("Subcategory");
+                ro(ui, "<None>");
+                ui.end_row();
+            });
+        }
+        FeSel::Note(k) => {
+            let Some(t) = def.notes.get(k).cloned() else { return };
+            let mut nt = t.clone();
+            style::group_header_ui(ui, "Text", true);
+            pgrid(ui, "fe-note", |ui| {
+                ui.label("Text");
+                ui.add(egui::TextEdit::singleline(&mut nt.text).desired_width(ui.available_width() - 4.0));
+                ui.end_row();
+            });
+            if nt != t {
+                fe.checkpoint();
+                fe.family.definition.as_mut().unwrap().notes[k] = nt;
+            }
+        }
     }
 }
 
@@ -804,6 +1107,15 @@ fn family_parameters(fe: &mut FamilyEditor, ui: &mut egui::Ui) {
 
 /// The options bar while sketching or placing in the family editor.
 pub fn options_bar(app: &mut App, ui: &mut egui::Ui) {
+    let mut comp_change: Option<(f64, Option<(String, String)>)> = None;
+    options_row(app, ui, &mut comp_change);
+    if let (Some((rot, comp)), Some(fe)) = (comp_change, app.family_editor.as_mut()) {
+        fe.comp_rotation = rot;
+        fe.comp = comp;
+    }
+}
+
+fn options_row(app: &mut App, ui: &mut egui::Ui, comp_change: &mut Option<(f64, Option<(String, String)>)>) {
     let Some(fe) = app.family_editor.as_ref() else { return };
     ui.horizontal_centered(|ui| {
         ui.add_space(6.0);
@@ -818,8 +1130,29 @@ pub fn options_bar(app: &mut App, ui: &mut egui::Ui) {
             FeTool::SymbolicLine => "Modify | Place Symbolic Lines".into(),
             FeTool::ModelLine => "Modify | Place Lines".into(),
             FeTool::RefLine => "Modify | Place Reference Lines".into(),
+            FeTool::Control => "Modify | Place Control".into(),
+            FeTool::ModelText => "Modify | Place Model Text".into(),
+            FeTool::Component => "Modify | Place Component".into(),
+            FeTool::Region => if fe.region_masking { "Modify | Create Masking Region Boundary".into() } else { "Modify | Create Filled Region Boundary".into() },
+            FeTool::Note => "Modify | Place Text".into(),
         };
         ui.label(title);
+        if fe.tool == FeTool::Component {
+            ui.separator();
+            ui.label("Rotation:");
+            let mut rot = fe.comp_rotation;
+            ui.add(egui::DragValue::new(&mut rot).speed(1.0).suffix("°"));
+            let types: Vec<(String, String)> = fe.def().map(|d| d.loaded.iter().flat_map(|f| f.types.iter().map(|t| (f.name.clone(), t.name.clone()))).collect()).unwrap_or_default();
+            let mut comp = fe.comp.clone();
+            ui.label("Type:");
+            egui::ComboBox::from_id_salt("fe-comp").selected_text(comp.as_ref().map(|(f, t)| format!("{f} : {t}")).unwrap_or_default()).width(220.0).show_ui(ui, |ui| {
+                for c in &types {
+                    ui.selectable_value(&mut comp, Some(c.clone()), format!("{} : {}", c.0, c.1));
+                }
+            });
+            *comp_change = Some((rot, comp));
+            return;
+        }
         if matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine | FeTool::RefPlane) {
             ui.separator();
             crate::style::check(ui, &mut app.opts.chain, "Chain");
@@ -1042,10 +1375,14 @@ fn prompt(fe: &FamilyEditor, mode: crate::tools::DrawMode) -> String {
         FeTool::Select => "Click to select, TAB for alternates, CTRL adds, SHIFT unselects.".into(),
         FeTool::RefPlane => if first { "Click to enter Reference Plane start point.".into() } else { "Click to enter Reference Plane end point.".into() },
         FeTool::Dimension => if fe.dim_planes.is_empty() { "Click on a reference to dimension.".into() } else { "Click on another reference, or click empty space to place the dimension.".into() },
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::Region if fe.closed => "The sketch is closed. Click Finish Edit Mode.".into(),
+        FeTool::Control => "Click to place a control.".into(),
+        FeTool::ModelText => "Click to place model text.".into(),
+        FeTool::Component => "Click to place component.".into(),
+        FeTool::Note => "Click to place text.".into(),
         FeTool::Sweep | FeTool::SweptBlend if fe.sweep_path.is_none() => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
         FeTool::ModelLine | FeTool::RefLine => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine | FeTool::Sweep | FeTool::SweptBlend => match mode {
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::SymbolicLine | FeTool::Sweep | FeTool::SweptBlend | FeTool::Region => match mode {
             DrawMode::Rect => if first { "Click to enter rectangle start point.".into() } else { "Click to enter rectangle end point.".into() },
             DrawMode::Circle => if first { "Click to enter circle center.".into() } else { "Click to enter circle radius.".into() },
             _ => if first { "Click to enter line start point.".into() } else { "Click to enter line end point.".into() },
@@ -1275,6 +1612,74 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
             painter.line_segment([xf.s(a), xf.s(b)], Stroke::new(if fe.sel == FeSel::Sym(k) { 2.0 } else { 1.2 }, if fe.sel == FeSel::Sym(k) { style::SELECT } else { Color32::BLACK }));
         }
     }
+    let plan_view = matches!(fe.view, FeView::Plan | FeView::Ceiling);
+    let view_code: u8 = match fe.view {
+        FeView::Plan | FeView::Ceiling => 0,
+        FeView::Front | FeView::Back => 1,
+        _ => 2,
+    };
+    let blue = Color32::from_rgb(70, 90, 230);
+    // Filled and masking regions (plan).
+    if plan_view {
+        for (k, r) in def.regions.iter().enumerate() {
+            let pts: Vec<Pos2> = r.pts.iter().map(|q| xf.s(pt2(*q, &solved))).collect();
+            if pts.len() < 3 {
+                continue;
+            }
+            let tris = rc_core::geom::triangulate(&r.pts.iter().map(|q| pt2(*q, &solved)).collect::<Vec<_>>());
+            let mut mesh = egui::Mesh::default();
+            let fill = if r.masking { Color32::WHITE } else { Color32::from_gray(40) };
+            for [a, b, c] in tris {
+                let i = mesh.vertices.len() as u32;
+                for q in [pts[a], pts[b], pts[c]] {
+                    mesh.colored_vertex(q, fill);
+                }
+                mesh.add_triangle(i, i + 1, i + 2);
+            }
+            painter.add(egui::Shape::mesh(mesh));
+            let sel = fe.sel == FeSel::Region(k);
+            painter.add(egui::Shape::closed_line(pts, Stroke::new(if sel { 2.0 } else { 1.0 }, if sel { style::SELECT } else if r.masking { Color32::from_gray(150) } else { Color32::BLACK })));
+        }
+        // Nested components: their plan symbols.
+        for (k, n) in def.nested.iter().enumerate() {
+            let mut one = def.clone();
+            one.regions.clear();
+            one.texts.clear();
+            one.nested = vec![n.clone()];
+            let col = if fe.sel == FeSel::Nested(k) { style::SELECT } else { Color32::BLACK };
+            for (pts, closed, _) in one.plan_extras(&solved) {
+                let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
+                if closed {
+                    painter.add(egui::Shape::closed_line(v, Stroke::new(1.0, col)));
+                } else {
+                    painter.add(egui::Shape::line(v, Stroke::new(1.0, col)));
+                }
+            }
+        }
+        // Flip controls: thin blue arrows.
+        for (k, c) in def.controls.iter().enumerate() {
+            let at = xf.s(pt2(c.at, &solved));
+            let col = if fe.sel == FeSel::Control(k) { style::SELECT } else { blue };
+            paint_control(&painter, at, c.kind, col);
+        }
+    }
+    // Notes in their view.
+    for (k, n) in def.notes.iter().enumerate().filter(|(_, n)| n.view == view_code) {
+        let col = if fe.sel == FeSel::Note(k) { style::SELECT } else { Color32::BLACK };
+        painter.text(xf.s(pt2(n.at, &solved)), egui::Align2::LEFT_BOTTOM, &n.text, egui::FontId::proportional(12.0), col);
+    }
+    // The work plane, when shown and parallel to the view.
+    if let (true, Some(wp)) = (fe.show_work_plane, fe.work_plane.and_then(|id| def.plane(id))) {
+        let normal = match fe.view {
+            FeView::Plan | FeView::Ceiling => Axis::Z,
+            FeView::Front | FeView::Back => Axis::Y,
+            _ => Axis::X,
+        };
+        if wp.axis == normal {
+            painter.rect_stroke(rect.shrink(30.0), 0.0, Stroke::new(1.0, Color32::from_rgb(120, 160, 230)), egui::StrokeKind::Inside);
+            painter.text(rect.left_top() + vec2(36.0, 34.0), egui::Align2::LEFT_TOP, format!("Work Plane: {}", wp.name), egui::FontId::proportional(11.0), Color32::from_rgb(70, 110, 200));
+        }
+    }
     // Snapped sketch point under the cursor.
     let snapped = cursor.map(|c| SketchPt { a: snap_loc(&def, &solved, ha, c.x, tol), b: snap_loc(&def, &solved, va, c.y, tol) });
     let snap_pos = snapped.map(|s| pt2(s, &solved));
@@ -1375,6 +1780,52 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                                     hit = FeSel::Sym(k);
                                 }
                             }
+                            for (k, ctl) in def.controls.iter().enumerate() {
+                                if pt2(ctl.at, &solved).distance(c) < tol * 1.6 {
+                                    hit = FeSel::Control(k);
+                                }
+                            }
+                            if hit == FeSel::None {
+                                for (k, r) in def.regions.iter().enumerate() {
+                                    if rc_core::geom::contains(&r.pts.iter().map(|q| pt2(*q, &solved)).collect::<Vec<_>>(), c) {
+                                        hit = FeSel::Region(k);
+                                    }
+                                }
+                            }
+                        }
+                        if hit == FeSel::None {
+                            let code: u8 = match fe.view {
+                                FeView::Plan | FeView::Ceiling => 0,
+                                FeView::Front | FeView::Back => 1,
+                                _ => 2,
+                            };
+                            for (k, n) in def.notes.iter().enumerate().filter(|(_, n)| n.view == code) {
+                                let o = pt2(n.at, &solved);
+                                let w = xf.len(7.0 * n.text.chars().count() as f32);
+                                if c.x >= o.x - tol && c.x <= o.x + w && c.y >= o.y - tol && c.y <= o.y + xf.len(14.0) {
+                                    hit = FeSel::Note(k);
+                                }
+                            }
+                        }
+                        // Model text and nested components: their projected geometry.
+                        let inside = |set: &rc_core::mesh::MeshSet| set.by_material.values().any(|m| m.indices.chunks(3).any(|t| rc_core::geom::contains(&(0..3).map(|j| to2(m.positions[t[j] as usize])).collect::<Vec<_>>(), c)));
+                        if hit == FeSel::None {
+                            for (k, t) in def.texts.iter().enumerate() {
+                                let mut one = def.clone();
+                                one.forms.clear();
+                                one.nested.clear();
+                                one.texts = vec![t.clone()];
+                                if inside(&one.build(&solved, &|_| "x".into(), &|_| true)) {
+                                    hit = FeSel::Text(k);
+                                }
+                            }
+                        }
+                        if hit == FeSel::None {
+                            for (k, n) in def.nested.iter().enumerate() {
+                                if inside(&def.nested_mesh(n, &solved)) {
+                                    hit = FeSel::Nested(k);
+                                }
+                            }
                         }
                     }
                     hit
@@ -1448,9 +1899,73 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
                 }
             }
         }
-        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine => {
+        FeTool::Control | FeTool::ModelText | FeTool::Component | FeTool::Note => {
+            // Preview at the cursor.
+            if let Some(sp) = snap_pos {
+                match fe.tool {
+                    FeTool::Control if plan_view => paint_control(&painter, xf.s(sp), fe.control_kind, blue),
+                    FeTool::ModelText | FeTool::Note => {
+                        painter.text(xf.s(sp), egui::Align2::LEFT_BOTTOM, fe.place_text.lines().next().unwrap_or(""), egui::FontId::proportional(13.0), style::PREVIEW);
+                    }
+                    FeTool::Component if plan_view => {
+                        if let Some((fam, ty)) = fe.comp.clone() {
+                            let n = NestedDef { family: fam, type_name: ty, at: SketchPt { a: Loc::Value(sp.x), b: Loc::Value(sp.y) }, z: 0.0, rotation_deg: fe.comp_rotation };
+                            let mut one = def.clone();
+                            one.nested = vec![n];
+                            for (pts, closed, _) in one.plan_extras(&solved).into_iter().filter(|(_, _, f)| f.is_none() || true) {
+                                let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q)).collect();
+                                if closed {
+                                    painter.add(egui::Shape::closed_line(v, Stroke::new(1.0, style::PREVIEW)));
+                                } else {
+                                    painter.add(egui::Shape::line(v, Stroke::new(1.0, style::PREVIEW)));
+                                }
+                            }
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            if let (true, Some(s)) = (clicked, snapped) {
+                let tool = fe.tool;
+                if matches!(tool, FeTool::Control | FeTool::Component) && !plan_view {
+                    fe.message = Some(if tool == FeTool::Control { "Controls are placed in plan views.".into() } else { "Components are placed in plan views.".into() });
+                } else {
+                    let plane = fe.view.sketch_plane().unwrap_or(SketchPlane::XY);
+                    let offset = fe.work_plane.and_then(|id| solved.get(&id).copied()).filter(|_| fe.work_plane.and_then(|id| def.plane(id)).is_some_and(|wp| wp.axis == plane.axes().2)).unwrap_or(0.0);
+                    let (kind, text, comp, rot) = (fe.control_kind, fe.place_text.clone(), fe.comp.clone(), fe.comp_rotation);
+                    let size = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 76.2 } else { 75.0 };
+                    fe.checkpoint();
+                    if let Some(d) = fe.family.definition.as_mut() {
+                        match tool {
+                            FeTool::Control => {
+                                d.controls.push(ControlDef { at: s, kind });
+                                fe.sel = FeSel::None;
+                            }
+                            FeTool::ModelText => {
+                                d.texts.push(ModelTextDef { text, plane, at: s, offset, size: size * 4.0, depth: size * 2.0, material: String::new() });
+                                fe.sel = FeSel::Text(d.texts.len() - 1);
+                            }
+                            FeTool::Note => {
+                                d.notes.push(FamNote { view: view_code, at: s, text, size: 2.5 });
+                                fe.sel = FeSel::Note(d.notes.len() - 1);
+                            }
+                            _ => {
+                                if let Some((family, type_name)) = comp {
+                                    d.nested.push(NestedDef { family, type_name, at: s, z: 0.0, rotation_deg: rot });
+                                }
+                            }
+                        }
+                    }
+                    // Text is placed once; controls and components keep placing.
+                    if matches!(tool, FeTool::ModelText | FeTool::Note) {
+                        fe.tool = FeTool::Select;
+                    }
+                }
+            }
+        }
+        FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Sweep | FeTool::SweptBlend | FeTool::SymbolicLine | FeTool::ModelLine | FeTool::RefLine | FeTool::Region => {
             let mode = app.opts.draw_mode;
-            let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve) || (matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) && fe.sweep_path.is_some());
+            let profile = matches!(fe.tool, FeTool::Extrusion | FeTool::Blend | FeTool::Revolve | FeTool::Region) || (matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) && fe.sweep_path.is_some());
             if let (true, Some(s), false) = (clicked, snapped, fe.closed) {
                 let close = fe.pts.len() >= 3 && fe.pts.first().is_some_and(|f| pt2(*f, &solved).distance(pt2(s, &solved)) < tol) && (!matches!(fe.tool, FeTool::Sweep | FeTool::SweptBlend) || fe.sweep_path.is_some());
                 if profile && mode == crate::tools::DrawMode::Rect && fe.pts.len() == 1 {
@@ -1494,6 +2009,28 @@ fn canvas_2d(app: &mut App, fe: &mut FamilyEditor, ui: &mut egui::Ui) {
     }
 }
 
+/// A flip control: a thin arrow (two half arrows for double controls), vertical or horizontal.
+fn paint_control(painter: &egui::Painter, at: Pos2, kind: ControlKind, col: Color32) {
+    let st = Stroke::new(1.2, col);
+    let dir = if kind.horizontal() { vec2(1.0, 0.0) } else { vec2(0.0, -1.0) };
+    let n = vec2(-dir.y, dir.x);
+    let len = 11.0;
+    if kind.double() {
+        // Two opposed half arrows, side by side.
+        for (s, off) in [(1.0f32, 1.6f32), (-1.0, -1.6)] {
+            let a = at + n * off - dir * len * s;
+            let b = at + n * off + dir * len * s;
+            painter.line_segment([a, b], st);
+            painter.line_segment([b, b - dir * 4.0 * s + n * 3.0 * s.signum() * off.signum()], st);
+        }
+    } else {
+        let (a, b) = (at - dir * len, at + dir * len);
+        painter.line_segment([a, b], st);
+        painter.line_segment([b, b - dir * 4.5 + n * 3.5], st);
+        painter.line_segment([b, b - dir * 4.5 - n * 3.5], st);
+    }
+}
+
 /// Ends the current sketch and creates the form.
 fn finish_sketch(fe: &mut FamilyEditor) {
     let Some(plane) = fe.view.sketch_plane() else { return };
@@ -1502,6 +2039,21 @@ fn finish_sketch(fe: &mut FamilyEditor) {
     fe.closed = false;
     fe.chain_ended = false;
     let n = fe.def().map(|d| d.forms.len()).unwrap_or(0) + 1;
+    if fe.tool == FeTool::Region {
+        if pts.len() < 3 || plane != SketchPlane::XY {
+            fe.message = Some(if plane != SketchPlane::XY { "Regions are sketched in plan views.".into() } else { "Sketch a closed loop.".into() });
+            fe.pts = pts;
+            return;
+        }
+        let masking = fe.region_masking;
+        fe.checkpoint();
+        if let Some(d) = fe.family.definition.as_mut() {
+            d.regions.push(FamRegion { pts, masking });
+            fe.sel = FeSel::Region(d.regions.len() - 1);
+        }
+        fe.message = None;
+        return;
+    }
     let form = match fe.tool {
         FeTool::Extrusion if pts.len() >= 3 => {
             // Extrude between the work plane's natural limits: Ref. Level → Top in plan, Front → Back
@@ -1510,7 +2062,10 @@ fn finish_sketch(fe: &mut FamilyEditor) {
                 FeView::Front | FeView::Left => -1.0,
                 _ => 1.0,
             };
-            let (start, end) = (Loc::Value(0.0), Loc::Value(fe.depth * toward_viewer));
+            // From the work plane when it is parallel to the sketch.
+            let wp = fe.work_plane.filter(|id| fe.def().and_then(|d| d.plane(*id)).is_some_and(|p| p.axis == plane.axes().2));
+            let base = wp.and_then(|id| fe.solved().0.get(&id).copied()).unwrap_or(0.0);
+            let (start, end) = (wp.map(Loc::Plane).unwrap_or(Loc::Value(0.0)), Loc::Value(base + fe.depth * toward_viewer));
             Some(Form::Extrusion { plane, profile: pts, start, end })
         }
         FeTool::Blend if pts.len() >= 3 => {
@@ -1634,6 +2189,26 @@ fn delete_selected(fe: &mut FamilyEditor) {
         FeSel::Sym(k) => {
             fe.checkpoint();
             fe.family.definition.as_mut().unwrap().symbolic.remove(k);
+        }
+        FeSel::Control(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().controls.remove(k);
+        }
+        FeSel::Text(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().texts.remove(k);
+        }
+        FeSel::Nested(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().nested.remove(k);
+        }
+        FeSel::Region(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().regions.remove(k);
+        }
+        FeSel::Note(k) => {
+            fe.checkpoint();
+            fe.family.definition.as_mut().unwrap().notes.remove(k);
         }
         FeSel::None => return,
     }

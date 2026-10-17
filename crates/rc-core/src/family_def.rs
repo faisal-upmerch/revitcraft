@@ -162,6 +162,89 @@ impl FamLine {
     }
 }
 
+/// Create > Control: a flip arrow shown on instances in projects (plan).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum ControlKind {
+    SingleVertical,
+    DoubleVertical,
+    SingleHorizontal,
+    DoubleHorizontal,
+}
+
+impl ControlKind {
+    pub const ALL: [ControlKind; 4] = [ControlKind::SingleVertical, ControlKind::DoubleVertical, ControlKind::SingleHorizontal, ControlKind::DoubleHorizontal];
+    pub fn label(self) -> &'static str {
+        match self {
+            ControlKind::SingleVertical => "Single Vertical",
+            ControlKind::DoubleVertical => "Double Vertical",
+            ControlKind::SingleHorizontal => "Single Horizontal",
+            ControlKind::DoubleHorizontal => "Double Horizontal",
+        }
+    }
+    /// Horizontal controls flip the hand (mirror across the family's y axis); vertical ones
+    /// flip the facing.
+    pub fn horizontal(self) -> bool {
+        matches!(self, ControlKind::SingleHorizontal | ControlKind::DoubleHorizontal)
+    }
+    pub fn double(self) -> bool {
+        matches!(self, ControlKind::DoubleVertical | ControlKind::DoubleHorizontal)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ControlDef {
+    pub at: SketchPt,
+    pub kind: ControlKind,
+}
+
+/// Create > Model Text: glyphs on a sketch plane, extruded `depth` from `offset`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ModelTextDef {
+    pub text: String,
+    pub plane: SketchPlane,
+    pub at: SketchPt,
+    #[serde(default)]
+    pub offset: f64,
+    pub size: f64,
+    pub depth: f64,
+    #[serde(default)]
+    pub material: String,
+}
+
+/// Create > Component: a family loaded into this one (`FamilyDef::loaded`), placed in plan.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct NestedDef {
+    pub family: String,
+    pub type_name: String,
+    pub at: SketchPt,
+    #[serde(default)]
+    pub z: f64,
+    #[serde(default)]
+    pub rotation_deg: f64,
+}
+
+/// Annotate > Filled Region / Masking Region in plan: shown with the family's plan symbol.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FamRegion {
+    pub pts: Vec<SketchPt>,
+    #[serde(default)]
+    pub masking: bool,
+}
+
+/// Annotate > Text: notes seen only in the family editor's views (0 plan, 1 front, 2 right).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct FamNote {
+    pub view: u8,
+    pub at: SketchPt,
+    pub text: String,
+    #[serde(default = "note_size")]
+    pub size: f64,
+}
+
+fn note_size() -> f64 {
+    2.5
+}
+
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyDef {
     pub planes: Vec<RefPlaneDef>,
@@ -173,6 +256,19 @@ pub struct FamilyDef {
     /// Model and reference lines.
     #[serde(default)]
     pub lines: Vec<FamLine>,
+    #[serde(default)]
+    pub controls: Vec<ControlDef>,
+    #[serde(default)]
+    pub texts: Vec<ModelTextDef>,
+    /// Families loaded into this family (Insert > Load Family) and their placed instances.
+    #[serde(default)]
+    pub loaded: Vec<crate::model::Family>,
+    #[serde(default)]
+    pub nested: Vec<NestedDef>,
+    #[serde(default)]
+    pub regions: Vec<FamRegion>,
+    #[serde(default)]
+    pub notes: Vec<FamNote>,
 }
 
 pub type Solved = HashMap<u32, f64>;
@@ -275,11 +371,80 @@ impl FamilyDef {
                 solids.push((mat, set));
             }
         }
+        // Model text and nested components.
+        for t in &self.texts {
+            let mat = material(&t.material);
+            let set = text_mesh(t, solved, if mat.is_empty() { "Default" } else { &mat });
+            if !set.is_empty() {
+                solids.push((mat, set));
+            }
+        }
+        for n in &self.nested {
+            let set = self.nested_mesh(n, solved);
+            if !set.is_empty() {
+                solids.push((String::new(), set));
+            }
+        }
         let mut out = MeshSet::default();
         for (_, set) in solids {
             let cut = if voids.polys.is_empty() { set } else { csg::subtract_set(&set, &voids) };
             for (name, m) in cut.by_material {
                 out.mesh(&name).append(&m);
+            }
+        }
+        out
+    }
+
+    /// A nested component's family and type.
+    pub fn nested_type(&self, n: &NestedDef) -> Option<(&crate::model::Family, &crate::model::FamilyType)> {
+        let f = self.loaded.iter().find(|f| f.name == n.family)?;
+        let t = f.types.iter().find(|t| t.name == n.type_name).or(f.types.first())?;
+        Some((f, t))
+    }
+
+    /// Placement of a nested component: family point (x, y, z) of its local point.
+    fn nested_place(n: &NestedDef, solved: &Solved) -> impl Fn(DVec3) -> DVec3 {
+        let o = DVec3::new(loc(n.at.a, solved), loc(n.at.b, solved), n.z);
+        let (c, s) = (n.rotation_deg.to_radians().cos(), n.rotation_deg.to_radians().sin());
+        move |q: DVec3| o + DVec3::new(q.x * c - q.y * s, q.x * s + q.y * c, q.z)
+    }
+
+    /// A nested component's geometry in family coordinates.
+    pub fn nested_mesh(&self, n: &NestedDef, solved: &Solved) -> MeshSet {
+        let mut out = MeshSet::default();
+        let Some((f, t)) = self.nested_type(n) else { return out };
+        let place = Self::nested_place(n, solved);
+        for (name, m) in crate::build3d::family_type_preview(f, t).by_material {
+            let target = out.mesh(&name);
+            for tri in m.indices.chunks(3) {
+                let q: Vec<DVec3> = tri.iter().map(|k| place(m.positions[*k as usize])).collect();
+                target.add_triangle(q[0], q[1], q[2]);
+            }
+        }
+        out
+    }
+
+    /// Plan graphics of nested components, filled/masking regions and flat model text:
+    /// (points, closed, fill).
+    pub fn plan_extras(&self, solved: &Solved) -> Vec<(Vec<DVec2>, bool, Option<[u8; 3]>)> {
+        let mut out = Vec::new();
+        for n in &self.nested {
+            let Some((f, t)) = self.nested_type(n) else { continue };
+            let place = Self::nested_place(n, solved);
+            for l in crate::family_geom::family_type_symbol(f, t) {
+                out.push((l.pts.iter().map(|q| place(DVec3::new(q.x, q.y, 0.0)).truncate()).collect(), l.closed, l.fill));
+            }
+        }
+        for r in &self.regions {
+            let pts: Vec<DVec2> = r.pts.iter().map(|q| DVec2::new(loc(q.a, solved), loc(q.b, solved))).collect();
+            if pts.len() >= 3 {
+                out.push((pts, true, Some(if r.masking { [255, 255, 255] } else { [0, 0, 0] })));
+            }
+        }
+        for t in self.texts.iter().filter(|t| t.plane == SketchPlane::XY) {
+            let o = DVec2::new(loc(t.at.a, solved), loc(t.at.b, solved));
+            for c in crate::model_text::text_contours(&t.text, t.size, 0) {
+                out.push((c.into_iter().map(|q| o + q).collect(), true, None));
             }
         }
         out
@@ -337,6 +502,33 @@ fn transformed(set: MeshSet, plane: SketchPlane) -> MeshSet {
         out.by_material.insert(name, t);
     }
     out
+}
+
+/// Model text glyphs extruded from their sketch plane.
+fn text_mesh(t: &ModelTextDef, solved: &Solved, material: &str) -> MeshSet {
+    let mut set = MeshSet::default();
+    let o = DVec2::new(loc(t.at.a, solved), loc(t.at.b, solved));
+    for (outer, holes) in crate::model_text::shapes(&crate::model_text::text_contours(&t.text, t.size, 0)) {
+        let mut local = MeshSet::default();
+        let outer: Vec<DVec2> = outer.into_iter().map(|q| o + q).collect();
+        let holes: Vec<Vec<DVec2>> = holes.into_iter().map(|h| h.into_iter().map(|q| o + q).collect()).collect();
+        local.add_extrusion_with_holes(material, &outer, &holes, t.offset, t.offset + t.depth.max(0.1));
+        for (name, m) in local.by_material {
+            let target = set.mesh(&name);
+            for tri in m.indices.chunks(3) {
+                let q: Vec<DVec3> = tri.iter().map(|k| {
+                    let v = m.positions[*k as usize];
+                    map(t.plane, v.x, v.y, v.z)
+                }).collect();
+                if mirrored(t.plane) {
+                    target.add_triangle(q[0], q[2], q[1]);
+                } else {
+                    target.add_triangle(q[0], q[1], q[2]);
+                }
+            }
+        }
+    }
+    set
 }
 
 pub fn form_mesh(form: &Form, solved: &Solved, material: &str) -> MeshSet {
@@ -574,6 +766,7 @@ pub fn empty_template() -> FamilyDef {
         forms: vec![],
         symbolic: vec![],
         lines: vec![],
+        ..Default::default()
     }
 }
 
@@ -607,6 +800,7 @@ pub fn generic_template() -> FamilyDef {
         }],
         symbolic: vec![],
         lines: vec![],
+        ..Default::default()
     }
 }
 
@@ -643,6 +837,37 @@ mod tests {
         // The far end is the small profile.
         let far: Vec<DVec3> = mesh.by_material.values().flat_map(|m| m.positions.iter().copied()).filter(|q| (q.x - 1000.0).abs() < 1e-6).collect();
         assert!(far.iter().all(|q| q.y <= 100.0 + 1e-6 && q.z <= 100.0 + 1e-6));
+    }
+
+    #[test]
+    fn nested_components_text_and_flip_controls() {
+        let mut p = crate::defaults::new_project(crate::units::UnitSystem::Metric);
+        let chair = p.families.iter().find(|f| f.template == crate::model::FamilyTemplate::Chair).unwrap().clone();
+        let mut def = empty_template();
+        def.loaded.push(chair.clone());
+        def.nested.push(NestedDef { family: chair.name.clone(), type_name: chair.types[0].name.clone(), at: SketchPt { a: Loc::Value(1000.0), b: Loc::Value(0.0) }, z: 0.0, rotation_deg: 90.0 });
+        def.texts.push(ModelTextDef { text: "A".into(), plane: SketchPlane::XZ, at: SketchPt { a: Loc::Value(-500.0), b: Loc::Value(0.0) }, offset: 0.0, size: 300.0, depth: 50.0, material: String::new() });
+        def.controls.push(ControlDef { at: SketchPt { a: Loc::Value(0.0), b: Loc::Value(-300.0) }, kind: ControlKind::SingleHorizontal });
+        def.regions.push(FamRegion { pts: vec![SketchPt { a: Loc::Value(0.0), b: Loc::Value(0.0) }, SketchPt { a: Loc::Value(100.0), b: Loc::Value(0.0) }, SketchPt { a: Loc::Value(100.0), b: Loc::Value(100.0) }], masking: false });
+        let solved = def.solve(&|_| None).unwrap();
+        let set = def.build(&solved, &|m| m.to_string(), &|_| true);
+        let (mn, mx) = set.bounds().unwrap();
+        // The chair sits around x = 1000; the text stands in the front plane at x = -500.
+        assert!(mx.x > 1100.0 && mn.x < -400.0, "{mn:?} {mx:?}");
+        let extras = def.plan_extras(&solved);
+        assert!(extras.iter().any(|(_, _, f)| *f == Some([0, 0, 0])));
+        assert!(extras.iter().any(|(pts, _, _)| pts.iter().any(|q| q.x > 700.0)));
+        // An instance flipped by the control mirrors across its y axis.
+        let mut fam = crate::model::Family { name: "Flip".into(), category: crate::model::Category::GenericModels, template: crate::model::FamilyTemplate::Custom, definition: Some(def), ..Default::default() };
+        fam.types.push(crate::model::FamilyType { id: 0, name: "Flip".into(), values: Default::default() });
+        let fid = crate::edit::load_family(&mut p, fam);
+        let ty = p.family(fid).unwrap().types[0].id;
+        let level = p.levels()[0].0;
+        let mut inst = crate::model::FamilyInstance { family_id: fid, type_id: ty, category: crate::model::Category::GenericModels, level, ..Default::default() };
+        let (_, a) = crate::family_geom::instance_mesh(&p, &inst).bounds().unwrap();
+        inst.flip_hand = true;
+        let (b, _) = crate::family_geom::instance_mesh(&p, &inst).bounds().unwrap();
+        assert!((a.x + b.x).abs() < 1.0, "{a:?} {b:?}");
     }
 
     #[test]

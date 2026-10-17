@@ -279,7 +279,11 @@ fn autodesk_family_dialog(app: &mut App, ctx: &egui::Context) {
                         ui.add_space(2.0);
                         ui.label(egui::RichText::new(template.category().label()).strong());
                     }
-                    let loaded = app.doc.data.families.iter().any(|f| f.name == *name);
+                    // In the family editor: loaded into the family being edited.
+                    let loaded = match app.family_editor.as_ref() {
+                        Some(fe) => fe.def().is_some_and(|d| d.loaded.iter().any(|f| f.name == *name)),
+                        None => app.doc.data.families.iter().any(|f| f.name == *name),
+                    };
                     let text = format!("    {name}  ({} type{}){}", types.len(), if types.len() == 1 { "" } else { "s" }, if loaded { "  - loaded" } else { "" });
                     if ui.selectable_label(st.sel == Some(k), text).clicked() {
                         st.sel = Some(k);
@@ -291,7 +295,16 @@ fn autodesk_family_dialog(app: &mut App, ctx: &egui::Context) {
     });
     if ok {
         if let Some((name, template, types)) = st.sel.and_then(|k| cat.into_iter().nth(k)) {
-            if app.doc.data.families.iter().any(|f| f.name == name) {
+            if app.family_editor.is_some() {
+                // In the family editor the family is loaded into the family being edited.
+                let mut tmp = rc_core::model::Project::empty();
+                rc_core::defaults::add_catalog_family(&mut tmp, name, template, types);
+                if let Some(f) = tmp.families.pop() {
+                    if let Some(n) = app.family_editor.as_mut().and_then(|fe| fe.load_nested(f)) {
+                        app.info(format!("Loaded family '{n}'. Place it with Create > Component."));
+                    }
+                }
+            } else if app.doc.data.families.iter().any(|f| f.name == name) {
                 app.info(format!("The family '{name}' is already in the project."));
             } else if app
                 .run("Load Autodesk Family", |p| {

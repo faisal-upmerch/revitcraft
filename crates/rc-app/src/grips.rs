@@ -144,6 +144,19 @@ pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
                         out.push(g(id, GripKind::BeamEnd(true), i.location));
                         out.push(g(id, GripKind::BeamEnd(false), end));
                     }
+                    // Flip controls of families that have them, at their places in the family.
+                    if let (true, Some(def), true) = (i.host.is_none(), p.family(i.family_id).and_then(|f| f.definition.as_ref()), app.selection.len() == 1) {
+                        if let Some(r) = rc_core::family_params::Resolver::for_instance(p, i) {
+                            if let Ok(solved) = def.solve(&|n| r.number(n).ok()) {
+                                let f = rc_core::family_geom::instance_frame(p, i);
+                                for c in &def.controls {
+                                    let at = f.plan(rc_core::family_def::loc(c.at.a, &solved), rc_core::family_def::loc(c.at.b, &solved));
+                                    let (kind, dir) = if c.kind.horizontal() { (GripKind::FlipHand, f.x) } else { (GripKind::FlipFacing, f.y) };
+                                    out.push(Grip { id, kind, pos: at, dir, on: false });
+                                }
+                            }
+                        }
+                    }
                     if let (Some(h), true) = (i.host.and_then(|h| p.wall(h)), app.selection.len() == 1) {
                         let (pt, dir) = analysis::wall_point(h, i.offset_along_host);
                         let n = geom::perp(dir);

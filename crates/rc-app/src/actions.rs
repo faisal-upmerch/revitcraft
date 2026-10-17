@@ -31,10 +31,15 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         let sketching = matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Sweep | F::SweptBlend);
         return match cmd {
             FeExtrusion | FeBlend | FeRevolve | FeSweep | FeSweptBlend | FeVoidExtrusion | FeVoidBlend | FeVoidRevolve | FeVoidSweep | FeRefPlane | FeDimension | FeSymbolicLine | FeModelLine | FeRefLine => custom,
-            FeFinishSketch | FeCancelSketch => sketching,
+            FeFinishSketch | FeCancelSketch => sketching || fe.tool == F::Region,
             FeFamilyTypes | FeFamilyCategory | FeLoadIntoProject | FeLoadAndClose | FeDefault3D => true,
-            DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine | F::ModelLine | F::RefLine),
-            DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve) || (matches!(fe.tool, F::Sweep | F::SweptBlend) && fe.sweep_path.is_some()),
+            FeComponent | FeModelText | FeControl | FeFilledRegion | FeMaskingRegion | FeText | LoadFamily | LoadAutodeskFamily => custom,
+            FeControlSingleV | FeControlDoubleV | FeControlSingleH | FeControlDoubleH => fe.tool == F::Control,
+            WorkPlaneSet | WorkPlaneShow | Purge => custom,
+            CloseInactive => fe.open_views.len() > 1,
+            Materials | ObjectStyles | Snaps | SharedParameters | ProjectUnits | LineStyles | CanvasTheme | KeyboardShortcuts => true,
+            DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine | F::ModelLine | F::RefLine | F::Region),
+            DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Region) || (matches!(fe.tool, F::Sweep | F::SweptBlend) && fe.sweep_path.is_some()),
             Modify | ToggleProperties | ToggleBrowser | ToggleStatusBar | ToggleOptionsBar | ThinLines | Undo | Redo | Exit | Options | Save | SaveAs => match cmd {
                 Undo => !fe.undo.is_empty(),
                 Redo => !fe.redo.is_empty(),
@@ -270,7 +275,84 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         FeLoadIntoProject => crate::family_editor::load(app, false),
         FeLoadAndClose => crate::family_editor::load(app, true),
-        FeComponent | FeModelText | FeOpening | FeModelGroup | FeControl => {}
+        FeComponent => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                if fe.def().is_some_and(|d| d.loaded.is_empty()) {
+                    fe.load_prompt = true;
+                } else {
+                    if fe.comp.is_none() {
+                        fe.comp = fe.def().and_then(|d| d.loaded.first()).and_then(|f| f.types.first().map(|t| (f.name.clone(), t.name.clone())));
+                    }
+                    crate::family_editor::set_tool(fe, crate::family_editor::FeTool::Component, false);
+                }
+            }
+        }
+        FeModelText | FeText => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.text_dialog = Some((cmd == FeText, if cmd == FeText { String::new() } else { "Model Text".into() }));
+            }
+        }
+        FeControl => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::set_tool(fe, crate::family_editor::FeTool::Control, false);
+            }
+        }
+        FeControlSingleV | FeControlDoubleV | FeControlSingleH | FeControlDoubleH => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.control_kind = match cmd {
+                    FeControlSingleV => rc_core::family_def::ControlKind::SingleVertical,
+                    FeControlDoubleV => rc_core::family_def::ControlKind::DoubleVertical,
+                    FeControlSingleH => rc_core::family_def::ControlKind::SingleHorizontal,
+                    _ => rc_core::family_def::ControlKind::DoubleHorizontal,
+                };
+            }
+        }
+        FeFilledRegion | FeMaskingRegion => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                crate::family_editor::set_tool(fe, crate::family_editor::FeTool::Region, false);
+                fe.region_masking = cmd == FeMaskingRegion;
+            }
+        }
+        WorkPlaneSet if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.work_plane_dialog = Some(fe.work_plane);
+            }
+        }
+        WorkPlaneShow if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                fe.show_work_plane = !fe.show_work_plane;
+            }
+        }
+        LoadFamily if app.family_editor.is_some() => {
+            if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
+                match io::load_family(&path) {
+                    Ok(ff) => {
+                        if let Some(name) = app.family_editor.as_mut().and_then(|fe| fe.load_nested(ff.family)) {
+                            app.info(format!("Loaded family '{name}'. Place it with Create > Component."));
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        Purge if app.family_editor.is_some() => {
+            // Purge Unused in a family: loaded families no component uses.
+            if let Some(fe) = app.family_editor.as_mut() {
+                let unused = fe.def().map(|d| d.loaded.iter().filter(|f| !d.nested.iter().any(|n| n.family == f.name)).count()).unwrap_or(0);
+                if unused > 0 {
+                    fe.purge_unused();
+                }
+                let msg = if unused == 0 { "There is nothing to purge.".to_string() } else { format!("Purged {unused} unused famil{}.", if unused == 1 { "y" } else { "ies" }) };
+                app.info(msg);
+            }
+        }
+        CloseInactive if app.family_editor.is_some() => {
+            if let Some(fe) = app.family_editor.as_mut() {
+                let v = fe.view;
+                fe.open_views.retain(|x| *x == v);
+            }
+        }
+        FeOpening | FeModelGroup => {}
         Undo => app.undo(),
         Redo => app.redo(),
 

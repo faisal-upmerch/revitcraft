@@ -1954,7 +1954,7 @@ impl ParamKind {
     }
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct FamilyParameter {
     pub name: String,
     pub kind: ParamKind,
@@ -1971,7 +1971,7 @@ pub struct FamilyParameter {
     pub reporting: bool,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct FamilyType {
     pub id: Id,
     pub name: String,
@@ -1979,7 +1979,7 @@ pub struct FamilyType {
     pub values: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct Family {
     pub id: Id,
     pub name: String,
