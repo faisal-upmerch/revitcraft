@@ -14,6 +14,9 @@ pub struct MarkupPage {
 
 use crate::geom::DVec2;
 
+/// The canvas holding a page's own drawing in DWFx files RevitCraft exports.
+pub const SHEET_CANVAS: &str = "RevitCraftSheet";
+
 /// XPS units (1/96 inch) to millimetres.
 const MM: f64 = 25.4 / 96.0;
 
@@ -172,11 +175,19 @@ pub fn read_dwfx(data: &[u8]) -> Result<Vec<MarkupPage>, String> {
         let h = page.height;
         let map = |q: DVec2| DVec2::new(q.x * MM, h - q.y * MM);
         let mut at = 0;
+        // Canvases: whether each open one holds the exported sheet itself (left out, so only
+        // the markups added to the page come back).
+        let mut canvases: Vec<bool> = Vec::new();
         while let Some(k) = xml[at..].find('<') {
             let s = at + k;
             let e = xml[s..].find('>').map(|j| s + j + 1).unwrap_or(xml.len());
             let tag = &xml[s..e];
-            if tag.starts_with("<Path ") {
+            if tag.starts_with("<Canvas") && !tag.ends_with("/>") {
+                canvases.push(attr(tag, "Name").as_deref() == Some(SHEET_CANVAS));
+            } else if tag.starts_with("</Canvas") {
+                canvases.pop();
+            } else if canvases.iter().any(|c| *c) {
+            } else if tag.starts_with("<Path ") {
                 if let Some(d) = attr(tag, "Data") {
                     let col = attr(tag, "Stroke").or_else(|| attr(tag, "Fill")).map(|c| color(&c)).unwrap_or([255, 0, 0]);
                     for fig in path_figures(&d) {
@@ -186,6 +197,7 @@ pub fn read_dwfx(data: &[u8]) -> Result<Vec<MarkupPage>, String> {
             } else if tag.starts_with("<Glyphs ") {
                 if let (Some(t), Some(x), Some(y)) = (attr(tag, "UnicodeString"), attr(tag, "OriginX").and_then(|v| v.parse::<f64>().ok()), attr(tag, "OriginY").and_then(|v| v.parse::<f64>().ok())) {
                     let size = attr(tag, "FontRenderingEmSize").and_then(|v| v.parse::<f64>().ok()).unwrap_or(12.0) * MM;
+                    let t = t.strip_prefix("{}").map(str::to_string).unwrap_or(t);
                     page.texts.push((map(DVec2::new(x, y)), t, size));
                 }
             }
@@ -194,7 +206,7 @@ pub fn read_dwfx(data: &[u8]) -> Result<Vec<MarkupPage>, String> {
         pages.push(page);
     }
     if pages.is_empty() {
-        return Err("The file has no pages (export the sheets from RevitCraft or Revit as DWFx).".into());
+        return Err("The file has no pages (export the sheets as DWFx from File > Export).".into());
     }
     Ok(pages)
 }

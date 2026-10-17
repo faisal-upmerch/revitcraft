@@ -1016,7 +1016,7 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                 1 => &[C::New, C::NewFamily],
                 2 => &[C::Open, C::ImportIfc, C::OpenSample, C::LoadFamily],
                 3 => &[C::SaveAs],
-                4 => &[C::ExportIfc, C::ExportDxf, C::ExportPdf, C::ExportImage, C::ExportCsv],
+                4 => &[C::ExportIfc, C::ExportDxf, C::ExportDwf, C::ExportPdf, C::ExportImage, C::ExportCsv],
                 5 => &[C::Print, C::PrintPreview, C::PrintSetup],
                 _ => &[],
             };

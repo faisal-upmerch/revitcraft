@@ -49,3 +49,75 @@ pub fn entries(data: &[u8]) -> Result<Vec<(String, Vec<u8>)>, String> {
     }
     Ok(out)
 }
+
+/// A ZIP archive of `files` (deflated), as DWFx and other OPC packages are written.
+pub fn write(files: &[(String, Vec<u8>)]) -> Vec<u8> {
+    use std::io::Write;
+    let mut out: Vec<u8> = Vec::new();
+    let mut central: Vec<u8> = Vec::new();
+    let le16 = |v: &mut Vec<u8>, x: u16| v.extend_from_slice(&x.to_le_bytes());
+    let le32 = |v: &mut Vec<u8>, x: u32| v.extend_from_slice(&x.to_le_bytes());
+    for (name, data) in files {
+        let mut crc = flate2::Crc::new();
+        crc.update(data);
+        let mut enc = flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+        let _ = enc.write_all(data);
+        let packed = enc.finish().unwrap_or_default();
+        let (method, body) = if packed.len() < data.len() { (8u16, packed) } else { (0u16, data.clone()) };
+        let offset = out.len() as u32;
+        // Local header.
+        le32(&mut out, 0x0403_4b50);
+        le16(&mut out, 20);
+        le16(&mut out, 0);
+        le16(&mut out, method);
+        le16(&mut out, 0);
+        le16(&mut out, 0x21);
+        le32(&mut out, crc.sum());
+        le32(&mut out, body.len() as u32);
+        le32(&mut out, data.len() as u32);
+        le16(&mut out, name.len() as u16);
+        le16(&mut out, 0);
+        out.extend_from_slice(name.as_bytes());
+        out.extend_from_slice(&body);
+        // Central directory entry.
+        le32(&mut central, 0x0201_4b50);
+        le16(&mut central, 20);
+        le16(&mut central, 20);
+        le16(&mut central, 0);
+        le16(&mut central, method);
+        le16(&mut central, 0);
+        le16(&mut central, 0x21);
+        le32(&mut central, crc.sum());
+        le32(&mut central, body.len() as u32);
+        le32(&mut central, data.len() as u32);
+        le16(&mut central, name.len() as u16);
+        le16(&mut central, 0);
+        le16(&mut central, 0);
+        le16(&mut central, 0);
+        le16(&mut central, 0);
+        le32(&mut central, 0);
+        le32(&mut central, offset);
+        central.extend_from_slice(name.as_bytes());
+    }
+    let start = out.len() as u32;
+    let size = central.len() as u32;
+    out.extend_from_slice(&central);
+    le32(&mut out, 0x0605_4b50);
+    le16(&mut out, 0);
+    le16(&mut out, 0);
+    le16(&mut out, files.len() as u16);
+    le16(&mut out, files.len() as u16);
+    le32(&mut out, size);
+    le32(&mut out, start);
+    le16(&mut out, 0);
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn written_archives_read_back() {
+        let files = vec![("a.txt".to_string(), b"hello hello hello hello".to_vec()), ("dir/b.bin".to_string(), vec![1, 2, 3])];
+        assert_eq!(super::entries(&super::write(&files)).unwrap(), files);
+    }
+}

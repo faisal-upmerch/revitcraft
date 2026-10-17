@@ -186,6 +186,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         }
         ExportIfc => export_ifc(app),
         ExportDxf => app.dialogs.export = Some(dialogs::ExportKind::Dxf),
+        ExportDwf => app.dialogs.export = Some(dialogs::ExportKind::Dwf),
         ExportPdf => app.dialogs.export = Some(dialogs::ExportKind::Pdf),
         ExportImage => app.dialogs.export = Some(dialogs::ExportKind::Image),
         ExportCsv => export_csv(app),

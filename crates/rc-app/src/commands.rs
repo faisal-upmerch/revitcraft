@@ -14,6 +14,7 @@ pub enum Cmd {
     ImportIfc,
     ExportIfc,
     ExportDxf,
+    ExportDwf,
     ExportPdf,
     ExportImage,
     ExportCsv,
@@ -479,6 +480,7 @@ impl Cmd {
             ImportIfc => ci("Open IFC", I::ImportIfc, "Opens an IFC file as a new project.", ""),
             ExportIfc => ci("IFC", I::Ifc, "Exports the model to IFC4.", ""),
             ExportDxf => ci("DWG/DXF", I::Dxf, "Exports views and sheets to DXF drawings.", ""),
+            ExportDwf => ci("DWF/DWFx", I::Export, "Exports views and sheets to a DWFx file (for markup and review).", ""),
             ExportPdf => ci("PDF", I::Pdf, "Exports sheets or views to a PDF file.", ""),
             ExportImage => ci("Image", I::Image, "Exports the current view as a PNG image.", ""),
             ExportCsv => ci("Schedule (CSV)", I::Schedule, "Exports the open schedule as comma-separated values.", ""),
@@ -922,7 +924,7 @@ impl Cmd {
     }
 
     pub const ALL: &'static [Cmd] = &[
-        Cmd::New, Cmd::Open, Cmd::Save, Cmd::SaveAs, Cmd::OpenSample, Cmd::ImportIfc, Cmd::ExportIfc, Cmd::ExportDxf, Cmd::ExportPdf, Cmd::ExportImage,
+        Cmd::New, Cmd::Open, Cmd::Save, Cmd::SaveAs, Cmd::OpenSample, Cmd::ImportIfc, Cmd::ExportIfc, Cmd::ExportDxf, Cmd::ExportDwf, Cmd::ExportPdf, Cmd::ExportImage,
         Cmd::ExportCsv, Cmd::Options, Cmd::Exit, Cmd::Undo, Cmd::Redo, Cmd::Home, Cmd::Modify, Cmd::Wall, Cmd::WallStructural, Cmd::Door, Cmd::Window, Cmd::Component,
         Cmd::Column, Cmd::StructColumn, Cmd::RoofFootprint, Cmd::RoofExtrusion, Cmd::Ceiling, Cmd::AutoCeiling, Cmd::SketchCeiling, Cmd::Floor, Cmd::FloorStructural, Cmd::CurtainGrid, Cmd::Railing,
         Cmd::Stair, Cmd::ModelText, Cmd::Ramp, Cmd::PlaceRoomsAuto, Cmd::HighlightBoundaries, Cmd::RampRun, Cmd::RampBoundary, Cmd::RampRiser, Cmd::ModelLine, Cmd::PlaceGroup, Cmd::CreateGroup, Cmd::Room, Cmd::RoomSeparator, Cmd::RoomTag, Cmd::Area, Cmd::AreaBoundary, Cmd::AreaTag,

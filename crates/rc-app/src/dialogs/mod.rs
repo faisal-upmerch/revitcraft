@@ -32,6 +32,7 @@ pub enum Pending {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum ExportKind {
     Dxf,
+    Dwf,
     Pdf,
     Image,
 }
@@ -614,6 +615,7 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
     let mut open = true;
     let title = match kind {
         ExportKind::Dxf => "DWG/DXF Export",
+        ExportKind::Dwf => "DWF Export Settings",
         ExportKind::Pdf => "PDF Export",
         ExportKind::Image => "Export Image",
     };
@@ -628,7 +630,7 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
             .iter()
             .filter(|v| !v.is_template)
             .filter(|v| match kind {
-                ExportKind::Dxf => matches!(v.kind, ViewKind::Sheet(_)) || (v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. })),
+                ExportKind::Dxf | ExportKind::Dwf => matches!(v.kind, ViewKind::Sheet(_)) || (v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. })),
                 ExportKind::Pdf => matches!(v.kind, ViewKind::Sheet(_)) || (v.is_graphical() && !matches!(v.kind, ViewKind::ThreeD { .. })),
                 ExportKind::Image => v.is_graphical(),
             })
@@ -726,6 +728,7 @@ fn export_dialog(app: &mut App, ctx: &egui::Context) {
         app.dialogs.export_sel.clear();
         match kind {
             ExportKind::Dxf => export_dxf(app, &ids),
+            ExportKind::Dwf => export_dwf(app, &ids),
             ExportKind::Pdf => export_pdf(app, &ids),
             ExportKind::Image => export_image(app, ids[0]),
         }
@@ -2330,6 +2333,40 @@ fn pdf_pages(app: &mut App, ids: &[Id]) -> Vec<(String, rc_core::pdf::Page)> {
         }
     }
     pages
+}
+
+/// DWF/DWFx export: the views and sheets as pages of one DWFx file.
+fn export_dwf(app: &mut App, ids: &[Id]) {
+    let Some(mut path) = crate::files::FileDialog::new().add_filter("DWFx Files", &["dwfx"]).set_file_name(format!("{}.dwfx", safe_name(&app.doc.data.info.name))).save_file() else { return };
+    if path.extension().is_none() {
+        path.set_extension("dwfx");
+    }
+    let fp = app.footprints();
+    let data = app.doc.data.clone();
+    let settings = app.dialogs.print.clone();
+    let mut pages = Vec::new();
+    for id in ids {
+        let Some(view) = data.view(*id) else { continue };
+        let Some((size, prims)) = rc_core::sheet::print_layout(&data, view, &fp, &settings) else { continue };
+        let name = match &view.kind {
+            ViewKind::Sheet(s) => s.number.clone(),
+            _ => format!("{} - {}", view.type_label(), view.name),
+        };
+        pages.push(rc_core::dwfx::DwfPage { name, size, prims });
+    }
+    if pages.is_empty() {
+        app.error("Nothing to export.");
+        return;
+    }
+    let fonts = std::env::var("WINDIR").map(std::path::PathBuf::from).unwrap_or_else(|_| r"C:\Windows".into()).join("Fonts");
+    let font = |f: &str| std::fs::read(fonts.join(f)).ok();
+    let fonts = (font("arial.ttf"), font("arialbd.ttf"));
+    let mut render = |vid: Id, w: u32, h: u32| crate::view3d::render_image(app, vid, w, h);
+    let bytes = rc_core::dwfx::write(&data, pages, &mut render, fonts);
+    match std::fs::write(&path, bytes) {
+        Ok(()) => app.info(format!("Exported {}", path.display())),
+        Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+    }
 }
 
 fn export_pdf(app: &mut App, ids: &[Id]) {

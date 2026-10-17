@@ -26,6 +26,7 @@ pub mod plan;
 pub mod png;
 pub mod rebar;
 pub mod zip;
+pub mod dwfx;
 pub mod markup;
 pub mod imports;
 pub mod shared_params;
