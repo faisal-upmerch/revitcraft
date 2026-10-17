@@ -142,9 +142,31 @@ fn insert() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
         panel("Manage", vec![Labeled("Manage\nLinks", C::ManageLinks, vec![])]),
-        panel("Link", vec![Big(C::LinkRevit), Big(C::LinkIfc), Big(C::LinkCad), Labeled("Decal", C::PlaceDecal, vec![C::PlaceDecal, C::DecalTypes]), Big(C::LinkImage)]),
-        panel("Import", vec![Big(C::ImportCad), Big(C::ImportImage), Big(C::ImportIfc)]),
-        panel("Load from Library", vec![Big(C::LoadFamily), Labeled("Load as\nGroup", C::LoadAsGroup, vec![]), Labeled("Insert\nfrom File", C::InsertViews, vec![C::InsertViews])]),
+        panel(
+            "Link",
+            vec![
+                Big(C::LinkRevit),
+                Big(C::LinkIfc),
+                Big(C::LinkCad),
+                Labeled("Link\nTopography", C::LinkTopography, vec![]),
+                Labeled("DWF\nMarkup", C::DwfMarkup, vec![]),
+                Labeled("Decal", C::PlaceDecal, vec![C::PlaceDecal, C::DecalTypes]),
+                Labeled("Point\nCloud", C::PointCloud, vec![]),
+                Labeled("Coordination\nModel", C::CoordinationModel, vec![]),
+                Labeled("Link\nPDF", C::LinkPdf, vec![]),
+                Big(C::LinkImage),
+            ],
+        ),
+        panel("Import", vec![Big(C::ImportCad), Labeled("Import\ngbXML", C::ImportGbxml, vec![]), Labeled("Import\nPDF", C::ImportPdf, vec![]), Big(C::ImportImage), Big(C::ImportIfc)]),
+        panel(
+            "Load from Library",
+            vec![
+                Labeled("Load Autodesk\nFamily", C::LoadAutodeskFamily, vec![]),
+                Big(C::LoadFamily),
+                Labeled("Load as\nGroup", C::LoadAsGroup, vec![]),
+                Labeled("Insert\nfrom File", C::InsertViews, vec![C::InsertViews, C::Insert2DElements]),
+            ],
+        ),
     ]
 }
 
@@ -177,7 +199,7 @@ fn annotate() -> Vec<Panel> {
             ],
         ),
         panel("Text", vec![Big(C::Text), Labeled("Check\nSpelling", C::CheckSpelling, vec![]), Labeled("Find/\nReplace", C::FindReplace, vec![])]),
-        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::BeamAnnotations, C::MultiCategoryTag, C::MaterialTag]), Stack(vec![C::AreaTag, C::RoomTag]), Stack(vec![C::ViewReference, C::TreadNumber]), Labeled("Keynote", C::ElementKeynote, vec![C::ElementKeynote, C::MaterialKeynote, C::UserKeynote, C::KeynotingSettings])]),
+        panel("Tag", vec![Labeled("Tag by\nCategory", C::TagByCategory, vec![]), Labeled("Tag\nAll", C::TagAll, vec![]), Stack(vec![C::BeamAnnotations, C::MultiCategoryTag, C::MaterialTag]), Stack(vec![C::AreaTag, C::RoomTag, C::SpaceTag]), Stack(vec![C::ViewReference, C::TreadNumber]), Labeled("Multi-\nRebar", C::MultiRebarAligned, vec![C::MultiRebarAligned, C::MultiRebarLinear]), Labeled("Keynote", C::ElementKeynote, vec![C::ElementKeynote, C::MaterialKeynote, C::UserKeynote, C::KeynotingSettings])]),
         panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
         panel("Symbol", vec![Big(C::Symbol), Stack(vec![C::SpanSymbol, C::BeamSymbol, C::StairPathSymbol]), Stack(vec![C::AreaSymbol, C::PathSymbol, C::RebarSymbol]), Stack(vec![C::FabricSymbol])]),
     ]
@@ -186,6 +208,7 @@ fn annotate() -> Vec<Panel> {
 fn analyze() -> Vec<Panel> {
     vec![
         panel("Select", vec![Big(C::Modify)]),
+        panel("Spaces & Zones", vec![Big(C::Space), Labeled("Space\nSeparator", C::SpaceSeparator, vec![]), Labeled("Tag\nSpace", C::SpaceTag, vec![])]),
         panel("Color Fill", vec![Labeled("Color Fill\nLegend", C::ColorFillLegend, vec![])]),
         panel("Reports & Schedules", vec![Labeled("Schedule/\nQuantities", C::Schedule, vec![C::Schedule, C::MaterialTakeoff])]),
     ]
@@ -227,7 +250,7 @@ fn view_tab(_app: &App) -> Vec<Panel> {
                 Labeled("Cut\nProfile", C::CutProfile, vec![]),
             ],
         ),
-        panel("Presentation", vec![Big(C::Render)]),
+        panel("Presentation", vec![Big(C::Render), Labeled("Cloud\nRendering", C::CloudRendering, vec![C::CloudRendering, C::RenderGallery]), Labeled("Twinmotion", C::OpenTwinmotion, vec![C::OpenTwinmotion, C::ExportObj])]),
         panel(
             "Create",
             vec![
@@ -283,6 +306,7 @@ fn manage() -> Vec<Panel> {
                 Stack(vec![C::ObjectStyles, C::Snaps, C::ProjectInfo]),
                 Stack(vec![C::ProjectParameters, C::SharedParameters, C::GlobalParameters]),
                 Stack(vec![C::TransferStandards, C::Purge, C::ProjectUnits]),
+                Stack(vec![C::StructuralSettings]),
                 Labeled("Additional\nSettings", C::LineStyles, vec![C::LineStyles, C::Sun]),
             ],
         ),

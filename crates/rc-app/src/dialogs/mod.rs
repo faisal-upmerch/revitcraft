@@ -1,6 +1,7 @@
 //! Dialogs. Each is shown while its field in `Dialogs` is set.
 
 mod annotate;
+pub mod insert;
 pub mod schedule_tools;
 mod manage;
 mod settings;
@@ -90,6 +91,16 @@ pub struct Dialogs {
     pub add_to_set: bool,
     /// Rebar Cover Settings.
     pub rebar_cover: bool,
+    /// Link/Import PDF, DWF Markup, Insert 2D Elements, Load Autodesk Family.
+    pub pdf: Option<Box<insert::PdfState>>,
+    pub markup: Option<Box<insert::MarkupState>>,
+    pub insert_2d: Option<Box<insert::Insert2DState>>,
+    pub autodesk_family: Option<insert::AdskState>,
+    /// Manage > Structural Settings.
+    pub structural: Option<Box<insert::StructuralState>>,
+    /// View > Cloud Rendering and Render Gallery.
+    pub cloud_render: Option<insert::CloudState>,
+    pub gallery: bool,
     /// Rendering (View > Render).
     pub render: Option<Box<RenderState>>,
     /// Insert Views from File: the source project and its views.
@@ -360,7 +371,9 @@ pub fn table_header(ui: &mut egui::Ui, cols: &[&str]) {
 
 /// A dialog push button (white face, grey border; the default button has a blue border).
 pub fn dlg_button(ui: &mut egui::Ui, label: &str, default: bool, enabled: bool) -> bool {
-    let (r, resp) = ui.allocate_exact_size(vec2(78.0, 24.0), if enabled { Sense::click() } else { Sense::hover() });
+    // Wider than the standard 78 px when the label needs it.
+    let w = (ui.painter().layout_no_wrap(label.to_string(), style::font(12.0), egui::Color32::BLACK).size().x + 20.0).max(78.0);
+    let (r, resp) = ui.allocate_exact_size(vec2(w, 24.0), if enabled { Sense::click() } else { Sense::hover() });
     let fill = if !enabled {
         egui::Color32::from_rgb(245, 245, 245)
     } else if resp.is_pointer_button_down_on() {
@@ -488,6 +501,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
     project_turn_dialog(app, ctx);
     decal_types_dialog(app, ctx);
     annotate::show(app, ctx);
+    insert::show(app, ctx);
     schedule_tools::show(app, ctx);
     location_dialog(app, ctx);
     specify_coords_dialog(app, ctx);

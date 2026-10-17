@@ -112,7 +112,7 @@ pub fn segment_text(p: &Project, d: &Dimension, value: f64) -> String {
 /// The default parameter shown by a tag for its host's category.
 pub fn default_tag_parameter(c: Category) -> &'static str {
     match c {
-        Category::Rooms => "Name",
+        Category::Rooms | Category::Spaces => "Name",
         Category::Areas => "Name",
         Category::Walls | Category::Floors | Category::Roofs | Category::Ceilings => "Type Mark",
         _ => "Mark",
@@ -135,7 +135,7 @@ pub fn tag_text(p: &Project, t: &Tag) -> String {
         _ if param == "Material" => element_material(p, host),
         _ => String::new(),
     };
-    if host.category() == Category::Rooms {
+    if matches!(host.category(), Category::Rooms | Category::Spaces) {
         let number = match params::get(p, host, "Number") {
             Some(params::Value::Text(s)) => s,
             _ => String::new(),

@@ -63,10 +63,13 @@ pub enum Category {
     FabricReinforcement,
     RebarCouplers,
     BeamSystems,
+    PointClouds,
+    CoordinationModels,
+    Spaces,
 }
 
 impl Category {
-    pub const ALL: [Category; 43] = [
+    pub const ALL: [Category; 46] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -110,10 +113,13 @@ impl Category {
         Category::ColorFillLegends,
         Category::ScopeBoxes,
         Category::Matchline,
+        Category::Spaces,
+        Category::PointClouds,
+        Category::CoordinationModels,
     ];
 
     /// Model categories (shown in Visibility/Graphics' model tab).
-    pub const MODEL: [Category; 31] = [
+    pub const MODEL: [Category; 32] = [
         Category::Walls,
         Category::Floors,
         Category::Roofs,
@@ -134,6 +140,7 @@ impl Category {
         Category::SpecialtyEquipment,
         Category::GenericModels,
         Category::Rooms,
+        Category::Spaces,
         Category::Areas,
         Category::RoomSeparation,
         Category::AreaBoundary,
@@ -164,12 +171,13 @@ impl Category {
     ];
 
     /// Categories that can be scheduled.
-    pub const SCHEDULABLE: [Category; 23] = [
+    pub const SCHEDULABLE: [Category; 24] = [
         Category::Walls,
         Category::Floors,
         Category::Roofs,
         Category::Ceilings,
         Category::Rooms,
+        Category::Spaces,
         Category::Areas,
         Category::Doors,
         Category::Windows,
@@ -245,6 +253,9 @@ impl Category {
             Category::FabricReinforcement => "Structural Fabric Reinforcement",
             Category::RebarCouplers => "Structural Rebar Couplers",
             Category::BeamSystems => "Structural Beam Systems",
+            Category::PointClouds => "Point Clouds",
+            Category::CoordinationModels => "Coordination Model",
+            Category::Spaces => "Spaces",
         }
     }
 
@@ -303,6 +314,9 @@ impl Category {
             Category::FabricReinforcement => "Structural Fabric Reinforcement",
             Category::RebarCouplers => "Structural Rebar Coupler",
             Category::BeamSystems => "Structural Beam System",
+            Category::PointClouds => "Point Cloud",
+            Category::CoordinationModels => "Coordination Model",
+            Category::Spaces => "Space",
         }
     }
 
@@ -395,6 +409,10 @@ pub enum ElementKind {
     RebarCoupler(RebarCoupler),
     /// Structure > Beam System: parallel beams at a fixed spacing across a boundary.
     BeamSystem(BeamSystem),
+    /// Insert > Point Cloud: a linked point cloud (its points in `Project::point_clouds`).
+    PointCloud(LinkedAsset),
+    /// Insert > Coordination Model: a linked mesh (in `Project::meshes`).
+    CoordinationModel(LinkedAsset),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -450,7 +468,13 @@ impl Element {
             ElementKind::Wall(_) => Category::Walls,
             ElementKind::Floor(_) => Category::Floors,
             ElementKind::Roof(_) => Category::Roofs,
-            ElementKind::Room(_) => Category::Rooms,
+            ElementKind::Room(r) => {
+                if r.space {
+                    Category::Spaces
+                } else {
+                    Category::Rooms
+                }
+            }
             ElementKind::Instance(i) => i.category,
             ElementKind::Ceiling(_) => Category::Ceilings,
             ElementKind::Stair(_) => Category::Stairs,
@@ -467,6 +491,8 @@ impl Element {
             ElementKind::FabricSheet(_) => Category::FabricReinforcement,
             ElementKind::RebarCoupler(_) => Category::RebarCouplers,
             ElementKind::BeamSystem(_) => Category::BeamSystems,
+            ElementKind::PointCloud(_) => Category::PointClouds,
+            ElementKind::CoordinationModel(_) => Category::CoordinationModels,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -878,6 +904,9 @@ pub struct Room {
     pub base_offset: f64,
     #[serde(default)]
     pub department: String,
+    /// Analyze > Space: a space (MEP) rather than a room.
+    #[serde(default)]
+    pub space: bool,
     #[serde(default)]
     pub floor_finish: String,
     #[serde(default)]
@@ -1431,6 +1460,10 @@ pub enum SymbolKind {
     AreaReinforcement,
     PathReinforcement,
     RebarSet,
+    /// Annotate > Multi-Rebar: a dimension across a rebar set's bars with its tag, aligned
+    /// to the set or horizontal/vertical.
+    MultiRebarAligned,
+    MultiRebarLinear,
     Fabric,
 }
 
@@ -3006,6 +3039,16 @@ pub struct Project {
     /// Linked project files (Manage Links).
     #[serde(default)]
     pub links: Vec<LinkedModel>,
+    /// Point clouds and coordination model meshes (Insert > Point Cloud / Coordination Model).
+    #[serde(default)]
+    pub point_clouds: Vec<PackedAsset>,
+    #[serde(default)]
+    pub meshes: Vec<PackedAsset>,
+    #[serde(default)]
+    pub structural: StructuralSettings,
+    /// Render Gallery.
+    #[serde(default)]
+    pub renders: Vec<RenderRecord>,
     /// Rebar Cover Settings: concrete cover (0 = the default 40 mm / 1 1/2").
     #[serde(default)]
     pub rebar_cover: f64,
@@ -3132,6 +3175,78 @@ pub struct FabricSheet {
     pub center: DVec2,
     pub angle: f64,
     pub top: bool,
+}
+
+/// A linked point cloud or coordination model: its asset, moved by `origin`.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LinkedAsset {
+    pub asset: Id,
+    #[serde(default)]
+    pub origin: DVec3,
+}
+
+/// Packed linked data (points or a mesh), with the file it came from.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+pub struct PackedAsset {
+    pub id: Id,
+    pub name: String,
+    #[serde(default)]
+    pub path: String,
+    pub data: String,
+    #[serde(default)]
+    pub count: usize,
+}
+
+/// Manage > Structural Settings.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct StructuralSettings {
+    /// Symbolic cutback distances (paper mm): brace, beam/truss, column.
+    pub brace_cutback: f64,
+    pub beam_cutback: f64,
+    pub column_cutback: f64,
+    /// Brace symbols in plan: parallel line (else line offset), and the offset.
+    pub brace_parallel: bool,
+    pub brace_offset: f64,
+    pub kicker_symbol: bool,
+    /// Load cases: (name, nature).
+    pub load_cases: Vec<(String, String)>,
+    /// Load combinations: (name, formula).
+    #[serde(default)]
+    pub load_combinations: Vec<(String, String)>,
+}
+
+impl Default for StructuralSettings {
+    fn default() -> Self {
+        let lc = |n: &str, k: &str| (n.to_string(), k.to_string());
+        StructuralSettings {
+            brace_cutback: 2.38,
+            beam_cutback: 2.38,
+            column_cutback: 2.38,
+            brace_parallel: true,
+            brace_offset: 2.38,
+            kicker_symbol: true,
+            load_cases: vec![
+                lc("DL1", "Dead"),
+                lc("LL1", "Live"),
+                lc("WIND1", "Wind"),
+                lc("SNOW1", "Snow"),
+                lc("LR1", "Roof Live"),
+                lc("ACC1", "Accidental"),
+                lc("TEMP1", "Temperature"),
+                lc("SEIS1", "Seismic"),
+            ],
+            load_combinations: Vec::new(),
+        }
+    }
+}
+
+/// View > Cloud Rendering: a finished render kept in the Render Gallery.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct RenderRecord {
+    pub image: Id,
+    pub view: Id,
+    pub name: String,
+    pub date: String,
 }
 
 /// A beam system: beams of `beam_type` along `dir`, `spacing` apart across the boundary.
@@ -3308,6 +3423,10 @@ impl Project {
             starting_view: None,
             images: Vec::new(),
             links: Vec::new(),
+            point_clouds: Vec::new(),
+            meshes: Vec::new(),
+            structural: StructuralSettings::default(),
+            renders: Vec::new(),
             rebar_cover: 0.0,
         }
     }

@@ -481,7 +481,9 @@ impl Renderer {
             }
             for (mat_name, mesh) in &set.by_material {
                 let mat = p.material(mat_name);
-                let mut rgb = ov.and_then(|o| o.fill_color).or(mat.map(|m| m.color)).unwrap_or([200, 200, 200]);
+                // Point clouds name their colours ("#rrggbb").
+                let point_color = mat_name.strip_prefix('#').filter(|h| h.len() == 6).map(|h| [0, 2, 4].map(|k| u8::from_str_radix(&h[k..k + 2], 16).unwrap_or(128)));
+                let mut rgb = ov.and_then(|o| o.fill_color).or(mat.map(|m| m.color)).or(point_color).unwrap_or([200, 200, 200]);
                 if half {
                     rgb = [(rgb[0] as u16 / 2 + 110) as u8, (rgb[1] as u16 / 2 + 110) as u8, (rgb[2] as u16 / 2 + 110) as u8];
                 }
@@ -506,7 +508,7 @@ impl Renderer {
                 } else if let Some(c) = ov.and_then(|o| o.line_color) {
                     srgb_color(c, 1.0)
                 } else if alpha < 0.99 { srgb_color([90, 110, 130], 1.0) } else { srgb_color([35, 35, 35], 1.0) };
-                for (a, b) in feature_edges(mesh) {
+                for (a, b) in if point_color.is_some() { Vec::new() } else { feature_edges(mesh) } {
                     for q in [a, b] {
                         lines.push(Vertex { pos: (q * 0.001).as_vec3().to_array(), normal: [0.0, 0.0, 1.0], color: edge_color, extra: [0.0; 4] });
                     }

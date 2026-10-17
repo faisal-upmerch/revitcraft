@@ -105,7 +105,7 @@ pub fn add_family(p: &mut Project, name: &str, template: FamilyTemplate, types: 
     id
 }
 
-fn add_catalog_family(p: &mut Project, name: &str, template: FamilyTemplate, types: Vec<(String, Vec<(&'static str, String)>)>) {
+pub fn add_catalog_family(p: &mut Project, name: &str, template: FamilyTemplate, types: Vec<(String, Vec<(&'static str, String)>)>) {
     let id = p.new_id();
     let mut family = Family { id, name: name.into(), category: template.category(), template, params: library::template_params(template), types: vec![], definition: None };
     for (tname, values) in types {

@@ -740,7 +740,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         match &e.kind {
             ElementKind::Room(r) if r.level == c.level && area_plan.is_none() => {
                 let b = analysis::room_boundary(p, r);
-                if let (Some(b), true) = (&b, room_colors) {
+                if let (Some(b), true) = (&b, room_colors && !r.space) {
                     d.fill(Some(e.id), &b.interior, room_name_color(&r.name));
                 }
                 let _ = b;
@@ -856,7 +856,31 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
         }
         let start = d.prims.len();
         let (proj, cutp) = category_pens(e.category());
+        // Structural Settings: beams are cut back at their ends by the symbolic cutback.
+        let cut_back = |pts: Vec<DVec2>| -> Vec<DVec2> {
+            let (Some(end), true) = (i.end, fam.is_some_and(|f| f.is_framing())) else {
+                return pts;
+            };
+            let k = p.structural.beam_cutback * c.scale;
+            let dir = (end - i.location).normalize_or_zero();
+            if k <= 0.0 || i.location.distance(end) <= 4.0 * k {
+                return pts;
+            }
+            pts.into_iter()
+                .map(|q| {
+                    if q.distance(i.location) < 1.0 {
+                        q + dir * k
+                    } else if q.distance(end) < 1.0 {
+                        q - dir * k
+                    } else {
+                        q
+                    }
+                })
+                .collect()
+        };
         for s in family_geom::instance_symbol(p, i, c.cut_z) {
+            let mut s = s;
+            s.pts = cut_back(std::mem::take(&mut s.pts));
             if let Some(fill) = s.fill {
                 d.fill(Some(e.id), &s.pts, [fill[0], fill[1], fill[2], 255]);
             }
@@ -941,6 +965,27 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
                 for sheet in crate::rebar::fabric_area_sheets(p, a) {
                     d.line(Some(e.id), sheet.clone(), true, THIN);
+                }
+            }
+            ElementKind::PointCloud(a) => {
+                // The points within the view range, as small crosses in their colour.
+                if let Some(pc) = p.point_clouds.iter().find(|x| x.id == a.asset) {
+                    let pts = crate::imports::unpack_points(&pc.data);
+                    let step = pts.len().div_ceil(20000).max(1);
+                    let r = 0.4 * c.scale;
+                    for (q, col) in pts.iter().step_by(step) {
+                        let w = *q + a.origin;
+                        if w.z < c.bottom_z || w.z > c.cut_z {
+                            continue;
+                        }
+                        let at = w.truncate();
+                        d.line(
+                            Some(e.id),
+                            vec![at - DVec2::X * r, at + DVec2::X * r],
+                            false,
+                            Stroke::new(0.1, *col, Dash::Solid),
+                        );
+                    }
                 }
             }
             ElementKind::BeamSystem(b) if b.level == c.level => {
@@ -1808,7 +1853,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 let h = 2.5 * scale;
                 let w = lines.iter().map(|l| l.chars().count()).max().unwrap_or(1) as f64 * h * 0.6 + h;
                 let boxh = h * 1.4 * lines.len() as f64;
-                let room = p.element(t.host).is_some_and(|h| h.category() == Category::Rooms);
+                let room = p.element(t.host).is_some_and(|h| matches!(h.category(), Category::Rooms | Category::Spaces));
                 if room {
                     let name = lines.first().copied().unwrap_or("");
                     let number = lines.get(1).copied().unwrap_or("");
@@ -1972,7 +2017,7 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                     d.fill(Some(e.id), &[b, b - dir * head + n * wing, b - dir * head], [0, 0, 0, 255]);
                     d.fill(Some(e.id), &[a, a + dir * head - n * wing, a + dir * head], [0, 0, 0, 255]);
                 }
-                SymbolKind::BeamSystem | SymbolKind::StairPath | SymbolKind::AreaReinforcement | SymbolKind::PathReinforcement | SymbolKind::RebarSet | SymbolKind::Fabric => host_symbol(p, e, s, scale, d),
+                SymbolKind::BeamSystem | SymbolKind::StairPath | SymbolKind::AreaReinforcement | SymbolKind::PathReinforcement | SymbolKind::RebarSet | SymbolKind::Fabric | SymbolKind::MultiRebarAligned | SymbolKind::MultiRebarLinear => host_symbol(p, e, s, scale, d),
                 SymbolKind::TreadNumber => {
                     // Numbers at the middle of each tread, a quarter of the run width to its left,
                     // counted through the stair.
@@ -2048,8 +2093,23 @@ pub fn annotation_graphics(p: &Project, view: &View, footprints: &HashMap<Id, Fo
                 }
             },
             ElementKind::Cad(cad) => {
+                // View-specific imports and DWF markups.
                 for (pts, col) in &cad.polylines {
                     d.line(Some(e.id), pts.clone(), false, Stroke::new(0.13, if cad.halftone { HALFTONE } else { *col }, Dash::Solid));
+                }
+                for (pos, text, h) in &cad.texts {
+                    d.prims.push((
+                        Some(e.id),
+                        Prim::Text {
+                            pos: *pos,
+                            text: text.clone(),
+                            size: (*h / scale) as f32,
+                            color: if cad.halftone { HALFTONE } else { [0, 0, 0] },
+                            anchor: Anchor::Left,
+                            angle: 0.0,
+                            bold: false,
+                        },
+                    ));
                 }
             }
             _ => {}
@@ -2374,6 +2434,83 @@ fn host_symbol(p: &Project, e: &Element, s: &Symbol, scale: f64, d: &mut Drawing
             let label = format!("{} {} @ {}", r.count, crate::rebar::bar_name(p, r.bar_type), p.units.length(r.spacing));
             tick_span(e.id, s.position, across, half, scale, label, d);
         }
+        (SymbolKind::MultiRebarAligned | SymbolKind::MultiRebarLinear, ElementKind::Rebar(r)) => {
+            // A dimension string through the bars (across the set, or horizontal/vertical
+            // whichever is nearer), extension lines to each bar and the set's tag beyond.
+            let along = (r.end - r.start).normalize_or(DVec2::X);
+            let across = geom::perp(along);
+            let dir = if s.kind == SymbolKind::MultiRebarLinear {
+                if across.x.abs() >= across.y.abs() {
+                    DVec2::X
+                } else {
+                    DVec2::Y
+                }
+            } else {
+                across
+            };
+            if dir.perp_dot(along).abs() < 1e-6 {
+                return;
+            }
+            let o = s.position;
+            // Where each bar's line crosses the dimension line.
+            let feet: Vec<(DVec2, DVec2)> = (0..r.count.max(1))
+                .map(|k| {
+                    let b = r.start + across * (r.spacing * k as f64);
+                    let t = (o - b).perp_dot(dir) / along.perp_dot(dir);
+                    let on_bar = b + along * t.clamp(0.0, r.start.distance(r.end));
+                    (on_bar, b + along * t)
+                })
+                .collect();
+            let n = geom::perp(dir);
+            let (gap, ext) = (1.5 * scale, 2.0 * scale);
+            for (bar, foot) in &feet {
+                let v = (*foot - *bar).normalize_or_zero();
+                if bar.distance(*foot) > gap {
+                    d.line(
+                        Some(e.id),
+                        vec![*bar + v * gap, *foot + v * ext],
+                        false,
+                        ANNO,
+                    );
+                }
+                let t = (dir + n).normalize() * 1.3 * scale;
+                d.line(
+                    Some(e.id),
+                    vec![*foot - t, *foot + t],
+                    false,
+                    Stroke::new(0.35, [0, 0, 0], Dash::Solid),
+                );
+            }
+            let (first, last) = (feet[0].1, feet[feet.len() - 1].1);
+            d.line(
+                Some(e.id),
+                vec![first - dir * ext, last + dir * ext],
+                false,
+                ANNO,
+            );
+            let span = first.distance(last);
+            if span > 0.0 {
+                d.text(
+                    Some(e.id),
+                    (first + last) / 2.0 + n * 1.5 * scale,
+                    p.units.length(span),
+                    2.0,
+                    Anchor::Center,
+                );
+            }
+            let hi = if (last - first).dot(dir) >= 0.0 {
+                last
+            } else {
+                first
+            };
+            let label = format!(
+                "{} {} @ {}",
+                r.count,
+                crate::rebar::bar_name(p, r.bar_type),
+                p.units.length(r.spacing)
+            );
+            d.text(Some(e.id), hi + dir * 4.0 * scale, label, 2.0, Anchor::Left);
+        }
         (SymbolKind::BeamSystem, ElementKind::BeamSystem(b)) => {
             // The system's span arrow, with its beam type and spacing.
             let dir = b.dir.normalize_or(DVec2::X);
@@ -2535,6 +2672,26 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::PathReinforcement(r) => crate::rebar::path_region(p, r),
         ElementKind::FabricArea(a) => vec![a.boundary.clone()],
         ElementKind::BeamSystem(b) => vec![b.boundary.clone()],
+        ElementKind::CoordinationModel(a) => p
+            .meshes
+            .iter()
+            .find(|x| x.id == a.asset)
+            .map(|m| {
+                let (v, _) = crate::imports::unpack_mesh(&m.data);
+                let (mn, mx) = geom::bounds(v.iter().map(|q| (*q + a.origin).truncate()));
+                vec![vec![mn, DVec2::new(mx.x, mn.y), mx, DVec2::new(mn.x, mx.y)]]
+            })
+            .unwrap_or_default(),
+        ElementKind::PointCloud(a) => p
+            .point_clouds
+            .iter()
+            .find(|x| x.id == a.asset)
+            .map(|pc| {
+                let pts = crate::imports::unpack_points(&pc.data);
+                let (mn, mx) = geom::bounds(pts.iter().map(|(q, _)| (*q + a.origin).truncate()));
+                vec![vec![mn, DVec2::new(mx.x, mn.y), mx, DVec2::new(mn.x, mx.y)]]
+            })
+            .unwrap_or_default(),
         ElementKind::RebarCoupler(cp) => crate::rebar::coupler_points(p, cp)
             .into_iter()
             .map(|(q, ax, dia)| {
@@ -2721,7 +2878,7 @@ pub fn pick_all(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>, p
         Category::Railings | Category::Stairs => 3,
         Category::Walls => 4,
         Category::Groups => 4,
-        Category::Rooms | Category::Areas => 5,
+        Category::Rooms | Category::Spaces | Category::Areas => 5,
         Category::FilledRegions | Category::ImportedCad => 6,
         Category::Roofs | Category::Ceilings | Category::ShaftOpenings => 6,
         Category::Floors => 7,

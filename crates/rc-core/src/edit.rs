@@ -143,11 +143,20 @@ pub fn add_extrusion_roof(p: &mut Project, level: Id, type_id: Id, start: DVec2,
 }
 
 pub fn next_room_number(p: &Project) -> String {
-    let max = p.elements.iter().filter_map(|e| e.as_room()).filter_map(|r| r.number.parse::<u32>().ok()).max().unwrap_or(0);
+    let max = p.elements.iter().filter_map(|e| e.as_room()).filter(|r| !r.space).filter_map(|r| r.number.parse::<u32>().ok()).max().unwrap_or(0);
     (max + 1).to_string()
 }
 
 pub fn add_room(p: &mut Project, level: Id, at: DVec2) -> Result<Id, String> {
+    add_room_or_space(p, level, at, false)
+}
+
+/// Analyze > Space: a space in the region at `at`; spaces share regions with rooms.
+pub fn add_space(p: &mut Project, level: Id, at: DVec2) -> Result<Id, String> {
+    add_room_or_space(p, level, at, true)
+}
+
+fn add_room_or_space(p: &mut Project, level: Id, at: DVec2, space: bool) -> Result<Id, String> {
     let Some(target) = analysis::find_enclosure(p, level, at) else {
         return Err("The room is not in a properly enclosed region. Click inside an area bounded by walls or room separation lines.".into());
     };
@@ -155,8 +164,12 @@ pub fn add_room(p: &mut Project, level: Id, at: DVec2) -> Result<Id, String> {
         (geom::area(&b.centerline) - geom::area(&target.centerline)).abs() < 1.0
             && geom::centroid(&b.centerline).distance(geom::centroid(&target.centerline)) < 1.0
     };
-    if p.elements.iter().filter_map(|e| e.as_room()).filter(|r| r.level == level).any(|r| analysis::room_boundary(p, r).is_some_and(|b| same(&b))) {
-        return Err("There is already a room in this region.".into());
+    if p.elements.iter().filter_map(|e| e.as_room()).filter(|r| r.level == level && r.space == space).any(|r| analysis::room_boundary(p, r).is_some_and(|b| same(&b))) {
+        return Err(if space { "There is already a space in this region." } else { "There is already a room in this region." }.into());
+    }
+    if space {
+        let number = (p.elements.iter().filter_map(|e| e.as_room()).filter(|r| r.space).count() + 1).to_string();
+        return Ok(push(p, ElementKind::Room(Room { name: "Space".into(), number, level, location: at, upper_offset: 2700.0, space: true, ..Default::default() })));
     }
     let number = next_room_number(p);
     Ok(push(p, ElementKind::Room(Room { name: "Room".into(), number, level, location: at, upper_offset: 2700.0, ..Default::default() })))
@@ -511,6 +524,200 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
     Ok(out)
 }
 
+/// Insert > Point Cloud: points (mm, colour) linked from `path`.
+pub fn add_point_cloud(
+    p: &mut Project,
+    name: &str,
+    path: &str,
+    pts: &[(DVec3, [u8; 3])],
+) -> Result<Id, String> {
+    if pts.is_empty() {
+        return Err("The point cloud is empty.".into());
+    }
+    let asset = p.new_id();
+    p.point_clouds.push(PackedAsset {
+        id: asset,
+        name: name.into(),
+        path: path.into(),
+        data: crate::imports::pack_points(pts),
+        count: pts.len(),
+    });
+    Ok(push(
+        p,
+        ElementKind::PointCloud(LinkedAsset {
+            asset,
+            origin: DVec3::ZERO,
+        }),
+    ))
+}
+
+/// Insert > Coordination Model: a mesh linked from `path`.
+pub fn add_coordination_model(
+    p: &mut Project,
+    name: &str,
+    path: &str,
+    v: &[DVec3],
+    f: &[[u32; 3]],
+) -> Result<Id, String> {
+    if f.is_empty() {
+        return Err("The model has no faces.".into());
+    }
+    let asset = p.new_id();
+    p.meshes.push(PackedAsset {
+        id: asset,
+        name: name.into(),
+        path: path.into(),
+        data: crate::imports::pack_mesh(v, f),
+        count: f.len(),
+    });
+    Ok(push(
+        p,
+        ElementKind::CoordinationModel(LinkedAsset {
+            asset,
+            origin: DVec3::ZERO,
+        }),
+    ))
+}
+
+/// Insert > Import gbXML: each space as a mass on the level nearest below its floor.
+pub fn import_gbxml(
+    p: &mut Project,
+    spaces: &[crate::imports::GbSpace],
+) -> Result<Vec<Id>, String> {
+    let levels: Vec<(Id, f64)> = p
+        .levels()
+        .into_iter()
+        .map(|(id, l)| (id, l.elevation))
+        .collect();
+    let mut out = Vec::new();
+    for (name, floor, z0, z1) in spaces {
+        let level = levels
+            .iter()
+            .filter(|(_, z)| *z <= z0 + 1.0)
+            .last()
+            .or(levels.first())
+            .map(|(id, _)| *id)
+            .ok_or("The project has no levels.")?;
+        let boundary = geom::ensure_ccw(floor);
+        if boundary.len() < 3 || geom::area(&boundary).abs() < 1.0 {
+            continue;
+        }
+        let id = add_mass(p, level, boundary, (z1 - z0).max(100.0))?;
+        if let Some(e) = p.element_mut(id) {
+            e.comments = name.clone();
+        }
+        out.push(id);
+    }
+    if out.is_empty() {
+        return Err("No spaces could be imported.".into());
+    }
+    Ok(out)
+}
+
+/// Insert > Link Topography: a toposolid through surveyed points (mm): their outline on the
+/// outside, the rest as interior elevation points.
+pub fn link_topography(p: &mut Project, level: Id, pts: &[DVec3]) -> Result<Id, String> {
+    if pts.len() < 3 {
+        return Err("At least three points are needed.".into());
+    }
+    let base = p.level_elevation(level);
+    let flat: Vec<DVec2> = pts.iter().map(|q| q.truncate()).collect();
+    let hull = crate::build3d::convex_hull(&flat);
+    if hull.len() < 3 {
+        return Err("The points do not cover an area.".into());
+    }
+    let height_at = |q: DVec2| {
+        pts.iter()
+            .min_by(|a, b| {
+                a.truncate()
+                    .distance(q)
+                    .total_cmp(&b.truncate().distance(q))
+            })
+            .map(|a| a.z - base)
+            .unwrap_or(0.0)
+    };
+    let id = add_toposolid(p, level, hull.clone(), 0.0, 1000.0)?;
+    if let Some(ElementKind::Toposolid(t)) = p.element_mut(id).map(|e| &mut e.kind) {
+        let b = t.boundary.clone();
+        t.heights = b.iter().map(|q| height_at(*q)).collect();
+        // Interior points (at most 2000), away from the outline.
+        let step = pts.len().div_ceil(2000).max(1);
+        for q in pts.iter().step_by(step) {
+            let at = q.truncate();
+            if geom::contains(&b, at)
+                && b.iter().all(|h| h.distance(at) > 10.0)
+                && t.points.iter().all(|(x, _)| x.distance(at) > 10.0)
+            {
+                t.points.push((at, q.z - base));
+            }
+        }
+    }
+    Ok(id)
+}
+
+/// Insert > DWF Markup: a marked-up page's lines and text on a sheet.
+pub fn add_markup(
+    p: &mut Project,
+    sheet: Id,
+    page: &crate::markup::MarkupPage,
+    file: &str,
+) -> Result<Id, String> {
+    if !matches!(p.view(sheet).map(|v| &v.kind), Some(ViewKind::Sheet(_))) {
+        return Err("DWF markups are placed on sheets.".into());
+    }
+    let cad = CadImport {
+        name: format!("{file} - {}", page.name),
+        level: None,
+        polylines: page.polylines.clone(),
+        texts: page.texts.clone(),
+        halftone: false,
+    };
+    Ok(push_in_view(p, sheet, ElementKind::Cad(cad)))
+}
+
+/// Insert > Insert 2D Elements from File: the 2D elements of a drafting view or legend of
+/// another project, copied into `dst_view`.
+pub fn insert_2d_elements(
+    p: &mut Project,
+    src: &Project,
+    src_view: Id,
+    dst_view: Id,
+) -> Result<Vec<Id>, String> {
+    let mut out = Vec::new();
+    for e in src.elements.iter().filter(|e| e.view == Some(src_view)) {
+        // Lines, text, regions and detail components carry over; annotations of other
+        // elements (dimensions, tags) do not.
+        if !matches!(
+            e.kind,
+            ElementKind::Line(_)
+                | ElementKind::Text(_)
+                | ElementKind::Region(_)
+                | ElementKind::Symbol(_)
+                | ElementKind::RasterImage(_)
+        ) {
+            continue;
+        }
+        let mut c = e.clone();
+        let id = p.new_id();
+        c.id = id;
+        c.view = Some(dst_view);
+        c.group = None;
+        if let ElementKind::RasterImage(im) = &mut c.kind {
+            if let Some(a) = src.images.iter().find(|a| a.id == im.asset).cloned() {
+                let nid = p.new_id();
+                p.images.push(ImageAsset { id: nid, ..a });
+                im.asset = nid;
+            }
+        }
+        p.elements.push(c);
+        out.push(id);
+    }
+    if out.is_empty() {
+        return Err("The view has no 2D elements to insert.".into());
+    }
+    Ok(out)
+}
+
 /// Annotate > Symbol: a symbol of `host` (a beam, stair, reinforcement or fabric) at `at`.
 pub fn add_host_symbol(p: &mut Project, view: Id, kind: SymbolKind, host: Id, at: DVec2) -> Result<Id, String> {
     let ok = match (kind, p.element(host).map(|e| &e.kind)) {
@@ -519,7 +726,7 @@ pub fn add_host_symbol(p: &mut Project, view: Id, kind: SymbolKind, host: Id, at
         (SymbolKind::StairPath, Some(ElementKind::Stair(_))) => true,
         (SymbolKind::AreaReinforcement, Some(ElementKind::AreaReinforcement(_))) => true,
         (SymbolKind::PathReinforcement, Some(ElementKind::PathReinforcement(_))) => true,
-        (SymbolKind::RebarSet, Some(ElementKind::Rebar(_))) => true,
+        (SymbolKind::RebarSet | SymbolKind::MultiRebarAligned | SymbolKind::MultiRebarLinear, Some(ElementKind::Rebar(_))) => true,
         (SymbolKind::Fabric, Some(ElementKind::FabricArea(_) | ElementKind::FabricSheet(_))) => true,
         _ => false,
     };
@@ -1428,6 +1635,10 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             let o = f(DVec2::ZERO);
             a.major = (f(a.major) - o).normalize_or(a.major);
             a.boundary = a.boundary.iter().map(|q| f(*q)).collect();
+        }
+        ElementKind::PointCloud(a) | ElementKind::CoordinationModel(a) => {
+            let q = f(a.origin.truncate());
+            a.origin = DVec3::new(q.x, q.y, a.origin.z);
         }
         ElementKind::BeamSystem(b) => {
             let o = f(DVec2::ZERO);
@@ -3080,6 +3291,44 @@ mod tests {
     }
 
     #[test]
+    fn linked_points_meshes_topography_and_2d_elements() {
+        let (mut p, lvl, _) = project();
+        let pts: Vec<(DVec3, [u8; 3])> = (0..10)
+            .map(|k| (DVec3::new(k as f64 * 100.0, 0.0, 0.0), [1, 2, 3]))
+            .collect();
+        let pc = add_point_cloud(&mut p, "scan.xyz", "scan.xyz", &pts).unwrap();
+        assert_eq!(p.element(pc).unwrap().category(), Category::PointClouds);
+        let v = vec![DVec3::ZERO, DVec3::X * 1000.0, DVec3::Y * 1000.0];
+        let cm = add_coordination_model(&mut p, "m.obj", "m.obj", &v, &[[0, 1, 2]]).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        assert!(
+            crate::build3d::element_mesh(&p, p.element(cm).unwrap(), &fp)
+                .by_material
+                .values()
+                .any(|m| m.triangle_count() == 1)
+        );
+        let survey: Vec<DVec3> = vec![
+            DVec3::new(0.0, 0.0, 0.0),
+            DVec3::new(10000.0, 0.0, 500.0),
+            DVec3::new(10000.0, 8000.0, 900.0),
+            DVec3::new(0.0, 8000.0, 300.0),
+            DVec3::new(5000.0, 4000.0, 1200.0),
+        ];
+        let topo = link_topography(&mut p, lvl, &survey).unwrap();
+        let Some(ElementKind::Toposolid(t)) = p.element(topo).map(|e| e.kind.clone()) else {
+            panic!()
+        };
+        assert_eq!(t.boundary.len(), 4);
+        assert_eq!(t.points.len(), 1);
+        // 2D elements of another project's drafting view.
+        let mut src = crate::defaults::new_project(crate::units::UnitSystem::Metric);
+        let dv = new_drafting_view(&mut src, "Detail", 10.0);
+        add_text(&mut src, dv, DVec2::ZERO, "NOTE", 2.5).unwrap();
+        let dst = new_drafting_view(&mut p, "Here", 10.0);
+        assert_eq!(insert_2d_elements(&mut p, &src, dv, dst).unwrap().len(), 1);
+    }
+
+    #[test]
     fn host_symbols_draw_their_reinforcement() {
         let (mut p, lvl, _) = project();
         let ft = p.types_of(Category::Floors).next().unwrap().id;
@@ -3101,6 +3350,26 @@ mod tests {
         let sym = add_host_symbol(&mut p, plan, SymbolKind::AreaReinforcement, ar, DVec2::new(1500.0, 1000.0)).unwrap();
         assert!(texts(&p, sym).iter().any(|t| t.contains("EW")), "{:?}", texts(&p, sym));
         assert!(add_host_symbol(&mut p, plan, SymbolKind::StairPath, ar, DVec2::ZERO).is_err());
+        // Multi-rebar annotations: a dimension across the set and its tag.
+        let r = add_rebar(
+            &mut p,
+            floor,
+            DVec2::new(500.0, 200.0),
+            DVec2::new(500.0, 1800.0),
+            bt,
+            5,
+            200.0,
+        )
+        .unwrap();
+        for kind in [SymbolKind::MultiRebarAligned, SymbolKind::MultiRebarLinear] {
+            let m = add_host_symbol(&mut p, plan, kind, r, DVec2::new(900.0, 2400.0)).unwrap();
+            let t = texts(&p, m);
+            assert!(
+                t.iter().any(|t| t.starts_with("5 ") && t.contains("@")),
+                "{t:?}"
+            );
+            assert!(t.iter().any(|t| t == "800"), "{t:?}");
+        }
     }
 
     #[test]

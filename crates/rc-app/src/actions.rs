@@ -90,6 +90,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         Render => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. })) && !in_sketch,
         SpanSymbol | TreadNumber => view.is_some_and(|v| v.plan_level().is_some()) && !in_sketch,
         Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
+        SpaceTag | Space | SpaceSeparator => plan && !in_sketch,
+        MultiRebarAligned | MultiRebarLinear | Insert2DElements => graphical_2d && !in_sketch,
         TypeProperties => true,
         Paste | PasteSameLevel => app.clipboard.is_some(),
         Cut | CopyClip | Delete | MatchType | Pin | Unpin | Move | Copy | Rotate | MirrorPick | MirrorDraw | Array | Scale | HideElements | HideCategory
@@ -502,9 +504,15 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             app.set_tool(if detail { ToolKind::PlaceDetailGroup } else { ToolKind::PlaceGroup });
         }
         CreateGroup => app.dialogs.create_group = Some(next_group_name(app)),
-        Room => app.set_tool(ToolKind::Room),
+        Room => {
+            app.opts.space_mode = false;
+            app.set_tool(ToolKind::Room);
+        }
         RoomSeparator => start_drawing(app, ToolKind::RoomSeparator),
-        RoomTag => app.set_tool(ToolKind::RoomTag),
+        RoomTag => {
+            app.opts.space_mode = false;
+            app.set_tool(ToolKind::RoomTag);
+        }
         Area => app.set_tool(ToolKind::Area),
         AreaBoundary => start_drawing(app, ToolKind::AreaBoundary),
         AreaTag => app.set_tool(ToolKind::AreaTag),
@@ -568,6 +576,7 @@ pub fn exec(app: &mut App, cmd: Cmd) {
                 let id = app.doc.data.next_id;
                 match crate::images::load_file(&path, id) {
                     Ok(asset) => {
+                        app.opts.image_width = None;
                         let made = app.run("Import Image", |p| {
                             let id = p.new_id();
                             p.images.push(rc_core::model::ImageAsset { id, ..asset });
@@ -659,6 +668,256 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         LoadFamily => {
             if let Some(path) = crate::files::FileDialog::new().add_filter("RevitCraft Family", &[io::FAMILY_EXTENSION]).pick_file() {
                 load_family_path(app, &path);
+            }
+        }
+        LoadAutodeskFamily => app.dialogs.autodesk_family = Some(Default::default()),
+        LinkTopography => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("Survey Points", &["xyz", "pts", "csv", "txt"])
+                .pick_file()
+            {
+                let Some(level) = app
+                    .active_level()
+                    .or_else(|| app.doc.data.levels().first().map(|(id, _)| *id))
+                else {
+                    app.error("The project has no levels.");
+                    return;
+                };
+                match std::fs::read_to_string(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|t| rc_core::imports::read_points(&t, 200_000))
+                {
+                    Ok(pts) => {
+                        let pts: Vec<rc_core::geom::DVec3> =
+                            pts.into_iter().map(|(q, _)| q).collect();
+                        if let Some(id) =
+                            app.run("Link Topography", |p| edit::link_topography(p, level, &pts))
+                        {
+                            app.select(vec![id]);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        DwfMarkup => {
+            if !app
+                .doc
+                .data
+                .views
+                .iter()
+                .any(|v| matches!(v.kind, ViewKind::Sheet(_)))
+            {
+                app.error("DWF markups are linked onto sheets. Create a sheet first.");
+            } else if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("DWFx Files", &["dwfx", "xps"])
+                .pick_file()
+            {
+                match std::fs::read(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|b| rc_core::markup::read_dwfx(&b))
+                {
+                    Ok(pages) => {
+                        let file = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        app.dialogs.markup = Some(Box::new(dialogs::insert::MarkupState::new(
+                            app, file, pages,
+                        )));
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        PointCloud => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("Point Clouds", &["xyz", "pts", "csv", "txt"])
+                .pick_file()
+            {
+                match std::fs::read_to_string(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|t| rc_core::imports::read_points(&t, 500_000))
+                {
+                    Ok(pts) => {
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let file = path.display().to_string();
+                        if let Some(id) = app.run("Point Cloud", |p| {
+                            edit::add_point_cloud(p, &name, &file, &pts)
+                        }) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        CoordinationModel => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("Coordination Models", &["obj"])
+                .pick_file()
+            {
+                match std::fs::read_to_string(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|t| rc_core::imports::read_obj(&t))
+                {
+                    Ok((v, f)) => {
+                        let name = path
+                            .file_name()
+                            .map(|n| n.to_string_lossy().to_string())
+                            .unwrap_or_default();
+                        let file = path.display().to_string();
+                        if let Some(id) = app.run("Coordination Model", |p| {
+                            edit::add_coordination_model(p, &name, &file, &v, &f)
+                        }) {
+                            app.select(vec![id]);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        LinkPdf | ImportPdf => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("PDF Files", &["pdf"])
+                .pick_file()
+            {
+                match crate::pdf_import::page_count(&path) {
+                    Ok(pages) => {
+                        app.dialogs.pdf = Some(Box::new(dialogs::insert::PdfState {
+                            path,
+                            pages,
+                            page: 0,
+                            dpi: 150,
+                            link: cmd == LinkPdf,
+                        }))
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        ImportGbxml => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("gbXML Files", &["xml", "gbxml"])
+                .pick_file()
+            {
+                match std::fs::read_to_string(&path)
+                    .map_err(|e| e.to_string())
+                    .and_then(|t| rc_core::imports::read_gbxml(&t))
+                {
+                    Ok(spaces) => {
+                        if let Some(ids) =
+                            app.run("Import gbXML", |p| edit::import_gbxml(p, &spaces))
+                        {
+                            app.info(format!("Imported {} space(s) as masses.", ids.len()));
+                            app.select(ids);
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        Insert2DElements => {
+            if let Some(path) = crate::files::FileDialog::new()
+                .add_filter("RevitCraft Project", &[io::EXTENSION])
+                .pick_file()
+            {
+                match io::load(&path) {
+                    Ok(src) => {
+                        let views: Vec<(Id, String)> = src
+                            .views
+                            .iter()
+                            .filter(|v| {
+                                matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)
+                                    && !v.is_template
+                            })
+                            .map(|v| (v.id, v.name.clone()))
+                            .collect();
+                        if views.is_empty() {
+                            app.error("The file has no drafting views or legends.");
+                        } else {
+                            app.dialogs.insert_2d =
+                                Some(Box::new(dialogs::insert::Insert2DState {
+                                    src,
+                                    views,
+                                    pick: 0,
+                                }));
+                        }
+                    }
+                    Err(e) => app.error(e),
+                }
+            }
+        }
+        Space => {
+            app.opts.space_mode = true;
+            app.set_tool(ToolKind::Room);
+        }
+        SpaceTag => {
+            app.opts.space_mode = true;
+            app.set_tool(ToolKind::RoomTag);
+        }
+        SpaceSeparator => start_drawing(app, ToolKind::RoomSeparator),
+        MultiRebarAligned | MultiRebarLinear => {
+            app.opts.host_symbol = if cmd == MultiRebarAligned {
+                SymbolKind::MultiRebarAligned
+            } else {
+                SymbolKind::MultiRebarLinear
+            };
+            app.set_tool(ToolKind::HostSymbol);
+        }
+        StructuralSettings => {
+            app.dialogs.structural = Some(Box::new(dialogs::insert::StructuralState::new(app)))
+        }
+        CloudRendering => {
+            let st = dialogs::insert::CloudState::new(app);
+            if st.views.is_empty() {
+                app.error("The project has no 3D views to render.");
+            } else {
+                app.dialogs.cloud_render = Some(st);
+            }
+        }
+        RenderGallery => app.dialogs.gallery = true,
+        OpenTwinmotion => {
+            let dir = std::env::temp_dir().join("RevitCraft Twinmotion");
+            let _ = std::fs::create_dir_all(&dir);
+            let name = app
+                .doc
+                .path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| "Project".into());
+            let path = dir.join(format!("{name}.obj"));
+            match dialogs::insert::write_obj_files(app, &path) {
+                Ok(()) => match dialogs::insert::twinmotion_exe() {
+                    Some(exe) => match std::process::Command::new(exe).arg(&path).spawn() {
+                        Ok(_) => app.info("The model was sent to Twinmotion."),
+                        Err(e) => app.error(format!("Twinmotion could not be started: {e}")),
+                    },
+                    None => app.info(format!(
+                        "Twinmotion is not installed. The model was exported for it as {}.",
+                        path.display()
+                    )),
+                },
+                Err(e) => app.error(e),
+            }
+        }
+        ExportObj => {
+            if let Some(mut path) = crate::files::FileDialog::new()
+                .add_filter("OBJ Files", &["obj"])
+                .set_file_name("Model.obj")
+                .save_file()
+            {
+                if path.extension().is_none() {
+                    path.set_extension("obj");
+                }
+                match dialogs::insert::write_obj_files(app, &path) {
+                    Ok(()) => app.info(format!("Exported {}", path.display())),
+                    Err(e) => app.error(e),
+                }
             }
         }
 

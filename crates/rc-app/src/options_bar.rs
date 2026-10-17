@@ -459,6 +459,8 @@ pub fn show(app: &mut App, ui: &mut egui::Ui) {
                     SymbolKind::AreaReinforcement => "Area Reinforcement Symbol",
                     SymbolKind::PathReinforcement => "Path Reinforcement Symbol",
                     SymbolKind::RebarSet => "Rebar Symbol",
+                    SymbolKind::MultiRebarAligned => "Aligned Multi-Rebar Annotation",
+                    SymbolKind::MultiRebarLinear => "Linear Multi-Rebar Annotation",
                     SymbolKind::Fabric => "Fabric Reinforcement Symbol",
                 };
                 egui::ComboBox::from_id_salt("sym-kind").selected_text(label(k)).width(120.0).show_ui(ui, |ui| {

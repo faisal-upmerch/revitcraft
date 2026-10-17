@@ -1882,6 +1882,7 @@ pub fn import(text: &str) -> Result<ImportResult, String> {
                 wall_finish: text_of(&props, "WallFinish").unwrap_or_default(),
                 ceiling_finish: text_of(&props, "CeilingFinish").unwrap_or_default(),
                 occupancy: text_of(&props, "Occupancy").unwrap_or_default(),
+                space: false,
             }),
         ));
         set_identity(&mut p, id, ent);

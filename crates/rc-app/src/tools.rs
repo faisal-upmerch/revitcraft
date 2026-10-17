@@ -696,6 +696,10 @@ pub struct ToolOptions {
     pub group_type: Id,
     /// Import Image: the asset being placed.
     pub image_asset: Id,
+    /// The placed image's width on paper (mm); None: 150 mm.
+    pub image_width: Option<f64>,
+    /// Room, Room Tag and Room Separator place spaces (Analyze > Spaces & Zones).
+    pub space_mode: bool,
     /// Place Decal: the decal type.
     pub decal_type: Id,
     /// Annotate > Symbol: the host symbol being placed.
@@ -873,6 +877,8 @@ impl ToolOptions {
             image_asset: 0,
             decal_type: 0,
             host_symbol: SymbolKind::AreaReinforcement,
+            image_width: None,
+            space_mode: false,
             coupler_between: true,
             draw_mode: DrawMode::Line,
             sketch_sub: SketchSub::Boundary,

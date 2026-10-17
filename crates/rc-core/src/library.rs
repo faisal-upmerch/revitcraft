@@ -258,7 +258,7 @@ pub fn template_params(t: FamilyTemplate) -> Vec<FamilyParameter> {
     v
 }
 
-type Catalog = Vec<(&'static str, FamilyTemplate, Vec<(String, Vec<(&'static str, String)>)>)>;
+pub type Catalog = Vec<(&'static str, FamilyTemplate, Vec<(String, Vec<(&'static str, String)>)>)>;
 
 fn mm(v: f64) -> String {
     crate::units::to_stored(v)
@@ -334,4 +334,297 @@ pub fn catalog(units: UnitSystem) -> Catalog {
         ("Footing-Rectangular", Footing, vec![("1500 x 1500 x 500".into(), vec![]), ("2000 x 2000 x 600".into(), vec![("Width", mm(2000.0)), ("Depth", mm(2000.0)), ("Thickness", mm(600.0))])]),
         ("Generic Box", Box, vec![("1000 x 1000 x 1000".into(), vec![])]),
     ]
+}
+
+/// The wider family library (Insert > Load Autodesk Family): families beyond the template's,
+/// loaded on demand.
+pub fn library_catalog(units: UnitSystem) -> Catalog {
+    use FamilyTemplate::*;
+    let imp = units == UnitSystem::Imperial;
+    let len = |m: f64, i: f64| if imp { inch(i) } else { mm(m) };
+    let name = |m: &str, i: &str| -> String { if imp { i.to_string() } else { m.to_string() } };
+    let wh = |m: (f64, f64), i: (f64, f64)| -> (String, Vec<(&'static str, String)>) {
+        (
+            name(
+                &format!("{} x {}", m.0, m.1),
+                &format!("{}\" x {}\"", i.0, i.1),
+            ),
+            vec![("Width", len(m.0, i.0)), ("Height", len(m.1, i.1))],
+        )
+    };
+    let wd = |m: (f64, f64), i: (f64, f64)| -> (String, Vec<(&'static str, String)>) {
+        (
+            name(
+                &format!("{} x {}", m.0, m.1),
+                &format!("{}\" x {}\"", i.0, i.1),
+            ),
+            vec![("Width", len(m.0, i.0)), ("Depth", len(m.1, i.1))],
+        )
+    };
+    vec![
+        (
+            "Single-Flush Vision",
+            GlazedDoor,
+            vec![
+                wh((900.0, 2100.0), (36.0, 84.0)),
+                wh((1000.0, 2100.0), (40.0, 84.0)),
+            ],
+        ),
+        (
+            "Single-Panel 4",
+            SingleDoor,
+            vec![
+                wh((820.0, 2040.0), (32.0, 80.0)),
+                wh((920.0, 2040.0), (36.0, 80.0)),
+            ],
+        ),
+        (
+            "Double-Glass 2",
+            DoubleDoor,
+            vec![
+                wh((1500.0, 2100.0), (60.0, 84.0)),
+                wh((1800.0, 2400.0), (72.0, 96.0)),
+            ],
+        ),
+        (
+            "Sliding-4 Panel",
+            SlidingDoor,
+            vec![
+                wh((3000.0, 2100.0), (120.0, 84.0)),
+                wh((3600.0, 2400.0), (144.0, 96.0)),
+            ],
+        ),
+        (
+            "Bifold-2 Panel",
+            BifoldDoor,
+            vec![wh((800.0, 2100.0), (30.0, 84.0))],
+        ),
+        (
+            "Overhead-Rolling",
+            GarageDoor,
+            vec![
+                wh((3000.0, 3000.0), (120.0, 120.0)),
+                wh((4000.0, 4200.0), (160.0, 168.0)),
+            ],
+        ),
+        (
+            "Fixed - Clerestory",
+            FixedWindow,
+            vec![
+                wh((1800.0, 450.0), (72.0, 18.0)),
+                wh((2400.0, 600.0), (96.0, 24.0)),
+            ],
+        ),
+        (
+            "Casement 3x3",
+            CasementWindow,
+            vec![wh((1800.0, 1500.0), (72.0, 60.0))],
+        ),
+        (
+            "Awning - Hopper",
+            AwningWindow,
+            vec![
+                wh((600.0, 450.0), (24.0, 18.0)),
+                wh((1200.0, 600.0), (48.0, 24.0)),
+            ],
+        ),
+        (
+            "Double Hung - Tall",
+            DoubleHungWindow,
+            vec![wh((900.0, 2100.0), (36.0, 84.0))],
+        ),
+        (
+            "Sliding - Horizontal 3 Lite",
+            SlidingWindow,
+            vec![wh((2400.0, 1200.0), (96.0, 48.0))],
+        ),
+        (
+            "Round - Porthole",
+            RoundWindow,
+            vec![(
+                name("600 Diameter", "24\" Diameter"),
+                vec![("Diameter", len(600.0, 24.0))],
+            )],
+        ),
+        (
+            "Table-Coffee",
+            Table,
+            vec![wd((1200.0, 600.0), (48.0, 24.0))],
+        ),
+        (
+            "Table-Conference",
+            Table,
+            vec![
+                wd((3600.0, 1200.0), (144.0, 48.0)),
+                wd((4800.0, 1400.0), (192.0, 56.0)),
+            ],
+        ),
+        ("Chair-Office", Chair, vec![("Standard".into(), vec![])]),
+        (
+            "Sofa-Corner",
+            Sofa,
+            vec![wd((2800.0, 1000.0), (110.0, 40.0))],
+        ),
+        (
+            "Bed-Single",
+            Bed,
+            vec![(
+                name("900 x 2000", "39\" x 75\""),
+                vec![("Width", len(900.0, 39.0))],
+            )],
+        ),
+        (
+            "Desk-Workstation",
+            Desk,
+            vec![
+                wd((1600.0, 800.0), (63.0, 31.0)),
+                wd((1800.0, 800.0), (71.0, 31.0)),
+            ],
+        ),
+        (
+            "Wall Cabinet",
+            KitchenCabinet,
+            vec![
+                (
+                    name("600 Wide", "24\" Wide"),
+                    vec![("Width", len(600.0, 24.0))],
+                ),
+                (
+                    name("900 Wide", "36\" Wide"),
+                    vec![("Width", len(900.0, 36.0))],
+                ),
+            ],
+        ),
+        (
+            "Toilet-Commercial",
+            Toilet,
+            vec![("Wall Hung".into(), vec![])],
+        ),
+        (
+            "Sink-Kitchen Double",
+            Sink,
+            vec![(
+                name("900 Wide", "36\" Wide"),
+                vec![("Width", len(900.0, 36.0))],
+            )],
+        ),
+        (
+            "Shower-Walk In",
+            Shower,
+            vec![wd((1400.0, 900.0), (56.0, 36.0))],
+        ),
+        (
+            "Tree - Conifer",
+            Tree,
+            vec![(
+                name("3m Canopy", "10' Canopy"),
+                vec![
+                    ("Width", len(3000.0, 120.0)),
+                    ("Depth", len(3000.0, 120.0)),
+                    ("Height", len(8000.0, 312.0)),
+                ],
+            )],
+        ),
+        (
+            "Parking Space - Accessible",
+            ParkingSpace,
+            vec![wd((3600.0, 5000.0), (144.0, 216.0))],
+        ),
+        (
+            "Concrete-Square-Column",
+            RectColumn,
+            vec![
+                (
+                    name("500 x 500", "20\" x 20\""),
+                    vec![("Width", len(500.0, 20.0)), ("Depth", len(500.0, 20.0))],
+                ),
+                (
+                    name("600 x 600", "24\" x 24\""),
+                    vec![("Width", len(600.0, 24.0)), ("Depth", len(600.0, 24.0))],
+                ),
+            ],
+        ),
+        (
+            "Steel-UC-Column",
+            SteelColumn,
+            vec![(
+                "254x254x73".into(),
+                vec![
+                    ("Section Depth", mm(254.1)),
+                    ("Flange Width", mm(254.6)),
+                    ("Web Thickness", mm(8.6)),
+                    ("Flange Thickness", mm(14.2)),
+                ],
+            )],
+        ),
+        (
+            "Steel-UB-Beam",
+            SteelBeam,
+            vec![
+                (
+                    "406x178x60".into(),
+                    vec![
+                        ("Section Depth", mm(406.4)),
+                        ("Flange Width", mm(177.9)),
+                        ("Web Thickness", mm(7.9)),
+                        ("Flange Thickness", mm(12.8)),
+                    ],
+                ),
+                (
+                    "305x165x40".into(),
+                    vec![
+                        ("Section Depth", mm(303.4)),
+                        ("Flange Width", mm(165.0)),
+                        ("Web Thickness", mm(6.0)),
+                        ("Flange Thickness", mm(10.2)),
+                    ],
+                ),
+            ],
+        ),
+        (
+            "Precast-Rectangular-Beam",
+            RectBeam,
+            vec![(
+                name("250 x 500", "10\" x 20\""),
+                vec![
+                    ("Width", len(250.0, 10.0)),
+                    ("Section Depth", len(500.0, 20.0)),
+                ],
+            )],
+        ),
+        (
+            "Footing-Pile Cap",
+            Footing,
+            vec![(
+                name("1200 x 1200 x 900", "48\" x 48\" x 36\""),
+                vec![
+                    ("Width", len(1200.0, 48.0)),
+                    ("Depth", len(1200.0, 48.0)),
+                    ("Thickness", len(900.0, 36.0)),
+                ],
+            )],
+        ),
+    ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn library_families_are_new_and_load() {
+        for units in [UnitSystem::Metric, UnitSystem::Imperial] {
+            let mut p = crate::defaults::new_project(units);
+            let n = p.families.len();
+            for (name, template, types) in library_catalog(units) {
+                assert!(
+                    p.families.iter().all(|f| f.name != name),
+                    "{name} is already in the template"
+                );
+                crate::defaults::add_catalog_family(&mut p, name, template, types);
+            }
+            assert_eq!(p.families.len(), n + library_catalog(units).len());
+            assert!(p.families.iter().all(|f| !f.types.is_empty()));
+        }
+    }
 }

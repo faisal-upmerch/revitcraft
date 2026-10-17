@@ -62,6 +62,36 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         ElementKind::Link(l) => link_mesh(p, l),
         ElementKind::AreaReinforcement(a) => crate::rebar::bars_mesh(&crate::rebar::area_bars(p, a)),
         ElementKind::Rebar(r) => crate::rebar::bars_mesh(&crate::rebar::rebar_bars(p, r)),
+        ElementKind::PointCloud(a) => {
+            // Each point as three small crossed triangles in its colour (to 4 bits a channel).
+            let mut set = MeshSet::default();
+            if let Some(pc) = p.point_clouds.iter().find(|x| x.id == a.asset) {
+                let pts = crate::imports::unpack_points(&pc.data);
+                let step = pts.len().div_ceil(60_000).max(1);
+                let r = 25.0;
+                for (q, c) in pts.iter().step_by(step) {
+                    let w = *q + a.origin;
+                    let key = format!("#{:02x}{:02x}{:02x}", c[0] & 0xf0, c[1] & 0xf0, c[2] & 0xf0);
+                    let m = set.mesh(&key);
+                    m.add_triangle(w + DVec3::new(-r, -r, 0.0), w + DVec3::new(r, -r, 0.0), w + DVec3::new(0.0, r, 0.0));
+                    m.add_triangle(w + DVec3::new(-r, 0.0, -r), w + DVec3::new(r, 0.0, -r), w + DVec3::new(0.0, 0.0, r));
+                    m.add_triangle(w + DVec3::new(0.0, -r, -r), w + DVec3::new(0.0, r, -r), w + DVec3::new(0.0, 0.0, r));
+                }
+            }
+            set
+        }
+        ElementKind::CoordinationModel(a) => {
+            let mut set = MeshSet::default();
+            if let Some(m) = p.meshes.iter().find(|m| m.id == a.asset) {
+                let (v, f) = crate::imports::unpack_mesh(&m.data);
+                let mesh = set.mesh("Coordination Model");
+                for t in f {
+                    let q = |i: u32| v.get(i as usize).copied().unwrap_or_default() + a.origin;
+                    mesh.add_triangle(q(t[0]), q(t[1]), q(t[2]));
+                }
+            }
+            set
+        }
         ElementKind::PathReinforcement(r) => crate::rebar::bars_mesh(&crate::rebar::path_bars(p, r)),
         ElementKind::FabricArea(a) => crate::rebar::bars_mesh(&crate::rebar::fabric_area_wires(p, a)),
         ElementKind::FabricSheet(f) => crate::rebar::bars_mesh(&crate::rebar::fabric_sheet_wires(p, f)),
@@ -1100,7 +1130,7 @@ pub fn run_going(len: f64, risers: u32) -> f64 {
     len / (risers.max(2) - 1) as f64
 }
 
-fn convex_hull(pts: &[DVec2]) -> Vec<DVec2> {
+pub fn convex_hull(pts: &[DVec2]) -> Vec<DVec2> {
     let mut v = pts.to_vec();
     v.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
     v.dedup_by(|a, b| a.distance(*b) < 1e-6);

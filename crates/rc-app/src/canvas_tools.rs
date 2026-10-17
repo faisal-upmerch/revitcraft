@@ -136,10 +136,10 @@ pub fn prompt(app: &App) -> String {
         ToolKind::ViewReference => "Click to place the view reference.".into(),
         ToolKind::Paint => format!("Click a face to paint it with {}. Esc to finish.", app.opts.paint_material),
         ToolKind::RemovePaint => "Click a painted face to remove its paint. Esc to finish.".into(),
-        ToolKind::Room => "Click to place room".into(),
+        ToolKind::Room => if app.opts.space_mode { "Click to place space".into() } else { "Click to place room".into() },
         ToolKind::CeilingAuto => "Click in an area bounded by walls to create ceiling".into(),
         ToolKind::Area => "Click inside a region enclosed by area boundaries.".into(),
-        ToolKind::RoomTag => "Click to place room tag".into(),
+        ToolKind::RoomTag => if app.opts.space_mode { "Click to place space tag".into() } else { "Click to place room tag".into() },
         ToolKind::AreaTag => "Click to place area tag".into(),
         ToolKind::Tag => "Click an element to tag it.".into(),
         ToolKind::Level => if n == 0 { "Click the start of the level line (in a section or elevation).".into() } else { "Click the end of the level line.".into() },
@@ -165,6 +165,7 @@ pub fn prompt(app: &App) -> String {
             SymbolKind::AreaReinforcement => "Select an area reinforcement to place its symbol.",
             SymbolKind::PathReinforcement => "Select a path reinforcement to place its symbol.",
             SymbolKind::RebarSet => "Select a rebar set to place its symbol.",
+            SymbolKind::MultiRebarAligned | SymbolKind::MultiRebarLinear => "Select a rebar set to annotate, then click to place the dimension.",
             _ => "Select a fabric area or fabric sheet to place its symbol.",
         }
         .into(),
@@ -251,7 +252,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 (ElementKind::Stair(_), SymbolKind::StairPath) => true,
                 (ElementKind::AreaReinforcement(_), SymbolKind::AreaReinforcement) => true,
                 (ElementKind::PathReinforcement(_), SymbolKind::PathReinforcement) => true,
-                (ElementKind::Rebar(_), SymbolKind::RebarSet) => true,
+                (ElementKind::Rebar(_), SymbolKind::RebarSet | SymbolKind::MultiRebarAligned | SymbolKind::MultiRebarLinear) => true,
                 (ElementKind::FabricArea(_) | ElementKind::FabricSheet(_), SymbolKind::Fabric) => true,
                 _ => false,
             };
@@ -341,7 +342,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                 app.tool = Tool::select();
                 return;
             };
-            let w = 150.0 * view.scale.max(1.0);
+            let w = app.opts.image_width.unwrap_or(150.0) * view.scale.max(1.0);
             let h = w * a.height as f64 / a.width.max(1) as f64;
             let at = pt - DVec2::new(w, h) / 2.0;
             let r = egui::Rect::from_two_pos(xf.s(at), xf.s(at + DVec2::new(w, h)));
@@ -2124,7 +2125,7 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
             if app.opts.room_tag {
                 let p0 = xf.s(c);
                 let (hn, hb) = (xf.text_px(3.0).max(6.0), xf.text_px(2.5).max(5.0));
-                let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, "Room Name", style::bold(hn), Color32::from_gray(110));
+                let name = painter.text(p0 + vec2(0.0, -hn * 0.15), egui::Align2::CENTER_BOTTOM, if app.opts.space_mode { "Space Name" } else { "Room Name" }, style::bold(hn), Color32::from_gray(110));
                 let bx = egui::Rect::from_center_size(p0 + vec2(0.0, hb * 0.75), vec2(name.width() * 0.5 + hb, hb * 1.3));
                 painter.rect_stroke(bx, 0.0, Stroke::new(1.0, Color32::from_gray(110)), egui::StrokeKind::Inside);
                 painter.line_segment([p0 - vec2(4.0, 0.0), p0 + vec2(4.0, 0.0)], Stroke::new(1.0, style::PREVIEW));
@@ -2187,8 +2188,13 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
             // The tool stays active with nothing selected, as in the reference app.
             let (upper_level, base_offset) = (app.opts.room_upper_level, app.opts.room_base_offset);
             let (horizontal, leader) = (app.opts.tag_horizontal, app.opts.tag_leader);
-            app.run("Place Room", |p| {
-                let id = edit::add_room(p, level, c)?;
+            let space = app.opts.space_mode;
+            app.run(if space { "Place Space" } else { "Place Room" }, |p| {
+                let id = if space {
+                    edit::add_space(p, level, c)?
+                } else {
+                    edit::add_room(p, level, c)?
+                };
                 if let Some(ElementKind::Room(r)) = p.element_mut(id).map(|e| &mut e.kind) {
                     r.upper_offset = upper;
                     r.upper_level = upper_level.filter(|l| *l != level);
@@ -2211,8 +2217,9 @@ fn room_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, curso
 fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Drawing, cursor: Option<DVec2>, clicked: bool) {
     let Some(c) = cursor else { return };
     let kind = app.tool.kind;
+    let space = app.opts.space_mode;
     let host = hover_of(app, view, d, c, xf, &|e| match kind {
-        ToolKind::RoomTag => matches!(e.kind, ElementKind::Room(_)),
+        ToolKind::RoomTag => matches!(&e.kind, ElementKind::Room(r) if r.space == space),
         ToolKind::AreaTag => matches!(e.kind, ElementKind::Area(_)),
         _ => e.view.is_none() && !matches!(e.kind, ElementKind::Level(_) | ElementKind::Grid(_) | ElementKind::RefPlane(_) | ElementKind::Room(_) | ElementKind::Area(_)) || matches!(e.kind, ElementKind::Room(_)),
     });
@@ -2224,7 +2231,7 @@ fn tag_tool(app: &mut App, painter: &egui::Painter, xf: &Xf, view: &View, d: &Dr
             p.elements
                 .iter()
                 .filter_map(|e| match &e.kind {
-                    ElementKind::Room(r) if r.level == level && rc_core::analysis::visible_in(p, view, e) => analysis::room_boundary(p, r).filter(|b| geom::contains(&b.interior, c)).map(|b| (e.id, b.interior)),
+                    ElementKind::Room(r) if r.level == level && r.space == space && rc_core::analysis::visible_in(p, view, e) => analysis::room_boundary(p, r).filter(|b| geom::contains(&b.interior, c)).map(|b| (e.id, b.interior)),
                     _ => None,
                 })
                 .min_by(|a, b| geom::area(&a.1).total_cmp(&geom::area(&b.1)))

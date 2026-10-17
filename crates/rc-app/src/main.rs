@@ -17,6 +17,7 @@ mod home;
 mod icons;
 mod images;
 mod options_bar;
+mod pdf_import;
 mod properties;
 mod render3d;
 mod ribbon;

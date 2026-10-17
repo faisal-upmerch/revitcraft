@@ -48,8 +48,8 @@ mod imp {
             unsafe {
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
             }
-            let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(path.as_str())).map_err(msg)?.get().map_err(msg)?;
-            let doc = PdfDocument::LoadFromFileAsync(&file).map_err(msg)?.get().map_err(msg)?;
+            let file = StorageFile::GetFileFromPathAsync(&HSTRING::from(path.as_str())).map_err(msg)?.join().map_err(msg)?;
+            let doc = PdfDocument::LoadFromFileAsync(&file).map_err(msg)?.join().map_err(msg)?;
             let count = doc.PageCount().map_err(msg)?;
             let Some(page) = page else { return Ok((Vec::new(), count)) };
             if count == 0 {
@@ -60,11 +60,11 @@ mod imp {
             let opts = PdfPageRenderOptions::new().map_err(msg)?;
             opts.SetDestinationWidth(((size.Width as f64) * dpi / 96.0).max(16.0) as u32).map_err(msg)?;
             let stream = InMemoryRandomAccessStream::new().map_err(msg)?;
-            pg.RenderWithOptionsToStreamAsync(&stream, &opts).map_err(msg)?.get().map_err(msg)?;
+            pg.RenderWithOptionsToStreamAsync(&stream, &opts).map_err(msg)?.join().map_err(msg)?;
             let n = stream.Size().map_err(msg)? as u32;
             let input = stream.GetInputStreamAt(0).map_err(msg)?;
             let reader = DataReader::CreateDataReader(&input).map_err(msg)?;
-            reader.LoadAsync(n).map_err(msg)?.get().map_err(msg)?;
+            reader.LoadAsync(n).map_err(msg)?.join().map_err(msg)?;
             let mut buf = vec![0u8; n as usize];
             reader.ReadBytes(&mut buf).map_err(msg)?;
             Ok((buf, count))

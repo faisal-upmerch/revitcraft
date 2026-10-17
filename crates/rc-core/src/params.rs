@@ -217,6 +217,21 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Primary Bar - Length", CONSTRUCTION, v(Length), false, false));
         }
         ElementKind::RebarCoupler(_) => {}
+        ElementKind::PointCloud(_) | ElementKind::CoordinationModel(_) => {
+            d.push(def("Name", IDENTITY, v(Text), true, false));
+            d.push(def("Path", IDENTITY, v(Text), true, false));
+            d.push(def(
+                if matches!(e.kind, ElementKind::PointCloud(_)) {
+                    "Number of Points"
+                } else {
+                    "Number of Faces"
+                },
+                OTHER,
+                v(Integer),
+                true,
+                false,
+            ));
+        }
         ElementKind::BeamSystem(_) => {
             d.push(def("Layout Rule", CONSTRUCTION, v(Text), true, false));
             d.push(def("Fixed Spacing", CONSTRUCTION, v(Length), false, false));
@@ -594,6 +609,7 @@ fn prototype(p: &Project, c: Category) -> Vec<Element> {
         Category::Ramps => Some(ElementKind::Ramp(Ramp { base_level: lvl, ..Default::default() })),
         Category::Railings => Some(ElementKind::Railing(Railing { level: lvl, ..Default::default() })),
         Category::Rooms => Some(ElementKind::Room(Room { level: lvl, ..Default::default() })),
+        Category::Spaces => Some(ElementKind::Room(Room { level: lvl, space: true, ..Default::default() })),
         Category::Areas => Some(ElementKind::Area(Area { name: String::new(), number: String::new(), level: lvl, scheme: 0, location: DVec2::ZERO, area_type: String::new() })),
         _ => None,
     };
@@ -804,6 +820,21 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             _ => None,
         },
         ElementKind::RebarCoupler(_) => None,
+        ElementKind::PointCloud(a) | ElementKind::CoordinationModel(a) => {
+            let asset = p
+                .point_clouds
+                .iter()
+                .chain(p.meshes.iter())
+                .find(|x| x.id == a.asset);
+            match name {
+                "Name" => text(asset.map(|x| x.name.clone()).unwrap_or_default()),
+                "Path" => text(asset.map(|x| x.path.clone()).unwrap_or_default()),
+                "Number of Points" | "Number of Faces" => {
+                    num(asset.map(|x| x.count as f64).unwrap_or(0.0))
+                }
+                _ => None,
+            }
+        }
         ElementKind::BeamSystem(b) => match name {
             "Layout Rule" => text("Fixed Distance".to_string()),
             "Fixed Spacing" => num(b.spacing),
