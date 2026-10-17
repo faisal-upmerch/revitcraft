@@ -248,9 +248,162 @@ pub fn write_obj(p: &crate::model::Project, meshes: &[(crate::model::Id, MeshSet
     (obj, mtl)
 }
 
+/// Export > CAD Formats > STL: the meshes as a binary STL (millimetres).
+pub fn write_stl(meshes: &[(crate::model::Id, MeshSet)]) -> Vec<u8> {
+    let mut tris: Vec<[DVec3; 3]> = Vec::new();
+    for (_, set) in meshes {
+        for m in set.by_material.values() {
+            for t in m.indices.chunks(3) {
+                tris.push([0, 1, 2].map(|k| m.positions[t[k] as usize]));
+            }
+        }
+    }
+    let mut out = vec![0u8; 80];
+    out[..26].copy_from_slice(b"RevitCraft STL export (mm)");
+    out.extend_from_slice(&(tris.len() as u32).to_le_bytes());
+    for [a, b, c] in tris {
+        let n = (b - a).cross(c - a).normalize_or_zero();
+        for v in [n, a, b, c] {
+            for x in [v.x, v.y, v.z] {
+                out.extend_from_slice(&(x as f32).to_le_bytes());
+            }
+        }
+        out.extend_from_slice(&[0, 0]);
+    }
+    out
+}
+
+/// Export > gbXML: rooms and spaces as gbXML spaces (their boundary at the floor and at their
+/// height), in millimetres.
+pub fn write_gbxml(p: &crate::model::Project) -> String {
+    use crate::model::ElementKind;
+    let mut spaces = String::new();
+    let mut storeys = String::new();
+    for (id, l) in p.levels() {
+        storeys.push_str(&format!("<BuildingStorey id=\"lvl{id}\"><Name>{}</Name><Level>{:.1}</Level></BuildingStorey>", esc(&l.name), l.elevation));
+    }
+    let lp = |pts: &[DVec2], z: f64| {
+        let mut s = String::from("<PolyLoop>");
+        for q in pts {
+            s.push_str(&format!("<CartesianPoint><Coordinate>{:.1}</Coordinate><Coordinate>{:.1}</Coordinate><Coordinate>{:.1}</Coordinate></CartesianPoint>", q.x, q.y, z));
+        }
+        s.push_str("</PolyLoop>");
+        s
+    };
+    for e in &p.elements {
+        let ElementKind::Room(r) = &e.kind else { continue };
+        let Some(b) = crate::analysis::room_boundary(p, r) else { continue };
+        let z0 = p.level_elevation(r.level) + r.base_offset;
+        let z1 = z0 + crate::analysis::room_height(p, r);
+        let area = crate::geom::area(&b.interior).abs() / 1e6;
+        spaces.push_str(&format!(
+            "<Space id=\"sp{}\" buildingStoreyIdRef=\"lvl{}\"><Name>{} {}</Name><Area>{:.3}</Area><ShellGeometry><ClosedShell>{}{}</ClosedShell></ShellGeometry></Space>",
+            e.id,
+            r.level,
+            esc(&r.number),
+            esc(&r.name),
+            area,
+            lp(&b.interior, z0),
+            lp(&b.interior, z1)
+        ));
+    }
+    format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<gbXML xmlns=\"http://www.gbxml.org/schema\" lengthUnit=\"Millimeters\" areaUnit=\"SquareMeters\" version=\"0.37\"><Campus id=\"campus\"><Name>{}</Name><Building id=\"building\" buildingType=\"Unknown\"><Name>{}</Name>{storeys}{spaces}</Building></Campus></gbXML>\n",
+        esc(&p.info.name),
+        esc(&p.info.name)
+    )
+}
+
+fn esc(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+}
+
+/// Export > Family Types: the family's types as a type catalog (CSV with
+/// "Name##KIND##UNITS" headers), as the reference app writes them.
+pub fn family_type_catalog(f: &crate::model::Family) -> String {
+    use crate::model::ParamKind;
+    let params: Vec<&crate::model::FamilyParameter> = f.params.iter().filter(|q| !q.instance && q.formula.is_empty() && !q.reporting).collect();
+    let kind = |k: ParamKind| match k {
+        ParamKind::Length => "LENGTH##MILLIMETERS",
+        ParamKind::Area => "AREA##SQUARE_METERS",
+        ParamKind::Volume => "VOLUME##CUBIC_METERS",
+        ParamKind::Angle => "ANGLE##DEGREES",
+        ParamKind::Integer | ParamKind::YesNo => "OTHER##",
+        ParamKind::Number | ParamKind::Currency => "OTHER##",
+        _ => "OTHER##",
+    };
+    let mut out = String::new();
+    for q in &params {
+        out.push_str(&format!(",{}##{}", q.name, kind(q.kind)));
+    }
+    out.push('\n');
+    for t in &f.types {
+        out.push_str(&t.name.replace(',', " "));
+        for q in &params {
+            let v = t.values.get(&q.name).cloned().unwrap_or_else(|| q.default.clone());
+            out.push(',');
+            out.push_str(&v.replace(',', " "));
+        }
+        out.push('\n');
+    }
+    out
+}
+
+/// Export > Reports > Room/Area Report: an HTML page listing rooms (or a scheme's areas)
+/// with their areas and a drawing of each.
+pub fn room_report(p: &crate::model::Project) -> String {
+    use crate::model::ElementKind;
+    let mut rows = String::new();
+    let mut total = 0.0;
+    for e in &p.elements {
+        let ElementKind::Room(r) = &e.kind else { continue };
+        let Some(b) = crate::analysis::room_boundary(p, r) else { continue };
+        let area = crate::geom::area(&b.interior).abs();
+        total += area;
+        let per: f64 = b.interior.iter().zip(b.interior.iter().cycle().skip(1)).map(|(a, c)| a.distance(*c)).sum();
+        let (mn, mx) = crate::geom::bounds(b.interior.iter().copied());
+        let k = 140.0 / (mx - mn).max_element().max(1.0);
+        let pts: Vec<String> = b.interior.iter().map(|q| format!("{:.1},{:.1}", (q.x - mn.x) * k + 5.0, (mx.y - q.y) * k + 5.0)).collect();
+        let level = p.levels().into_iter().find(|(id, _)| *id == r.level).map(|(_, l)| l.name.clone()).unwrap_or_default();
+        rows.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><svg width=\"150\" height=\"150\"><polygon points=\"{}\" fill=\"#e8f0fb\" stroke=\"#245\" stroke-width=\"1\"/></svg></td></tr>",
+            esc(&r.number),
+            esc(&r.name),
+            esc(&level),
+            p.units.area(area),
+            p.units.length(per),
+            pts.join(" ")
+        ));
+    }
+    format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Room/Area Report - {name}</title><style>body{{font-family:Segoe UI,Arial,sans-serif;margin:24px}}table{{border-collapse:collapse}}td,th{{border:1px solid #999;padding:4px 8px;text-align:left;vertical-align:top}}th{{background:#eee}}</style></head><body><h2>Room/Area Report</h2><p>Project: {name}</p><table><tr><th>Number</th><th>Name</th><th>Level</th><th>Area</th><th>Perimeter</th><th>Shape</th></tr>{rows}</table><p>Total area: {total}</p></body></html>\n",
+        name = esc(&p.info.name),
+        total = p.units.area(total)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn exports_round_trip_and_read() {
+        let p = crate::sample::sample_house();
+        let spaces = read_gbxml(&write_gbxml(&p)).unwrap();
+        let rooms = p.elements.iter().filter(|e| matches!(e.kind, crate::model::ElementKind::Room(_))).count();
+        assert_eq!(spaces.len(), rooms);
+        assert!(spaces.iter().all(|(_, floor, z0, z1)| floor.len() >= 3 && z1 > z0));
+        let fp = crate::analysis::wall_footprints(&p);
+        let meshes: Vec<(crate::model::Id, MeshSet)> = p.elements.iter().map(|e| (e.id, crate::build3d::element_mesh(&p, e, &fp))).collect();
+        let stl = write_stl(&meshes);
+        let n = u32::from_le_bytes([stl[80], stl[81], stl[82], stl[83]]) as usize;
+        assert!(n > 100 && stl.len() == 84 + n * 50);
+        let fam = p.families.iter().find(|f| f.types.len() > 1).unwrap();
+        let cat = family_type_catalog(fam);
+        assert!(cat.lines().next().unwrap().contains("##LENGTH##MILLIMETERS"));
+        assert_eq!(cat.lines().count(), fam.types.len() + 1);
+        assert!(room_report(&p).contains("<polygon"));
+    }
 
     #[test]
     fn gbxml_spaces_points_and_obj_round_trip() {

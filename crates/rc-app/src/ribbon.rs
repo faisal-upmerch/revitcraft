@@ -1020,7 +1020,8 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                 1 => &[C::New, C::NewFamily],
                 2 => &[C::Open, C::ImportIfc, C::OpenSample, C::LoadFamily],
                 3 => &[C::SaveAs],
-                4 => &[C::ExportIfc, C::ExportDxf, C::ExportDwf, C::ExportPdf, C::ExportImage, C::ExportCsv],
+                // As the reference app: CAD formats, PDF, IFC, DWF/DWFx, Family Types, gbXML, images and reports.
+                4 => &[C::ExportDxf, C::ExportObj, C::ExportStl, C::ExportPdf, C::ExportIfc, C::ExportDwf, C::ExportFamilyTypes, C::ExportGbxml, C::ExportImage, C::WalkExport, C::ExportCsv, C::ExportRoomReport],
                 5 => &[C::Print, C::PrintPreview, C::PrintSetup],
                 _ => &[],
             };
@@ -1045,13 +1046,29 @@ fn file_menu(ui: &mut egui::Ui, app: &mut App) {
                 ui.label(egui::RichText::new(title).font(style::bold(12.5)));
                 ui.add_space(6.0);
                 for c in items {
+                    let group = match (sub, *c) {
+                        (4, C::ExportDxf) => Some("CAD Formats"),
+                        (4, C::ExportImage) => Some("Images and Animations"),
+                        (4, C::ExportCsv) => Some("Reports"),
+                        _ => None,
+                    };
+                    if let Some(g) = group {
+                        ui.add_space(2.0);
+                        ui.label(egui::RichText::new(g).color(style::text_dim()).size(11.0));
+                    }
                     let info = c.info();
-                    let (r, resp) = ui.allocate_exact_size(vec2(300.0, 40.0), Sense::click());
+                    let (r, resp) = ui.allocate_exact_size(vec2(300.0, if sub == 4 { 34.0 } else { 40.0 }), Sense::click());
                     if resp.hovered() {
                         ui.painter().rect_filled(r, 0.0, style::hover());
                     }
                     icons::paint(ui.painter(), Rect::from_min_size(r.min + vec2(6.0, 6.0), vec2(28.0, 28.0)), info.icon, actions::enabled(app, *c));
-                    ui.painter().text(r.min + vec2(42.0, 5.0), egui::Align2::LEFT_TOP, info.label.replace('\n', " "), style::bold(12.0), style::text());
+                    // Names as the reference app's Export menu gives them.
+                    let label = match (sub, *c) {
+                        (4, C::ExportObj) => "OBJ".to_string(),
+                        (4, C::WalkExport) => "Walkthrough".to_string(),
+                        _ => info.label.replace('\n', " "),
+                    };
+                    ui.painter().text(r.min + vec2(42.0, 5.0), egui::Align2::LEFT_TOP, label, style::bold(12.0), style::text());
                     let tip: String = info.tip.chars().take(52).collect();
                     ui.painter().text(r.min + vec2(42.0, 22.0), egui::Align2::LEFT_TOP, tip, style::font(11.0), style::text_dim());
                     if resp.clicked() {

@@ -37,7 +37,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
             FeControlSingleV | FeControlDoubleV | FeControlSingleH | FeControlDoubleH => fe.tool == F::Control,
             WorkPlaneSet | WorkPlaneShow | Purge => custom,
             CloseInactive => fe.open_views.len() > 1,
-            Materials | ObjectStyles | Snaps | SharedParameters | ProjectUnits | LineStyles | CanvasTheme | KeyboardShortcuts => true,
+            Materials | ObjectStyles | Snaps | SharedParameters | ProjectUnits | LineStyles | CanvasTheme | KeyboardShortcuts | ExportFamilyTypes => true,
             DrawLine => sketching || matches!(fe.tool, F::RefPlane | F::SymbolicLine | F::ModelLine | F::RefLine | F::Region),
             DrawRect | DrawCircle => matches!(fe.tool, F::Extrusion | F::Blend | F::Revolve | F::Region) || (matches!(fe.tool, F::Sweep | F::SweptBlend) && fe.sweep_path.is_some()),
             Modify | ToggleProperties | ToggleBrowser | ToggleStatusBar | ToggleOptionsBar | ThinLines | Undo | Redo | Exit | Options | Save | SaveAs => match cmd {
@@ -83,6 +83,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         LoadSelection | EditSelection => !app.doc.data.selection_sets.is_empty(),
         SelectJoined => sel_el(&|e| matches!(e.kind, ElementKind::Wall(_))),
         ExportCsv => view.is_some_and(|v| matches!(v.kind, ViewKind::Schedule(_))),
+        ExportFamilyTypes => false,
         PlaceView => view.is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_))),
         GuideGrid | TitleBlock | ActivateView => app.active_tab().and_then(|s| app.doc.data.view(s)).is_some_and(|v| matches!(v.kind, ViewKind::Sheet(_))) && app.sheet_activation.is_none(),
         DeactivateView => app.sheet_activation.is_some(),
@@ -197,6 +198,49 @@ pub fn exec(app: &mut App, cmd: Cmd) {
         ExportPdf => app.dialogs.export = Some(dialogs::ExportKind::Pdf),
         ExportImage => app.dialogs.export = Some(dialogs::ExportKind::Image),
         ExportCsv => export_csv(app),
+        ExportStl => {
+            if let Some(mut path) = crate::files::FileDialog::new().add_filter("STL Files", &["stl"]).set_file_name("Model.stl").save_file() {
+                if path.extension().is_none() {
+                    path.set_extension("stl");
+                }
+                let p = &app.doc.data;
+                let fp = rc_core::analysis::wall_footprints(p);
+                let meshes: Vec<(Id, rc_core::mesh::MeshSet)> = p.elements.iter().filter(|e| e.view.is_none()).map(|e| (e.id, rc_core::build3d::element_mesh(p, e, &fp))).collect();
+                match std::fs::write(&path, rc_core::imports::write_stl(&meshes)) {
+                    Ok(()) => app.info(format!("Exported {}", path.display())),
+                    Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+                }
+            }
+        }
+        ExportGbxml | ExportRoomReport => {
+            let gb = cmd == ExportGbxml;
+            let (filter, ext, name) = if gb { ("gbXML Files", "xml", "Model.xml") } else { ("HTML Files", "html", "Room Area Report.html") };
+            if !app.doc.data.elements.iter().any(|e| matches!(e.kind, ElementKind::Room(_))) {
+                app.error("The project has no rooms or spaces to export.");
+            } else if let Some(mut path) = crate::files::FileDialog::new().add_filter(filter, &[ext]).set_file_name(name).save_file() {
+                if path.extension().is_none() {
+                    path.set_extension(ext);
+                }
+                let text = if gb { rc_core::imports::write_gbxml(&app.doc.data) } else { rc_core::imports::room_report(&app.doc.data) };
+                match std::fs::write(&path, text) {
+                    Ok(()) => app.info(format!("Exported {}", path.display())),
+                    Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+                }
+            }
+        }
+        ExportFamilyTypes => {
+            if let Some(f) = app.family_editor.as_ref().map(|fe| fe.family.clone()) {
+                if let Some(mut path) = crate::files::FileDialog::new().add_filter("Type Catalogs", &["txt"]).set_file_name(format!("{}.txt", f.name)).save_file() {
+                    if path.extension().is_none() {
+                        path.set_extension("txt");
+                    }
+                    match std::fs::write(&path, rc_core::imports::family_type_catalog(&f)) {
+                        Ok(()) => app.info(format!("Exported {}", path.display())),
+                        Err(e) => app.error(format!("Could not write {}: {e}", path.display())),
+                    }
+                }
+            }
+        }
         Options => app.dialogs.options = true,
         Exit => app.dialogs.exit = true,
         Undo if app.family_editor.is_some() => {
