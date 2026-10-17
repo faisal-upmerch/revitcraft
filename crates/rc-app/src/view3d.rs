@@ -687,6 +687,16 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                     }
                 }
             }
+            // Wall: Sweep / Reveal: click a wall face.
+            if app.tool.kind == crate::tools::ToolKind::WallSweep {
+                app.interact.prompt = crate::canvas_tools::prompt(app);
+                if resp.clicked_by(egui::PointerButton::Primary) {
+                    match app.scenes.get(&view_id).and_then(|s| render3d::pick_face(s, o, d, view.section_box)) {
+                        Some((host, q, n)) => crate::canvas_tools::place_wall_sweep(app, host, q, n),
+                        None => app.error("Click on a wall face."),
+                    }
+                }
+            }
             // Place Decal: click a face.
             let decal = app.tool.kind == crate::tools::ToolKind::PlaceDecal;
             if decal {
@@ -703,7 +713,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                     }
                 }
             }
-            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting && !modify_3d && !decal {
+            if resp.clicked_by(egui::PointerButton::Primary) && section_drag.is_none() && !painting && !modify_3d && !decal && app.tool.kind != crate::tools::ToolKind::WallSweep {
                 match hit_id {
                     Some(id) if ctrl => {
                         let mut s = app.selection.clone();

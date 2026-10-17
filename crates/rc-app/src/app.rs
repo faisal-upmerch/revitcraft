@@ -723,7 +723,7 @@ impl App {
             self.error(format!("{}: select elements first, then start the tool.", kind.name()));
             return;
         }
-        let three_d_tool = matches!(kind, ToolKind::Paint | ToolKind::RemovePaint | ToolKind::PlaceDecal) || crate::view3d::is_3d_tool(kind);
+        let three_d_tool = matches!(kind, ToolKind::Paint | ToolKind::RemovePaint | ToolKind::PlaceDecal | ToolKind::WallSweep) || crate::view3d::is_3d_tool(kind);
         // Sheets take annotation (and Move for viewports), as in the reference app.
         let sheet_tool = matches!(
             kind,

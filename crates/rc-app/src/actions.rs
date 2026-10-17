@@ -96,6 +96,8 @@ pub fn enabled(app: &App, cmd: Cmd) -> bool {
         SpanSymbol | TreadNumber => view.is_some_and(|v| v.plan_level().is_some()) && !in_sketch,
         Paint | RemovePaint => view.is_some_and(|v| v.is_graphical() && !matches!(v.kind, ViewKind::Drafting | ViewKind::Legend)) && !in_sketch,
         SpaceTag | Space | SpaceSeparator => plan && !in_sketch,
+        WallSweep | WallReveal => view.is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. } | ViewKind::Section { .. } | ViewKind::Elevation { .. })) && !in_sketch,
+        SweepHorizontal | SweepVertical => app.tool.kind == ToolKind::WallSweep,
         MultiRebarAligned | MultiRebarLinear | Insert2DElements => graphical_2d && !in_sketch,
         TypeProperties => true,
         Paste | PasteSameLevel => app.clipboard.is_some(),
@@ -1142,6 +1144,13 @@ pub fn exec(app: &mut App, cmd: Cmd) {
             }
         }
         DecalTypes => app.dialogs.decal_types = Some(dialogs::DecalTypesState::new(&app.doc.data, None, false)),
+        WallSweep | WallReveal => {
+            app.opts.sweep_reveal = cmd == WallReveal;
+            app.opts.sweep_vertical = false;
+            app.set_tool(ToolKind::WallSweep);
+        }
+        SweepHorizontal => app.opts.sweep_vertical = false,
+        SweepVertical => app.opts.sweep_vertical = true,
         Walkthrough => app.set_tool(ToolKind::Walkthrough),
         FinishWalkthrough => {
             let pts = app.tool.pts.clone();

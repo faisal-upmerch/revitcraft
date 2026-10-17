@@ -62,6 +62,24 @@ fn element_mesh_unpainted(p: &Project, e: &Element, footprints: &HashMap<Id, Foo
         ElementKind::Link(l) => link_mesh(p, l),
         ElementKind::AreaReinforcement(a) => crate::rebar::bars_mesh(&crate::rebar::area_bars(p, a)),
         ElementKind::Rebar(r) => crate::rebar::bars_mesh(&crate::rebar::rebar_bars(p, r)),
+        ElementKind::WallSweep(sw) if !sw.reveal => {
+            let mut set = MeshSet::default();
+            if let Some((rect, z0, z1)) = crate::edit::wall_sweep_box(p, sw) {
+                let mat = if sw.material.is_empty() { p.wall(sw.host).and_then(|w| p.sys_type(w.type_id)).and_then(|t| t.layers.first()).map(|l| l.material.clone()).unwrap_or_else(|| "Default".into()) } else { sw.material.clone() };
+                set.add_extrusion(&mat, &geom::ensure_ccw(&rect), z0, z1);
+                // Cut by inserts: doors, windows and openings in the host break the sweep.
+                if let Some(w) = p.wall(sw.host) {
+                    let (dir, n) = (w.direction(), w.normal());
+                    let reach = analysis::wall_thickness(p, w) / 2.0 + sw.depth + 20.0;
+                    for (u0, u1, oz0, oz1) in wall_openings(p, sw.host, w) {
+                        let at = |u: f64, v: f64| w.start + dir * u + n * v;
+                        let cut = vec![at(u0, -reach), at(u1, -reach), at(u1, reach), at(u0, reach)];
+                        set = csg::subtract_set(&set, &csg::prism(&geom::ensure_ccw(&cut), oz0, oz1));
+                    }
+                }
+            }
+            set
+        }
         ElementKind::PointCloud(a) => {
             // Each point as three small crossed triangles in its colour (to 4 bits a channel).
             let mut set = MeshSet::default();
@@ -348,6 +366,16 @@ fn wall(p: &Project, id: Id, w: &Wall, fp: &Footprint) -> MeshSet {
             set
         }
     };
+    // Reveals cut into the wall.
+    for e in &p.elements {
+        if let ElementKind::WallSweep(sw) = &e.kind {
+            if sw.reveal && sw.host == id {
+                if let Some((rect, z0, z1)) = crate::edit::wall_sweep_box(p, sw) {
+                    set = csg::subtract_set(&set, &csg::prism(&geom::ensure_ccw(&rect), z0, z1));
+                }
+            }
+        }
+    }
     // Trim under an attached roof.
     if let Some(Element { kind: ElementKind::Roof(r), .. }) = w.attach_top.and_then(|id| p.element(id)) {
         let cutter = roof_upper_cutter(p, r);

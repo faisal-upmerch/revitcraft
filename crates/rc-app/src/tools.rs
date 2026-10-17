@@ -48,6 +48,8 @@ pub enum ToolKind {
     PickToEdit,
     CutProfileHost,
     PlaceDecal,
+    /// Wall: Sweep / Wall: Reveal (opts.sweep_reveal).
+    WallSweep,
     PathReinfHost,
     FabricAreaHost,
     FabricSheet,
@@ -147,6 +149,7 @@ impl ToolKind {
             ToolKind::PickToEdit => "Pick to Edit",
             ToolKind::CutProfileHost => "Cut Profile",
             ToolKind::PlaceDecal => "Decal",
+            ToolKind::WallSweep => "Wall Sweep",
             ToolKind::PathReinfHost => "Path Reinforcement",
             ToolKind::FabricAreaHost => "Fabric Area",
             ToolKind::FabricSheet => "Fabric Sheet",
@@ -698,6 +701,9 @@ pub struct ToolOptions {
     pub image_asset: Id,
     /// The placed image's width on paper (mm); None: 150 mm.
     pub image_width: Option<f64>,
+    /// Wall: Sweep / Reveal: placing a reveal, vertically.
+    pub sweep_reveal: bool,
+    pub sweep_vertical: bool,
     /// Room, Room Tag and Room Separator place spaces (Analyze > Spaces & Zones).
     pub space_mode: bool,
     /// Place Decal: the decal type.
@@ -878,6 +884,8 @@ impl ToolOptions {
             decal_type: 0,
             host_symbol: SymbolKind::AreaReinforcement,
             image_width: None,
+            sweep_reveal: false,
+            sweep_vertical: false,
             space_mode: false,
             coupler_between: true,
             draw_mode: DrawMode::Line,

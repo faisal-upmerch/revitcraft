@@ -83,7 +83,7 @@ fn architecture() -> Vec<Panel> {
         panel(
             "Build",
             vec![
-                Labeled("Wall", C::Wall, vec![C::Wall, C::WallStructural]),
+                Labeled("Wall", C::Wall, vec![C::Wall, C::WallStructural, C::WallByFace, C::WallSweep, C::WallReveal]),
                 Big(C::Door),
                 Big(C::Window),
                 Labeled("Component", C::Component, vec![C::Component, C::ModelInPlace]),
@@ -462,6 +462,9 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
         if kind == ToolKind::CeilingAuto {
             v.push(panel("Ceiling", vec![Big(C::AutoCeiling), Big(C::SketchCeiling)]));
         }
+        if kind == ToolKind::WallSweep {
+            v.push(panel("Placement", vec![Big(C::SweepHorizontal), Big(C::SweepVertical)]));
+        }
         if kind == ToolKind::StructColumn {
             v.push(panel("Placement", vec![Labeled("Vertical\nColumn", C::VerticalColumn, vec![]), Labeled("Slanted\nColumn", C::SlantedColumn, vec![])]));
             if app.opts.column_multi.is_some() {
@@ -496,6 +499,7 @@ fn contextual(app: &App) -> Option<(String, Vec<Panel>)> {
             }
             ToolKind::Dimension(_) => "Place Dimensions".to_string(),
             ToolKind::CeilingAuto => "Place Ceiling".to_string(),
+            ToolKind::WallSweep if app.opts.sweep_reveal => "Place Reveal".to_string(),
             k => format!("Place {}", k.name()),
         };
         return Some((title, v));

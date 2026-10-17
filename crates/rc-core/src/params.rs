@@ -217,6 +217,13 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Primary Bar - Length", CONSTRUCTION, v(Length), false, false));
         }
         ElementKind::RebarCoupler(_) => {}
+        ElementKind::WallSweep(_) => {
+            d.push(def("Offset", CONSTRAINTS, v(Length), false, false));
+            d.push(def("Width", DIMENSIONS, v(Length), false, false));
+            d.push(def("Depth", DIMENSIONS, v(Length), false, false));
+            d.push(def("Side", CONSTRAINTS, v(Text), true, false));
+            d.push(def("Orientation", CONSTRAINTS, v(Text), true, false));
+        }
         ElementKind::PointCloud(_) | ElementKind::CoordinationModel(_) => {
             d.push(def("Name", IDENTITY, v(Text), true, false));
             d.push(def("Path", IDENTITY, v(Text), true, false));
@@ -820,6 +827,14 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             _ => None,
         },
         ElementKind::RebarCoupler(_) => None,
+        ElementKind::WallSweep(sw) => match name {
+            "Offset" => num(sw.offset),
+            "Width" => num(sw.width),
+            "Depth" => num(sw.depth),
+            "Side" => text(if sw.exterior { "Exterior" } else { "Interior" }.to_string()),
+            "Orientation" => text(if sw.vertical { "Vertical" } else { "Horizontal" }.to_string()),
+            _ => None,
+        },
         ElementKind::PointCloud(a) | ElementKind::CoordinationModel(a) => {
             let asset = p
                 .point_clouds
@@ -1387,6 +1402,20 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
         },
         ElementKind::FabricSheet(f) => match name {
             "Location" => f.top = t() == "Top" || t() == "0",
+            _ => return Err(format!("'{name}' cannot be set.")),
+        },
+        ElementKind::WallSweep(sw) => match name {
+            "Offset" => sw.offset = n(),
+            "Width" | "Depth" => {
+                if n() <= 0.0 {
+                    return Err("Enter a positive size.".into());
+                }
+                if name == "Width" {
+                    sw.width = n();
+                } else {
+                    sw.depth = n();
+                }
+            }
             _ => return Err(format!("'{name}' cannot be set.")),
         },
         ElementKind::Decal(dc) => match name {

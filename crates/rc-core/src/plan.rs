@@ -2672,6 +2672,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::PathReinforcement(r) => crate::rebar::path_region(p, r),
         ElementKind::FabricArea(a) => vec![a.boundary.clone()],
         ElementKind::BeamSystem(b) => vec![b.boundary.clone()],
+        ElementKind::WallSweep(sw) => crate::edit::wall_sweep_box(p, sw).map(|(r, _, _)| vec![r]).unwrap_or_default(),
         ElementKind::CoordinationModel(a) => p
             .meshes
             .iter()

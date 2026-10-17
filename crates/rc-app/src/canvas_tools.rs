@@ -180,6 +180,7 @@ pub fn prompt(app: &App) -> String {
         ToolKind::PickToEdit => "Pick an element in a design option to edit that option.".into(),
         ToolKind::CutProfileHost => "Select a wall to edit its cut profile.".into(),
         ToolKind::PlaceDecal => "Click on a planar face to place the decal.".into(),
+        ToolKind::WallSweep => if app.opts.sweep_reveal { "Click on a wall face to place the reveal.".into() } else { "Click on a wall face to place the wall sweep.".into() },
         ToolKind::Walkthrough => if n < 2 { "Click to place the walkthrough's camera positions.".into() } else { "Click the next camera position, or Finish Walkthrough.".into() },
         ToolKind::Camera => if n == 0 { "Click to place the camera.".into() } else { "Click to place the camera target.".into() },
         ToolKind::SpecifyCoords => "Click a point to specify its shared coordinates.".into(),
@@ -368,6 +369,15 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                         }
                     }
                     None => app.error("Decals are placed on planar faces of the model, in 3D, elevation and section views."),
+                }
+            }
+        }
+        ToolKind::WallSweep => {
+            if clicked {
+                let fp = app.footprints();
+                match rc_core::section::pick_face(&app.doc.data, view, cursor.unwrap_or_default(), &fp) {
+                    Some((host, q, n)) => place_wall_sweep(app, host, q, n),
+                    None => app.error("Click on a wall face."),
                 }
             }
         }
@@ -3602,4 +3612,14 @@ pub fn zoom_to(app: &mut App, view: Id, xf: &Xf, a: DVec2, b: DVec2) {
     let size = (b - a).abs().max(DVec2::splat(100.0));
     let zoom = (xf.rect.width() as f64 / size.x).min(xf.rect.height() as f64 / size.y);
     app.cams.insert(view, canvas::Cam2 { center: (a + b) / 2.0, zoom, fitted: true });
+}
+
+/// Wall: Sweep / Reveal on the clicked face; the tool stays active, as in the reference app.
+pub fn place_wall_sweep(app: &mut App, host: rc_core::model::Id, q: rc_core::geom::DVec3, n: rc_core::geom::DVec3) {
+    let (reveal, vertical) = (app.opts.sweep_reveal, app.opts.sweep_vertical);
+    if !app.el(host).is_some_and(|e| matches!(e.kind, ElementKind::Wall(_))) {
+        app.error(if reveal { "Reveals are placed on walls." } else { "Wall sweeps are placed on walls." });
+        return;
+    }
+    app.run(if reveal { "Wall Reveal" } else { "Wall Sweep" }, |p| edit::add_wall_sweep(p, host, q, n, reveal, vertical));
 }

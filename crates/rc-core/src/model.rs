@@ -66,10 +66,12 @@ pub enum Category {
     PointClouds,
     CoordinationModels,
     Spaces,
+    WallSweeps,
+    Reveals,
 }
 
 impl Category {
-    pub const ALL: [Category; 46] = [
+    pub const ALL: [Category; 48] = [
         Category::Levels,
         Category::Grids,
         Category::Walls,
@@ -116,6 +118,8 @@ impl Category {
         Category::Spaces,
         Category::PointClouds,
         Category::CoordinationModels,
+        Category::WallSweeps,
+        Category::Reveals,
     ];
 
     /// Model categories (shown in Visibility/Graphics' model tab).
@@ -256,6 +260,8 @@ impl Category {
             Category::PointClouds => "Point Clouds",
             Category::CoordinationModels => "Coordination Model",
             Category::Spaces => "Spaces",
+            Category::WallSweeps => "Wall Sweeps",
+            Category::Reveals => "Reveals",
         }
     }
 
@@ -317,6 +323,8 @@ impl Category {
             Category::PointClouds => "Point Cloud",
             Category::CoordinationModels => "Coordination Model",
             Category::Spaces => "Space",
+            Category::WallSweeps => "Wall Sweep",
+            Category::Reveals => "Reveal",
         }
     }
 
@@ -411,6 +419,8 @@ pub enum ElementKind {
     BeamSystem(BeamSystem),
     /// Insert > Point Cloud: a linked point cloud (its points in `Project::point_clouds`).
     PointCloud(LinkedAsset),
+    /// Architecture > Wall: Sweep / Wall: Reveal: a profile along a wall face.
+    WallSweep(WallSweep),
     /// Insert > Coordination Model: a linked mesh (in `Project::meshes`).
     CoordinationModel(LinkedAsset),
     Railing(Railing),
@@ -492,6 +502,7 @@ impl Element {
             ElementKind::RebarCoupler(_) => Category::RebarCouplers,
             ElementKind::BeamSystem(_) => Category::BeamSystems,
             ElementKind::PointCloud(_) => Category::PointClouds,
+            ElementKind::WallSweep(w) => if w.reveal { Category::Reveals } else { Category::WallSweeps },
             ElementKind::CoordinationModel(_) => Category::CoordinationModels,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
@@ -3175,6 +3186,23 @@ pub struct FabricSheet {
     pub center: DVec2,
     pub angle: f64,
     pub top: bool,
+}
+
+/// A wall sweep (added along the face) or reveal (cut into it), horizontal at `offset` above
+/// the wall's base or vertical at `offset` along the wall from its start.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct WallSweep {
+    pub host: Id,
+    pub reveal: bool,
+    pub vertical: bool,
+    pub offset: f64,
+    /// On the wall's exterior face (else the interior).
+    pub exterior: bool,
+    /// Profile size: across the sweep on the face, and out from (or into) the face.
+    pub width: f64,
+    pub depth: f64,
+    #[serde(default)]
+    pub material: String,
 }
 
 /// A linked point cloud or coordination model: its asset, moved by `origin`.

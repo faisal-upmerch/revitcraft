@@ -524,6 +524,48 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
     Ok(out)
 }
 
+/// Wall: Sweep / Wall: Reveal: placed where a wall face was clicked (`at` with the face's
+/// `normal`), horizontal at that height or vertical at that point along the wall.
+pub fn add_wall_sweep(p: &mut Project, host: Id, at: DVec3, normal: DVec3, reveal: bool, vertical: bool) -> Result<Id, String> {
+    let w = p.wall(host).ok_or("Wall sweeps and reveals are placed on walls.")?;
+    if w.arc_mid.is_some() {
+        return Err("Wall sweeps and reveals are placed on straight walls.".into());
+    }
+    if p.sys_type(w.type_id).is_some_and(|t| t.wall_kind == WallKind::Curtain) {
+        return Err("Wall sweeps and reveals cannot be placed on curtain walls.".into());
+    }
+    let exterior = normal.truncate().dot(w.normal()) >= 0.0;
+    let offset = if vertical { (at.truncate() - w.start).dot(w.direction()) } else { at.z - analysis::wall_base_z(p, w) };
+    let imp = p.units.system == crate::units::UnitSystem::Imperial;
+    let (width, depth) = match (reveal, imp) {
+        (false, false) => (150.0, 75.0),
+        (false, true) => (152.4, 76.2),
+        (true, false) => (50.0, 20.0),
+        (true, true) => (50.8, 19.05),
+    };
+    Ok(push(p, ElementKind::WallSweep(WallSweep { host, reveal, vertical, offset, exterior, width, depth, material: String::new() })))
+}
+
+/// The box of a sweep or reveal: (plan rectangle, z0, z1). Reveals reach a little outside the
+/// face so the cut is clean.
+pub fn wall_sweep_box(p: &Project, s: &WallSweep) -> Option<(Vec<DVec2>, f64, f64)> {
+    let w = p.wall(s.host)?;
+    let (dir, n) = (w.direction(), w.normal() * if s.exterior { 1.0 } else { -1.0 });
+    let half = analysis::wall_thickness(p, w) / 2.0;
+    let (n0, n1) = if s.reveal { (half - s.depth, half + 5.0) } else { (half, half + s.depth) };
+    let (zb, zt) = (analysis::wall_base_z(p, w), analysis::wall_base_z(p, w) + analysis::wall_height(p, w));
+    let len = w.start.distance(w.end);
+    let (u0, u1, z0, z1) = if s.vertical {
+        let u = s.offset.clamp(s.width / 2.0, (len - s.width / 2.0).max(s.width / 2.0));
+        (u - s.width / 2.0, u + s.width / 2.0, zb, zt)
+    } else {
+        let z = (zb + s.offset).clamp(zb + s.width / 2.0, (zt - s.width / 2.0).max(zb + s.width / 2.0));
+        (if s.reveal { -5.0 } else { 0.0 }, if s.reveal { len + 5.0 } else { len }, z - s.width / 2.0, z + s.width / 2.0)
+    };
+    let at = |u: f64, v: f64| w.start + dir * u + n * v;
+    Some((vec![at(u0, n0), at(u1, n0), at(u1, n1), at(u0, n1)], z0, z1))
+}
+
 /// Insert > Point Cloud: points (mm, colour) linked from `path`.
 pub fn add_point_cloud(
     p: &mut Project,
@@ -1534,6 +1576,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::RebarCoupler(c) => doomed.contains(&c.rebar) || c.other.is_some_and(|o| doomed.contains(&o)),
                 ElementKind::BeamSystem(b) => doomed.contains(&b.level),
                 ElementKind::Decal(dc) => doomed.contains(&dc.host) || !matches!(p.sys_type(dc.type_id), Some(t) if t.category == Category::Decals),
+                ElementKind::WallSweep(w) => doomed.contains(&w.host),
                 ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
             } || e.group.is_some_and(|g| doomed.contains(&g))
@@ -3288,6 +3331,26 @@ mod tests {
         assert!(t.distance(e) > 900.0);
         set_walk_frame(&mut p, v, 300);
         assert!((eye(&p).0 - DVec3::new(10000.0, 10000.0, 1750.0)).length() < 1e-6);
+    }
+
+    #[test]
+    fn wall_sweeps_add_and_reveals_cut() {
+        let (mut p, lvl, _) = project();
+        let wt = p.types_of(Category::Walls).find(|t| t.wall_kind == WallKind::Basic).unwrap().id;
+        let w = add_wall(&mut p, lvl, wt, DVec2::ZERO, DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let fp = analysis::wall_footprints(&p);
+        let tris = |p: &Project| crate::build3d::element_mesh(p, p.element(w).unwrap(), &analysis::wall_footprints(p)).by_material.values().map(|m| m.triangle_count()).sum::<usize>();
+        let before = tris(&p);
+        let n = p.wall(w).unwrap().normal();
+        let sw = add_wall_sweep(&mut p, w, DVec3::new(2000.0, 0.0, 1000.0), DVec3::new(n.x, n.y, 0.0), false, false).unwrap();
+        let set = crate::build3d::element_mesh(&p, p.element(sw).unwrap(), &fp);
+        let (mn, mx) = set.bounds().unwrap();
+        assert!((mn.z - 925.0).abs() < 1.0 && (mx.z - 1075.0).abs() < 1.0, "{mn:?} {mx:?}");
+        assert_eq!(p.element(sw).unwrap().category(), Category::WallSweeps);
+        add_wall_sweep(&mut p, w, DVec3::new(1000.0, 0.0, 2000.0), DVec3::new(n.x, n.y, 0.0), true, true).unwrap();
+        assert!(tris(&p) > before, "the reveal cuts the wall");
+        delete_elements(&mut p, &[w]).unwrap();
+        assert!(p.elements.iter().all(|e| !matches!(e.kind, ElementKind::WallSweep(_))));
     }
 
     #[test]
