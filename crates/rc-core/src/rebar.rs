@@ -60,6 +60,50 @@ fn host_z(p: &Project, host: Id) -> Option<(f64, f64)> {
     }
 }
 
+/// A wall host's face frame: (start, direction, exterior normal, base z, thickness). Wall-hosted
+/// reinforcement keeps its points in face coordinates: along the wall from its start, up from
+/// its base.
+pub fn wall_frame(p: &Project, host: Id) -> Option<(DVec2, DVec2, DVec2, f64, f64)> {
+    let w = p.wall(host)?;
+    Some((w.start, w.direction(), w.normal(), analysis::wall_base_z(p, w), analysis::wall_thickness(p, w)))
+}
+
+pub fn is_wall_hosted(p: &Project, host: Id) -> bool {
+    p.wall(host).is_some()
+}
+
+/// The host's outline in the reinforcement's coordinates: a floor's boundary, or a wall's face.
+pub fn host_region(p: &Project, host: Id) -> Option<Vec<DVec2>> {
+    match &p.element(host)?.kind {
+        ElementKind::Floor(f) => Some(f.boundary.clone()),
+        ElementKind::Wall(w) => {
+            let (len, h) = (w.start.distance(w.end), analysis::wall_height(p, w));
+            Some(vec![DVec2::ZERO, DVec2::new(len, 0.0), DVec2::new(len, h), DVec2::new(0.0, h)])
+        }
+        _ => None,
+    }
+}
+
+/// A face point of a wall-hosted reinforcement in the world, on the wall's centre plane.
+pub fn face_point(p: &Project, host: Id, q: DVec2) -> Option<DVec3> {
+    let (o, dir, _, base, _) = wall_frame(p, host)?;
+    Some(geom::at(o + dir * q.x, base + q.y))
+}
+
+/// Where a layer of bars of diameter `d` lies (`below` = diameters laid outside it): floors
+/// take plan points at the layer's height; walls take face points at the layer's depth from
+/// the exterior (`top`) or interior face.
+fn layer_map(p: &Project, host: Id, top: bool, d: f64, below: f64) -> Option<Box<dyn Fn(DVec2) -> DVec3>> {
+    let c = cover(p) + below;
+    if let Some((zb, zt)) = host_z(p, host) {
+        let z = if top { zt - c - d / 2.0 } else { zb + c + d / 2.0 };
+        return Some(Box::new(move |q| geom::at(q, z)));
+    }
+    let (o, dir, n, base, t) = wall_frame(p, host)?;
+    let off = (t / 2.0 - c - d / 2.0) * if top { 1.0 } else { -1.0 };
+    Some(Box::new(move |q: DVec2| geom::at(o + dir * q.x + n * off, base + q.y)))
+}
+
 /// Lines across a polygon parallel to `dir` at `spacing`, centred across it.
 fn hatch(poly: &[DVec2], dir: DVec2, spacing: f64) -> Vec<(DVec2, DVec2)> {
     let n = geom::perp(dir);
@@ -95,7 +139,6 @@ fn hatch(poly: &[DVec2], dir: DVec2, spacing: f64) -> Vec<(DVec2, DVec2)> {
 
 /// The bars of an area reinforcement: (start, end, diameter), each layer inside the cover.
 pub fn area_bars(p: &Project, a: &AreaReinforcement) -> Vec<(DVec3, DVec3, f64)> {
-    let Some((zb, zt)) = host_z(p, a.host) else { return vec![] };
     let c = cover(p);
     let inner = geom::offset(&geom::ensure_ccw(&a.boundary), -c);
     if inner.len() < 3 || geom::area(&inner).abs() < 1.0 {
@@ -106,15 +149,17 @@ pub fn area_bars(p: &Project, a: &AreaReinforcement) -> Vec<(DVec3, DVec3, f64)>
     let mut out = Vec::new();
     // Layers: top major (outermost), top minor, bottom major (outermost), bottom minor.
     let d = |k: usize| bar_diameter(p, a.layers[k].bar_type);
-    let zs = [zt - c - d(0) / 2.0, zt - c - d(0) - d(1) / 2.0, zb + c + d(2) / 2.0, zb + c + d(2) + d(3) / 2.0];
+    // Top (exterior) major and minor, then bottom (interior) major and minor.
+    let below = [0.0, d(0), 0.0, d(2)];
     for k in 0..4 {
         let l = &a.layers[k];
         if !l.on {
             continue;
         }
+        let Some(at) = layer_map(p, a.host, k < 2, d(k), below[k]) else { return vec![] };
         let dir = if k % 2 == 0 { major } else { minor };
         for (s, e) in hatch(&inner, dir, l.spacing) {
-            out.push((geom::at(s, zs[k]), geom::at(e, zs[k]), d(k)));
+            out.push((at(s), at(e), d(k)));
         }
     }
     out
@@ -133,20 +178,12 @@ pub fn rebar_bars(p: &Project, r: &Rebar) -> Vec<(DVec3, DVec3, f64)> {
     }).collect()
 }
 
-/// The z of a top or bottom layer of bars of diameter `d` (`below` = diameters of bars laid
-/// outside it).
-fn layer_z(p: &Project, host: Id, top: bool, d: f64, below: f64) -> Option<f64> {
-    let (zb, zt) = host_z(p, host)?;
-    let c = cover(p) + below;
-    Some(if top { zt - c - d / 2.0 } else { zb + c + d / 2.0 })
-}
-
 /// Which side of the path (+1 left, -1 right) the bars run to: into the host.
 pub fn path_side(p: &Project, r: &PathReinforcement) -> f64 {
-    let side = match (p.element(r.host).map(|e| &e.kind), r.path.first(), r.path.get(1)) {
-        (Some(ElementKind::Floor(f)), Some(a), Some(b)) => {
+    let side = match (host_region(p, r.host), r.path.first(), r.path.get(1)) {
+        (Some(region), Some(a), Some(b)) => {
             let n = geom::perp((*b - *a).normalize_or_zero());
-            if geom::contains(&f.boundary, (*a + *b) / 2.0 + n * r.length.min(600.0) / 2.0) { 1.0 } else { -1.0 }
+            if geom::contains(&region, (*a + *b) / 2.0 + n * r.length.min(600.0) / 2.0) { 1.0 } else { -1.0 }
         }
         _ => 1.0,
     };
@@ -156,7 +193,7 @@ pub fn path_side(p: &Project, r: &PathReinforcement) -> f64 {
 /// The bars of a path reinforcement, centred along each segment of the path.
 pub fn path_bars(p: &Project, r: &PathReinforcement) -> Vec<(DVec3, DVec3, f64)> {
     let d = bar_diameter(p, r.bar_type);
-    let Some(z) = layer_z(p, r.host, r.top, d, 0.0) else { return vec![] };
+    let Some(at) = layer_map(p, r.host, r.top, d, 0.0) else { return vec![] };
     let side = path_side(p, r);
     let mut out = Vec::new();
     for w in r.path.windows(2) {
@@ -170,7 +207,7 @@ pub fn path_bars(p: &Project, r: &PathReinforcement) -> Vec<(DVec3, DVec3, f64)>
         let first = (len - (count - 1) as f64 * r.spacing) / 2.0;
         for k in 0..count {
             let q = w[0] + dir * (first + k as f64 * r.spacing);
-            out.push((geom::at(q, z), geom::at(q + n * r.length, z), d));
+            out.push((at(q), at(q + n * r.length), d));
         }
     }
     out
@@ -222,9 +259,9 @@ pub fn sheet_rect(c: DVec2, dir: DVec2, length: f64, width: f64) -> Vec<DVec2> {
 /// The wires of a fabric piece (an outline), major wires along `dir`.
 fn sheet_wires(p: &Project, host: Id, top: bool, type_id: Id, piece: &[DVec2], dir: DVec2) -> Vec<(DVec3, DVec3, f64)> {
     let (_, _, smaj, smin, d) = sheet_size(p, type_id);
-    let (Some(z0), Some(z1)) = (layer_z(p, host, top, d, 0.0), layer_z(p, host, top, d, d)) else { return vec![] };
-    let mut out: Vec<(DVec3, DVec3, f64)> = hatch(piece, dir, smaj).into_iter().map(|(a, b)| (geom::at(a, z0), geom::at(b, z0), d)).collect();
-    out.extend(hatch(piece, geom::perp(dir), smin).into_iter().map(|(a, b)| (geom::at(a, z1), geom::at(b, z1), d)));
+    let (Some(m0), Some(m1)) = (layer_map(p, host, top, d, 0.0), layer_map(p, host, top, d, d)) else { return vec![] };
+    let mut out: Vec<(DVec3, DVec3, f64)> = hatch(piece, dir, smaj).into_iter().map(|(a, b)| (m0(a), m0(b), d)).collect();
+    out.extend(hatch(piece, geom::perp(dir), smin).into_iter().map(|(a, b)| (m1(a), m1(b), d)));
     out
 }
 
@@ -287,8 +324,14 @@ pub fn coupler_points(p: &Project, c: &RebarCoupler) -> Vec<(DVec3, DVec3, f64)>
 
 /// Couplers as sleeves: 4 bar diameters long, 1.6 wide.
 pub fn couplers_mesh(pts: &[(DVec3, DVec3, f64)]) -> MeshSet {
-    let sleeves: Vec<(DVec3, DVec3, f64)> = pts.iter().map(|(c, ax, d)| (*c - *ax * 2.0 * d, *c + *ax * 2.0 * d, 1.6 * d)).collect();
-    bars_mesh(&sleeves)
+    // Two sleeve halves either side of a wider middle rib.
+    let mut parts: Vec<(DVec3, DVec3, f64)> = Vec::new();
+    for (c, ax, d) in pts {
+        parts.push((*c - *ax * 2.0 * d, *c - *ax * 0.4 * d, 1.5 * d));
+        parts.push((*c - *ax * 0.4 * d, *c + *ax * 0.4 * d, 1.8 * d));
+        parts.push((*c + *ax * 0.4 * d, *c + *ax * 2.0 * d, 1.5 * d));
+    }
+    bars_mesh(&parts)
 }
 
 /// Bars as octagonal rods.
@@ -335,6 +378,25 @@ pub fn area_tag(p: &Project, a: &AreaReinforcement) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn wall_area_reinforcement_lies_inside_the_wall() {
+        let mut p = crate::defaults::new_project(UnitSystem::Metric);
+        let l1 = p.levels()[0].0;
+        let wt = p.types_of(Category::Walls).next().unwrap().id;
+        let w = crate::edit::add_wall(&mut p, l1, wt, DVec2::new(0.0, 0.0), DVec2::new(4000.0, 0.0), 3000.0).unwrap();
+        let bt = ensure_bar_types(&mut p)[1];
+        // The whole face: 4000 along, 3000 up.
+        let face = vec![DVec2::ZERO, DVec2::new(4000.0, 0.0), DVec2::new(4000.0, 3000.0), DVec2::new(0.0, 3000.0)];
+        let id = crate::edit::add_area_reinforcement(&mut p, w, face, bt, 300.0).unwrap();
+        let Some(ElementKind::AreaReinforcement(a)) = p.element(id).map(|e| e.kind.clone()) else { panic!() };
+        let bars = area_bars(&p, &a);
+        assert!(!bars.is_empty());
+        let t = analysis::wall_thickness(&p, p.wall(w).unwrap());
+        assert!(bars.iter().all(|(s, e, _)| s.y.abs() < t / 2.0 && e.y.abs() < t / 2.0 && s.z >= 0.0 && e.z <= 3000.0 + 1e-6), "bars leave the wall");
+        // Both faces get bars.
+        assert!(bars.iter().any(|b| b.0.y > 0.0) && bars.iter().any(|b| b.0.y < 0.0));
+    }
 
     #[test]
     fn path_fabric_and_couplers_lay_out_their_bars() {

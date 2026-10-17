@@ -919,14 +919,14 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                 let pts = line_points(l);
                 d.line(Some(e.id), pts, l.closed, line_style_stroke(p, l.style));
             }
-            ElementKind::AreaReinforcement(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
+            ElementKind::AreaReinforcement(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) && !crate::rebar::is_wall_hosted(p, a.host) => {
                 // Boundary (dashed); the symbol is its own element (older projects draw it here).
                 d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
                 if a.own_symbol {
                     area_symbol(p, e.id, a, geom::centroid(&a.boundary), c.scale, d);
                 }
             }
-            ElementKind::PathReinforcement(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) => {
+            ElementKind::PathReinforcement(r) if p.element(r.host).and_then(|h| h.level()) == Some(c.level) && !crate::rebar::is_wall_hosted(p, r.host) => {
                 // The path, the strips it reinforces (dashed) and the symbol with its tag.
                 d.line(Some(e.id), r.path.clone(), false, ANNO);
                 for strip in crate::rebar::path_region(p, r) {
@@ -936,14 +936,18 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
                     path_symbol(p, e.id, r, (r.path[0] + r.path[1]) / 2.0, c.scale, d);
                 }
             }
-            ElementKind::FabricArea(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) => {
+            ElementKind::FabricArea(a) if p.element(a.host).and_then(|h| h.level()) == Some(c.level) && !crate::rebar::is_wall_hosted(p, a.host) => {
                 // Boundary (dashed) and each sheet with its diagonal.
                 d.line(Some(e.id), a.boundary.clone(), true, Stroke::new(0.13, [0, 0, 0], Dash::Dashed));
                 for sheet in crate::rebar::fabric_area_sheets(p, a) {
                     d.line(Some(e.id), sheet.clone(), true, THIN);
                 }
             }
-            ElementKind::FabricSheet(f) if p.element(f.host).and_then(|h| h.level()) == Some(c.level) => {
+            ElementKind::BeamSystem(b) if b.level == c.level => {
+                // Its boundary, faint, to pick it by.
+                d.line(Some(e.id), b.boundary.clone(), true, Stroke::new(0.1, [160, 160, 160], Dash::Dashed));
+            }
+            ElementKind::FabricSheet(f) if p.element(f.host).and_then(|h| h.level()) == Some(c.level) && !crate::rebar::is_wall_hosted(p, f.host) => {
                 let (l, w, ..) = crate::rebar::sheet_size(p, f.type_id);
                 let r = crate::rebar::sheet_rect(f.center, DVec2::from_angle(f.angle.to_radians()), l, w);
                 d.line(Some(e.id), r.clone(), true, THIN);
@@ -998,7 +1002,7 @@ fn model_graphics(c: &Ctx, d: &mut Drawing) {
             continue;
         }
         match &e.kind {
-            ElementKind::Grid(g) => grid_graphics(e.id, g, c.scale, d),
+            ElementKind::Grid(g) => grid_graphics(e.id, g, c.view.id, c.scale, d),
             ElementKind::Matchline(m) => d.line(Some(e.id), vec![m.start, m.end], false, Stroke::new(0.5, [80, 0, 120], Dash::DashDot)),
             ElementKind::ScopeBox(s) => {
                 // Thin dash-dot rectangle with its name at the top-left corner.
@@ -1065,17 +1069,28 @@ fn style_element(c: &Ctx, e: &Element, d: &mut Drawing, start: usize) {
     }
 }
 
-fn grid_graphics(id: Id, g: &Grid, scale: f64, d: &mut Drawing) {
+fn grid_graphics(id: Id, g: &Grid, view: Id, scale: f64, d: &mut Drawing) {
+    let ext = g.view_ext(view).cloned().unwrap_or_default();
+    let g = &g.in_view(view);
     let pts = g.polyline();
     let (d0, d1) = g.end_dirs();
     d.line(Some(id), pts, false, GRID);
-    // 1/2" bubble with the grid name.
+    // 1/2" bubble with the grid name; an elbow jogs it aside.
     let r = 6.0 * scale;
-    for (pt, dir, show) in [(g.start, d0, g.bubble_start), (g.end, d1, g.bubble_end)] {
+    for (pt, dir, show, elbow) in [(g.start, d0, g.bubble_start, ext.elbow_start), (g.end, d1, g.bubble_end, ext.elbow_end)] {
         if !show {
             continue;
         }
-        let c = pt + dir * r;
+        let at = match elbow {
+            Some(o) => {
+                // Back along the grid, across by the offset, then out to the bubble.
+                let k = 6.0 * scale;
+                d.line(Some(id), vec![pt - dir * (k * 2.0), pt - dir * k + o, pt + o], false, Stroke { dash: Dash::Solid, ..GRID });
+                pt + o
+            }
+            None => pt,
+        };
+        let c = at + dir * r;
         d.line(Some(id), circle(c, r, 32), true, Stroke { dash: Dash::Solid, ..GRID });
         d.text(Some(id), c, g.name.clone(), 4.5, Anchor::Center);
     }
@@ -1701,7 +1716,7 @@ fn ceiling_plan_graphics(c: &Ctx, d: &mut Drawing) {
             continue;
         }
         match &e.kind {
-            ElementKind::Grid(g) => grid_graphics(e.id, g, c.scale, d),
+            ElementKind::Grid(g) => grid_graphics(e.id, g, c.view.id, c.scale, d),
             ElementKind::Matchline(m) => d.line(Some(e.id), vec![m.start, m.end], false, Stroke::new(0.5, [80, 0, 120], Dash::DashDot)),
             _ => {}
         }
@@ -2359,6 +2374,18 @@ fn host_symbol(p: &Project, e: &Element, s: &Symbol, scale: f64, d: &mut Drawing
             let label = format!("{} {} @ {}", r.count, crate::rebar::bar_name(p, r.bar_type), p.units.length(r.spacing));
             tick_span(e.id, s.position, across, half, scale, label, d);
         }
+        (SymbolKind::BeamSystem, ElementKind::BeamSystem(b)) => {
+            // The system's span arrow, with its beam type and spacing.
+            let dir = b.dir.normalize_or(DVec2::X);
+            let n = geom::perp(dir);
+            let (half, head, wing) = (10.0 * scale, 3.5 * scale, 1.6 * scale);
+            let (a, q) = (s.position - dir * half, s.position + dir * half);
+            d.line(Some(e.id), vec![a, q], false, ANNO);
+            d.fill(Some(e.id), &[q, q - dir * head + n * wing, q - dir * head], [0, 0, 0, 255]);
+            d.fill(Some(e.id), &[a, a + dir * head - n * wing, a + dir * head], [0, 0, 0, 255]);
+            let ty = p.family_type(b.beam_type).map(|(_, t)| t.name.clone()).unwrap_or_default();
+            d.text(Some(e.id), s.position + n * 2.2 * scale, format!("{ty} @ {}", p.units.length(b.spacing)), 2.0, Anchor::Center);
+        }
         (SymbolKind::BeamSystem, ElementKind::Instance(i)) => {
             // A span arrow along the beam with its type.
             let Some(end) = i.end else { return };
@@ -2507,6 +2534,7 @@ pub fn element_outline(p: &Project, e: &Element, footprints: &HashMap<Id, Footpr
         ElementKind::Decal(dc) => vec![dc.corners().iter().map(|q| q.truncate()).collect()],
         ElementKind::PathReinforcement(r) => crate::rebar::path_region(p, r),
         ElementKind::FabricArea(a) => vec![a.boundary.clone()],
+        ElementKind::BeamSystem(b) => vec![b.boundary.clone()],
         ElementKind::RebarCoupler(cp) => crate::rebar::coupler_points(p, cp)
             .into_iter()
             .map(|(q, ax, dia)| {

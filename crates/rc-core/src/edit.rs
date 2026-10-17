@@ -204,7 +204,7 @@ pub fn add_grid_ex(p: &mut Project, start: DVec2, end: DVec2, arc_mid: Option<DV
             .unwrap()
     };
     // Like the reference app, a new grid shows its bubble at the end point only.
-    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: false, bubble_end: true, vertices: vec![] })))
+    Ok(push(p, ElementKind::Grid(Grid { name, start, end, arc_mid, bubble_start: false, bubble_end: true, vertices: vec![], ..Default::default() })))
 }
 
 /// A multi-segment grid through `pts` (named by its first segment's direction).
@@ -515,6 +515,7 @@ pub fn model_by_face(p: &mut Project, mass: Id, what: ByFace, type_id: Id) -> Re
 pub fn add_host_symbol(p: &mut Project, view: Id, kind: SymbolKind, host: Id, at: DVec2) -> Result<Id, String> {
     let ok = match (kind, p.element(host).map(|e| &e.kind)) {
         (SymbolKind::BeamSystem, Some(ElementKind::Instance(i))) => i.category == Category::StructuralFraming && i.end.is_some(),
+        (SymbolKind::BeamSystem, Some(ElementKind::BeamSystem(_))) => true,
         (SymbolKind::StairPath, Some(ElementKind::Stair(_))) => true,
         (SymbolKind::AreaReinforcement, Some(ElementKind::AreaReinforcement(_))) => true,
         (SymbolKind::PathReinforcement, Some(ElementKind::PathReinforcement(_))) => true,
@@ -859,8 +860,8 @@ pub fn add_area_reinforcement(p: &mut Project, host: Id, boundary: Vec<DVec2>, b
     if b.len() < 3 {
         return Err("Area reinforcement needs a closed boundary.".into());
     }
-    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
-        return Err("Select a floor or slab to reinforce.".into());
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_) | ElementKind::Wall(_))) {
+        return Err("Select a floor, slab or wall to reinforce.".into());
     }
     if spacing < 25.0 {
         return Err("The bar spacing is too small.".into());
@@ -881,7 +882,7 @@ pub fn add_path_reinforcement(p: &mut Project, host: Id, path: Vec<DVec2>, bar_t
     if pts.len() < 2 {
         return Err("Sketch the path: one or more connected lines.".into());
     }
-    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_) | ElementKind::Wall(_))) {
         return Err("Pick Structural Floor or Wall for Path Reinforcement".into());
     }
     if spacing < 25.0 || length < 25.0 {
@@ -897,7 +898,7 @@ pub fn add_fabric_area(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Resul
     if b.len() < 3 {
         return Err("A fabric area needs a closed boundary.".into());
     }
-    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_) | ElementKind::Wall(_))) {
         return Err("Pick Structural Floor or Wall for Fabric Area Reinforcement".into());
     }
     let type_id = crate::rebar::ensure_fabric_types(p);
@@ -909,7 +910,7 @@ pub fn add_fabric_area(p: &mut Project, host: Id, boundary: Vec<DVec2>) -> Resul
 
 /// Structure > Fabric Sheet: one sheet centred at `center` in a floor.
 pub fn add_fabric_sheet(p: &mut Project, host: Id, center: DVec2, angle: f64) -> Result<Id, String> {
-    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_))) {
+    if !matches!(p.element(host).map(|e| &e.kind), Some(ElementKind::Floor(_) | ElementKind::Wall(_))) {
         return Err("Click within a structural Wall or Floor to place Fabric Sheet.".into());
     }
     let type_id = crate::rebar::ensure_fabric_types(p);
@@ -1039,12 +1040,37 @@ pub fn add_truss(p: &mut Project, type_id: Id, level: Id, start: DVec2, end: DVe
 
 /// A beam system: beams parallel to the boundary's first edge at `spacing`, centred across
 /// the bay, each clipped to the boundary.
-pub fn add_beam_system(p: &mut Project, type_id: Id, level: Id, boundary: Vec<DVec2>, spacing: f64) -> Result<Vec<Id>, String> {
+pub fn add_beam_system(p: &mut Project, type_id: Id, level: Id, boundary: Vec<DVec2>, spacing: f64) -> Result<Id, String> {
     let b = geom::clean(&boundary, 1.0);
     if b.len() < 3 {
         return Err("A beam system needs a closed boundary.".into());
     }
     let dir = (b[1] - b[0]).normalize_or_zero();
+    let id = push(p, ElementKind::BeamSystem(BeamSystem { level, boundary: b, dir, spacing, beam_type: type_id, members: Vec::new() }));
+    regen_beam_system(p, id)?;
+    Ok(id)
+}
+
+/// Rebuilds a beam system's beams from its boundary, direction, spacing and type.
+pub fn regen_beam_system(p: &mut Project, id: Id) -> Result<(), String> {
+    let Some(ElementKind::BeamSystem(sys)) = p.element(id).map(|e| e.kind.clone()) else { return Err("Beam system not found.".into()) };
+    p.elements.retain(|e| !sys.members.contains(&e.id));
+    let lines = beam_system_lines(&sys.boundary, sys.dir, sys.spacing)?;
+    let mut ids = Vec::new();
+    for (a, b) in lines {
+        ids.push(add_beam(p, sys.beam_type, sys.level, a, b)?);
+    }
+    if let Some(ElementKind::BeamSystem(s)) = p.element_mut(id).map(|e| &mut e.kind) {
+        s.members = ids;
+    }
+    Ok(())
+}
+
+/// The beams' lines: along `dir`, `spacing` apart, centred across the boundary.
+fn beam_system_lines(b: &[DVec2], dir: DVec2, spacing: f64) -> Result<Vec<(DVec2, DVec2)>, String> {
+    if spacing < 100.0 {
+        return Err("The beam spacing is too small.".into());
+    }
     let n = geom::perp(dir);
     let across: Vec<f64> = b.iter().map(|q| (*q - b[0]).dot(n)).collect();
     let (lo, hi) = across.iter().fold((f64::MAX, f64::MIN), |(a, c), v| (a.min(*v), c.max(*v)));
@@ -1054,7 +1080,7 @@ pub fn add_beam_system(p: &mut Project, type_id: Id, level: Id, boundary: Vec<DV
         return Err("The boundary is narrower than the beam spacing.".into());
     }
     let first = lo + (width - (count - 1) as f64 * spacing) / 2.0;
-    let mut ids = Vec::new();
+    let mut lines = Vec::new();
     for k in 0..count {
         let off = first + k as f64 * spacing;
         // Where the line at this offset crosses the boundary, paired inside-out.
@@ -1071,11 +1097,11 @@ pub fn add_beam_system(p: &mut Project, type_id: Id, level: Id, boundary: Vec<DV
         ts.sort_by(|x, y| x.total_cmp(y));
         for w in ts.chunks(2) {
             if w.len() == 2 && w[1] - w[0] > 100.0 {
-                ids.push(add_beam(p, type_id, level, o + dir * w[0], o + dir * w[1])?);
+                lines.push((o + dir * w[0], o + dir * w[1]));
             }
         }
     }
-    Ok(ids)
+    Ok(lines)
 }
 
 /// Creates a stair from runs, with railings on both sides when requested.
@@ -1271,6 +1297,14 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
         return Err(format!("{} is pinned. Unpin it before deleting.", p.display_name(e)));
     }
     let mut doomed: HashSet<Id> = ids.iter().copied().collect();
+    // A beam system takes its beams with it.
+    for e in &p.elements {
+        if let ElementKind::BeamSystem(b) = &e.kind {
+            if doomed.contains(&e.id) {
+                doomed.extend(b.members.iter().copied());
+            }
+        }
+    }
     if p.levels().iter().filter(|(id, _)| !doomed.contains(id)).count() == 0 {
         return Err("A project must have at least one level.".into());
     }
@@ -1291,6 +1325,7 @@ pub fn delete_elements(p: &mut Project, ids: &[Id]) -> Result<usize, String> {
                 ElementKind::FabricArea(a) => doomed.contains(&a.host),
                 ElementKind::FabricSheet(f) => doomed.contains(&f.host),
                 ElementKind::RebarCoupler(c) => doomed.contains(&c.rebar) || c.other.is_some_and(|o| doomed.contains(&o)),
+                ElementKind::BeamSystem(b) => doomed.contains(&b.level),
                 ElementKind::Decal(dc) => doomed.contains(&dc.host) || !matches!(p.sys_type(dc.type_id), Some(t) if t.category == Category::Decals),
                 ElementKind::Rebar(r) => doomed.contains(&r.host),
                 _ => e.level().is_some_and(|l| doomed.contains(&l)),
@@ -1393,6 +1428,11 @@ fn transform_element(e: &mut Element, f: &dyn Fn(DVec2) -> DVec2, rot: f64, mirr
             let o = f(DVec2::ZERO);
             a.major = (f(a.major) - o).normalize_or(a.major);
             a.boundary = a.boundary.iter().map(|q| f(*q)).collect();
+        }
+        ElementKind::BeamSystem(b) => {
+            let o = f(DVec2::ZERO);
+            b.dir = (f(b.dir) - o).normalize_or(b.dir);
+            b.boundary = b.boundary.iter().map(|q| f(*q)).collect();
         }
         ElementKind::FabricSheet(s) => {
             let c = f(s.center);
@@ -3223,10 +3263,19 @@ mod tests {
         assert_eq!(add_truss(&mut p, bt, lvl, DVec2::ZERO, DVec2::new(6000.0, 0.0), 1500.0).unwrap().len(), 6);
         // A 6 x 4 m bay at 1.8 m spacing: 2 beams, 0.2 m in from... centred across the 4 m.
         let bay = vec![DVec2::new(0.0, 0.0), DVec2::new(6000.0, 0.0), DVec2::new(6000.0, 4000.0), DVec2::new(0.0, 4000.0)];
-        let ids = add_beam_system(&mut p, bt, lvl, bay, 1800.0).unwrap();
+        let sys = add_beam_system(&mut p, bt, lvl, bay, 1800.0).unwrap();
+        let Some(ElementKind::BeamSystem(b)) = p.element(sys).map(|e| e.kind.clone()) else { panic!() };
+        let ids = b.members.clone();
         assert_eq!(ids.len(), 2);
         let ys: Vec<f64> = ids.iter().map(|id| match p.element(*id).map(|e| &e.kind) { Some(ElementKind::Instance(i)) => i.location.y, _ => 0.0 }).collect();
         assert!((ys[0] - 1100.0).abs() < 1e-6 && (ys[1] - 2900.0).abs() < 1e-6, "{ys:?}");
+        // A closer spacing regenerates the beams; deleting the system deletes them.
+        crate::params::set(&mut p, sys, "Fixed Spacing", "900").unwrap();
+        let Some(ElementKind::BeamSystem(b)) = p.element(sys).map(|e| e.kind.clone()) else { panic!() };
+        assert_eq!(b.members.len(), 4);
+        assert!(ids.iter().all(|id| p.element(*id).is_none()));
+        delete_elements(&mut p, &[sys]).unwrap();
+        assert!(b.members.iter().all(|id| p.element(*id).is_none()));
     }
 
     #[test]

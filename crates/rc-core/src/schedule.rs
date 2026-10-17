@@ -52,13 +52,15 @@ enum Rec {
     Sheet(Id),
     /// A keynote legend row: the key.
     Keynote(String),
+    /// A key schedule row.
+    Key(usize),
 }
 
 impl Rec {
     fn id(&self) -> Id {
         match self {
             Rec::Element(id) | Rec::Material(id, ..) | Rec::Sheet(id) => *id,
-            Rec::Keynote(_) => 0,
+            Rec::Keynote(_) | Rec::Key(_) => 0,
         }
     }
 }
@@ -69,6 +71,12 @@ fn text_def(name: &str, kind: ParamKind) -> ParamDef {
 
 /// All fields offered for a schedule definition.
 pub fn available_fields(p: &Project, def: &ScheduleDef) -> Vec<ParamDef> {
+    if def.key.is_some() {
+        // The key's name, then the category's editable instance parameters.
+        let mut v = vec![text_def("Key Name", ParamKind::Text)];
+        v.extend(params::category_fields(p, def.category).into_iter().filter(|f| !f.read_only && !f.type_param && f.name != "Mark"));
+        return v;
+    }
     if def.keynote_legend {
         return ["Key Value", "Keynote Text"].iter().map(|n| text_def(n, ParamKind::Text)).collect();
     }
@@ -198,6 +206,9 @@ fn layer_area(p: &Project, e: &Element) -> f64 {
 }
 
 fn records(p: &Project, def: &ScheduleDef) -> Vec<Rec> {
+    if let Some(k) = &def.key {
+        return (0..k.rows.len()).map(Rec::Key).collect();
+    }
     if def.sheet_list {
         return p.views.iter().filter(|v| matches!(v.kind, ViewKind::Sheet(_))).map(|v| Rec::Sheet(v.id)).collect();
     }
@@ -282,6 +293,7 @@ fn raw_get(p: &Project, def: &ScheduleDef, r: &Rec, field: &str) -> Option<Value
             }
         }
         Rec::Element(id) => get_field(p, def, p.element(*id)?, field),
+        Rec::Key(i) => def.key.as_ref()?.rows.get(*i)?.get(field).map(|s| Value::Text(s.clone())),
     }
 }
 
@@ -523,6 +535,12 @@ pub struct GridCell {
     pub underline: bool,
     pub shading: Option<[u8; 3]>,
     pub border: u8,
+    /// Edge weights (top, right, bottom, left).
+    pub edges: [u8; 4],
+    /// Rows covered (an ungrouped heading spans the group row and the heading row).
+    pub rowspan: usize,
+    /// Covered by the cell above (drawn by it).
+    pub covered: bool,
     pub halign: u8,
     pub valign: u8,
     pub image: Option<Id>,
@@ -591,6 +609,9 @@ pub fn layout(p: &Project, def: &ScheduleDef, title: &str, segment: Option<(u32,
             underline: font.as_ref().is_some_and(|f| f.underline),
             shading: st.shading,
             border: st.border.unwrap_or(if def.look.grid_lines { 1 } else { 0 }),
+            edges: st.edges.unwrap_or([st.border.unwrap_or(if def.look.grid_lines { 1 } else { 0 }); 4]),
+            rowspan: 1,
+            covered: false,
             halign: st.halign.unwrap_or(align),
             valign: st.valign.unwrap_or(1),
             image: None,
@@ -635,14 +656,30 @@ pub fn layout(p: &Project, def: &ScheduleDef, title: &str, segment: Option<(u32,
                         ci = last + 1;
                     }
                     None => {
-                        cells.push(cell(CellKey::Blank, String::new(), 1, false, 2.5, 1));
+                        // An ungrouped heading spans both rows, as in the reference app.
+                        let mut c = cell(CellKey::Header(name.clone()), table.columns.get(ci).map(|c| c.heading.clone()).unwrap_or_default(), 1, true, 2.5, 1);
+                        c.rowspan = 2;
+                        cells.push(c);
                         ci += 1;
                     }
                 }
             }
             rows.push(GridRow { kind: GridRowKind::Groups, cells, height: ROW_MM, ids: vec![], table_row: None });
         }
-        let cells = (0..n).map(|ci| cell(CellKey::Header(field_of(ci)), table.columns.get(ci).map(|c| c.heading.clone()).unwrap_or_default(), 1, true, 2.5, 1)).collect();
+        let in_group = |ci: usize| -> bool {
+            let name = field_of(ci);
+            let pos = |f: &str| table.columns.iter().position(|c| c.def.name == f);
+            def.groups.iter().any(|g| matches!((pos(&g.first), pos(&g.last)), (Some(a), Some(b)) if pos(&name).is_some_and(|k| k >= a && k <= b)))
+        };
+        let cells = (0..n)
+            .map(|ci| {
+                let mut c = cell(CellKey::Header(field_of(ci)), table.columns.get(ci).map(|c| c.heading.clone()).unwrap_or_default(), 1, true, 2.5, 1);
+                if !def.groups.is_empty() && !in_group(ci) {
+                    c.covered = true;
+                }
+                c
+            })
+            .collect();
         rows.push(GridRow { kind: GridRowKind::Headers, cells, height: ROW_MM, ids: vec![], table_row: None });
     }
     if def.look.blank_row {
@@ -739,6 +776,26 @@ mod tests {
         let seg = layout(&p, &d, "Doors", Some((1, 1)));
         assert_eq!(seg.rows[0].kind, GridRowKind::Groups);
         assert_eq!(seg.rows.len() - seg.head_rows, 1);
+    }
+
+    #[test]
+    fn key_schedules_drive_their_elements() {
+        let mut p = project_with_doors();
+        let mut d = ScheduleDef { category: Category::Doors, fields: vec!["Key Name".into(), "Comments".into()], itemize: true, ..Default::default() };
+        let mut row = std::collections::BTreeMap::new();
+        row.insert("Key Name".to_string(), "Fire".to_string());
+        row.insert("Comments".to_string(), "60 min".to_string());
+        d.key = Some(KeyDef { name: "Door Style".into(), rows: vec![row] });
+        let t = build(&p, &d);
+        assert_eq!(t.rows[0].cells, vec!["Fire".to_string(), "60 min".to_string()]);
+        let id = p.next_id;
+        p.views.push(View::new(id, "Door Style Schedule", 100.0, ViewKind::Schedule(d)));
+        p.next_id += 1;
+        // A door choosing the key takes its comments.
+        let door = p.elements.iter().find(|e| e.category() == Category::Doors).unwrap().id;
+        crate::params::set(&mut p, door, "Door Style", "Fire").unwrap();
+        let e = p.element(door).unwrap();
+        assert_eq!(crate::params::get(&p, e, "Comments"), Some(crate::params::Value::Text("60 min".into())));
     }
 
     #[test]

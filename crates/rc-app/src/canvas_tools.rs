@@ -246,6 +246,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             let Some(c) = cursor else { return };
             let kind = app.opts.host_symbol;
             let fits = move |e: &Element| match (&e.kind, kind) {
+                (ElementKind::BeamSystem(_), SymbolKind::BeamSystem) => true,
                 (ElementKind::Instance(i), SymbolKind::BeamSystem) => i.category == Category::StructuralFraming && i.end.is_some(),
                 (ElementKind::Stair(_), SymbolKind::StairPath) => true,
                 (ElementKind::AreaReinforcement(_), SymbolKind::AreaReinforcement) => true,
@@ -260,6 +261,7 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
                     fits(e) && match &e.kind {
                         ElementKind::AreaReinforcement(a) => rc_core::geom::contains(&a.boundary, c),
                         ElementKind::FabricArea(a) => rc_core::geom::contains(&a.boundary, c),
+                        ElementKind::BeamSystem(b) => rc_core::geom::contains(&b.boundary, c),
                         _ => false,
                     }
                 }).map(|e| e.id)
@@ -647,14 +649,21 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             painter.add(egui::Shape::closed_line(pts.clone(), Stroke::new(1.0, style::PREVIEW)));
             painter.line_segment([pts[0], pts[2]], Stroke::new(1.0, style::PREVIEW));
             if clicked {
-                let host = app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, pt))).map(|e| e.id);
-                match host {
-                    Some(host) => {
-                        if let Some(id) = app.run("Place Fabric Sheet", |p| edit::add_fabric_sheet(p, host, pt, 0.0)) {
+                // A floor of this plan, or a wall faced in a section or elevation.
+                let wall = if level.is_none() { hover_of(app, view, d, pt, xf, &|e| matches!(e.kind, ElementKind::Wall(_))) } else { None };
+                let host = wall.or_else(|| app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, pt))).map(|e| e.id));
+                let fp = app.footprints();
+                let at = match wall {
+                    Some(w) => rc_core::section::to_wall_face(&app.doc.data, view, w, pt, &fp),
+                    None => Some(pt),
+                };
+                match (host, at) {
+                    (Some(host), Some(at)) => {
+                        if let Some(id) = app.run("Place Fabric Sheet", |p| edit::add_fabric_sheet(p, host, at, 0.0)) {
                             app.select(vec![id]);
                         }
                     }
-                    None => app.error("Click within a structural Wall or Floor to place Fabric Sheet."),
+                    _ => app.error("Click within a structural Wall or Floor to place Fabric Sheet."),
                 }
             }
         }
@@ -699,12 +708,17 @@ pub fn handle(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &egu
             }
         }
         ToolKind::AreaReinfHost | ToolKind::PathReinfHost | ToolKind::FabricAreaHost => {
-            // Pick the slab (by its edge or inside it), then sketch the boundary.
+            // Pick the slab (by its edge or inside it) in a plan, or the wall in a section or
+            // elevation, then sketch the boundary there.
             let Some(c) = cursor else { return };
             let level = view.plan_level();
-            let hit = hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Floor(_))).or_else(|| {
-                app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, c))).map(|e| e.id)
-            });
+            let hit = if level.is_none() {
+                hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Wall(_)))
+            } else {
+                hover_of(app, view, d, c, xf, &|e| matches!(e.kind, ElementKind::Floor(_))).or_else(|| {
+                    app.doc.data.elements.iter().rev().find(|e| matches!(&e.kind, ElementKind::Floor(f) if Some(f.level) == level && rc_core::geom::contains(&f.boundary, c))).map(|e| e.id)
+                })
+            };
             app.interact.hover = hit;
             if clicked {
                 match hit {

@@ -99,6 +99,15 @@ pub fn pick_face(p: &Project, view: &View, q: DVec2, footprints: &HashMap<Id, Fo
     best.map(|(t, id, n)| (id, o + d * t, n))
 }
 
+/// A point of a section or elevation view on a wall's face: (along the wall from its start,
+/// up from its base).
+pub fn to_wall_face(p: &Project, view: &View, wall: Id, q: DVec2, footprints: &HashMap<Id, Footprint>) -> Option<DVec2> {
+    let f = view_frame(p, view, footprints)?;
+    let (o, dir, _, base, _) = crate::rebar::wall_frame(p, wall)?;
+    let w = f.to_world(q, 0.0);
+    Some(DVec2::new((w.truncate() - o).dot(dir), w.z - base))
+}
+
 pub fn view_frame(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) -> Option<ViewFrame> {
     match &view.kind {
         ViewKind::Section { start, end, depth, z_min, z_max } => {
@@ -724,7 +733,70 @@ pub fn drawing(p: &Project, view: &View, footprints: &HashMap<Id, Footprint>) ->
         }
     }
     levels_and_grids(p, view, &f, Some((mn, mx)), &mut d);
+    wall_reinforcement(p, view, &f, &mut d);
     d
+}
+
+/// Wall-hosted reinforcement seen on its wall: boundaries dashed, paths solid, sheets with
+/// their diagonal, and the area/path symbol and tag.
+fn wall_reinforcement(p: &Project, view: &View, f: &ViewFrame, d: &mut Drawing) {
+    let dashed = plan::Stroke::new(0.13, [0, 0, 0], plan::Dash::Dashed);
+    let thin = plan::Stroke::new(0.13, [60, 60, 60], plan::Dash::Solid);
+    for e in &p.elements {
+        if !analysis::visible_in(p, view, e) {
+            continue;
+        }
+        let host = match &e.kind {
+            ElementKind::AreaReinforcement(a) => a.host,
+            ElementKind::PathReinforcement(r) => r.host,
+            ElementKind::FabricArea(a) => a.host,
+            ElementKind::FabricSheet(s) => s.host,
+            _ => continue,
+        };
+        // Only where the wall faces the view.
+        let Some((_, dir, n, _, _)) = crate::rebar::wall_frame(p, host) else { continue };
+        if (geom::at(n, 0.0)).dot(f.look).abs() < 0.5 {
+            continue;
+        }
+        let _ = dir;
+        let to2 = |q: DVec2| crate::rebar::face_point(p, host, q).map(|w| f.to_view(w).0);
+        let pts = |v: &[DVec2]| -> Vec<DVec2> { v.iter().filter_map(|q| to2(*q)).collect() };
+        match &e.kind {
+            ElementKind::AreaReinforcement(a) => {
+                d.line(Some(e.id), pts(&a.boundary), true, dashed);
+                if let Some(c) = to2(geom::centroid(&a.boundary)) {
+                    d.text(Some(e.id), c, crate::rebar::area_tag(p, a), 2.0, plan::Anchor::Center);
+                }
+            }
+            ElementKind::PathReinforcement(r) => {
+                d.line(Some(e.id), pts(&r.path), false, plan::Stroke::new(0.18, [0, 0, 0], plan::Dash::Solid));
+                for strip in crate::rebar::path_region(p, r) {
+                    d.line(Some(e.id), pts(&strip), true, dashed);
+                }
+                if let (Some(a), Some(b)) = (r.path.first(), r.path.get(1)) {
+                    if let Some(c) = to2((*a + *b) / 2.0) {
+                        d.text(Some(e.id), c, crate::rebar::path_tag(p, r), 2.0, plan::Anchor::Center);
+                    }
+                }
+            }
+            ElementKind::FabricArea(a) => {
+                d.line(Some(e.id), pts(&a.boundary), true, dashed);
+                for sheet in crate::rebar::fabric_area_sheets(p, a) {
+                    d.line(Some(e.id), pts(&sheet), true, thin);
+                }
+            }
+            ElementKind::FabricSheet(s) => {
+                let (l, w, ..) = crate::rebar::sheet_size(p, s.type_id);
+                let r = crate::rebar::sheet_rect(s.center, DVec2::from_angle(s.angle.to_radians()), l, w);
+                let q = pts(&r);
+                if q.len() == 4 {
+                    d.line(Some(e.id), q.clone(), true, thin);
+                    d.line(Some(e.id), vec![q[0], q[2]], false, thin);
+                }
+            }
+            _ => {}
+        }
+    }
 }
 
 fn levels_and_grids(p: &Project, view: &View, f: &ViewFrame, extent: Option<(DVec2, DVec2)>, d: &mut Drawing) {

@@ -609,6 +609,8 @@ struct NewSchedState {
     name: String,
     name_edited: bool,
     phase: usize,
+    keys: bool,
+    key_name: String,
 }
 
 fn new_schedule(app: &mut App, ctx: &egui::Context) {
@@ -622,7 +624,10 @@ fn new_schedule(app: &mut App, ctx: &egui::Context) {
         st.category = cats.first().copied();
     }
     if !st.name_edited {
-        st.name = st.category.map(|c| format!("{} {suffix}", c.singular())).unwrap_or_default();
+        st.name = st.category.map(|c| if st.keys { format!("{} Style Schedule", c.singular()) } else { format!("{} {suffix}", c.singular()) }).unwrap_or_default();
+    }
+    if st.key_name.is_empty() {
+        st.key_name = st.category.map(|c| format!("{} Style", c.singular())).unwrap_or_default();
     }
     let (mut open, mut ok, mut cancel) = (true, false, false);
     window(if takeoff { "New Material Takeoff" } else { "New Schedule" }).open(&mut open).resizable(false).default_width(560.0).show(ctx, |ui| {
@@ -669,14 +674,15 @@ fn new_schedule(app: &mut App, ctx: &egui::Context) {
                     st.name_edited = true;
                 }
                 ui.add_space(10.0);
-                let _ = ui.radio(true, "Schedule building components");
-                ui.add_enabled_ui(false, |ui| {
-                    let _ = ui.radio(false, "Schedule keys");
+                ui.radio_value(&mut st.keys, false, "Schedule building components");
+                ui.add_enabled_ui(!takeoff, |ui| {
+                    ui.radio_value(&mut st.keys, true, "Schedule keys");
+                });
+                ui.add_enabled_ui(st.keys, |ui| {
                     ui.horizontal(|ui| {
                         ui.add_space(20.0);
                         ui.label("Key name:");
-                        let mut k = String::new();
-                        ui.add(egui::TextEdit::singleline(&mut k).desired_width(160.0));
+                        ui.add(egui::TextEdit::singleline(&mut st.key_name).desired_width(160.0));
                     });
                 });
                 ui.add_space(10.0);
@@ -708,7 +714,11 @@ fn new_schedule(app: &mut App, ctx: &egui::Context) {
             let phase = app.doc.data.phases.get(st.phase).map(|p| p.id);
             if !takeoff {
                 // As in the reference app, the schedule exists once Schedule Properties is OK'd.
-                let def = ScheduleDef { category: c, itemize: true, grand_total: false, ..Default::default() };
+                let mut def = ScheduleDef { category: c, itemize: true, grand_total: false, ..Default::default() };
+                if st.keys {
+                    def.key = Some(KeyDef { name: st.key_name.trim().to_string(), rows: Vec::new() });
+                    def.fields = vec!["Key Name".into()];
+                }
                 app.dialogs.new_schedule_pending = Some((def, name.clone(), phase));
                 app.dialogs.schedule_props = Some((0, 0));
                 app.dialogs.new_schedule = None;

@@ -217,6 +217,13 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
             d.push(def("Primary Bar - Length", CONSTRUCTION, v(Length), false, false));
         }
         ElementKind::RebarCoupler(_) => {}
+        ElementKind::BeamSystem(_) => {
+            d.push(def("Layout Rule", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Fixed Spacing", CONSTRUCTION, v(Length), false, false));
+            d.push(def("Justification", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Beam Type", CONSTRUCTION, v(Text), true, false));
+            d.push(def("Number of Beams", CONSTRUCTION, v(Integer), true, false));
+        }
         ElementKind::FabricArea(_) => {
             d.push(def("Location", CONSTRUCTION, choice(&[0u8, 1], |a: u8| ["Top", "Bottom"][a as usize]), false, false));
             d.push(def("Fabric Sheet", CONSTRUCTION, v(Text), true, false));
@@ -487,8 +494,16 @@ pub fn element_params(p: &Project, e: &Element) -> Vec<ParamDef> {
     if typed && !d.iter().any(|x| x.name == "Keynote") {
         d.push(def("Keynote", IDENTITY, v(Text), false, true));
     }
-    // Manage > Project Parameters bound to this category.
+    // Key schedules of this category: the key to choose.
     let c = e.category();
+    for k in key_schedules(p, c) {
+        if !d.iter().any(|x| x.name == k.name) {
+            let mut keys = vec!["(none)".to_string()];
+            keys.extend(k.rows.iter().filter_map(|r| r.get("Key Name").cloned()));
+            d.push(def(&k.name, IDENTITY, PKind::Choice(keys), false, false));
+        }
+    }
+    // Manage > Project Parameters bound to this category.
     for q in p.project_params.iter().filter(|q| q.categories.contains(&c)) {
         if !d.iter().any(|x| x.name == q.name) {
             d.push(def(&q.name, &q.group, v(q.kind), false, !q.instance && typed));
@@ -632,7 +647,26 @@ fn top_name(p: &Project, l: Option<Id>) -> String {
 }
 
 /// Reads a parameter value.
+/// Key schedules (with their keys) for a category.
+pub fn key_schedules(p: &Project, c: Category) -> impl Iterator<Item = &KeyDef> {
+    p.views.iter().filter_map(move |v| match &v.kind {
+        ViewKind::Schedule(d) if d.category == c => d.key.as_ref(),
+        _ => None,
+    })
+}
+
 pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
+    // A chosen key, and the values its row gives the element.
+    for k in key_schedules(p, e.category()) {
+        if k.name == name {
+            return text(e.params.get(name).cloned().unwrap_or_else(|| "(none)".into()));
+        }
+        if let Some(row) = e.params.get(&k.name).and_then(|key| k.rows.iter().find(|r| r.get("Key Name") == Some(key))) {
+            if let Some(v) = row.get(name).filter(|v| !v.is_empty()) {
+                return text(v.clone());
+            }
+        }
+    }
     if name == "Keynote" && p.type_of(e).is_some() {
         return text(crate::keynote::element_keynote(p, e));
     }
@@ -770,6 +804,14 @@ pub fn get(p: &Project, e: &Element, name: &str) -> Option<Value> {
             _ => None,
         },
         ElementKind::RebarCoupler(_) => None,
+        ElementKind::BeamSystem(b) => match name {
+            "Layout Rule" => text("Fixed Distance".to_string()),
+            "Fixed Spacing" => num(b.spacing),
+            "Justification" => text("Center".to_string()),
+            "Beam Type" => text(p.family_type(b.beam_type).map(|(f, t)| format!("{}: {}", f.name, t.name)).unwrap_or_default()),
+            "Number of Beams" => num(b.members.len() as f64),
+            _ => None,
+        },
         ElementKind::FabricArea(a) => match name {
             "Location" => text(if a.top { "Top" } else { "Bottom" }.to_string()),
             "Fabric Sheet" => text(p.sys_type(a.type_id).map(|t| t.name.clone()).unwrap_or_default()),
@@ -1064,6 +1106,14 @@ pub fn set(p: &mut Project, id: Id, name: &str, input: &str) -> Result<(), Strin
         return Err(format!("'{name}' is read-only."));
     }
     let value = parse(p, &d, input)?;
+    // A beam system's spacing rebuilds its beams.
+    if let (ElementKind::BeamSystem(_), "Fixed Spacing") = (&e.kind, name) {
+        let v = value.as_num().unwrap_or(0.0);
+        if let Some(ElementKind::BeamSystem(b)) = p.element_mut(id).map(|x| &mut x.kind) {
+            b.spacing = v;
+        }
+        return crate::edit::regen_beam_system(p, id);
+    }
     set_value(p, id, name, value)
 }
 
@@ -1079,6 +1129,16 @@ pub fn set_value(p: &mut Project, id: Id, name: &str, value: Value) -> Result<()
     };
     let positive = |x: f64, what: &str| if x > 0.0 { Ok(x) } else { Err(format!("{what} must be greater than zero.")) };
 
+    if key_schedules(p, e.category()).any(|k| k.name == name) {
+        let v = t();
+        let el = p.element_mut(id).unwrap();
+        if v == "(none)" || v.is_empty() {
+            el.params.remove(name);
+        } else {
+            el.params.insert(name.to_string(), v);
+        }
+        return Ok(());
+    }
     if name == "Keynote" {
         if let Some(tid) = p.type_of(&e) {
             let s = t();

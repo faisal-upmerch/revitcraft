@@ -424,7 +424,7 @@ pub fn export_sheet_with(p: &Project, view: &View, footprints: &HashMap<Id, Foot
                     w.solid(&l, t, [color[0], color[1], color[2]]);
                 }
             }
-            SheetPrim::Text { pos, text, size, anchor, angle, id, .. } => w.text(&layer_of(id).replace("SHEET", "SHEET-TEXT"), pos, &text, size as f64, [0, 0, 0], anchor, (angle as f64).to_degrees()),
+            SheetPrim::Text { pos, text, size, anchor, angle, id, color, .. } => w.text(&layer_of(id).replace("SHEET", "SHEET-TEXT"), pos, &text, size as f64, color, anchor, (angle as f64).to_degrees()),
             SheetPrim::Picture { min, max, id, .. } => {
                 let pts = vec![min, DVec2::new(max.x, min.y), max, DVec2::new(min.x, max.y)];
                 w.polyline(&layer_of(id), &pts, true, [128, 128, 128], Dash::Solid);

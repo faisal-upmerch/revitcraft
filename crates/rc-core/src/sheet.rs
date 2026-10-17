@@ -68,18 +68,28 @@ fn grid_size(g: &schedule::Grid) -> DVec2 {
 /// text (aligned, sized, coloured, underlined) and images.
 pub fn draw_grid(out: &mut Vec<SheetPrim>, g: &schedule::Grid, origin: DVec2, outline: bool) {
     let mut y = origin.y;
-    for row in &g.rows {
+    for (ri, row) in g.rows.iter().enumerate() {
         let mut ci = 0;
         let mut x = origin.x;
         for c in &row.cells {
             let w: f64 = g.widths[ci.min(g.widths.len() - 1)..(ci + c.span).min(g.widths.len())].iter().sum();
-            let (a, b) = (DVec2::new(x, y - row.height), DVec2::new(x + w, y));
+            if c.covered {
+                x += w;
+                ci += c.span;
+                continue;
+            }
+            let h: f64 = g.rows[ri..(ri + c.rowspan).min(g.rows.len())].iter().map(|r| r.height).sum();
+            let (a, b) = (DVec2::new(x, y - h), DVec2::new(x + w, y));
             if let Some(col) = c.shading {
                 out.push(SheetPrim::Fill { tris: vec![[a, DVec2::new(b.x, a.y), b], [a, b, DVec2::new(a.x, b.y)]], color: [col[0], col[1], col[2], 255], id: None });
             }
-            if c.border > 0 {
-                let wt = [0.0, 0.18, 0.35, 0.5][c.border.min(3) as usize];
-                out.push(SheetPrim::Line { pts: vec![a, DVec2::new(b.x, a.y), b, DVec2::new(a.x, b.y)], closed: true, width: wt, color: [0, 0, 0], dash: plan::Dash::Solid, id: None });
+            // Edges one by one: top, right, bottom, left.
+            let corners = [(DVec2::new(a.x, b.y), b), (b, DVec2::new(b.x, a.y)), (DVec2::new(b.x, a.y), a), (a, DVec2::new(a.x, b.y))];
+            for (k, (e0, e1)) in corners.iter().enumerate() {
+                let wt = c.edges[k];
+                if wt > 0 {
+                    out.push(SheetPrim::Line { pts: vec![*e0, *e1], closed: false, width: [0.0, 0.18, 0.35, 0.5][wt.min(3) as usize], color: [0, 0, 0], dash: plan::Dash::Solid, id: None });
+                }
             }
             if let Some(asset) = c.image {
                 out.push(SheetPrim::Picture { asset, min: a + DVec2::splat(0.5), max: b - DVec2::splat(0.5), id: None });

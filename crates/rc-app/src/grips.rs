@@ -18,6 +18,12 @@ pub enum GripKind {
     LineMid,
     GridEnd(bool),
     GridBubble(bool),
+    /// The 3D/2D extents label at a grid end: click to switch.
+    GridExtents(bool),
+    /// Add Elbow (or drag an elbow's bubble aside).
+    GridElbow(bool),
+    /// The alignment lock at a grid end aligned with others.
+    GridLock(bool),
     BeamEnd(bool),
     FlipFacing,
     FlipHand,
@@ -40,7 +46,7 @@ pub enum GripKind {
 impl GripKind {
     /// Controls are clicked rather than dragged.
     pub fn is_control(&self) -> bool {
-        matches!(self, GripKind::WallFlip | GripKind::FlipFacing | GripKind::FlipHand | GripKind::GridBubble(_) | GripKind::DimLock(_) | GripKind::DimEq | GripKind::SectionFlip)
+        matches!(self, GripKind::WallFlip | GripKind::FlipFacing | GripKind::FlipHand | GripKind::GridBubble(_) | GripKind::GridExtents(_) | GripKind::GridLock(_) | GripKind::DimLock(_) | GripKind::DimEq | GripKind::SectionFlip)
     }
 }
 
@@ -106,13 +112,32 @@ pub fn grips(app: &App, view: &View, xf: &Xf) -> Vec<Grip> {
                     out.push(g(id, GripKind::Vertex(1), s.end));
                 }
                 ElementKind::Grid(gr) if plan_view => {
-                    // Model ends (hollow circles with their 3D extents label) and the bubble
-                    // checkboxes beyond them, along the grid.
-                    let d = (gr.end - gr.start).normalize_or_zero();
-                    out.push(Grip { id, kind: GripKind::GridEnd(true), pos: gr.start, dir: -d, on: false });
-                    out.push(Grip { id, kind: GripKind::GridEnd(false), pos: gr.end, dir: d, on: false });
-                    out.push(Grip { id, kind: GripKind::GridBubble(true), pos: gr.start - d * px(30.0), dir: d, on: gr.bubble_start });
-                    out.push(Grip { id, kind: GripKind::GridBubble(false), pos: gr.end + d * px(30.0), dir: d, on: gr.bubble_end });
+                    // Ends (hollow circles: model extents; filled: 2D extents in this view) with
+                    // their 3D/2D label, the bubble checkboxes beyond them along the grid, the
+                    // Add Elbow controls beside the bubbles and locks where ends align.
+                    let ext = gr.view_ext(view.id).cloned().unwrap_or_default();
+                    let gv = gr.in_view(view.id);
+                    let d = (gv.end - gv.start).normalize_or_zero();
+                    let n = geom::perp(d);
+                    let r = 6.0 * view.scale;
+                    for (s, pt, out_dir, two_d, bubble, elbow, lock) in [
+                        (true, gv.start, -d, ext.start.is_some(), gr.bubble_start, ext.elbow_start, gr.lock_start),
+                        (false, gv.end, d, ext.end.is_some(), gr.bubble_end, ext.elbow_end, gr.lock_end),
+                    ] {
+                        out.push(Grip { id, kind: GripKind::GridEnd(s), pos: pt, dir: out_dir, on: two_d });
+                        out.push(Grip { id, kind: GripKind::GridExtents(s), pos: pt + geom::perp(out_dir) * px(14.0) - out_dir * px(2.0), dir: out_dir, on: two_d });
+                        out.push(Grip { id, kind: GripKind::GridBubble(s), pos: pt + elbow.unwrap_or_default() + out_dir * (2.0 * r + px(12.0)), dir: d, on: bubble });
+                        if bubble {
+                            let at = match elbow {
+                                Some(o) => pt + o,
+                                None => pt + out_dir * r - n * (r + px(10.0)),
+                            };
+                            out.push(Grip { id, kind: GripKind::GridElbow(s), pos: at, dir: out_dir, on: elbow.is_some() });
+                        }
+                        if aligned_grids(p, id, s, view.id).len() > 0 {
+                            out.push(Grip { id, kind: GripKind::GridLock(s), pos: pt - out_dir * px(18.0) - geom::perp(out_dir) * px(12.0), dir: out_dir, on: lock });
+                        }
+                    }
                 }
                 ElementKind::Instance(i) if plan_view => {
                     if let Some(end) = i.end {
@@ -233,14 +258,24 @@ pub fn paint(painter: &egui::Painter, xf: &Xf, grips: &[Grip], hover: Option<&Gr
                 }
             }
             GripKind::GridEnd(_) => {
-                // Hollow end circle, and "3D" (the model extents) beside it.
-                let fill = if hot { Color32::from_rgb(120, 190, 255) } else { Color32::WHITE };
+                // Hollow for model (3D) extents, filled for 2D extents in this view.
+                let fill = if hot { Color32::from_rgb(120, 190, 255) } else if gr.on { style::SELECT } else { Color32::WHITE };
                 painter.circle(p, 4.5, fill, Stroke::new(1.5, style::SELECT));
-                let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
-                let side = vec2(-d.y, d.x);
-                let at = p + side * 14.0 - d * 2.0;
-                painter.text(at, egui::Align2::CENTER_CENTER, "3D", style::bold(10.0), style::SELECT);
             }
+            GripKind::GridExtents(_) => {
+                let c = if hot { style::PRESELECT } else { style::SELECT };
+                painter.text(p, egui::Align2::CENTER_CENTER, if gr.on { "2D" } else { "3D" }, style::bold(10.0), c);
+            }
+            GripKind::GridElbow(_) => {
+                // A small break symbol; with an elbow, a dot that drags the bubble aside.
+                let c = if hot { style::PRESELECT } else { style::SELECT };
+                if gr.on {
+                    painter.circle(p, 3.5, Color32::WHITE, Stroke::new(1.5, c));
+                } else {
+                    painter.add(egui::Shape::line(vec![p + vec2(-6.0, 3.0), p + vec2(-2.0, 3.0), p + vec2(2.0, -3.0), p + vec2(6.0, -3.0)], Stroke::new(1.5, c)));
+                }
+            }
+            GripKind::GridLock(_) => paint_lock(painter, p, gr.on, hot),
             GripKind::SectionDepth => {
                 let d = egui::vec2(gr.dir.x as f32, -gr.dir.y as f32);
                 let n = vec2(-d.y, d.x);
@@ -284,6 +319,36 @@ fn paint_lock(painter: &egui::Painter, p: Pos2, locked: bool, hot: bool) {
         })
         .collect();
     painter.add(egui::Shape::line(shackle, Stroke::new(1.2, c)));
+}
+
+/// Other straight grids parallel to `id` whose end lies on the same line across the grids as
+/// its start (`at_start`) or end: (grid, which end).
+pub fn aligned_grids(p: &Project, id: Id, at_start: bool, view: Id) -> Vec<(Id, bool)> {
+    let Some(ElementKind::Grid(g)) = p.element(id).map(|e| &e.kind) else { return vec![] };
+    if g.arc_mid.is_some() || !g.vertices.is_empty() {
+        return vec![];
+    }
+    let g = g.in_view(view);
+    let dir = (g.end - g.start).normalize_or_zero();
+    let end = if at_start { g.start } else { g.end };
+    let mut out = Vec::new();
+    for e in &p.elements {
+        let ElementKind::Grid(o) = &e.kind else { continue };
+        if e.id == id || o.arc_mid.is_some() || !o.vertices.is_empty() {
+            continue;
+        }
+        let o = o.in_view(view);
+        let od = (o.end - o.start).normalize_or_zero();
+        if od.perp_dot(dir).abs() > 1e-3 {
+            continue;
+        }
+        for (os, q) in [(true, o.start), (false, o.end)] {
+            if ((q - end).dot(dir)).abs() < 1.0 {
+                out.push((e.id, os));
+            }
+        }
+    }
+    out
 }
 
 /// Walls whose ends coincide with `pt` (joined there), excluding `skip`.
@@ -413,6 +478,27 @@ pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, 
                 }
                 return Ok(());
             }
+            // Locked grid ends drag the ends aligned with them along.
+            if let GripKind::GridEnd(s) = kind {
+                let locked = matches!(p.element(id).map(|e| &e.kind), Some(ElementKind::Grid(g)) if if s { g.lock_start } else { g.lock_end });
+                if locked {
+                    let Some(ElementKind::Grid(g)) = p.element(id).map(|e| e.kind.clone()) else { return Ok(()) };
+                    let old = if s { g.start } else { g.end };
+                    let dir = (g.end - g.start).normalize_or_zero();
+                    let shift = (pt - old).dot(dir);
+                    for (other, os) in aligned_grids(p, id, s, view_id) {
+                        if let Some(ElementKind::Grid(o)) = p.element_mut(other).map(|e| &mut e.kind) {
+                            let od = (o.end - o.start).normalize_or_zero();
+                            let sign = if od.dot(dir) >= 0.0 { 1.0 } else { -1.0 };
+                            if os {
+                                o.start += od * shift * sign;
+                            } else {
+                                o.end += od * shift * sign;
+                            }
+                        }
+                    }
+                }
+            }
             if let GripKind::LevelElevation = kind {
                 if let Some(ElementKind::Level(l)) = p.element_mut(id).map(|e| &mut e.kind) {
                     l.elevation = pt.y;
@@ -440,6 +526,27 @@ pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, 
                         s.start = pt
                     } else {
                         s.end = pt
+                    }
+                }
+                (ElementKind::Grid(gr), GripKind::GridEnd(s)) if gr.view_ext(view_id).is_some_and(|x| if *s { x.start.is_some() } else { x.end.is_some() }) => {
+                    let x = gr.view_ext_mut(view_id);
+                    if *s {
+                        x.start = Some(pt)
+                    } else {
+                        x.end = Some(pt)
+                    }
+                }
+                (ElementKind::Grid(gr), GripKind::GridElbow(s)) => {
+                    // The elbow's offset is the drag across the grid.
+                    let g2 = gr.in_view(view_id);
+                    let (end, dir) = if *s { (g2.start, (g2.start - g2.end).normalize_or_zero()) } else { (g2.end, (g2.end - g2.start).normalize_or_zero()) };
+                    let n = geom::perp(dir);
+                    let o = n * (pt - end).dot(n);
+                    let x = gr.view_ext_mut(view_id);
+                    if *s {
+                        x.elbow_start = Some(o)
+                    } else {
+                        x.elbow_end = Some(o)
                     }
                 }
                 (ElementKind::Grid(gr), GripKind::GridEnd(s)) => {
@@ -502,7 +609,32 @@ pub fn apply(app: &mut App, view: &View, id: Id, kind: &GripKind, start: DVec2, 
 }
 
 /// Click controls. Returns true when the click was consumed.
-pub fn click(app: &mut App, _view: &View, id: Id, kind: &GripKind) -> bool {
+pub fn click(app: &mut App, view: &View, id: Id, kind: &GripKind) -> bool {
+    let view_id = view.id;
+    // Add Elbow: a click adds the jog (an existing elbow drags instead).
+    if let GripKind::GridElbow(s) = kind {
+        let s = *s;
+        let has = matches!(app.el(id).map(|e| &e.kind), Some(ElementKind::Grid(g)) if g.view_ext(view_id).is_some_and(|x| if s { x.elbow_start.is_some() } else { x.elbow_end.is_some() }));
+        if has {
+            return false;
+        }
+        let off = 8.0 * view.scale;
+        app.run("Add Elbow", move |p| {
+            if let Some(ElementKind::Grid(g)) = p.element_mut(id).map(|e| &mut e.kind) {
+                let gv = g.in_view(view_id);
+                let d = (gv.end - gv.start).normalize_or_zero();
+                let o = -geom::perp(d) * off;
+                let x = g.view_ext_mut(view_id);
+                if s {
+                    x.elbow_start = Some(o)
+                } else {
+                    x.elbow_end = Some(o)
+                }
+            }
+            Ok(())
+        });
+        return true;
+    }
     if !kind.is_control() {
         return false;
     }
@@ -512,6 +644,8 @@ pub fn click(app: &mut App, _view: &View, id: Id, kind: &GripKind) -> bool {
         GripKind::FlipFacing => "Flip Facing",
         GripKind::FlipHand => "Flip Hand",
         GripKind::GridBubble(_) => "Show Bubble",
+        GripKind::GridExtents(_) => "Switch Extents",
+        GripKind::GridLock(_) => "Lock Alignment",
         GripKind::DimLock(_) => "Lock Dimension",
         GripKind::DimEq => "Equality Constraint",
         _ => "Flip Section",
@@ -524,6 +658,21 @@ pub fn click(app: &mut App, _view: &View, id: Id, kind: &GripKind) -> bool {
             match (&mut e.kind, &kind) {
                 (ElementKind::Instance(i), GripKind::FlipFacing) => i.flip_facing = !i.flip_facing,
                 (ElementKind::Instance(i), GripKind::FlipHand) => i.flip_hand = !i.flip_hand,
+                (ElementKind::Grid(g), GripKind::GridExtents(s)) => {
+                    // 3D -> 2D keeps the end where it is in this view; 2D -> 3D returns it to
+                    // the model extents.
+                    let model = if *s { g.start } else { g.end };
+                    let x = g.view_ext_mut(view_id);
+                    let cur = if *s { &mut x.start } else { &mut x.end };
+                    *cur = if cur.is_some() { None } else { Some(model) };
+                }
+                (ElementKind::Grid(g), GripKind::GridLock(s)) => {
+                    if *s {
+                        g.lock_start = !g.lock_start
+                    } else {
+                        g.lock_end = !g.lock_end
+                    }
+                }
                 (ElementKind::Grid(g), GripKind::GridBubble(s)) => {
                     if *s {
                         g.bubble_start = !g.bubble_start

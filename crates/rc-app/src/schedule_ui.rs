@@ -99,7 +99,9 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let ViewKind::Schedule(def) = &view.kind else { return };
     let Some(grid) = app.grid(view_id) else { return };
     let table = &grid.table;
-    let editable: Vec<bool> = table.columns.iter().map(|c| !c.def.read_only && !def.sheet_list && !def.keynote_legend && !def.material_takeoff).collect();
+    let key_schedule = def.key.is_some();
+    let editable: Vec<bool> = table.columns.iter().map(|c| key_schedule || (!c.def.read_only && !def.sheet_list && !def.keynote_legend && !def.material_takeoff)).collect();
+    let mut key_edits: Vec<(usize, String, String)> = Vec::new();
     let widths: Vec<f32> = grid.widths.iter().map(|w| *w as f32 * PX_PER_MM).collect();
     let total_w: f32 = widths.iter().sum::<f32>().max(200.0);
     let sel = selected_cells(app, view_id);
@@ -170,6 +172,11 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                 for c in &row.cells {
                     let x = xs.get(ci).copied().unwrap_or(origin.x);
                     let w: f32 = widths[ci.min(widths.len().saturating_sub(1))..(ci + c.span).min(widths.len())].iter().sum();
+                    if c.covered {
+                        ci += c.span;
+                        continue;
+                    }
+                    let h: f32 = grid.rows[ri..(ri + c.rowspan).min(grid.rows.len())].iter().map(|r| r.height as f32 * PX_PER_MM).sum::<f32>().max(h);
                     let cr = Rect::from_min_size(pos2(x, y), vec2(w.max(1.0), h));
                     if let Some(s) = c.shading {
                         p.rect_filled(cr, 0.0, Color32::from_rgb(s[0], s[1], s[2]));
@@ -177,13 +184,20 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                     if c.key != CellKey::Blank && sel.contains(&c.key) {
                         p.rect_filled(cr, 0.0, Color32::from_rgb(204, 228, 247));
                     }
-                    let border = match c.border {
+                    // Edges one by one: top, right, bottom, left.
+                    let stroke = |wt: u8| match wt {
                         0 => Stroke::NONE,
                         1 => Stroke::new(1.0, grid_line),
                         2 => Stroke::new(1.5, Color32::from_gray(90)),
                         _ => Stroke::new(2.5, Color32::from_gray(40)),
                     };
-                    p.rect_stroke(cr, 0.0, border, egui::StrokeKind::Inside);
+                    let cs = cr.shrink(0.5);
+                    for (k, (e0, e1)) in [(cs.left_top(), cs.right_top()), (cs.right_top(), cs.right_bottom()), (cs.right_bottom(), cs.left_bottom()), (cs.left_bottom(), cs.left_top())].iter().enumerate() {
+                        let st = stroke(c.edges[k]);
+                        if st.width > 0.0 {
+                            p.line_segment([*e0, *e1], st);
+                        }
+                    }
                     if let Some(t) = c.image.and_then(crate::images::texture) {
                         p.image(t, cr.shrink(2.0), Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)), Color32::WHITE);
                     }
@@ -220,7 +234,10 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                         if r.lost_focus() {
                             ui.memory_mut(|m| m.data.remove::<String>(key));
                             if text != c.text {
-                                cell_edits.push((row.ids[0], field.clone().unwrap_or_default(), text));
+                                match (key_schedule, row.table_row) {
+                                    (true, Some(tr)) => key_edits.push((tr, field.clone().unwrap_or_default(), text)),
+                                    _ => cell_edits.push((row.ids[0], field.clone().unwrap_or_default(), text)),
+                                }
                             }
                         }
                     } else {
@@ -236,7 +253,17 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
                                 (2, _) => (cr.right_center() - vec2(4.0, 0.0), egui::Align2::RIGHT_CENTER),
                                 _ => (cr.left_center() + vec2(4.0, 0.0), egui::Align2::LEFT_CENTER),
                             };
-                            let tr = p.text(at, align, &c.text, font.clone(), color);
+                            // Italic text goes through a layout job (the painter has no italics).
+                            let tr = if c.italic {
+                                let mut job = egui::text::LayoutJob::default();
+                                job.append(&c.text, 0.0, egui::TextFormat { font_id: font.clone(), color, italics: true, ..Default::default() });
+                                let galley = p.layout_job(job);
+                                let rect = align.anchor_size(at, galley.size());
+                                p.galley(rect.min, galley, color);
+                                rect
+                            } else {
+                                p.text(at, align, &c.text, font.clone(), color)
+                            };
                             if c.underline {
                                 p.line_segment([tr.left_bottom(), tr.right_bottom()], Stroke::new(1.0, color));
                             }
@@ -328,6 +355,24 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         if !ids.is_empty() {
             app.select(ids);
         }
+    }
+    if !key_edits.is_empty() {
+        let mut nv = view.clone();
+        if let ViewKind::Schedule(d) = &mut nv.kind {
+            if let Some(k) = &mut d.key {
+                for (r, f, v) in &key_edits {
+                    if let Some(row) = k.rows.get_mut(*r) {
+                        row.insert(f.clone(), v.clone());
+                    }
+                }
+            }
+        }
+        app.run("Edit Schedule", |p| {
+            if let Some(x) = p.view_mut(view_id) {
+                *x = nv;
+            }
+            Ok(())
+        });
     }
     if !cell_edits.is_empty() {
         app.run("Edit Schedule", |pr| {

@@ -19,12 +19,22 @@ pub enum SchedTool {
     Resize(Id, ResizeTarget, String),
     /// Edit Font: (view, style keys, font).
     Font(Id, Vec<String>, FontSpec),
-    /// Edit Borders: (view, style keys, line weight 1-3 or 0 for invisible).
-    Borders(Id, Vec<String>, u8),
+    /// Edit Borders: (view, style keys left to right, line weight, edits to apply).
+    Borders(Id, Vec<String>, u8, Vec<BorderEdit>),
     /// Shading: (view, style keys, colour).
     Shading(Id, Vec<String>, [u8; 3]),
     /// Split & Place: (view, sheet index, segments).
     Split(Id, usize, u32),
+}
+
+/// A border change in Edit Borders, applied on OK.
+#[derive(Clone, Copy, PartialEq)]
+pub enum BorderEdit {
+    None,
+    Outside(u8),
+    Inside(u8),
+    /// One outer edge of the selection: 0 top, 1 right, 2 bottom, 3 left.
+    Edge(usize, u8),
 }
 
 pub enum ResizeTarget {
@@ -105,7 +115,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> Option<bool> {
         SchedColDelete | SchedColHide | SchedColResize => !fields.is_empty(),
         SchedRowInsert | SchedRowInsertBelow => title_or_extra,
         SchedRowInsertAbove => matches!(first, Some(CellKey::Extra(..))),
-        SchedRowDelete => cells.iter().any(|c| matches!(c, CellKey::Extra(..))),
+        SchedRowDelete => cells.iter().any(|c| matches!(c, CellKey::Extra(..))) || (def.key.is_some() && cells.iter().any(|c| matches!(c, CellKey::Body(..)))),
         SchedRowResize => title_or_extra,
         SchedMerge => {
             let extra: Vec<&CellKey> = cells.iter().filter(|c| matches!(c, CellKey::Extra(..))).collect();
@@ -121,7 +131,7 @@ pub fn enabled(app: &App, cmd: Cmd) -> Option<bool> {
         SchedShading | SchedBorders | SchedReset | SchedFont | SchedAlignLeft | SchedAlignCenter | SchedAlignRight | SchedAlignVertical | SchedAlignTop | SchedAlignMiddle | SchedAlignBottom => cells.iter().any(|c| c.style_key().is_some()),
         SchedSplit => app.doc.data.views.iter().any(|x| matches!(x.kind, ViewKind::Sheet(_))) && app.cache.grids.get(&v.id).is_none_or(|g| g.table.rows.len() >= 2),
         // Data rows belong to key schedules, as in the reference app.
-        SchedRowInsertData => false,
+        SchedRowInsertData => def.key.is_some(),
         _ => false,
     })
 }
@@ -198,6 +208,36 @@ pub fn exec(app: &mut App, cmd: Cmd) -> bool {
                 }
             });
             app.sched_cells = Some((vid, vec![CellKey::Extra(at, 0)]));
+        }
+        SchedRowInsertData => {
+            modify(app, "Insert Data Row", |v| {
+                if let ViewKind::Schedule(d) = &mut v.kind {
+                    if let Some(k) = &mut d.key {
+                        // Keys number on from the highest so far.
+                        let next = k.rows.iter().filter_map(|r| r.get("Key Name").and_then(|x| x.parse::<u32>().ok())).max().unwrap_or(0) + 1;
+                        let mut row = std::collections::BTreeMap::new();
+                        row.insert("Key Name".to_string(), next.to_string());
+                        k.rows.push(row);
+                    }
+                }
+            });
+        }
+        SchedRowDelete if def.key.is_some() && !cells.iter().any(|c| matches!(c, CellKey::Extra(..))) => {
+            let mut rows: Vec<usize> = cells.iter().filter_map(|c| if let CellKey::Body(r, _) = c { Some(*r) } else { None }).collect();
+            rows.sort();
+            rows.dedup();
+            modify(app, "Delete Row", |v| {
+                if let ViewKind::Schedule(d) = &mut v.kind {
+                    if let Some(k) = &mut d.key {
+                        for r in rows.iter().rev() {
+                            if *r < k.rows.len() {
+                                k.rows.remove(*r);
+                            }
+                        }
+                    }
+                }
+            });
+            app.sched_cells = None;
         }
         SchedRowDelete => {
             let mut rows: Vec<usize> = cells.iter().filter_map(|c| if let CellKey::Extra(r, _) = c { Some(*r) } else { None }).collect();
@@ -340,7 +380,7 @@ pub fn exec(app: &mut App, cmd: Cmd) -> bool {
         SchedBorders => {
             let keys = style_keys(app, vid);
             let w = keys.first().and_then(|k| def.styles.get(k)).and_then(|s| s.border).unwrap_or(1);
-            app.dialogs.sched_tool = Some(SchedTool::Borders(vid, keys, w));
+            app.dialogs.sched_tool = Some(SchedTool::Borders(vid, keys, w, Vec::new()));
         }
         SchedFont => {
             let keys = style_keys(app, vid);
@@ -703,7 +743,7 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
             keep = !(ok || cancel);
             SchedTool::Font(vid, keys, f)
         }
-        SchedTool::Borders(vid, keys, mut w) => {
+        SchedTool::Borders(vid, keys, mut w, mut edits) => {
             let (mut ok, mut cancel) = (false, false);
             window("Edit Borders").open(&mut open).resizable(false).default_width(420.0).show(ctx, |ui| {
                 ui.horizontal_top(|ui| {
@@ -723,17 +763,57 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                         ui.label("Cell border:");
                         ui.horizontal(|ui| {
                             if ui.button("None").clicked() {
-                                w = 0;
+                                edits.push(BorderEdit::None);
                             }
-                            let _ = ui.button("Outside");
-                            let _ = ui.button("Inside");
+                            if ui.button("Outside").clicked() {
+                                edits.push(BorderEdit::Outside(w));
+                            }
+                            if ui.add_enabled(keys.len() > 1, egui::Button::new("Inside")).clicked() {
+                                edits.push(BorderEdit::Inside(w));
+                            }
                         });
-                        // A sample cell with the chosen border.
-                        let (r, _) = ui.allocate_exact_size(vec2(200.0, 100.0), egui::Sense::hover());
-                        ui.painter().rect_filled(r, 0.0, egui::Color32::WHITE);
-                        let s = [0.0, 1.0, 2.0, 3.0][w.min(3) as usize];
-                        ui.painter().rect_stroke(r.shrink(10.0), 0.0, egui::Stroke::new(s, egui::Color32::BLACK), egui::StrokeKind::Middle);
-                        ui.painter().text(r.center(), egui::Align2::CENTER_CENTER, "Text", style::font(11.0), egui::Color32::BLACK);
+                        // A sample of the selection's outer edges, with a button per edge.
+                        let mut sample = [1u8; 4];
+                        for e in &edits {
+                            match e {
+                                BorderEdit::None => sample = [0; 4],
+                                BorderEdit::Outside(x) => sample = [*x; 4],
+                                BorderEdit::Edge(k, x) => sample[*k] = *x,
+                                BorderEdit::Inside(_) => {}
+                            }
+                        }
+                        ui.horizontal(|ui| {
+                            ui.vertical(|ui| {
+                                if ui.small_button("Top").clicked() {
+                                    edits.push(BorderEdit::Edge(0, w));
+                                }
+                                ui.add_space(50.0);
+                                if ui.small_button("Bottom").clicked() {
+                                    edits.push(BorderEdit::Edge(2, w));
+                                }
+                            });
+                            let (r, _) = ui.allocate_exact_size(vec2(180.0, 100.0), egui::Sense::hover());
+                            let pt = ui.painter();
+                            pt.rect_filled(r, 0.0, egui::Color32::WHITE);
+                            let c = r.shrink(10.0);
+                            for (k, (a, b)) in [(c.left_top(), c.right_top()), (c.right_top(), c.right_bottom()), (c.right_bottom(), c.left_bottom()), (c.left_bottom(), c.left_top())].iter().enumerate() {
+                                let wdt = [0.0, 1.0, 2.0, 3.0][sample[k].min(3) as usize];
+                                if wdt > 0.0 {
+                                    pt.line_segment([*a, *b], egui::Stroke::new(wdt, egui::Color32::BLACK));
+                                }
+                            }
+                            pt.text(r.center(), egui::Align2::CENTER_CENTER, "Text", style::font(11.0), egui::Color32::BLACK);
+                        });
+                        ui.horizontal(|ui| {
+                            ui.add_space(40.0);
+                            if ui.small_button("Left").clicked() {
+                                edits.push(BorderEdit::Edge(3, w));
+                            }
+                            ui.add_space(110.0);
+                            if ui.small_button("Right").clicked() {
+                                edits.push(BorderEdit::Edge(1, w));
+                            }
+                        });
                     });
                 });
                 ui.add_space(4.0);
@@ -741,10 +821,55 @@ pub fn show(app: &mut App, ctx: &egui::Context) {
                 (ok, cancel) = ok_cancel(ui, true);
             });
             if ok {
-                set_styles(app, vid, "Edit Borders", &keys, |st| st.border = Some(w));
+                // Apply each change to the selected cells, left to right.
+                let all = edits.clone();
+                let n = keys.len();
+                let ks = keys.clone();
+                modify(app, "Edit Borders", |v| {
+                    if let ViewKind::Schedule(d) = &mut v.kind {
+                        for (i, k) in ks.iter().enumerate() {
+                            let st = d.styles.entry(k.clone()).or_default();
+                            let mut e = st.edges.unwrap_or([st.border.unwrap_or(1); 4]);
+                            for ed in &all {
+                                match *ed {
+                                    BorderEdit::None => e = [0; 4],
+                                    BorderEdit::Outside(x) => {
+                                        e[0] = x;
+                                        e[2] = x;
+                                        if i == 0 {
+                                            e[3] = x;
+                                        }
+                                        if i + 1 == n {
+                                            e[1] = x;
+                                        }
+                                    }
+                                    BorderEdit::Inside(x) => {
+                                        if i > 0 {
+                                            e[3] = x;
+                                        }
+                                        if i + 1 < n {
+                                            e[1] = x;
+                                        }
+                                    }
+                                    BorderEdit::Edge(k2, x) => {
+                                        let outer = match k2 {
+                                            1 => i + 1 == n,
+                                            3 => i == 0,
+                                            _ => true,
+                                        };
+                                        if outer {
+                                            e[k2] = x;
+                                        }
+                                    }
+                                }
+                            }
+                            st.edges = Some(e);
+                        }
+                    }
+                });
             }
             keep = !(ok || cancel);
-            SchedTool::Borders(vid, keys, w)
+            SchedTool::Borders(vid, keys, w, edits)
         }
         SchedTool::Shading(vid, keys, mut c) => {
             let (mut ok, mut cancel) = (false, false);

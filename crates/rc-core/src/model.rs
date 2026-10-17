@@ -62,6 +62,7 @@ pub enum Category {
     FabricAreas,
     FabricReinforcement,
     RebarCouplers,
+    BeamSystems,
 }
 
 impl Category {
@@ -243,6 +244,7 @@ impl Category {
             Category::FabricAreas => "Structural Fabric Areas",
             Category::FabricReinforcement => "Structural Fabric Reinforcement",
             Category::RebarCouplers => "Structural Rebar Couplers",
+            Category::BeamSystems => "Structural Beam Systems",
         }
     }
 
@@ -300,6 +302,7 @@ impl Category {
             Category::FabricAreas => "Structural Fabric Area",
             Category::FabricReinforcement => "Structural Fabric Reinforcement",
             Category::RebarCouplers => "Structural Rebar Coupler",
+            Category::BeamSystems => "Structural Beam System",
         }
     }
 
@@ -390,6 +393,8 @@ pub enum ElementKind {
     FabricSheet(FabricSheet),
     /// Structure > Rebar Coupler: couplers on the ends of a rebar set's bars.
     RebarCoupler(RebarCoupler),
+    /// Structure > Beam System: parallel beams at a fixed spacing across a boundary.
+    BeamSystem(BeamSystem),
     Railing(Railing),
     Shaft(Shaft),
     WallFoundation(WallFoundation),
@@ -461,6 +466,7 @@ impl Element {
             ElementKind::FabricArea(_) => Category::FabricAreas,
             ElementKind::FabricSheet(_) => Category::FabricReinforcement,
             ElementKind::RebarCoupler(_) => Category::RebarCouplers,
+            ElementKind::BeamSystem(_) => Category::BeamSystems,
             ElementKind::Railing(_) => Category::Railings,
             ElementKind::Shaft(_) => Category::ShaftOpenings,
             ElementKind::WallFoundation(_) => Category::StructuralFoundations,
@@ -576,9 +582,55 @@ pub struct Grid {
     /// Multi-segment grids: the bend points between start and end.
     #[serde(default)]
     pub vertices: Vec<DVec2>,
+    /// Per-view (2D) extents and elbows; ends without one use the model (3D) extents.
+    #[serde(default)]
+    pub views: Vec<GridViewExtents>,
+    /// Alignment locks: the end moves with the other grids' ends aligned with it.
+    #[serde(default)]
+    pub lock_start: bool,
+    #[serde(default)]
+    pub lock_end: bool,
+}
+
+/// A grid's 2D extents and bubble elbows in one view.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct GridViewExtents {
+    pub view: Id,
+    #[serde(default)]
+    pub start: Option<DVec2>,
+    #[serde(default)]
+    pub end: Option<DVec2>,
+    /// Elbow: the bubble's offset across the grid at that end.
+    #[serde(default)]
+    pub elbow_start: Option<DVec2>,
+    #[serde(default)]
+    pub elbow_end: Option<DVec2>,
 }
 
 impl Grid {
+    pub fn view_ext(&self, view: Id) -> Option<&GridViewExtents> {
+        self.views.iter().find(|v| v.view == view)
+    }
+    pub fn view_ext_mut(&mut self, view: Id) -> &mut GridViewExtents {
+        if let Some(k) = self.views.iter().position(|v| v.view == view) {
+            return &mut self.views[k];
+        }
+        self.views.push(GridViewExtents { view, ..Default::default() });
+        self.views.last_mut().unwrap()
+    }
+    /// The grid as shown in `view`: its 2D ends there, if any.
+    pub fn in_view(&self, view: Id) -> Grid {
+        let mut g = self.clone();
+        if let Some(x) = self.view_ext(view) {
+            if let Some(a) = x.start {
+                g.start = a;
+            }
+            if let Some(b) = x.end {
+                g.end = b;
+            }
+        }
+        g
+    }
     /// The grid line as drawn: arcs tessellated, multi-segment grids through their bends.
     pub fn polyline(&self) -> Vec<DVec2> {
         if let Some(a) = self.arc_mid.and_then(|m| crate::geom::Arc2::through(self.start, m, self.end)) {
@@ -2131,6 +2183,17 @@ pub struct ScheduleDef {
     /// Titles & Headers > Insert Image in the title cell.
     #[serde(default)]
     pub title_image: Option<Id>,
+    /// A key schedule (New Schedule > Schedule keys): its key rows.
+    #[serde(default)]
+    pub key: Option<KeyDef>,
+}
+
+/// A key schedule's key parameter and rows; each row maps field names (and "Key Name") to
+/// text. Elements choosing a key take the row's values.
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+pub struct KeyDef {
+    pub name: String,
+    pub rows: Vec<BTreeMap<String, String>>,
 }
 
 /// One part of a combined parameter.
@@ -2201,6 +2264,9 @@ pub struct CellStyle {
     /// Borders: line weight (0 none, 1 thin, 2 medium, 3 wide).
     #[serde(default)]
     pub border: Option<u8>,
+    /// Edge weights (top, right, bottom, left) where set one by one.
+    #[serde(default)]
+    pub edges: Option<[u8; 4]>,
     /// 0 left, 1 center, 2 right.
     #[serde(default)]
     pub halign: Option<u8>,
@@ -3066,6 +3132,19 @@ pub struct FabricSheet {
     pub center: DVec2,
     pub angle: f64,
     pub top: bool,
+}
+
+/// A beam system: beams of `beam_type` along `dir`, `spacing` apart across the boundary.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BeamSystem {
+    pub level: Id,
+    pub boundary: Vec<DVec2>,
+    pub dir: DVec2,
+    pub spacing: f64,
+    pub beam_type: Id,
+    /// The beams it made (regenerated when it changes).
+    #[serde(default)]
+    pub members: Vec<Id>,
 }
 
 /// Couplers at one end of every bar of a rebar set (joining `other`'s bars when placed

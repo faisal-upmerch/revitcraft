@@ -1531,6 +1531,17 @@ fn span_dir(sk: &Sketch) -> Option<DVec2> {
     (d != DVec2::ZERO).then_some(d)
 }
 
+/// Sketched points in a reinforcement's coordinates: plan points for floors, wall face points
+/// (sketched in a section or elevation) for walls.
+fn to_host_coords(app: &mut App, host: Id, view: Id, pts: Vec<DVec2>) -> Result<Vec<DVec2>, String> {
+    if !rc_core::rebar::is_wall_hosted(&app.doc.data, host) {
+        return Ok(pts);
+    }
+    let fp = app.footprints();
+    let v = app.doc.data.view(view).cloned().ok_or("View not found.")?;
+    pts.iter().map(|q| rc_core::section::to_wall_face(&app.doc.data, &v, host, *q, &fp).ok_or_else(|| String::from("Sketch wall reinforcement in a section or elevation of the wall."))).collect()
+}
+
 pub fn finish_sketch(app: &mut App) {
     let Some(sk) = app.sketch.clone() else { return };
     let o = app.opts.clone();
@@ -1543,7 +1554,7 @@ pub fn finish_sketch(app: &mut App) {
                 Ok(app.run("Create Grid", |p| edit::add_grid_path(p, path)))
             }
             SketchKind::PathReinforcement(host) => {
-                let path = sk.chain()?;
+                let path = to_host_coords(app, host, vid, sk.chain()?)?;
                 let spacing = o.rebar_spacing;
                 let length = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1828.8 } else { 1800.0 };
                 Ok(app.run("Create Path Reinforcement", |p| {
@@ -1552,7 +1563,9 @@ pub fn finish_sketch(app: &mut App) {
                     let at = (path[0] + path[1]) / 2.0;
                     let id = edit::add_path_reinforcement(p, host, path, bt, spacing, length)?;
                     // Its symbol and tag, as the reference app places them.
-                    edit::add_host_symbol(p, vid, SymbolKind::PathReinforcement, id, at)?;
+                    if !rc_core::rebar::is_wall_hosted(p, host) {
+                        edit::add_host_symbol(p, vid, SymbolKind::PathReinforcement, id, at)?;
+                    }
                     Ok(id)
                 }))
             }
@@ -1708,21 +1721,33 @@ pub fn finish_sketch(app: &mut App) {
                     SketchKind::Shaft => app.run("Create Shaft", |p| edit::add_shaft(p, level, outer)),
                     SketchKind::Callout => app.run("Create Callout", |p| edit::new_sketch_callout(p, vid, outer)),
                     SketchKind::CutProfile(host) => app.run("Cut Profile", |p| edit::add_cut_profile(p, vid, host, outer)),
-                    SketchKind::FabricArea(host) => app.run("Create Fabric Area", |p| edit::add_fabric_area(p, host, outer)),
+                    SketchKind::FabricArea(host) => {
+                        let outer = to_host_coords(app, host, vid, outer)?;
+                        app.run("Create Fabric Area", |p| edit::add_fabric_area(p, host, outer))
+                    }
                     SketchKind::AreaReinforcement(host) => {
+                        let outer = to_host_coords(app, host, vid, outer)?;
                         let spacing = o.rebar_spacing;
                         app.run("Create Area Reinforcement", |p| {
                             let types = rc_core::rebar::ensure_bar_types(p);
                             let bt = types.get(1).or(types.first()).copied().unwrap_or(0);
                             let at = rc_core::geom::centroid(&outer);
                             let id = edit::add_area_reinforcement(p, host, outer, bt, spacing)?;
-                            edit::add_host_symbol(p, vid, SymbolKind::AreaReinforcement, id, at)?;
+                            if !rc_core::rebar::is_wall_hosted(p, host) {
+                                edit::add_host_symbol(p, vid, SymbolKind::AreaReinforcement, id, at)?;
+                            }
                             Ok(id)
                         })
                     }
                     SketchKind::BeamSystem => {
                         let spacing = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 1828.8 } else { 1800.0 };
-                        app.run("Create Beam System", |p| edit::add_beam_system(p, o.beam_type, level, outer, spacing).map(|ids| ids[0]))
+                        let at = rc_core::geom::centroid(&outer);
+                        app.run("Create Beam System", |p| {
+                            let id = edit::add_beam_system(p, o.beam_type, level, outer, spacing)?;
+                            // Its symbol, as the reference app places it.
+                            edit::add_host_symbol(p, vid, SymbolKind::BeamSystem, id, at)?;
+                            Ok(id)
+                        })
                     }
                     SketchKind::Opening(host) => app.run("Create Opening", |p| if o.opening_by_face { edit::add_face_opening(p, host, outer) } else { edit::add_vertical_opening(p, host, outer) }),
                     SketchKind::Subdivide(host) => {
