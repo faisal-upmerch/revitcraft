@@ -5,6 +5,19 @@ Build verified: Arcus 1.0.0, development build `1.2609251653` (the `VERSION` fil
 
 This report records what was actually run and seen. Anything not verified is listed under **Limitations**.
 
+## RevitCraft port pass (2026-10-18)
+
+The Arcus codebase was brought into the `revitcraft` repository (`macos/`) and given RevitCraft's behaviour and features. [RevitCraftPort.md](RevitCraftPort.md) §5 lists each milestone and its known limits.
+
+| Check | Result |
+|---|---|
+| `swift test` | 1,618 tests in all suites pass, including Metal ↔ CoreGraphics parity (35) and 871 Domain tests |
+| Release build | 0 warnings; signed with the Apple Development certificate; installed to `/Applications/Arcus.app` by `script/build_and_run.sh` |
+| QA harness (`script/qa_capture.sh all`) | 99 of 99 checks pass, including the dialog audit (every dialog closes with Escape; this failed in the original Arcus) |
+| Ribbon | Each tab captured (`ribbon-<tab>-<appearance>`) and checked against RevitCraft's panel order |
+
+Limits of this pass: the feature batches were tested at model level and by the QA harness, and the new dialogs and tools were not walked through by hand. Known partial features are listed per milestone in RevitCraftPort.md.
+
 ## 0. This pass: Revit familiarity, Revit interop, Metal, UI polish (2026-09-25)
 
 What was done, and how it was checked:

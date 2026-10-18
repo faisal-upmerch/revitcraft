@@ -1,5 +1,3 @@
-  | Revit models and families via the Arcus Bridge add-in (`.arcusx`) | ✓ (native, editable elements and families; re-import updates in place) | | |
-  | RVT / RFA directly | only with a licensed ODA BimRv SDK build; otherwise Arcus shows the file's release and preview and explains the two routes that work | | |
 # Arcus
 
 Arcus is a native macOS app for architectural BIM authoring. You model levels, grids, walls, doors, windows, floors, roofs, ceilings, rooms, stairs, railings, columns, beams and components, and Arcus keeps plans, reflected ceiling plans, sections, elevations, 3D views, schedules and sheets coordinated with every change. It targets the everyday scope of a small-practice BIM tool. It is not a clone of any other product. People coming from Revit will find the conventions they know (ribbon tabs, contextual "Modify | Place" tabs, the Options Bar, the Properties palette with Type Selector and Edit Type, the Project Browser, two-letter shortcuts, temporary dimensions). Arcus does not open RVT or RFA files directly: models and families come in through an open exchange format written by a companion add-in, or through IFC (see [Revit interop](Docs/RevitInterop.md)).
@@ -9,6 +7,7 @@ Everything runs locally. Arcus makes no network connections, collects no analyti
 - **Platform:** macOS 26 or later on Apple silicon. It was built and verified on macOS 27 with Xcode 27 (Swift 6.4).
 - **Version:** see `VERSION` and `BUILD_NUMBER`. Development builds are stamped `1.<yyMMddHHmm>`.
 - **Status:** see [Docs/VerificationReport.md](Docs/VerificationReport.md) for what was built, tested and verified, and what is still limited.
+- **RevitCraft port:** this copy lives in the `revitcraft` repository and adopts RevitCraft's Revit-exact behaviour on Arcus's look. That covers Revit's tab and command names, ribbon structure, selection and snapping feedback, cursors, grips, and RevitCraft's features: structure and reinforcement, links and imports, spaces and masses, walkthroughs and rendering, Manage tools, schedule tools, DWFx/STL/gbXML/OBJ export and the full Family Editor. [Docs/RevitCraftPort.md](Docs/RevitCraftPort.md) lists every milestone and its known limits.
 
 ## Quick start
 
