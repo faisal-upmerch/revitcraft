@@ -149,7 +149,8 @@ extension ViewGraphicsBuilder {
     var modelCategories: Set<Category> {
         [.walls, .doors, .windows, .floors, .ceilings, .roofs, .stairs, .railings, .columns, .structuralColumns, .structuralFraming,
          .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .topography, .buildingPads, .parking, .ifcReference, .ramps,
-         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site] // W2-LIB
+         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
+         .linkedModels] // F67: linked models cut in sections and elevations with the host's elements
     }
 
     func visibleModelElements() -> [(Element, GraphicOverride)] {

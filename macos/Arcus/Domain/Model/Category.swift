@@ -45,6 +45,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F67 categories:
+    case linkedModels, coordinationModels, pointClouds, decals, decalTypes, dwfMarkups // F67
 
 
     // F810 categories:
@@ -84,6 +85,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .scopeBoxes, .projectBasePoint, .surveyPoint: return .datum // WP6a
         case .cameras: return .annotation // WP6a
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
+        case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
+        case .dwfMarkups: return .annotation // F67
+        case .decalTypes: return .internal_ // F67
         }
     }
 
@@ -192,6 +196,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site"
+        case .linkedModels: "Linked Models" // F67
+        case .coordinationModels: "Coordination Models"
+        case .pointClouds: "Point Clouds"
+        case .decals: "Decals"
+        case .decalTypes: "Decal Types"
+        case .dwfMarkups: "DWF Markups"
         }
     }
 
@@ -282,6 +292,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site Component"
+        case .linkedModels: "Linked Model" // F67
+        case .coordinationModels: "Coordination Model"
+        case .pointClouds: "Point Cloud"
+        case .decals: "Decal"
+        case .decalTypes: "Decal Type"
+        case .dwfMarkups: "DWF Markup"
         }
     }
 

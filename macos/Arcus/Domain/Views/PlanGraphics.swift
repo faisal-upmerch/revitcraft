@@ -24,6 +24,7 @@ struct PlanGraphics {
 
         if let u = data.underlayLevelID, u != levelID { items += underlay(u) }
         items += links()
+        items += LinkedGraphics.planItems(self) // F67: linked models, point clouds, decals
         items += walls(byCategory[.walls] ?? [])
         items += wp3Items(byCategory) // WP3: curtain walls, wall openings, shafts
         if builder.isCancelled() { return items }

@@ -191,6 +191,8 @@ public enum AnnotationRenderer {
             return nil
         case .colorFillLegend(let l):
             return colorFillLegend(e, l, model: model, scale: s, st: st)
+        case .markup(let m): // F67: DWF markups on sheets
+            return LinkedGraphics.markupItem(e, m)
         default:
             return nil
         }

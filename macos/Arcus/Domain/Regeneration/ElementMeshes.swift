@@ -36,6 +36,8 @@ public enum ElementMeshes {
             return [MeshPart(mesh: TopographyGeometry.mesh(e), materialID: e.topography?.materialID)] // W2-DWG: sub-region material
         case .referenceGeometry(let r):
             return [MeshPart(mesh: r.mesh, materialID: nil)]
+        case .linkedModel, .pointCloud, .decal: // F67
+            return LinkedGeometry.meshParts(e, model)
         default:
             return []
         }
@@ -55,6 +57,7 @@ public enum ElementMeshes {
     public static func hasModelGeometry(_ e: Element) -> Bool {
         switch e.data {
         case .wall, .insert, .component, .column, .beam, .slab, .roof, .stair, .railing, .topography, .referenceGeometry, .ramp: true
+        case .linkedModel, .pointCloud, .decal: true // F67
         default: false
         }
     }
@@ -78,6 +81,8 @@ public enum ElementMeshes {
         case .entourage: RGBColor(0.62, 0.66, 0.74)
         case .lightingFixtures: RGBColor(0.93, 0.92, 0.86)
         case .site: RGBColor(0.70, 0.70, 0.68)
+        case .pointClouds: RGBColor(0.36, 0.46, 0.62) // F67
+        case .coordinationModels: RGBColor(0.72, 0.74, 0.80, 0.9)
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }
@@ -202,6 +207,8 @@ public enum DependencyGraph {
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
+        case .decal(let d): // F67: the decal type's image
+            s.insert(d.decalTypeID)
         case .slab, .roof: // WP3: shafts cutting this element
             for sh in ShaftCuts.shafts(cutting: e, model) { s.insert(sh.id); if let l = sh.levelID { s.insert(l) }; if let t = sh.opening?.shaft?.topLevelID { s.insert(t) } }
         default:

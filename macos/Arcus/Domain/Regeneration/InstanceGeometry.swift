@@ -22,6 +22,10 @@ public struct MeshPart: Sendable {
     public var views: FamilyViewSet
     /// World plan direction of the family's front (+Y) axis, for front/back vs left/right visibility.
     public var frontAxis: Vec2?
+    /// F67: a display colour that replaces the material colour (linked models, point clouds, decal images).
+    public var color: RGBColor? = nil
+    /// F67: visual styles that show this part in 3D views (decal images show only in Realistic).
+    public var styles: MeshPartStyles = .all
     public init(mesh: Mesh, materialID: ElementID?, subcategory: FamilySubcategory = .general, views: FamilyViewSet = .all, frontAxis: Vec2? = nil) {
         self.mesh = mesh; self.materialID = materialID; self.subcategory = subcategory; self.views = views; self.frontAxis = frontAxis
     }
@@ -35,6 +39,18 @@ public struct MeshPart: Sendable {
         guard let f = frontAxis, d.lengthSquared > 0 else { return views.contains(.frontBack) || views.contains(.leftRight) }
         let dir = d.normalized
         return abs(dir.dot(f)) >= abs(dir.cross(f)) ? views.contains(.frontBack) : views.contains(.leftRight)
+    }
+}
+
+/// F67: which 3D visual styles show a mesh part.
+public enum MeshPartStyles: Sendable {
+    case all, realisticOnly, exceptRealistic
+    public func shows(realistic: Bool) -> Bool {
+        switch self {
+        case .all: true
+        case .realisticOnly: realistic
+        case .exceptRealistic: !realistic
+        }
     }
 }
 

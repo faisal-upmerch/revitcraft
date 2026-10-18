@@ -75,6 +75,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F67 commands:
+    case linkModel, linkIFC, linkTopography, dwfMarkup, placeDecal, decalTypes, pointCloud, coordinationModel, importGbXML, importPDF, importImage, loadAsGroup, insertViewsFromFile, insert2DElementsFromFile, transferProjectStandards
 
 
     // F810 commands:

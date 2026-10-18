@@ -26,12 +26,13 @@ nonisolated public enum SceneBuilder {
         let chunk = 32
         let chunks = (count + chunk - 1) / chunk
         let frozen = candidates
+        let realistic = data.visualStyle == .realistic // F67
         DispatchQueue.concurrentPerform(iterations: chunks) { c in
             if isCancelled() { return }
             let lo = c * chunk, hi = min(count, lo + chunk)
             for i in lo..<hi {
                 let (e, o) = frozen[i]
-                results.set(i, element(e, override: o, model: model, detail: detail, sectionBox: sectionBox))
+                results.set(i, element(e, override: o, model: model, detail: detail, sectionBox: sectionBox, realistic: realistic))
             }
         }
         if isCancelled() { return .empty }
@@ -40,13 +41,13 @@ nonisolated public enum SceneBuilder {
     }
 
     /// Builds one scene element (nil when it has no geometry or lies outside the section box).
-    nonisolated static func element(_ e: Element, override o: GraphicOverride, model: BIMModel, detail: DetailLevel, sectionBox: Box3?) -> SceneElement? {
+    nonisolated static func element(_ e: Element, override o: GraphicOverride, model: BIMModel, detail: DetailLevel, sectionBox: Box3?, realistic: Bool = false) -> SceneElement? {
         let parts = GeometryCache.shared.parts(e, model, detail: detail)
         var out: [ScenePart] = []
         out.reserveCapacity(parts.count)
         var bounds = Box3.empty
-        for p in parts where !p.mesh.isEmpty && p.isVisibleIn3D {
-            var c = color(for: p.materialID, category: e.category, model: model)
+        for p in parts where !p.mesh.isEmpty && p.isVisibleIn3D && p.styles.shows(realistic: realistic) { // F67: decal images in Realistic
+            var c = p.color ?? color(for: p.materialID, category: e.category, model: model) // F67: linked and point colours
             if let s = o.surfaceColor { c = RGBColor(s.r, s.g, s.b, c.a) }
             if let t = o.transparency { c.a = max(0.05, min(1, 1 - t)) }
             if o.halftone == true { c = c.mixed(with: RGBColor(1, 1, 1, c.a), amount: 0.5) }

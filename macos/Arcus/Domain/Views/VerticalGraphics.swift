@@ -94,6 +94,7 @@ struct VerticalGraphics {
         }
         items += colorFills(fr)
         items += wallOpeningItems(fr) // WP3: selectable wall openings
+        items += LinkedGraphics.verticalItems(self, fr) // F67: point clouds and decals
         // Datums.
         var extents = Rect2.empty
         for i in items { extents.include(i.bounds) }
