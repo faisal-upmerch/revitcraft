@@ -210,6 +210,8 @@ struct ExportPlan {
         case (.ifcReference, .referenceGeometry(let r)): return .export(.reference(r.ifcType))
         case (.modelGroups, .group): return .export(.group)
         case (.importedCAD, _): return .skip("Imported CAD geometry is not exported.")
+        case (.linkedModels, _), (.coordinationModels, _), (.pointClouds, _): return .skip("Linked models and point clouds are references and are not exported.") // F67
+        case (.decals, _): return .skip("Decals are images for rendering and are not exported.") // F67
         case (.wallOpenings, _): return .ignore // WP3: exported as IfcOpeningElement voids of their host wall
         case (.reveals, _): return .ignore // F1: the groove is part of the host wall's body
         case (.shaftOpenings, _): return .skip("Shaft openings are exported as holes in the floors, ceilings and roofs they cut.") // WP3

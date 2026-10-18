@@ -194,6 +194,8 @@ public enum AnnotationRenderer {
             return colorFillLegend(e, l, model: model, scale: s, st: st)
         case .structuralSymbol(let sym): // F34
             return StructuralSymbolGraphics.item(e, sym, model: model, scale: s, st: st)
+        case .markup(let m): // F67: DWF markups on sheets
+            return LinkedGraphics.markupItem(e, m)
         default:
             return nil
         }

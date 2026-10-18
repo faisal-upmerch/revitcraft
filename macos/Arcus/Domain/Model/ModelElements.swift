@@ -474,6 +474,8 @@ public struct LinkData: Hashable, Codable, Sendable {
     public var page: String?
     public var lastLoaded: Date?
     public var sourceModified: Date?
+    /// F67: the picture itself for Import Image / Import PDF (imports keep their content in the project).
+    public var embeddedData: Data? = nil
     public init(format: LinkFormat, isLinked: Bool, sourcePath: String, sourceName: String, contentKey: String, placement: Transform2 = .identity) {
         self.format = format; self.isLinked = isLinked; self.bookmark = nil; self.sourcePath = sourcePath; self.sourceName = sourceName
         self.contentKey = contentKey; self.placement = placement; self.elevationOffset = 0; self.layers = []; self.isLoaded = true

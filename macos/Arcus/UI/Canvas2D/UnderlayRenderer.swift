@@ -55,6 +55,7 @@ enum UnderlayRenderer {
     }
 
     private static func image(_ l: LinkData) -> CGImage? {
+        if let d = l.embeddedData { return embedded(d) } // F67: Import Image / Import PDF
         if let i = imageCache[l.sourcePath] { return i }
         guard let u = url(l) else { return nil }
         let access = u.startAccessingSecurityScopedResource()
@@ -72,5 +73,29 @@ enum UnderlayRenderer {
         ctx.move(to: r.origin); ctx.addLine(to: CGPoint(x: r.maxX, y: r.maxY)); ctx.strokePath()
     }
 
-    static func purge() { pdfCache.removeAll(); imageCache.removeAll() }
+    static func purge() { pdfCache.removeAll(); imageCache.removeAll(); embeddedCache.removeAll() }
+
+    // F67: pictures stored in the project (imported images and PDF pages, DWF markup pictures), keyed by content.
+    private static var embeddedCache: [Data: CGImage] = [:]
+    static func embedded(_ d: Data) -> CGImage? {
+        if let i = embeddedCache[d] { return i }
+        guard let src = CGImageSourceCreateWithData(d as CFData, nil), let img = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
+        if embeddedCache.count > 64 { embeddedCache.removeAll() }
+        embeddedCache[d] = img
+        return img
+    }
+
+    /// F67: the pictures of DWF markups on a sheet, drawn under the display list like underlays.
+    static func drawMarkupPictures(for viewID: ElementID, model: BIMModel, in ctx: CGContext, viewToDevice: CGAffineTransform) {
+        for e in model.owned(byView: viewID) {
+            guard let m = e.markup, m.isLoaded else { continue }
+            for p in m.pictures {
+                guard let img = embedded(p.image) else { continue }
+                ctx.saveGState()
+                ctx.concatenate(viewToDevice)
+                ctx.draw(img, in: CGRect(x: p.bounds.min.x + m.offset.x, y: p.bounds.min.y + m.offset.y, width: p.bounds.width, height: p.bounds.height))
+                ctx.restoreGState()
+            }
+        }
+    }
 }

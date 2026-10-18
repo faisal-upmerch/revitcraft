@@ -64,6 +64,11 @@ struct RibbonItem: Hashable {
         case .typeProperties: return size == .large ? "Type\nProperties" : "Type Properties"
         case .roomSeparator: return "Room Separator"
         case .areaBoundary: return "Area Boundary"
+        case .placeDecal where split: return "Decal" // F67
+        case .insertViewsFromFile where split: return size == .large ? "Insert\nfrom File" : "Insert from File" // F67
+        case .loadAsGroup where size == .large: return "Load as\nGroup" // F67
+        case .linkModel where size == .large: return "Link\nModel" // F67
+        case .linkIFC where size == .large: return "Link\nIFC" // F67
         default: break
         }
         let title = CommandCatalog.info(id).title
@@ -160,10 +165,16 @@ enum RibbonContent {
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .insert:
+            // F67: RevitCraft's Insert tab (ribbon.rs insert()): Link Model, Link IFC and Link CAD large, the other links stacked.
             return [RibbonPanel(title: "Manage", items: [.large(.manageLinks)], tint: build),
-                    RibbonPanel(title: "Link", items: [.large(.linkCAD), .small(.linkPDF), .small(.linkImage)], tint: build), // BL-SCHED: one Link CAD with a format picker
-                    RibbonPanel(title: "Import", items: [.large(.importCAD), .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
-                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
+                    RibbonPanel(title: "Link", items: [.large(.linkModel), .large(.linkIFC), .large(.linkCAD), // BL-SCHED: one Link CAD with a format picker
+                                                       .small(.linkTopography), .small(.dwfMarkup), .small(.placeDecal, [.placeDecal, .decalTypes]),
+                                                       .small(.pointCloud), .small(.coordinationModel), .small(.linkPDF), .small(.linkImage)], tint: build),
+                    RibbonPanel(title: "Import", items: [.large(.importCAD), .small(.importGbXML), .small(.importPDF), .small(.importImage),
+                                                         .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
+                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .large(.loadAsGroup),
+                                                                    .large(.insertViewsFromFile, [.insertViewsFromFile, .insert2DElementsFromFile]),
+                                                                    .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
         case .annotate:
             // W2-ANNOT: organised like the reference tool's Annotate tab. MEP-only items (duct and pipe legends, space
             // tags) are left out: Arcus has no MEP systems.

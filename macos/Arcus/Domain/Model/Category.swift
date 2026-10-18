@@ -46,6 +46,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F67 categories:
+    case linkedModels, coordinationModels, pointClouds, decals, decalTypes, dwfMarkups // F67
 
 
     // F810 categories:
@@ -88,6 +89,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, .beamSystems: return .model // F34
         case .structuralSettings: return .internal_ // F34
         case .reveals: return .model // F1
+        case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
+        case .dwfMarkups: return .annotation // F67
+        case .decalTypes: return .internal_ // F67
         }
     }
 
@@ -206,6 +210,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .beamSystems: "Structural Beam Systems"
         case .structuralSettings: "Structural Settings"
         case .reveals: "Reveals" // F1
+        case .linkedModels: "Linked Models" // F67
+        case .coordinationModels: "Coordination Models"
+        case .pointClouds: "Point Clouds"
+        case .decals: "Decals"
+        case .decalTypes: "Decal Types"
+        case .dwfMarkups: "DWF Markups"
         }
     }
 
@@ -305,6 +315,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .beamSystems: "Structural Beam System"
         case .structuralSettings: "Structural Settings"
         case .reveals: "Reveal" // F1
+        case .linkedModels: "Linked Model" // F67
+        case .coordinationModels: "Coordination Model"
+        case .pointClouds: "Point Cloud"
+        case .decals: "Decal"
+        case .decalTypes: "Decal Type"
+        case .dwfMarkups: "DWF Markup"
         }
     }
 

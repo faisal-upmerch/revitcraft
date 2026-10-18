@@ -8,7 +8,7 @@ public enum ElementOperations {
     public static func dependentsToCarry(_ ids: Set<ElementID>, _ model: BIMModel, viewID: ElementID?) -> Set<ElementID> {
         var out = ids
         for id in ids {
-            for h in model.hosted(by: id) where h.insert != nil || h.railing != nil || h.opening != nil { out.insert(h.id) }
+            for h in model.hosted(by: id) where h.insert != nil || h.railing != nil || h.opening != nil || h.decal != nil { out.insert(h.id) } // F67: decals
             for t in model.tags(of: id) where t.ownerViewID == viewID || viewID == nil { out.insert(t.id) }
         }
         return out
