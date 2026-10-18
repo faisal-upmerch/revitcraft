@@ -242,6 +242,33 @@ struct ModifyToolsTests {
         #expect(ctx.model[d]?.hostID == w && Fx.approx(ctx.model[d]!.insert!.location, Vec2(4, 0)))
     }
 
+    /// I3: Graphical offset, as in RevitCraft: pick the wall, then two points; their distance across it is the offset.
+    @Test func graphicalOffsetTakesTheDistanceBetweenTwoPicks() {
+        let (ctx, ids) = context()
+        let (w, _) = wallWithDoor(ctx, ids)
+        let tool = OffsetTool(ctx: ctx)
+        #expect(!tool.graphical, "Numerical by default, as in RevitCraft")
+        tool.setOption("mode", .text("Graphical"))
+        #expect(tool.numericLabel == nil && !tool.options.contains { $0.id == "distance" })
+        click(tool, Vec2(5, 0.05), hit: w)
+        click(tool, Vec2(6, 1))
+        click(tool, Vec2(7, 3.5))       // 2.5 m across the wall, whatever the run along it
+        let copy = ctx.model.elements(.walls).first { $0.id != w }
+        #expect(copy != nil && Fx.approx(copy!.wall!.location.start.y, 2.5))
+        #expect(tool.escape() == .exitTool, "the tool starts over after each offset")
+    }
+
+    /// I3: Align's RevitCraft options: Multiple Alignment (off) and Prefer (wall centerlines), alongside Lock.
+    @Test func alignOffersMultipleAlignmentAndPrefer() {
+        let (ctx, _) = context()
+        let tool = AlignTool(ctx: ctx)
+        #expect(tool.options.map(\.id) == ["multiple", "prefer", "lock"])
+        #expect(!tool.multiple && tool.prefer == .centers)
+        tool.setOption("prefer", .text("Faces of core"))
+        tool.setOption("multiple", .bool(true))
+        #expect(tool.prefer == .coreFaces && tool.multiple)
+    }
+
     @Test func offsetWithoutCopyMovesTheDoorWithTheWall() {
         let (ctx, ids) = context()
         let (w, d) = wallWithDoor(ctx, ids)

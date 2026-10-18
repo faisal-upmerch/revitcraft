@@ -52,8 +52,17 @@ public final class MoveCopyTool: BaseTool, InteractiveTool {
         guard let b = base, let c = current else { return }
         let t = Transform2.translation(c - b)
         preview.primitives = ghost(ids, t)
-        preview.primitives.append(ctx.line(b, c))
-        preview.tempDims = [tempDim(b, c)]
+        // I3: as in RevitCraft: a dashed box around what moves, a thin blue rubber band, its length and angle.
+        preview.movedBox = movedBounds(preview.primitives)
+        preview.rubberBand = Segment2(b, c)
+        preview.tempDims = [tempDim(b, c), angleDim(b, c)]
+    }
+
+    /// Bounds of the ghost outlines (view units).
+    func movedBounds(_ prims: [GPrimitive]) -> Rect2? {
+        var pts: [Vec2] = []
+        for p in prims { if case .polyline(let q, _, _) = p { pts += q } }
+        return pts.isEmpty ? nil : Rect2(points: pts)
     }
 
     /// Outline ghosts of the moved elements.
@@ -462,22 +471,52 @@ public final class ScaleTool: BaseTool, InteractiveTool {
 }
 
 /// Align: pick a reference line, then an element edge to align to it. Option to lock (creates an alignment constraint).
+/// I3: as in RevitCraft, Multiple Alignment keeps the reference for further picks (otherwise each alignment starts
+/// over), and Prefer chooses which line of a wall a pick takes: centerline, faces, core centre or core faces.
 @MainActor
 public final class AlignTool: BaseTool, InteractiveTool {
+    public enum Prefer: String, CaseIterable, Sendable {
+        case centers = "Wall centerlines", faces = "Wall faces", coreCenter = "Center of core", coreFaces = "Faces of core"
+    }
     public let commandID = CommandID.align
     public let title = "Align"
     var reference: (Segment2, ElementID?)?
     public var lock = false
+    public var multiple = false
+    public var prefer = Prefer.centers
     public var prompt: String { reference == nil ? "Click the reference line to align to." : "Click the line or edge to move into alignment." }
-    public var options: [ToolOption] { [ToolOption(id: "lock", label: "Lock", kind: .bool, value: .bool(lock))] }
-    public func setOption(_ id: String, _ value: ParamValue) { if id == "lock" { lock = value.boolValue ?? false } }
+    public var options: [ToolOption] {
+        [ToolOption(id: "multiple", label: "Multiple Alignment", kind: .bool, value: .bool(multiple)),
+         ToolOption(id: "prefer", label: "Prefer", kind: .choice(Prefer.allCases.map(\.rawValue)), value: .text(prefer.rawValue)),
+         ToolOption(id: "lock", label: "Lock", kind: .bool, value: .bool(lock))]
+    }
+    public func setOption(_ id: String, _ value: ParamValue) {
+        if id == "lock" { lock = value.boolValue ?? false }
+        if id == "multiple" { multiple = value.boolValue ?? false }
+        if id == "prefer", let p = value.textValue.flatMap(Prefer.init(rawValue:)) { prefer = p }
+    }
+    /// The line a pick takes: on a straight wall, the preferred one of its lines (the nearer face for faces).
+    func pick(_ p: Vec2) -> (Segment2, ElementID?)? {
+        guard let (seg, id) = ctx.snapIndex.nearestSegment(p, radius: ctx.pixel * 8) else { return nil }
+        guard let id, let e = ctx.model[id], e.wall != nil, let f = WallGeometry.frame(e, ctx.model), f.isStraight else { return (seg, id) }
+        let a = f.assembly
+        let offsets: [Double]
+        switch prefer {
+        case .centers: offsets = [f.centerOffset]
+        case .faces: offsets = [f.exteriorOffset, f.interiorOffset]
+        case .coreCenter: offsets = [f.offset(fromExterior: a.exteriorToCore + a.coreThickness / 2)]
+        case .coreFaces: offsets = [f.offset(fromExterior: a.exteriorToCore), f.offset(fromExterior: a.exteriorToCore + a.coreThickness)]
+        }
+        let lines = offsets.compactMap { f.location.offset(by: $0).asSegment }
+        return lines.min { $0.distance(to: p) < $1.distance(to: p) }.map { ($0, id) } ?? (seg, id)
+    }
     public func pointerMoved(_ i: ToolInput) {
         preview = ToolPreview()
         if let r = reference { preview.primitives.append(ctx.line(r.0.start, r.0.end, heavy: true)) }
-        if let (s, _) = ctx.snapIndex.nearestSegment(i.point, radius: ctx.pixel * 8) { preview.primitives.append(ctx.line(s.start, s.end)); preview.cursor = .pick }
+        if let (s, _) = pick(i.point) { preview.primitives.append(ctx.line(s.start, s.end)); preview.cursor = .pick }
     }
     public func pointerDown(_ i: ToolInput) {
-        guard let (seg, id) = ctx.snapIndex.nearestSegment(i.point, radius: ctx.pixel * 8) else { message("Click a line or edge."); return }
+        guard let (seg, id) = pick(i.point) else { message("Click a line or edge."); return }
         guard let (ref, refID) = reference else { reference = (seg, id); return }
         guard let moveID = id, moveID != refID else { message("Pick an element's edge to move."); return }
         guard ref.isParallel(to: seg) else { message("The lines must be parallel to align them."); return }
@@ -493,25 +532,39 @@ public final class AlignTool: BaseTool, InteractiveTool {
             }
         }
         if let e = ctx.session.lastError { message(e.message) }
+        if !multiple { reference = nil }
     }
     public func escape() -> EscapeResult { if reference != nil { reference = nil; return .stayInTool }; return .exitTool }
 }
 
-/// Offset: copies (or moves) a wall/line parallel by a distance toward the cursor side.
+/// Offset: copies (or moves) a wall/line parallel to itself. Numerical: by the typed distance toward the cursor side.
+/// I3: Graphical, as in RevitCraft: pick the element, then two points; their distance across it is the offset.
 @MainActor
 public final class OffsetTool: BaseTool, InteractiveTool {
     public let commandID = CommandID.offset
     public let title = "Offset"
     public var distance = 1.0
     public var copy = true
-    public var prompt: String { "Click a wall or line to offset it \(ctx.format(distance)) toward the cursor side." }
-    public var numericLabel: String? { "Offset" }
+    public var graphical = false
+    var picked: (Element, Curve2)?
+    var firstPoint: Vec2?
+    public var prompt: String {
+        guard graphical else { return "Click a wall or line to offset it \(ctx.format(distance)) toward the cursor side." }
+        if picked == nil { return "Click the wall or line to offset." }
+        return firstPoint == nil ? "Click the first point of the offset distance." : "Click the second point: its distance across the element is the offset."
+    }
+    public var numericLabel: String? { graphical ? nil : "Offset" }
+    public var snapFrom: Vec2? { firstPoint }
     public var options: [ToolOption] {
-        [ToolOption(id: "distance", label: "Offset", kind: .length, value: .double(distance)), ToolOption(id: "copy", label: "Copy", kind: .bool, value: .bool(copy))]
+        var o = [ToolOption(id: "mode", label: "Offset", kind: .choice(["Graphical", "Numerical"]), value: .text(graphical ? "Graphical" : "Numerical"))]
+        if !graphical { o.append(ToolOption(id: "distance", label: "Distance", kind: .length, value: .double(distance))) }
+        o.append(ToolOption(id: "copy", label: "Copy", kind: .bool, value: .bool(copy)))
+        return o
     }
     public func setOption(_ id: String, _ value: ParamValue) {
         if id == "distance", let d = value.doubleValue, d > 0 { distance = d }
         if id == "copy" { copy = value.boolValue ?? true }
+        if id == "mode" { graphical = value.textValue == "Graphical"; picked = nil; firstPoint = nil; preview = ToolPreview() }
     }
     func target(_ i: ToolInput) -> (Element, Curve2, Double)? {
         for id in [i.hit].compactMap({ $0 }) + i.hitCandidates {
@@ -521,28 +574,58 @@ public final class OffsetTool: BaseTool, InteractiveTool {
         }
         return nil
     }
+    /// Graphical: the signed offset from the first point to `p`, across the picked element.
+    func graphicalDistance(_ c: Curve2, _ p: Vec2) -> Double? {
+        guard let f = firstPoint else { return nil }
+        return c.normal(at: 0.5).dot(p - f)
+    }
     public func pointerMoved(_ i: ToolInput) {
         preview = ToolPreview()
-        guard let (_, c, side) = target(i) else { preview.cursor = .notAllowed; return }
+        if graphical, let (e, c) = picked {
+            preview.highlight = [e.id]
+            guard let f = firstPoint, let d = graphicalDistance(c, i.point), abs(d) > Tolerance.length else { return }
+            preview.primitives = [.polyline(c.offset(by: d).tessellate(chordTolerance: 0.01), closed: false, ctx.previewHeavy)]
+            preview.tempDims = [tempDim(f, f + c.normal(at: 0.5) * d)]
+            return
+        }
+        guard let (e, c, side) = target(i) else { preview.cursor = .notAllowed; return }
+        if graphical { preview.highlight = [e.id]; preview.cursor = .pick; return }
         let o = c.offset(by: distance * side)
         preview.primitives = [.polyline(o.tessellate(chordTolerance: 0.01), closed: false, ctx.previewHeavy)]
         preview.cursor = .pick
     }
     public func pointerDown(_ i: ToolInput) {
+        if graphical {
+            guard let (e, c) = picked else {
+                if let (e, c, _) = target(i) { picked = (e, c) } else { message("Click a wall or line.") }
+                return
+            }
+            guard firstPoint != nil else { firstPoint = i.point; return }
+            guard let d = graphicalDistance(c, i.point), abs(d) > Tolerance.length else { return }
+            apply(e.id, d)
+            picked = nil; firstPoint = nil; preview = ToolPreview()
+            return
+        }
         guard let (e, _, side) = target(i) else { return }
-        let d = distance * side
+        apply(e.id, distance * side)
+    }
+    func apply(_ id: ElementID, _ d: Double) {
         let view = ctx.viewID
         let isCopy = copy
         // Doors and windows in an offset wall go with it (copied onto the new wall, or moved with the wall).
-        ctx.session.perform("Offset") { tx in try ElementOperations.offset(e.id, by: d, copy: isCopy, in: tx, viewID: view) }
+        ctx.session.perform("Offset") { tx in try ElementOperations.offset(id, by: d, copy: isCopy, in: tx, viewID: view) }
         if let err = ctx.session.lastError { message(err.message) }
     }
     public func numericInput(_ text: String) -> Bool {
-        guard let d = ctx.parse(text), d > 0 else { return false }
+        guard !graphical, let d = ctx.parse(text), d > 0 else { return false }
         distance = d
         return true
     }
-    public func escape() -> EscapeResult { .exitTool }
+    public func escape() -> EscapeResult {
+        if firstPoint != nil { firstPoint = nil; return .stayInTool }
+        if picked != nil { picked = nil; preview = ToolPreview(); return .stayInTool }
+        return .exitTool
+    }
 }
 
 /// Trim/Extend: corner (two picks), single (boundary then element), multiple (boundary then elements).

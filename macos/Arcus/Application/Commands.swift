@@ -91,8 +91,8 @@ public enum CommandCatalog {
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),
         CommandInfo(.selectAll, "Select All", .modify, "checklist", shortcut: "⌘A", help: "Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension."), // BL-KEYS
-        CommandInfo(.selectAllInstancesInView, "Select All Instances: Visible in View", .modify, "square.stack.3d.up", help: "Select every instance of the selected type visible in the view."), // BL-KEYS: SA moved to In Project
-        CommandInfo(.selectAllInstancesInProject, "Select All Instances: In Entire Project", .modify, "square.stack.3d.up.fill", aliases: ["SA"], help: "Select every instance of the selected type in the project."), // BL-KEYS
+        CommandInfo(.selectAllInstancesInView, "Select All Instances: Visible in View", .modify, "square.stack.3d.up", aliases: ["SA"], help: "Select every instance of the selected type visible in the view."), // I3: SA is Visible in View, as in RevitCraft
+        CommandInfo(.selectAllInstancesInProject, "Select All Instances: In Entire Project", .modify, "square.stack.3d.up.fill", help: "Select every instance of the selected type in the project."), // BL-KEYS
         CommandInfo(.selectByCategory, "Select by Category…", .modify, "line.3.horizontal.decrease.circle", help: "Select all visible elements of chosen categories."),
         CommandInfo(.filterSelection, "Filter Selection…", .modify, "line.3.horizontal.decrease", help: "Keep only chosen categories in the selection."),
         CommandInfo(.move, "Move", .modify, "arrow.up.and.down.and.arrow.left.and.right", aliases: ["MV"], help: "Move selected elements by picking two points or typing a distance."),
@@ -111,13 +111,13 @@ public enum CommandCatalog {
         CommandInfo(.unpin, "Unpin", .modify, "pin.slash", aliases: ["UP"], help: "Allow selected elements to move."),
         CommandInfo(.delete, "Delete", .modify, "trash", shortcut: "⌫", aliases: ["DE"], help: "Delete the selection and dependent elements."),
         CommandInfo(.matchType, "Match Type Properties", .modify, "paintbrush.pointed", aliases: ["MA"], help: "Apply the type of a source element to other elements."),
-        CommandInfo(.paint, "Paint", .modify, "paintbrush", help: "Apply a material to an element's surfaces (stored as an element material override)."),
+        CommandInfo(.paint, "Paint", .modify, "paintbrush", aliases: ["PT"], help: "Apply a material to an element's surfaces (stored as an element material override)."),
         CommandInfo(.removePaint, "Remove Paint", .modify, "paintbrush.fill", help: "Remove painted material overrides."),
         CommandInfo(.joinGeometry, "Allow Join", .modify, "link", help: "Allow the selected walls to join at their ends."),
         CommandInfo(.unjoinGeometry, "Disallow Join", .modify, "link.badge.plus", help: "Stop the selected walls joining at their ends."),
         CommandInfo(.createGroup, "Create Group", .modify, "square.on.square.dashed", aliases: ["GP"], help: "Group the selected elements."),
-        CommandInfo(.ungroup, "Ungroup", .modify, "square.on.square.intersection.dashed", help: "Dissolve the selected group."),
-        CommandInfo(.editGroup, "Edit Group", .modify, "pencil.and.outline", help: "Edit the members of a group; changes apply to every instance of the group type."),
+        CommandInfo(.ungroup, "Ungroup", .modify, "square.on.square.intersection.dashed", aliases: ["UG"], help: "Dissolve the selected group."),
+        CommandInfo(.editGroup, "Edit Group", .modify, "pencil.and.outline", aliases: ["EG"], help: "Edit the members of a group; changes apply to every instance of the group type."),
         CommandInfo(.finishEditGroup, "Finish Group", .modify, "checkmark.circle", help: "Finish editing the group."),
         CommandInfo(.flipFacing, "Flip Facing", .modify, "arrow.up.arrow.down", help: "Flip the facing of doors and windows."),
         CommandInfo(.flipHand, "Flip Hand", .modify, "arrow.left.arrow.right", help: "Flip the hand (hinge side) of doors and windows."),
@@ -347,7 +347,7 @@ public enum CommandCatalog {
         CommandInfo(.addShapePoint, "Add Point", .modify, "plus.viewfinder", help: "Add shape-editing points to a floor or flat roof at an elevation offset.", keywords: ["shape editing", "drainage", "falls"]),
         CommandInfo(.resetShape, "Reset Shape", .modify, "arrow.counterclockwise.circle", help: "Remove shape editing from the selected floors and roofs."),
         CommandInfo(.attachWallsToHost, "Attach Walls", .modify, "rectangle.connected.to.line.below", help: "Attach the walls below the selected roof or floor to its underside."),
-        CommandInfo(.joinSolids, "Join Geometry", .modify, "square.fill.on.square.fill", help: "Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings.", keywords: ["cut", "overlap", "quantities"]),
+        CommandInfo(.joinSolids, "Join Geometry", .modify, "square.fill.on.square.fill", aliases: ["JG"], help: "Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings.", keywords: ["cut", "overlap", "quantities"]),
         CommandInfo(.unjoinSolids, "Unjoin Geometry", .modify, "square.and.line.vertical.and.square", help: "Remove geometry joins between the selected elements."),
         // BL-VG: graphics control, project settings, geometry and structure
         CommandInfo(.filtersDialog, "Filters…", .view, "line.3.horizontal.decrease.circle", help: "Create and edit rule-based view filters: several categories, rules joined by AND or OR, and nested rule sets.", keywords: ["view filter", "rules"]),
@@ -373,10 +373,10 @@ public enum CommandCatalog {
         CommandInfo(.uncutGeometry, "Uncut Geometry", .modify, "arrow.uturn.backward.square", help: "Remove cuts between the selected elements."),
         CommandInfo(.switchJoinOrder, "Switch Join Order", .modify, "arrow.left.arrow.right.square", help: "Make the element that was cut by a join cut the other one instead."),
         CommandInfo(.foundationIsolated, "Isolated Foundation", .structure, "square.bottomhalf.filled", help: "Add a pad footing under each selected structural column.", keywords: ["footing", "pad", "foundation"]),
-        CommandInfo(.foundationWall, "Wall Foundation", .structure, "rectangle.bottomhalf.filled", help: "Add a strip footing under each selected wall.", keywords: ["footing", "strip", "foundation"]),
+        CommandInfo(.foundationWall, "Wall Foundation", .structure, "rectangle.bottomhalf.filled", aliases: ["FT"], help: "Add a strip footing under each selected wall.", keywords: ["footing", "strip", "foundation"]),
         CommandInfo(.foundationSlab, "Foundation Slab", .structure, "square.3.layers.3d.bottom.filled", help: "Sketch a structural foundation slab.", keywords: ["raft", "mat", "foundation"]),
         CommandInfo(.structuralWall, "Structural Wall", .structure, "rectangle.split.1x2.fill", help: "Draw load-bearing walls (Structural is on).", keywords: ["bearing wall", "shear wall"]),
-        CommandInfo(.structuralFloor, "Structural Floor", .structure, "square.3.layers.3d.middle.filled", help: "Sketch a structural floor (Structural is on).", keywords: ["slab", "deck"]),
+        CommandInfo(.structuralFloor, "Structural Floor", .structure, "square.3.layers.3d.middle.filled", aliases: ["SB"], help: "Sketch a structural floor (Structural is on).", keywords: ["slab", "deck"]),
         CommandInfo(.createSimilar, "Create Similar", .modify, "rectangle.badge.plus", aliases: ["CS"], help: "Start placing a new element of the selected element's type.", keywords: ["same type", "place like"]),
         CommandInfo(.measureBetween, "Measure Between Two References", .modify, "lines.measurement.horizontal", aliases: ["ME"], help: "Measure the distance between picked points; nothing is added to the model.", keywords: ["distance", "tape"]),
         CommandInfo(.measureAlong, "Measure Along an Element", .modify, "lines.measurement.vertical", help: "Measure the length of a wall or line, or the perimeter of a floor, roof or region.", keywords: ["length", "perimeter"]),

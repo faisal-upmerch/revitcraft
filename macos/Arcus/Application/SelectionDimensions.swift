@@ -23,9 +23,37 @@ public struct SelectionDimension: Sendable, Hashable {
     /// The references measured, for making the dimension permanent: the selected element's first, then the other.
     public var elementReference: GeometryReference
     public var otherReference: GeometryReference
+    /// I3: set for a segment of a permanent dimension (its value text, view coordinates): the canvas edits it in place
+    /// instead of drawing a temporary dimension, as in RevitCraft.
+    public var permanentLabel: Vec2? = nil
 }
 
 public enum SelectionDimensions {
+    /// I3: segments of the view's permanent aligned and linear dimensions between `id` and another reference
+    /// (RevitCraft tempdims.rs `permanent_dims`). Typing a new value there moves the element; the other reference stays.
+    /// Locked, EQ-constrained, baseline and ordinate strings are left alone.
+    public static func permanent(for id: ElementID, in model: BIMModel, view: Element?, scale: Double) -> [SelectionDimension] {
+        guard let view, view.view?.kind.isPlan == true else { return [] }
+        var out: [SelectionDimension] = []
+        for e in model.elements(.dimensions) where e.ownerViewID == view.id {
+            guard let d = e.dimension, d.kind == .linear || d.kind == .aligned, !d.locked, !d.equality,
+                  (d.chainStyle ?? .continuous) == .continuous, d.references.count >= 2,
+                  let lay = DimensionLayout.make(e, d, model, scale: scale, view: view), lay.order.count == d.references.count else { continue }
+            for k in 0..<(lay.order.count - 1) {
+                let a = lay.order[k], b = lay.order[k + 1]
+                let mineA = d.references[a].elementID == id, mineB = d.references[b].elementID == id
+                guard mineA != mineB, k < lay.values.count, k < lay.textPositions.count else { continue }
+                let (mine, other) = mineA ? (a, b) : (b, a)
+                let dir = (lay.projected[mine] - lay.projected[other]).normalized
+                guard dir.length > 0.5 else { continue }
+                out.append(SelectionDimension(elementID: id, role: .offset, from: lay.projected[mine], to: lay.projected[other], value: lay.values[k],
+                                              direction: dir, elementReference: d.references[mine], otherReference: d.references[other],
+                                              permanentLabel: lay.textPositions[k]))
+            }
+        }
+        return out
+    }
+
     /// A reference line an element can be dimensioned to.
     struct RefLine {
         var seg: Segment2

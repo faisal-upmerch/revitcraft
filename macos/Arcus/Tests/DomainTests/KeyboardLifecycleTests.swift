@@ -91,9 +91,10 @@ struct KeyboardLifecycleTests {
         let expected: [String: CommandID] = [
             "SX": .snapPoints, "SR": .snapRemote, "SW": .snapWorkPlaneGrid, "SZ": .snapClose, "SS": .snapOverrideOff, "SO": .snapsOff,
             "SE": .snapEndpoint, "SM": .snapMidpoint, "SN": .snapNearest, "SQ": .snapQuadrant, "SI": .snapIntersection, "SC": .snapCenter,
-            "SP": .snapPerpendicular, "ST": .snapTangent, "ZA": .zoomAllToFit, "SA": .selectAllInstancesInProject, "RC": .repeatLastCommand,
+            "SP": .snapPerpendicular, "ST": .snapTangent, "ZA": .zoomAllToFit, "SA": .selectAllInstancesInView, "RC": .repeatLastCommand,
             "KS": .keyboardShortcuts, "EOD": .overrideGraphicsElement, "VP": .viewProperties, "CS": .createSimilar, "RE": .scale,
             "PP": .toggleProperties, "WA": .wall, "DR": .door, "MV": .move, "VG": .visibilityGraphics, "VV": .visibilityGraphics,
+            "SB": .structuralFloor, "FT": .foundationWall, "PT": .paint, "EG": .editGroup, "UG": .ungroup, "JG": .joinSolids, // I3: RevitCraft
         ]
         for (a, id) in expected { #expect(table[a] == id, "\(a) → \(table[a].map { "\($0)" } ?? "nil"), expected \(id)") }
         // Arcus extras kept.

@@ -330,6 +330,10 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         if let tool = state.activeTool { guides += tool.preview.guides }
         if selectTool.isDragging { guides += selectTool.preview.guides }
         drawGuides(guides, ctx)
+        var previews: [ToolPreview] = []
+        if let tool = state.activeTool { previews.append(tool.preview) }
+        if selectTool.isDragging { previews.append(selectTool.preview) }
+        for p in previews { drawMoveFeedback(p, ctx) } // I3
         var dims: [TemporaryDimension] = []
         if let tool = state.activeTool { dims += tool.preview.tempDims }
         if selectTool.isDragging { dims += selectTool.preview.tempDims }
@@ -391,18 +395,22 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         while sweep < -.pi { sweep += 2 * .pi }
         // Straight on (or straight back) has no angle to show.
         guard abs(sweep) > 0.004, .pi - abs(sweep) > 0.004 else { return }
-        let radius = min(len * 0.85, 220)
-        let color = Tokens.construction
+        // I3: RevitCraft's angle arc (canvas_tools.rs `angle_arc`): a grey reference line, a dashed light-blue arc of
+        // half the rubber band (24–140 pt) and the value in bold blue outside its middle.
+        let radius = min(max(len * 0.5, 24), 140)
         ctx.saveGState()
-        ctx.setStrokeColor(color.withAlphaComponent(0.75).cgColor)
+        ctx.setStrokeColor(NSColor(white: 120 / 255, alpha: 1).cgColor)
         ctx.setLineWidth(1)
-        ctx.move(to: a); ctx.addLine(to: CGPoint(x: a.x + cos(refAngle) * radius * 1.15, y: a.y + sin(refAngle) * radius * 1.15))
+        ctx.move(to: a); ctx.addLine(to: CGPoint(x: a.x + cos(refAngle) * radius * 1.35, y: a.y + sin(refAngle) * radius * 1.35))
+        ctx.strokePath()
+        ctx.setStrokeColor(TempDimLabelStyle.lineColor.cgColor)
+        ctx.setLineDash(phase: 0, lengths: [4, 3])
         ctx.addArc(center: a, radius: radius, startAngle: refAngle, endAngle: refAngle + sweep, clockwise: sweep < 0)
         ctx.strokePath()
         ctx.restoreGState()
         let mid = refAngle + sweep / 2
         let text = String(format: "%.2f°", abs(sweep) * 180 / .pi) as NSString
-        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 10.5, weight: .regular), .foregroundColor: color]
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .bold), .foregroundColor: TempDimLabelStyle.textColor]
         let size = text.size(withAttributes: attrs)
         var at = CGPoint(x: a.x + cos(mid) * (radius + 14) - size.width / 2, y: a.y + sin(mid) * (radius + 14) - size.height / 2)
         // A small angle: set the value clear of the two lines.
@@ -415,7 +423,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             drawAngleArc(d, ctx); return
         }
         let a = toScreen(d.from), b = toScreen(d.to)
-        let color = Tokens.construction
+        let color = TempDimLabelStyle.lineColor // I3: RevitCraft's light blue
         ctx.saveGState()
         ctx.setStrokeColor(color.cgColor)
         ctx.setLineWidth(1)
@@ -431,6 +439,9 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             ctx.move(to: a); ctx.addLine(to: NSPoint(x: pa.x + n.x * 0.3, y: pa.y + n.y * 0.3))
             ctx.move(to: b); ctx.addLine(to: NSPoint(x: pb.x + n.x * 0.3, y: pb.y + n.y * 0.3))
             ctx.move(to: pa); ctx.addLine(to: pb)
+            // I3: RevitCraft's 45° ticks where the dimension line meets the witness lines.
+            let u = Vec2(v.x, v.y) / len, w = Vec2(-v.y, v.x) / len, t = (u + w) * 3
+            for q in [pa, pb] { ctx.move(to: NSPoint(x: q.x - t.x, y: q.y - t.y)); ctx.addLine(to: NSPoint(x: q.x + t.x, y: q.y + t.y)) }
             ctx.strokePath()
         }
         ctx.restoreGState()
@@ -480,17 +491,34 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
     /// Selection dimension under a screen point, and whether the point is on its make-permanent button.
     private func selectionDimension(at sp: NSPoint) -> (SelectionDimension, permanent: Bool)? {
         for d in selectionDimensions {
-            guard let r = tempDimLabelRect(selectTool.temporaryDimension(d)) else { continue }
+            guard let r = selectionLabelRect(d) else { continue }
             if r.insetBy(dx: -2, dy: -2).contains(sp) { return (d, false) }
-            if permanentButtonRect(r).insetBy(dx: -2, dy: -2).contains(sp) { return (d, true) }
+            if d.permanentLabel == nil, permanentButtonRect(r).insetBy(dx: -2, dy: -2).contains(sp) { return (d, true) }
         }
         return nil
+    }
+
+    /// The value box of a selection dimension: a temporary dimension's own, or (I3) the text of the permanent
+    /// dimension segment it edits.
+    private func selectionLabelRect(_ d: SelectionDimension) -> NSRect? {
+        let td = selectTool.temporaryDimension(d)
+        guard let p = d.permanentLabel else { return tempDimLabelRect(td) }
+        let size = (td.text as NSString).size(withAttributes: tempDimAttributes(td))
+        return TempDimLabelStyle.box(size: size, mid: toScreen(p))
     }
 
     private func drawSelectionDimensions(_ ctx: CGContext) {
         let hover = lastMouse.flatMap(selectionDimension(at:))
         for d in selectionDimensions {
             let td = selectTool.temporaryDimension(d)
+            if d.permanentLabel != nil {
+                // I3: the permanent dimension draws itself; its value is the click target, outlined under the pointer.
+                if hover?.0 == d, let r = selectionLabelRect(d) {
+                    let path = NSBezierPath(roundedRect: r, xRadius: 2, yRadius: 2)
+                    TempDimLabelStyle.textColor.setStroke(); path.lineWidth = 1.5; path.stroke()
+                }
+                continue
+            }
             drawTempDim(td, ctx, highlighted: hover?.0 == d && hover?.permanent == false)
             guard let label = tempDimLabelRect(td) else { continue }
             // Dimension glyph: a line with end ticks, in a small rounded box.
@@ -515,7 +543,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
     /// Opens the value box of a selection dimension for typing; Return moves the element.
     private func beginDimensionEdit(_ d: SelectionDimension) {
         let td = selectTool.temporaryDimension(d)
-        guard let r = tempDimLabelRect(td) else { return }
+        guard let r = selectionLabelRect(d) else { return }
         beginNumericEntry(td.text, target: .dimension(d), label: d.role == .length ? "Length" : "Distance",
                           frame: NSRect(x: r.midX - 60, y: r.midY - 11, width: 120, height: 22), selectAll: true)
     }
@@ -646,6 +674,45 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         }
         ctx.strokePath()
         ctx.restoreGState()
+    }
+
+    /// I3: RevitCraft's drag and move feedback: the dashed box around what moves, the thin blue rubber band, and the
+    /// thick orange dashed new location line of a dragged wall end with a tracking line beyond the pointer.
+    private func drawMoveFeedback(_ p: ToolPreview, _ ctx: CGContext) {
+        ctx.saveGState()
+        defer { ctx.restoreGState() }
+        if let box = p.movedBox {
+            let a = toScreen(box.min), b = toScreen(box.max)
+            let r = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y)).insetBy(dx: -6, dy: -6)
+            ctx.setStrokeColor(NSColor(srgbRed: 120 / 255, green: 190 / 255, blue: 200 / 255, alpha: 1).cgColor)
+            ctx.setLineWidth(1)
+            ctx.setLineDash(phase: 0, lengths: [4, 3])
+            ctx.stroke(r)
+            ctx.setLineDash(phase: 0, lengths: [])
+        }
+        if let band = p.rubberBand {
+            ctx.setStrokeColor(TempDimLabelStyle.lineColor.cgColor)
+            ctx.setLineWidth(1)
+            ctx.move(to: toScreen(band.start)); ctx.addLine(to: toScreen(band.end)); ctx.strokePath()
+        }
+        if let line = p.endDragLine {
+            let a = toScreen(line.start), b = toScreen(line.end)
+            let len = hypot(b.x - a.x, b.y - a.y)
+            guard len > 1 else { return }
+            let d = CGVector(dx: (b.x - a.x) / len, dy: (b.y - a.y) / len)
+            drawGuides([Segment2(toView(b), toView(CGPoint(x: b.x + d.dx * 120, y: b.y + d.dy * 120)))], ctx)
+            // Dashes of 16 pt with 10 pt gaps from the pointer back to the fixed end, 5 pt wide with round ends.
+            ctx.setStrokeColor(NSColor(srgbRed: 226 / 255, green: 148 / 255, blue: 82 / 255, alpha: 1).cgColor)
+            ctx.setLineWidth(5)
+            ctx.setLineCap(.round)
+            var t: CGFloat = 0
+            while t < len {
+                let u0 = t, u1 = min(t + 16, len)
+                ctx.move(to: CGPoint(x: b.x - d.dx * u0, y: b.y - d.dy * u0)); ctx.addLine(to: CGPoint(x: b.x - d.dx * u1, y: b.y - d.dy * u1))
+                t += 26
+            }
+            ctx.strokePath()
+        }
     }
 
     /// The snap colour RevitCraft draws its markers in (style.rs SNAP).

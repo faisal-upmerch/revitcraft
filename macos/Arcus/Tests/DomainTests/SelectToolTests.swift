@@ -303,6 +303,35 @@ struct SelectToolTests {
         #expect(sel.selectPrevious(in: e.model) && sel.ids == [w[1]])
     }
 
+    /// I3: with an element selected, the permanent dimensions to it edit in place, as in RevitCraft: the segment's
+    /// value moves the selected element; segments between two other references are not offered.
+    @Test func permanentDimensionsToTheSelectionEditInPlace() throws {
+        var walls: [ElementID] = []
+        var dim: ElementID!
+        let e = try env { tx, ids in
+            walls = [0.0, 3, 7].map { Fx.wall(tx, ids, Vec2($0, 0), Vec2($0, 5)) }
+            dim = tx.create(.dimensions, data: .dimension(DimensionData(kind: .aligned, references: walls.map { GeometryReference($0, .location) },
+                                                                         linePoint: Vec2(0, 6))), ownerViewID: ids.planViews[ids.levels[0]]!)
+        }
+        e.selection.select([walls[1]])
+        let tool = SelectTool(ctx: e.ctx)
+        let perm = tool.selectionDimensions.filter { $0.permanentLabel != nil }.sorted { $0.value < $1.value }
+        #expect(perm.count == 2, "both segments touch the middle wall")
+        #expect(Fx.approx(perm[0].value, 3) && Fx.approx(perm[1].value, 4))
+        #expect(perm.allSatisfy { $0.elementReference.elementID == walls[1] })
+        // Typing 2 m into the 3 m segment moves the middle wall to x = 2; the dimension follows.
+        let three = perm[0]
+        #expect(tool.setDimension(three, to: "2000"))
+        let loc = try #require(e.model[walls[1]]?.wall?.location.asSegment)
+        #expect(Fx.approx(loc.start.x, 2) && Fx.approx(loc.end.x, 2))
+        // Selecting an end wall offers only its own segment.
+        e.selection.select([walls[0]])
+        #expect(SelectTool(ctx: e.ctx).selectionDimensions.filter { $0.permanentLabel != nil }.count == 1)
+        // Locked strings are left alone.
+        try e.ctx.session.perform("Lock") { tx in tx.update(dim) { $0.dimension?.locked = true } }
+        #expect(SelectTool(ctx: e.ctx).selectionDimensions.allSatisfy { $0.permanentLabel == nil })
+    }
+
     // MARK: Witness lines
 
     @Test func witnessDragReReferencesTheDimension() throws {

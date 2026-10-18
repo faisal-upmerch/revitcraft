@@ -40,6 +40,13 @@ public struct ToolPreview: Sendable {
     public var guides: [Segment2] = []
     public var highlight: Set<ElementID> = []
     public var cursor: ToolCursor = .crosshair
+    /// I3: a light dashed box around what Move/Copy carries (view units), as in RevitCraft.
+    public var movedBox: Rect2? = nil
+    /// I3: the thin blue rubber band of Move/Copy, from the base point to the pointer.
+    public var rubberBand: Segment2? = nil
+    /// I3: a wall end being dragged: the wall stays as it is and its new location line (fixed end → pointer) draws as a
+    /// thick orange dashed line with a tracking line beyond the pointer, as in RevitCraft.
+    public var endDragLine: Segment2? = nil
     public init() {}
 }
 

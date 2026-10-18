@@ -12,7 +12,13 @@ import ArcusViewport3D
 /// How temporary dimension values are drawn: blue text in the size chosen in Settings, on a transparent or opaque
 /// background (Settings ▸ Graphics).
 enum TempDimLabelStyle {
-    static var textColor: NSColor { Tokens.selection }
+    /// I3: RevitCraft's temporary dimension text (10, 60, 220), lighter on a dark canvas.
+    static let textColor = NSColor(name: "arcus.tempDimText") { ap in
+        ap.bestMatch(from: [.darkAqua, .accessibilityHighContrastDarkAqua]) != nil
+            ? NSColor(srgbRed: 120 / 255, green: 165 / 255, blue: 255 / 255, alpha: 1) : NSColor(srgbRed: 10 / 255, green: 60 / 255, blue: 220 / 255, alpha: 1)
+    }
+    /// I3: RevitCraft's light-blue witness and dimension lines (130, 170, 235).
+    static let lineColor = NSColor(srgbRed: 130 / 255, green: 170 / 255, blue: 235 / 255, alpha: 1)
     static func attributes(active: Bool) -> [NSAttributedString.Key: Any] {
         [.font: NSFont.monospacedDigitSystemFont(ofSize: CanvasSettings.tempDimTextSize, weight: active ? .semibold : .medium), .foregroundColor: textColor]
     }

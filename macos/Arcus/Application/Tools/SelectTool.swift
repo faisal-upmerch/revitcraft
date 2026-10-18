@@ -47,6 +47,13 @@ public final class SelectTool: BaseTool, InteractiveTool {
         if let g = dragGrip {
             // W2-ANNOT: annotations preview live with the grip applied (text, leaders, dimension texts, spots, tags).
             if let prims = annotationGripPreview(g, to: p) { preview.primitives = prims; return }
+            if let e = ctx.model[g.elementID], e.wall != nil, g.kind == .start || g.kind == .end, let c = ElementOperations.curveOf(e), case .line = c {
+                // I3: RevitCraft's wall-end drag: the wall stays, its new location line shows thick orange dashed.
+                let other = g.kind == .start ? c.end : c.start
+                preview.endDragLine = Segment2(other, p)
+                preview.tempDims = [tempDim(other, p)]
+                return
+            }
             preview.primitives = [ctx.line(g.position, p, heavy: true)]
             if case .witness = g.kind { return }
             if let e = ctx.model[g.elementID], let c = ElementOperations.curveOf(e) {
@@ -210,6 +217,7 @@ public final class SelectTool: BaseTool, InteractiveTool {
         let m = ctx.model
         if let c = dimensionCache, c.id == id, c.view == ctx.viewID, c.revision == m.revision { return c.dims }
         let dims = SelectionDimensions.compute(for: id, in: m, view: ctx.view)
+            + SelectionDimensions.permanent(for: id, in: m, view: ctx.view, scale: Double(ctx.scale)) // I3
         dimensionCache = (id, ctx.viewID, m.revision, dims)
         return dims
     }
