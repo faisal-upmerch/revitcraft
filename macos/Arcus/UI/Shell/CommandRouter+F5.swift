@@ -28,6 +28,12 @@ extension CommandRouter {
             let t = SketchTool(ctx: c, target: .f5(.mass), commandID: .inPlaceMass)
             t.drawMode = .rectangle // RevitCraft starts the mass sketch with a rectangle
             return t
+        case .editBoundary:
+            // A mass edits its footprint in sketch mode.
+            guard selection.count == 1, let id = selection.first, model[id]?.mass != nil else { return nil }
+            let t = SketchTool(ctx: c, target: .f5(.mass), commandID: .editBoundary, editing: id)
+            t.drawMode = .line
+            return t
         case .wallByFace, .curtainSystemByFace, .floorByFace, .roofByFace:
             guard f5SelectedMasses.isEmpty, let kind = Self.f5ByFace[id] else { return nil } // with masses selected: f5Perform
             return ModelByFaceTool(ctx: c, kind: kind, typeID: f5ByFaceType(kind))
@@ -100,6 +106,13 @@ extension CommandRouter {
         case .roof:
             return state.currentTypes[.roofs].flatMap { model[$0]?.typeData != nil ? $0 : nil } ?? model.types(for: .roofs).first?.id
         }
+    }
+
+    /// Double-click on an in-place family's instance: edit the family in place (the Family Editor). False otherwise.
+    func f5EditInPlace(_ e: Element) -> Bool {
+        guard e.component != nil || e.column != nil, let fid = model.typeData(of: e)?.familyID, InPlaceFamilies.isInPlace(model[fid]) else { return false }
+        FamilyEditorWindowController.open(familyID: fid, state: state)
+        return true
     }
 
     /// Show Mass: masses show or hide in every open view (plans, sections, elevations, 3D).

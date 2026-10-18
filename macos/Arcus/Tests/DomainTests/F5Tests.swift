@@ -175,6 +175,19 @@ struct F5Tests {
         #expect(ctx.session.lastError != nil && ctx.model[mass.id]?.mass?.isBlend == false)
     }
 
+    @Test func editBoundaryReshapesTheMassFootprint() throws {
+        let (ctx, _) = context()
+        #expect(massSketch(ctx, Rect2(min: .zero, max: Vec2(10, 8)), height: 5).finish())
+        let mass = try #require(ctx.model.elements(.mass).first)
+        let edit = SketchTool(ctx: ctx, target: .f5(.mass), commandID: .editBoundary, editing: mass.id)
+        #expect(edit.curves.count == 4 && !edit.options.contains { $0.id == "massHeight" })
+        edit.curves = Polygon2.rectangle(Rect2(min: .zero, max: Vec2(6, 6))).edges.map { .line($0) }
+        #expect(edit.finish())
+        let d = try #require(ctx.model[mass.id]?.mass)
+        #expect(Fx.approx(Polygon2(d.boundary).area, 36) && d.height == 5)
+        #expect(ctx.model.elements(.mass).count == 1)
+    }
+
     @Test func blendMassTapersToItsTopInset() throws {
         let (ctx, _) = context()
         #expect(massSketch(ctx, Rect2(min: .zero, max: Vec2(10, 8)), inset: 1, height: 4).finish())

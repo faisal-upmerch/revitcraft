@@ -75,6 +75,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             case .railing(let r): curves = r.path
             case .revisionCloud(let c): curves = c.outline.edges.map { .line($0) }; revisionID = c.revisionID
             case .beamSystem, .areaReinforcement, .fabricArea: curves = F34SketchTarget.boundaryCurves(e) // F34
+            case .mass(let m): curves = Polygon2(m.boundary).edges.map { .line($0) } // F5
             default: break
             }
         }

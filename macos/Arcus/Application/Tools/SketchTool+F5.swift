@@ -30,6 +30,7 @@ public struct MassSketchOptions: Sendable, Equatable {
 
 extension SketchTool {
     func f5Options(_ t: F5SketchTarget) -> [ToolOption] {
+        guard editingID == nil else { return [] } // Edit Boundary keeps the mass's height and form (Properties edits them)
         switch t {
         case .mass:
             return [ToolOption(id: "massHeight", label: "Height", kind: .length, value: .double(massOptions.height ?? MassGeometry.defaultHeight(ctx.units))),
@@ -60,6 +61,16 @@ extension SketchTool {
         switch t {
         case .mass:
             guard case .success(let polys) = sketch.polygons(), let outline = polys.max(by: { $0.area < $1.area }) else { message("Sketch a closed loop."); return }
+            if let id = editingID { // Edit Boundary: the new footprint, keeping height and form
+                ctx.session.perform("Edit Mass Footprint") { tx in
+                    guard var m = tx.model[id]?.mass else { return }
+                    m.boundary = outline.counterClockwise.points
+                    if m.isBlend, MassGeometry.topLoop(m) == nil { throw TransactionError("The top inset leaves no top face on this footprint.") }
+                    tx.update(id) { $0.mass = m }
+                }
+                if ctx.session.lastError == nil { ctx.session.selection.select([id]) }
+                return
+            }
             let height = massOptions.height ?? MassGeometry.defaultHeight(ctx.units)
             let inset = massOptions.topInset
             var created: ElementID?
