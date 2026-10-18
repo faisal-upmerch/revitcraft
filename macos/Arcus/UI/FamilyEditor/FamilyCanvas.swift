@@ -268,7 +268,7 @@ final class FamilyCanvasView: NSView {
         switch event.keyCode {
         case 51, 117:
             if model.sketch != nil { model.undoSketchVertex() } else { model.deleteSelection() }
-        case 36, 76 where model.sketch != nil: model.finishSketch() // F1415: Return finishes the sketch
+        case 36 where model.sketch != nil, 76 where model.sketch != nil: model.finishSketch() // F1415: Return finishes the sketch
         case 53:
             if model.sketch != nil {
                 // F1415: in sketch mode Esc ends the chain; Cancel Edit Mode leaves it (a blank sketch is left at once).
