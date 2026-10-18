@@ -165,8 +165,8 @@ I checked the Swift code under `macos/Arcus` directly, because `Docs/RevitParity
 **Feature batches**
 7. **F1 Architecture A:** Model Text, Wall Reveal, Openings (By Face, Vertical, Dormer), Place Model Group, Spline and Ellipse modes.
 8. **F2 Architecture B:** stacked walls, multi-segment grids, Work Plane Set/Show/Viewer, multistory stairs, roof slope arrows and roof tools, slanted columns, At Grids, Highlight Boundaries.
-9. **F3 Structure:** Truss, Brace, Beam System, Structural Settings.
-10. **F4 Reinforcement:** Rebar, Area, Path, Fabric, Cover and Couplers, with their symbols, tags and Multi-Rebar.
+9. **F3 Structure:** ✅ done (2026-10-18, branch port/F34). Truss (a flat Warren truss of framing members), Brace (BR, from the level up to the next), Beam System (BS: sketch a bay, beams at a spacing, rebuilt when the system changes), and Structural Settings (symbolic cutbacks shorten beams in plan; load cases and combinations). Brace plan symbol settings are stored but not drawn, as in RevitCraft.
+10. **F4 Reinforcement:** ✅ done (2026-10-18, branch port/F34). Rebar (RB), Area, Path, Fabric Area, Fabric Sheet, Cover and Rebar Coupler, hosted in floors and foundation slabs (in plan) and in walls (from a facing section or elevation). They draw in plan, cut in sections and show as steel in 3D, with Properties and schedules (Quantity, Total Bar Length). Beam, Area, Path, Rebar and Fabric symbols; Aligned and Linear Multi-Rebar annotation; IFC export as IfcReinforcingBar and IfcReinforcingMesh. Limits: wall-hosted reinforcement has no Edit Boundary, and Move/Rotate on it isn't face-aware; cross-project paste skips reinforcement.
 11. **F5 Analyze and Massing:** Spaces and Space Tag, Show Mass and In-Place Mass, Model by Face (wall, floor, roof, curtain system), Model In-Place.
 12. **F6 Insert:** Link project, Link IFC, Import PDF/Image/gbXML, Load as Group, Insert Views and 2D Elements, Transfer Project Standards.
 13. **F7 Insert extras:** Decal and Decal Types, Point Cloud, Coordination Model, Link Topography, DWF Markup.

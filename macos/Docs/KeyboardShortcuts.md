@@ -183,8 +183,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 |---|---|---|---|
 | Modify | `⎋⎋` | `MD` | Return to selection mode. |
 | Select All | `⌘A` |  | Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension. |
-| Select All Instances: Visible in View |  |  | Select every instance of the selected type visible in the view. |
-| Select All Instances: In Entire Project |  | `SA` | Select every instance of the selected type in the project. |
+| Select All Instances: Visible in View |  | `SA` | Select every instance of the selected type visible in the view. |
+| Select All Instances: In Entire Project |  |  | Select every instance of the selected type in the project. |
 | Select by Category… |  |  | Select all visible elements of chosen categories. |
 | Filter Selection… |  |  | Keep only chosen categories in the selection. |
 | Move |  | `MV` | Move selected elements by picking two points or typing a distance. |
@@ -203,13 +203,13 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Unpin |  | `UP` | Allow selected elements to move. |
 | Delete | `⌫` | `DE` | Delete the selection and dependent elements. |
 | Match Type Properties |  | `MA` | Apply the type of a source element to other elements. |
-| Paint |  |  | Apply a material to an element's surfaces (stored as an element material override). |
+| Paint |  | `PT` | Apply a material to an element's surfaces (stored as an element material override). |
 | Remove Paint |  |  | Remove painted material overrides. |
 | Allow Join |  |  | Allow the selected walls to join at their ends. |
 | Disallow Join |  |  | Stop the selected walls joining at their ends. |
 | Create Group |  | `GP` | Group the selected elements. |
-| Ungroup |  |  | Dissolve the selected group. |
-| Edit Group |  |  | Edit the members of a group; changes apply to every instance of the group type. |
+| Ungroup |  | `UG` | Dissolve the selected group. |
+| Edit Group |  | `EG` | Edit the members of a group; changes apply to every instance of the group type. |
 | Finish Group |  |  | Finish editing the group. |
 | Flip Facing |  |  | Flip the facing of doors and windows. |
 | Flip Hand |  |  | Flip the hand (hinge side) of doors and windows. |
@@ -239,7 +239,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Add Point |  |  | Add shape-editing points to a floor or flat roof at an elevation offset. |
 | Reset Shape |  |  | Remove shape editing from the selected floors and roofs. |
 | Attach Walls |  |  | Attach the walls below the selected roof or floor to its underside. |
-| Join Geometry |  |  | Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings. |
+| Join Geometry |  | `JG` | Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings. |
 | Unjoin Geometry |  |  | Remove geometry joins between the selected elements. |
 | Cut Geometry |  |  | Cut one floor, ceiling or roof with another element: pick the element to cut first, then the cutting element. |
 | Uncut Geometry |  |  | Remove cuts between the selected elements. |
@@ -329,10 +329,22 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Structural Column |  | `CL` | Place structural columns. |
 | Beam |  | `BM` | Draw beams between points or supports. |
 | Isolated Foundation |  |  | Add a pad footing under each selected structural column. |
-| Wall Foundation |  |  | Add a strip footing under each selected wall. |
+| Wall Foundation |  | `FT` | Add a strip footing under each selected wall. |
 | Foundation Slab |  |  | Sketch a structural foundation slab. |
 | Structural Wall |  |  | Draw load-bearing walls (Structural is on). |
-| Structural Floor |  |  | Sketch a structural floor (Structural is on). |
+| Structural Floor |  | `SB` | Sketch a structural floor (Structural is on). |
+| Truss |  |  | Places a flat truss of chords and diagonal members between two points. |
+| Brace |  | `BR` | Adds diagonal braces from the current level up to the level above. |
+| Beam System |  | `BS` | Sketches a bay and fills it with parallel beams at a fixed spacing. |
+| Rebar |  | `RB` | Places a set of straight bars in a floor or slab at its bottom cover: click the bar's start and end. |
+| Area |  |  | Reinforces a sketched area of a floor or slab with top and bottom bar layers both ways. |
+| Path |  |  | Places bars along a sketched path in a floor or slab, each running into it at the path's spacing. |
+| Fabric Area |  |  | Lays welded wire fabric sheets over a sketched area of a floor or slab, lapped at their edges. |
+| Fabric Sheet |  |  | Places a single welded wire fabric sheet in a floor or slab. |
+| Cover |  |  | Rebar Cover Settings: the concrete cover to the bars. |
+| Rebar Coupler |  |  | Places couplers on the ends of a rebar set's bars, or between two sets that meet end to end. |
+| Place on Bar End |  |  | Places couplers on the end of the bars you pick. |
+| Place between Two Bars |  |  | Places couplers where two rebar sets meet end to end. |
 
 ### Insert
 
@@ -405,6 +417,13 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Stair Path |  |  | Draw the walk line of a stair with its direction arrow and UP label. |
 | Add Leader |  |  | Add a leader to the selected text notes, toward the nearest free side. |
 | Remove Leader |  |  | Remove the last leader of the selected text notes. |
+| Beam |  |  | Places a beam system symbol on a beam: a span arrow with its type. |
+| Area |  |  | Places an area reinforcement symbol and tag on an area reinforcement. |
+| Path |  |  | Places a path reinforcement symbol and tag on a path reinforcement. |
+| Rebar |  |  | Places a rebar symbol across a rebar set with its quantity, size and spacing. |
+| Fabric |  |  | Places a fabric reinforcement symbol on a fabric area or sheet. |
+| Aligned Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set across the set, with its tag. |
+| Linear Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set horizontally or vertically, with its tag. |
 
 ### View
 
@@ -547,6 +566,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Temporary Dimensions… |  |  | Measure temporary dimensions of walls from their centerlines or faces. |
 | Load Standard Types |  |  | Add the standard wall, floor, roof, ceiling, door, window and column types for the project's units that the project doesn't have yet. |
 | Site Settings… |  |  | Contour interval, primary contours and contour display for toposurfaces. |
+| Structural Settings |  |  | Symbolic cutbacks, brace symbols, load cases and load combinations. |
 
 ### File
 
