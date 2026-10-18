@@ -142,6 +142,7 @@ final class DocumentState {
         session.onChange { [weak self] change in self?.modelChanged(change) }
         openInitialView()
         LevelRenamePrompt.install(on: self) // WP6a: offer to rename a level's views
+        SaveReminder.install(on: self) // F11: "Project Not Saved Recently"
     }
 
     var model: BIMModel { session.model }
@@ -173,6 +174,7 @@ final class DocumentState {
 
     func openInitialView() {
         let m = model
+        if let start = StartingView.view(m) { open(start.id); return } // F11: Manage ▸ Starting View
         if let plan = m.views.first(where: { $0.view?.kind == .floorPlan && m[$0.levelID]?.level?.elevation == m.levels.first?.level?.elevation })
             ?? m.views.first(where: { $0.view?.kind == .floorPlan }) ?? m.views.first {
             open(plan.id)

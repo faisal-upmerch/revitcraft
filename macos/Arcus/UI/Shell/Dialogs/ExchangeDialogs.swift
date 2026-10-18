@@ -28,6 +28,7 @@ struct ExportPDFDialog: View {
     @State private var naming = 0
     @State private var fileName = "Drawing Set.pdf"
     @State private var includeViews = false
+    @State private var setup = PrintSetup() // F13: Print Setup's paper and hide options
     var items: [Element] { state.model.sheets + (includeViews ? state.model.views.filter { $0.view?.kind != .threeD || true } : []) }
 
     var body: some View {
@@ -50,9 +51,24 @@ struct ExportPDFDialog: View {
             else {
                 Picker("File naming", selection: $naming) { Text("Sheet number – Sheet name").tag(0); Text("View or sheet name").tag(1); Text("Project number – Sheet number").tag(2) }
             }
+            DisclosureGroup("Options") { // F13: as RevitCraft's PDF export options
+                HStack(alignment: .top, spacing: 24) {
+                    VStack(alignment: .leading) {
+                        Toggle("Hide reference/work planes", isOn: $setup.hideReferencePlanes)
+                        Toggle("Hide scope boxes", isOn: $setup.hideScopeBoxes)
+                        Toggle("Hide crop boundaries", isOn: $setup.hideCropBoundaries)
+                        Toggle("Hide unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
+                    }
+                    VStack(alignment: .leading) {
+                        Picker("Colors", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
+                        Picker("Views on", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
+                        Picker("Zoom", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
+                    }
+                }
+            }
         }
         .frame(minWidth: 560, idealWidth: 560)
-        .onAppear { chosen = Set(state.model.sheets.map(\.id)); fileName = "\(state.model.projectInfo.projectName).pdf" }
+        .onAppear { chosen = Set(state.model.sheets.map(\.id)); fileName = "\(state.model.projectInfo.projectName).pdf"; setup = state.model.manageData.printSetup ?? PrintSetup() }
     }
 
     func chooseFolder() {
@@ -71,6 +87,9 @@ struct ExportPDFDialog: View {
             job.combinedFileName = fileName.hasSuffix(".pdf") ? fileName : fileName + ".pdf"
             job.naming = naming == 0 ? .sheetNumberAndName : naming == 1 ? .viewName : .custom("{Project Number} - {Sheet Number}")
             job.creator = "Arcus \(AppVersionInfo.current.marketingVersion)"
+            job.hideCropBoundaries = setup.hideCropBoundaries; job.hideReferencePlanes = setup.hideReferencePlanes // F13
+            job.hideScopeBoxes = setup.hideScopeBoxes; job.hideUnreferencedViewTags = setup.hideUnreferencedViewTags; job.colors = setup.colors
+            job.viewPaper = setup.paper; job.viewLandscape = setup.landscape; job.zoom = setup.zoom == .fitToPage ? .fit : .actual
             let conflicts = PDFExporter.conflicts(m, job: job)
             if !conflicts.isEmpty {
                 let alert = NSAlert()

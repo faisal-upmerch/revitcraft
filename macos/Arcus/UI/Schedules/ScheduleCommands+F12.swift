@@ -17,6 +17,7 @@ extension ScheduleCommands {
         let titleOrRow: Bool = { if case .title? = first { return true }; if case .headerRow? = first { return true }; return false }()
         switch id {
         case .scheduleCombineParameters, .scheduleFreezeHeader: return ""
+        case .scheduleInsertHeaderRow where def.formatting.headerRows.isEmpty: return ""
         case .scheduleInsertHeaderRow, .scheduleInsertRowBelow, .scheduleResizeRow, .scheduleInsertImage:
             return titleOrRow ? "" : "Click the title or a header row first."
         case .scheduleInsertRowAbove:

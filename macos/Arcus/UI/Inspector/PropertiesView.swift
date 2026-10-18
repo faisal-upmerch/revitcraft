@@ -327,6 +327,7 @@ struct ParamRow: View {
             editor
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .help(varies ? "Values differ across the selection" : (entry.isReadOnly ? [formatted, entry.readOnlyReason ?? ""].filter { !$0.isEmpty }.joined(separator: "\n") : formatted))
+            if apply == nil { GlobalParameterAssociationButton(state: state, entry: entry, targets: targets) } // F11
         }
         .padding(.horizontal, 10)
         .frame(minHeight: Tokens.inspectorRowHeight)

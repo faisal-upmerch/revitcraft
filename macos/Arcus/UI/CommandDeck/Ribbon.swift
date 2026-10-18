@@ -30,6 +30,7 @@ struct RibbonItem: Hashable {
     /// Ribbon captions are shorter than menu titles: a split button is named after its family
     /// ("Roof", "Stair") and long large-button captions break onto two lines at a word boundary.
     static func caption(_ id: CommandID, size: Size, split: Bool) -> String {
+        if let c = f11Caption(id, size: size, split: split) { return c } // F11
         switch id {
         case .roofFootprint where split: return "Roof"
         case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
@@ -169,7 +170,7 @@ enum RibbonContent {
                     RibbonPanel(title: "Text", items: [.large(.textNote), .small(.checkSpelling), .small(.findReplace)], tint: annotate),
                     RibbonPanel(title: "Tag", items: [.large(.tagByCategory), .large(.tagAll), .small(.beamAnnotations), .small(.multiCategoryTag), .small(.materialTag),
                                                       .small(.areaTag), .small(.roomTag), .small(.viewReference).newColumn(), .small(.treadNumber),
-                                                      .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser])], tint: annotate),
+                                                      .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser, .keynotingSettings])], tint: annotate), // F12: Keynoting Settings
                     RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
                     RibbonPanel(title: "Symbol", items: [.large(.symbol), .small(.spanDirection), .small(.stairPath), .small(.northArrow), .small(.scaleBar)], tint: annotate)]
         case .analyze:
@@ -194,7 +195,7 @@ enum RibbonContent {
                     RibbonPanel(title: "Create", items: [.large(.threeDView, [.threeDView, .cameraView]), .large(.section), .large(.callout),
                                                          .large(.floorPlan, [.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan]), .large(.elevation),
                                                          .small(.draftingView), .small(.duplicateView, [.duplicateView, .duplicateViewWithDetailing, .duplicateDependent]),
-                                                         .small(.legend), .large(.schedule, [.schedule, .materialTakeoff, .sheetList, .revisionSchedule]), .small(.scopeBox)], tint: view),
+                                                         .small(.legend, [.legend, .keynoteLegend]), .large(.schedule, [.schedule, .materialTakeoff, .sheetList, .revisionSchedule]), .small(.scopeBox)], tint: view), // F12: Keynote Legend
                     RibbonPanel(title: "Sheet Composition", items: [.large(.newSheet), .small(.placeView), .small(.revisions), .small(.viewReference),
                                                                     .large(.activateViewport, [.activateViewport, .deactivateViewport])], tint: sheet),
                     RibbonPanel(title: "Windows", items: [.small(.closeHiddenViews), .small(.previousView),
@@ -202,12 +203,15 @@ enum RibbonContent {
         case .manage:
             // Export and Print live in the File menu, as in RevitCraft.
             return [RibbonPanel(title: "Settings", items: [.large(.materials), .small(.objectStyles), .small(.snapSettings), .small(.projectInfo),
-                                                           .small(.projectParameters), .small(.sharedParameters), .small(.purgeUnused), .small(.projectUnits),
+                                                           .small(.projectParameters), .small(.sharedParameters), .small(.globalParameters), .small(.purgeUnused), .small(.projectUnits), // F11: Global Parameters
                                                            .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage), // BL-VG
-                    RibbonPanel(title: "Project Location", items: [.large(.locationSettings)], tint: manage),
-                    RibbonPanel(title: "Design Options", items: [.large(.designOptions)], tint: manage),
-                    RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .small(.familyEditor)], tint: manage),
+                    // F11: Coordinates and Position, as RevitCraft's Project Location panel.
+                    RibbonPanel(title: "Project Location", items: [.large(.locationSettings), .large(.specifyCoordinates, [.specifyCoordinates, .reportCoordinates]),
+                                                                   .large(.relocateProject, [.relocateProject, .rotateTrueNorth, .mirrorProject, .rotateProjectNorth])], tint: manage),
+                    RibbonPanel(title: "Design Options", items: [.large(.designOptions), .small(.addToSet), .small(.pickToEdit)], tint: manage), // F11: + the active option combo (Ribbon+F11.swift)
+                    RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .large(.startingView), .small(.familyEditor)], tint: manage), // F11: Starting View
                     RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
+                    RibbonPanel(title: "Selection", items: [.small(.saveSelection), .small(.loadSelection), .small(.editSelection)], tint: manage), // F11
                     RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage)] // BL-VG
         }
     }
@@ -394,7 +398,8 @@ struct RibbonView: View {
     }
 
     @ViewBuilder func panelView(_ p: RibbonPanel, contextual: Bool = false) -> some View {
-        RibbonPanelView(panel: p, state: state, contextual: contextual)
+        if !contextual, p.title == "Design Options" { DesignOptionsRibbonPanel(panel: p, state: state) } // F11: with the active option combo
+        else { RibbonPanelView(panel: p, state: state, contextual: contextual) }
     }
 
     @ViewBuilder func contextualPanels(tool: (any InteractiveTool)?) -> some View {

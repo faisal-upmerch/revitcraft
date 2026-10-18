@@ -13,7 +13,7 @@ extension CommandCatalog {
         CommandInfo(.rotateTrueNorth, "Rotate True North", .manage, "location.north.line", help: "Sets the angle between project north and true north.", keywords: ["north", "position"]),
         CommandInfo(.rotateProjectNorth, "Rotate Project North", .manage, "rotate.right", help: "Turns the whole project (model and views) 90° or 180° about its origin; true north stays where it is.", keywords: ["north", "position"]),
         CommandInfo(.mirrorProject, "Mirror Project", .manage, "arrow.left.and.right.righttriangle.left.righttriangle.right", help: "Mirrors the whole project about its north-south or east-west axis.", keywords: ["position", "flip"]),
-        CommandInfo(.addToSet, "Add to Set", .manage, "square.stack.badge.plus", help: "Moves the selected main model elements into design options of a set.", keywords: ["design option"]),
+        CommandInfo(.addToSet, "Add to Set", .manage, "plus.square.on.square", help: "Moves the selected main model elements into design options of a set.", keywords: ["design option"]),
         CommandInfo(.pickToEdit, "Pick to Edit", .manage, "hand.point.up.left", help: "Click an element to edit the design option it belongs to.", keywords: ["design option"]),
         CommandInfo(.startingView, "Starting View", .manage, "flag", help: "Specifies the view that opens when the project opens."),
         CommandInfo(.saveSelection, "Save Selection", .manage, "square.and.arrow.down.on.square", help: "Saves the current selection so it can be loaded later.", keywords: ["selection set"]),
@@ -22,7 +22,7 @@ extension CommandCatalog {
         CommandInfo(.selectJoinedElements, "Select Joined Elements", .modify, "link", help: "Adds the elements joined to the selection.", keywords: ["wall joins"]),
         // F12 schedule tools (the Modify Schedule/Quantities tab) and keynotes
         CommandInfo(.scheduleCombineParameters, "Combine Parameters", .view, "rectangle.2.swap", help: "Combines several parameters into one column.", keywords: ["schedule"]),
-        CommandInfo(.scheduleInsertHeaderRow, "Insert Row", .view, "rectangle.insert", help: "Inserts a row in the header.", keywords: ["schedule", "title"]),
+        CommandInfo(.scheduleInsertHeaderRow, "Insert Row", .view, "text.insert", help: "Inserts a row in the header.", keywords: ["schedule", "title"]),
         CommandInfo(.scheduleInsertRowAbove, "Insert Row Above Selected", .view, "arrow.up.to.line", help: "Inserts a header row above the selected row.", keywords: ["schedule", "above selected"]),
         CommandInfo(.scheduleInsertRowBelow, "Insert Row Below Selected", .view, "arrow.down.to.line", help: "Inserts a header row below the selected row.", keywords: ["schedule", "below selected"]),
         CommandInfo(.scheduleResizeRow, "Resize Row", .view, "arrow.up.and.down.square", help: "Sets the height of the selected row.", keywords: ["schedule"]),
