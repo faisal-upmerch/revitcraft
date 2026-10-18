@@ -227,3 +227,156 @@ struct F34Tests {
         #expect(Category.schedulable.contains(.structuralRebar))
     }
 }
+
+/// F34 tools, driven as the canvas drives them.
+@MainActor
+@Suite("F34 structure and reinforcement tools")
+struct F34ToolTests {
+    func context(_ build: (TransactionContext, ProjectTemplates.Ids) throws -> Void = { _, _ in }) throws -> (ToolContext, ProjectTemplates.Ids) {
+        var (m, ids) = Fx.template()
+        try Fx.commit(&m) { tx in
+            let s = SlabData(boundary: Sketch(rect: Rect2(min: .zero, max: Vec2(6, 4))))
+            tx.create(.floors, data: .slab(s), typeID: ids.floorTypes["Concrete Slab 200mm"], levelID: ids.levels[0])
+            try build(tx, ids)
+        }
+        let session = DocumentSession(model: m)
+        session.undoManager.groupsByEvent = false
+        session.undoManager.beginUndoGrouping()
+        let ctx = ToolContext(session: session, viewID: ids.planViews[ids.levels[0]]!)
+        ctx.pixel = 0.01
+        return (ctx, ids)
+    }
+    func click(_ tool: some InteractiveTool, _ p: Vec2, hit: ElementID? = nil) {
+        var i = ToolInput(point: p, rawPoint: p)
+        i.hit = hit
+        tool.pointerMoved(i)
+        tool.pointerDown(i)
+    }
+    var floorID: (ToolContext) -> ElementID { { $0.model.elements(.floors).first!.id } }
+
+    @Test func rebarToolPlacesASetInTheFloor() throws {
+        let (ctx, _) = try context()
+        var messages: [String] = []
+        ctx.showMessage = { messages.append($0) }
+        let tool = RebarTool(ctx: ctx)
+        tool.setOption("quantity", .int(4))
+        tool.setOption("spacing", .double(0.25))
+        click(tool, Vec2(10, 10))
+        #expect(messages.last == "Start the bar inside a floor or slab.")
+        click(tool, Vec2(1, 1))
+        tool.pointerMoved(ToolInput(point: Vec2(5, 1), rawPoint: Vec2(5, 1)))
+        #expect(tool.preview.primitives.count == 4)
+        click(tool, Vec2(5, 1))
+        let r = try #require(ctx.model.elements(.structuralRebar).first)
+        #expect(r.rebar == RebarData(start: Vec2(1, 1), end: Vec2(5, 1), count: 4, spacing: 0.25))
+        #expect(r.hostID == floorID(ctx) && ctx.model[r.typeID]?.name == "15M")
+        #expect(ctx.session.selection.ids == [r.id])
+    }
+
+    @Test func areaPathAndFabricAreaPickTheFloorThenSketch() throws {
+        let (ctx, _) = try context()
+        let area = ReinforcementSketchTool(ctx: ctx, kind: .area)
+        #expect(!area.isSketchMode)
+        click(area, Vec2(2, 2))
+        #expect(area.isSketchMode)
+        area.setOption("mode", .text("Rectangle"))
+        click(area, Vec2(0, 0)); click(area, Vec2(3, 2))
+        #expect(area.finish())
+        let a = try #require(ctx.model.elements(.areaReinforcement).first)
+        #expect(a.hostID == floorID(ctx) && a.areaReinforcement?.layers.count == 4)
+        #expect(ctx.model.hosted(by: a.id).first?.structuralSymbol?.kind == .areaReinforcement)
+
+        let path = ReinforcementSketchTool(ctx: ctx, kind: .path)
+        click(path, Vec2(2, 2))
+        click(path, Vec2(0, 0)); click(path, Vec2(3, 0))
+        #expect(path.finish())
+        let p = try #require(ctx.model.elements(.pathReinforcement).first)
+        #expect(p.pathReinforcement?.path == [Vec2(0, 0), Vec2(3, 0)])
+        #expect(Reinforcement.pathBars(p, ctx.model).count == 11)
+        #expect(ctx.model.hosted(by: p.id).first?.structuralSymbol?.kind == .pathReinforcement)
+
+        let fabric = ReinforcementSketchTool(ctx: ctx, kind: .fabricArea)
+        click(fabric, Vec2(2, 2))
+        fabric.setOption("mode", .text("Rectangle"))
+        click(fabric, Vec2(0, 0)); click(fabric, Vec2(6, 4))
+        #expect(fabric.finish())
+        let f = try #require(ctx.model.elements(.fabricAreas).first)
+        #expect(Reinforcement.fabricAreaSheets(f, ctx.model).count == 4)
+    }
+
+    @Test func wallAreaReinforcementIsSketchedInAnElevation() throws {
+        var walls: [ElementID] = []
+        let (ctx, ids) = try context { tx, ids in walls = Fx.boxWalls(tx, ids) }
+        let south = try #require(ctx.model.views.first { $0.name == "South" && $0.view?.kind == .elevation })
+        ctx.viewID = south.id
+        let tool = ReinforcementSketchTool(ctx: ctx, kind: .area)
+        click(tool, Vec2(2, 1), hit: walls[0])
+        #expect(tool.isSketchMode)
+        tool.setOption("mode", .text("Rectangle"))
+        click(tool, Vec2(1, 0.5)); click(tool, Vec2(4, 2.5))
+        #expect(tool.finish())
+        let a = try #require(ctx.model.elements(.areaReinforcement).first)
+        #expect(a.hostID == walls[0] && a.levelID == ids.levels[0])
+        let b = a.areaReinforcement!.boundary
+        #expect(b.map(\.x).min() == 1 && b.map(\.x).max() == 4 && b.map(\.y).min() == 0.5 && b.map(\.y).max() == 2.5)
+        // It draws on its wall in the elevation.
+        let g = ViewGraphicsBuilder(model: ctx.model, view: ctx.model[south.id]!).build()
+        #expect(g.items.contains { $0.elementID == a.id })
+    }
+
+    @Test func fabricSheetCouplersAndSymbols() throws {
+        let (ctx, _) = try context()
+        let sheet = FabricSheetTool(ctx: ctx)
+        click(sheet, Vec2(3, 2))
+        #expect(ctx.model.elements(.fabricReinforcement).first?.fabricSheet?.center == Vec2(3, 2))
+        // Two sets meeting end to end.
+        let rebar = RebarTool(ctx: ctx)
+        click(rebar, Vec2(0.5, 1)); click(rebar, Vec2(2.5, 1))
+        click(rebar, Vec2(2.5, 1)); click(rebar, Vec2(4.5, 1))
+        let sets = ctx.model.elements(.structuralRebar).sorted { $0.id < $1.id }
+        #expect(sets.count == 2)
+        let coupler = RebarCouplerTool(ctx: ctx, between: true)
+        click(coupler, Vec2(2.4, 1)); click(coupler, Vec2(2.6, 1))
+        let c = try #require(ctx.model.elements(.rebarCouplers).first)
+        #expect(c.hostID == sets[0].id && c.rebarCoupler == RebarCouplerData(atEnd: true, otherRebarID: sets[1].id))
+        // Place on Bar End refuses a second coupler on the same end.
+        var messages: [String] = []
+        ctx.showMessage = { messages.append($0) }
+        let onEnd = RebarCouplerTool(ctx: ctx)
+        click(onEnd, Vec2(2.4, 1))
+        #expect(messages.last == "This end of the bars already has a coupler.")
+        // A rebar symbol is placed with one click; a Multi-Rebar annotation picks the set, then places the line.
+        let sym = StructuralSymbolTool(ctx: ctx, kind: .rebar, commandID: .rebarSymbol)
+        click(sym, Vec2(1.5, 1))
+        #expect(ctx.model.hosted(by: sets[0].id).contains { $0.structuralSymbol?.kind == .rebar })
+        let multi = StructuralSymbolTool(ctx: ctx, kind: .multiRebarLinear, commandID: .multiRebarLinear)
+        click(multi, Vec2(3.5, 1))
+        #expect(ctx.model.hosted(by: sets[1].id).allSatisfy { $0.structuralSymbol == nil })
+        click(multi, Vec2(3.5, 2))
+        #expect(ctx.model.hosted(by: sets[1].id).contains { $0.structuralSymbol == StructuralSymbolData(kind: .multiRebarLinear, position: Vec2(3.5, 2)) })
+    }
+
+    @Test func trussBraceAndBeamSystemTools() throws {
+        let (ctx, ids) = try context()
+        ctx.currentTypes[.structuralFraming] = ids.systemTypes["Steel Beam 200 x 400"]
+        let truss = TrussBraceTool(ctx: ctx, kind: .truss)
+        click(truss, Vec2(0, 10)); click(truss, Vec2(9, 10))
+        #expect(ctx.model.elements(.structuralFraming).count == 2 + 6)
+        let brace = TrussBraceTool(ctx: ctx, kind: .brace)
+        click(brace, Vec2(0, 12))
+        #expect(brace.numericInput("4000"))
+        let b = try #require(ctx.model.elements(.structuralFraming).first { $0.beam?.curve.asSegment?.start == Vec2(0, 12) })
+        #expect(b.beam?.endOffset == 4 && b.typeID == ids.systemTypes["Steel Beam 200 x 400"])
+        let sys = SketchTool(ctx: ctx, target: .f34(.beamSystem), commandID: .beamSystem)
+        sys.setOption("mode", .text("Rectangle"))
+        click(sys, Vec2(0, 20)); click(sys, Vec2(8, 26))
+        #expect(sys.finish())
+        let s = try #require(ctx.model.elements(.beamSystems).first)
+        #expect(ctx.model.hosted(by: s.id).filter { $0.beam != nil }.count == 3)
+        #expect(ctx.model.hosted(by: s.id).contains { $0.structuralSymbol?.kind == .beamSystem })
+        // Undo removes the system with its beams.
+        ctx.session.undoManager.endUndoGrouping()
+        ctx.session.undoManager.undo()
+        #expect(ctx.model.elements(.beamSystems).isEmpty)
+    }
+}

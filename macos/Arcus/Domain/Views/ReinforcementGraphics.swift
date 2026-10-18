@@ -249,3 +249,23 @@ enum StructuralSymbolGraphics {
         return a
     }
 }
+
+extension Reinforcement {
+    /// Whether `view` (a section or elevation) looks straight at the wall `host`.
+    public static func viewFacesWall(_ view: ViewData, _ host: ElementID?, _ m: BIMModel) -> Bool {
+        guard let fr = VerticalGraphics.frame(view), let w = wallFrame(m, host) else { return false }
+        return abs(w.direction.dot(fr.right)) > 0.999
+    }
+
+    /// A point of a section or elevation (u, z) in the face coordinates of a wall the view looks straight at.
+    public static func wallFacePoint(_ p: Vec2, view: ViewData, host: ElementID?, _ m: BIMModel) -> Vec2? {
+        guard let fr = VerticalGraphics.frame(view), let w = wallFrame(m, host), abs(w.direction.dot(fr.right)) > 0.999 else { return nil }
+        let plan = fr.origin.xy + fr.right * p.x
+        return Vec2((plan - w.origin).dot(w.direction), p.y - w.base)
+    }
+
+    /// The floor (or foundation slab) of `level` under a plan point, topmost first.
+    public static func floor(at p: Vec2, level: ElementID?, _ m: BIMModel) -> Element? {
+        m.elements(.floors).filter { $0.levelID == level && $0.slab != nil }.reversed().first { SlabGeometry.profile($0)?.contains(p) == true }
+    }
+}
