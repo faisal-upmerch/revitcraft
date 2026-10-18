@@ -14,6 +14,8 @@ extension CommandRouter {
             return WallRevealTool(ctx: c)
         case .placeModelGroup:
             return ModelGroupTool(ctx: c)
+        case .highlightBoundaries:
+            return HighlightBoundariesTool(ctx: c)
         case .verticalOpening, .faceOpening, .dormerOpening:
             let kind: HostedOpeningKind = id == .verticalOpening ? .vertical : id == .faceOpening ? .byFace : .dormer
             // A single selected host starts the sketch on it, as when it is picked.
@@ -31,6 +33,8 @@ extension CommandRouter {
         switch id {
         case .modelText:
             return isPlan ? nil : "Open a plan view to place model text."
+        case .highlightBoundaries:
+            return isPlan ? nil : "Open a plan view to highlight its level's room boundaries."
         case .placeModelGroup:
             guard !ModelGroups.typeNames(model).isEmpty else { return "The project has no model groups. Select elements and use Create Group first." }
             return isPlan ? nil : "Open a plan view to place a model group."

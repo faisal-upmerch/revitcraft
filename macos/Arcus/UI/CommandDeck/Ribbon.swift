@@ -424,7 +424,8 @@ struct RibbonView: View {
             }
             if [.room, .area].contains(tool.commandID) {
                 panelView(RibbonPanel(title: tool.commandID == .area ? "Area" : "Room",
-                                      items: [.large(tool.commandID == .area ? .placeAreasAutomatically : .placeRoomsAutomatically), .small(.colorSchemes)],
+                                      items: [.large(tool.commandID == .area ? .placeAreasAutomatically : .placeRoomsAutomatically)]
+                                          + (tool.commandID == .room ? [.large(.highlightBoundaries)] : []) + [.small(.colorSchemes)], // F1: as RevitCraft's Room panel
                                       tint: RibbonContent.rooms), contextual: true)
             }
         } else {

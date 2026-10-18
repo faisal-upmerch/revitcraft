@@ -399,3 +399,28 @@ extension F1Tests {
         #expect(region.curves.count > 2)
     }
 }
+
+// MARK: - Highlight Boundaries
+
+extension F1Tests {
+    @Test func highlightBoundariesShowsTheLevelsRoomBoundingElements() throws {
+        let (ctx, ids) = context()
+        var walls: [ElementID] = [], notBounding: ElementID!, separator: ElementID!, upstairs: ElementID!
+        ctx.session.perform("Walls") { tx in
+            walls = Fx.boxWalls(tx, ids)
+            notBounding = Fx.wall(tx, ids, Vec2(2, 2), Vec2(4, 2)) { $0.roomBounding = false }
+            separator = tx.create(.roomSeparationLines, data: .modelLine(ModelLineData(curve: .line(Segment2(Vec2(5, 0), Vec2(5, 8))))), levelID: ids.levels[0])
+            upstairs = Fx.wall(tx, ids, Vec2(0, 20), Vec2(4, 20), level: 1, top: nil)
+        }
+        var messages: [String] = []
+        ctx.showMessage = { messages.append($0) }
+        let tool = HighlightBoundariesTool(ctx: ctx)
+        #expect(Set(tool.boundaries) == Set(walls + [separator]))
+        #expect(tool.preview.highlight == Set(walls + [separator]) && !tool.preview.highlight.contains(notBounding) && !tool.preview.highlight.contains(upstairs))
+        #expect(messages == ["Room Bounding elements are highlighted."])
+        var done = false
+        ctx.toolFinished = { done = true }
+        click(tool, Vec2(1, 1))
+        #expect(done, "a click ends the highlight")
+    }
+}
