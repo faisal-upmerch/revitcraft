@@ -220,6 +220,8 @@ struct PropertiesView: View {
         case .column: .columns
         case .structuralColumn: .structuralColumns
         case .beam: .structuralFraming
+        case .truss, .brace, .beamSystem: .structuralFraming // F34
+        case .rebar: .structuralRebar // F34
         case .floor, .floorPickWalls: .floors
         case .ceiling: .ceilings
         case .roofFootprint, .roofPickWalls, .roofExtrusion: .roofs

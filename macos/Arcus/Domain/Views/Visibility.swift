@@ -99,7 +99,7 @@ public struct VisibilityResolver: Sendable {
         if vg.hiddenElements.contains(e.id) || vg.hiddenCategories.contains(e.category) { return nil }
         if !optionVisible(e) { return nil }
         if data.discipline == .structural, e.category.isModel,
-           ![.structuralColumns, .structuralFraming, .floors, .walls, .levels, .grids, .stairs].contains(e.category) {
+           ![.structuralColumns, .structuralFraming, .floors, .walls, .levels, .grids, .stairs].contains(e.category), !Category.f34Structural.contains(e.category) { // F34
             return nil
         }
         let subKey = subcategory.map { Subcategories.key(e.category, $0) } // BL-VG

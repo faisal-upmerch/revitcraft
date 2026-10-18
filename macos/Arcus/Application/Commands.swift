@@ -69,7 +69,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F34 commands:
-
+    case truss, brace, beamSystem, structuralSettings, rebar, areaReinforcement, pathReinforcement, fabricArea, fabricSheet, rebarCover, rebarCoupler, couplerOnBarEnd, couplerBetweenBars, beamSymbol, areaReinforcementSymbol, pathReinforcementSymbol, rebarSymbol, fabricSymbol, multiRebarAligned, multiRebarLinear
 
     // F5 commands:
 

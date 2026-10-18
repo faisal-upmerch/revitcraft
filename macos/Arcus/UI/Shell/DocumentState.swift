@@ -26,6 +26,7 @@ enum DialogKind: Identifiable, Equatable {
     case schedulePropertiesTab(ElementID, tab: Int, fieldID: String?) // BL-SCHED: Schedule Properties opened on a tab
     case sheetTitle(ElementID) // BL-BROWSER: sheet number and name
     case filters(ElementID?), viewTemplates(ElementID?, ViewTemplatesMode, select: ElementID? = nil), objectStyles, warnings, selectByID, additionalSettings(AdditionalSettingsTab), userInterface // BL-VG
+    case f34(F34Dialog) // F34: Structural Settings, Rebar Cover Settings
     case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
     var id: String { String(describing: self) }
 }

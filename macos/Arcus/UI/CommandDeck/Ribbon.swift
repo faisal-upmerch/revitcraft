@@ -42,6 +42,7 @@ struct RibbonItem: Hashable {
         case .locationSettings where size == .large: return "Location"
         case .stairStraight where split: return "Stair"
         case .alignedDimension where split: return "Aligned"
+        case .multiRebarAligned where split: return "Multi-\nRebar" // F34
         case .floorPlan where split: return "Plan\nViews"
         case .schedule where split: return "Schedules"
         case .duplicateView where split: return "Duplicate View"
@@ -146,8 +147,10 @@ enum RibbonContent {
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .structure:
             return [RibbonPanel(title: "Structure", items: [.large(.beam), .large(.structuralWall, [.structuralWall, .wall]), .large(.structuralColumn),
-                                                            .large(.structuralFloor, [.structuralFloor, .floor])], tint: build), // BL-VG
+                                                            .large(.structuralFloor, [.structuralFloor, .floor]), .large(.truss), .large(.brace), .large(.beamSystem)], tint: build), // BL-VG, F34
                     RibbonPanel(title: "Foundation", items: [.large(.foundationIsolated), .large(.foundationWall), .large(.foundationSlab)], tint: build), // BL-VG
+                    RibbonPanel(title: "Reinforcement", items: [.large(.rebar), .small(.areaReinforcement), .small(.pathReinforcement), .small(.fabricArea),
+                                                                .small(.fabricSheet).newColumn(), .small(.rebarCover), .small(.rebarCoupler, [.rebarCoupler, .couplerOnBarEnd, .couplerBetweenBars])], tint: build), // F34
                     RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary]), .small(.modelLine), .small(.createGroup)], tint: build),
                     RibbonPanel(title: "Opening", items: [.large(.shaftOpening), .small(.wallOpening)], tint: build),
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
@@ -170,9 +173,12 @@ enum RibbonContent {
                     RibbonPanel(title: "Text", items: [.large(.textNote), .small(.checkSpelling), .small(.findReplace)], tint: annotate),
                     RibbonPanel(title: "Tag", items: [.large(.tagByCategory), .large(.tagAll), .small(.beamAnnotations), .small(.multiCategoryTag), .small(.materialTag),
                                                       .small(.areaTag), .small(.roomTag), .small(.viewReference).newColumn(), .small(.treadNumber),
+                                                      .large(.multiRebarAligned, [.multiRebarAligned, .multiRebarLinear]), // F34
                                                       .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser, .keynotingSettings])], tint: annotate), // F12: Keynoting Settings
                     RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
-                    RibbonPanel(title: "Symbol", items: [.large(.symbol), .small(.spanDirection), .small(.stairPath), .small(.northArrow), .small(.scaleBar)], tint: annotate)]
+                    RibbonPanel(title: "Symbol", items: [.large(.symbol), .small(.spanDirection), .small(.beamSymbol), .small(.stairPath), // F34: RevitCraft's order
+                                                         .small(.areaReinforcementSymbol).newColumn(), .small(.pathReinforcementSymbol), .small(.rebarSymbol),
+                                                         .small(.fabricSymbol).newColumn(), .small(.northArrow), .small(.scaleBar)], tint: annotate)]
         case .analyze:
             // Spaces & Zones arrives with the Analyze milestone (F5).
             return [RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
@@ -204,7 +210,7 @@ enum RibbonContent {
             // Export and Print live in the File menu, as in RevitCraft.
             return [RibbonPanel(title: "Settings", items: [.large(.materials), .small(.objectStyles), .small(.snapSettings), .small(.projectInfo),
                                                            .small(.projectParameters), .small(.sharedParameters), .small(.globalParameters), .small(.purgeUnused), .small(.projectUnits), // F11: Global Parameters
-                                                           .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage), // BL-VG
+                                                           .small(.structuralSettings), .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage), // BL-VG
                     // F11: Coordinates and Position, as RevitCraft's Project Location panel.
                     RibbonPanel(title: "Project Location", items: [.large(.locationSettings), .large(.specifyCoordinates, [.specifyCoordinates, .reportCoordinates]),
                                                                    .large(.relocateProject, [.relocateProject, .rotateTrueNorth, .mirrorProject, .rotateProjectNorth])], tint: manage),

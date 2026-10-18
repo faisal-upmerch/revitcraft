@@ -11,6 +11,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case floor, ceiling, roof, buildingPad, filledRegion, maskingRegion, revisionCloud, railing, propertyLine, callout, slopeArrow
         /// Open roof profile sketched in an elevation or section (Roof by Extrusion).
         case roofExtrusion
+        /// F34: beam system bays and area, path and fabric area reinforcement boundaries (SketchTool+F34.swift).
+        case f34(F34SketchTarget)
     }
     /// Draw tools of the contextual Draw panel (BL-CANVAS: the full set of the reference tool's boundary sketches).
     public enum DrawMode: String, CaseIterable {
@@ -64,6 +66,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             case .filledRegion(let f): curves = f.boundary.allCurves
             case .railing(let r): curves = r.path
             case .revisionCloud(let c): curves = c.outline.edges.map { .line($0) }; revisionID = c.revisionID
+            case .beamSystem, .areaReinforcement, .fabricArea: curves = F34SketchTarget.boundaryCurves(e) // F34
             default: break
             }
         }
@@ -86,6 +89,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .callout: "Callout"
         case .slopeArrow: "Slope Arrow"
         case .roofExtrusion: "Roof Profile"
+        case .f34(let t): t.title // F34
         }
     }
     public var prompt: String {
@@ -341,6 +345,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
             createCallout(r)
         case .roofExtrusion:
             guard commitExtrusion() else { return false }
+        case .f34(let t) where t.isOpenPath: // F34: path reinforcement is an open chain
+            guard f34FinishPath(t) else { return false }
         default:
             let loops = splitLoops(curves)
             if let issue = SketchValidation.validate(curves, loops: loops) { // BL-CANVAS: ARCUS-050
@@ -435,6 +441,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
                 if let id = editing { tx.update(id) { $0.revisionCloud?.outline = outline } }
                 else { tx.create(.revisionClouds, data: .revisionCloud(RevisionCloudData(outline: outline, revisionID: rev)), ownerViewID: view) }
             }
+        case .f34(let t): f34Commit(t, sketch, view: view, level: level) // F34
         default: break
         }
     }
