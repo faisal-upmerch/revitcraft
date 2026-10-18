@@ -24,6 +24,15 @@ extension QAHarness {
             c.zoom(to: Rect2(center: r.center, halfSize: Vec2(max(r.width, r.height) * 0.3, max(r.width, r.height) * 0.3)))
             await pause(600)
             await shot(w, "wall-selected-zoom-\(suffix)")
+            // I4: a selected grid's end up close: the end grip, its 3D/2D switch, bubble box, Add Elbow and lock.
+            if let grid = s.model.elements(.grids).first, let gd = grid.grid {
+                s.session.selection.select([grid.id])
+                let p = gd.curve(in: plan.id).start
+                c.zoom(to: Rect2(center: p, halfSize: Vec2(3, 3)))
+                await pause(600)
+                await shot(w, "grid-selected-zoom-\(suffix)")
+                s.session.selection.select([id])
+            }
             c.zoomToFit()
         }
         // W4-WIRE: the ribbon minimized to its tab pill; a tool with its Options pill; a second open view's tab pills.

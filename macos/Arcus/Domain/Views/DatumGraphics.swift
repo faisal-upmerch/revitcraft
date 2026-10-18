@@ -18,14 +18,23 @@ public enum DatumGraphics {
         let st = builder.stroke(.grids, cut: false, o)
         var prims: [GPrimitive] = []
         let r = builder.paper(bubbleRadius)
-        switch gd.curve {
+        let ext = gd.extent(in: builder.view.id)
+        switch gd.curve(in: builder.view.id) {
         case .line(let s):
             let d = s.direction
-            let a = gd.bubbleAtStart ? s.start + d * r : s.start
-            let b = gd.bubbleAtEnd ? s.end - d * r : s.end
+            let k = builder.paper(0.006)
+            // I4: as in RevitCraft (`grid_graphics`), the bubble hangs beyond the grid's end, so the end (and its grip)
+            // stays clear of it. An elbow jogs it aside: back along the grid, across by the offset, then out to the bubble.
+            func end(_ p: Vec2, out: Vec2, show: Bool, elbow: Vec2?) -> Vec2 {
+                guard show, let o = elbow else { return p }
+                prims.append(.polyline([p - out * (k * 2), p - out * k + o, p + o], closed: false, st))
+                return p - out * (k * 2)
+            }
+            let a = end(s.start, out: -d, show: gd.bubbleAtStart, elbow: ext?.elbowStart)
+            let b = end(s.end, out: d, show: gd.bubbleAtEnd, elbow: ext?.elbowEnd)
             prims.append(.polyline([a, b], closed: false, st))
-            if gd.bubbleAtStart { prims += bubble(at: s.start - d * 0, label: g.name, builder: builder, st: st).map { shift($0, by: -d * 0) } }
-            if gd.bubbleAtEnd { prims += bubble(at: s.end, label: g.name, builder: builder, st: st) }
+            if gd.bubbleAtStart { prims += bubble(at: s.start + (ext?.elbowStart ?? .zero) - d * r, label: g.name, builder: builder, st: st) }
+            if gd.bubbleAtEnd { prims += bubble(at: s.end + (ext?.elbowEnd ?? .zero) + d * r, label: g.name, builder: builder, st: st) }
         case .arc(let a):
             prims.append(.arc(a, st))
             if gd.bubbleAtStart { prims += bubble(at: a.start, label: g.name, builder: builder, st: st) }

@@ -8,6 +8,8 @@ import ArcusDomain
 public struct Grip: Sendable, Hashable {
     public enum Kind: Sendable, Hashable {
         case start, end, point, cropEdge(Int), dimensionLine, tagHead, textPosition, sectionEnd(Bool), sketchVertex(Int)
+        /// I4: a section's far clip (the triangle beyond its line) and a grid bubble's elbow (drag it across the grid).
+        case sectionDepth, gridElbow(atEnd: Bool)
         /// Witness line `i` of a dimension: drag it onto another reference.
         case witness(Int)
         /// Annotation handles: text wrap width, text leader `i` end and elbow, tag leader end and elbow, the value text of
@@ -15,18 +17,22 @@ public struct Grip: Sendable, Hashable {
         case textWidth, leaderEnd(Int), leaderElbow(Int), tagLeaderEnd, tagLeaderElbow, dimensionText(Int), spotPoint, spotHead, repeatEnd
         /// Controls (click to toggle).
         case flipWall, flipFacing, flipHand, bubble(atEnd: Bool), dimensionEquality, dimensionLock
+        /// I4 controls (RevitCraft): a grid end's 3D/2D extents switch, Add Elbow, the alignment lock, and a section's flip.
+        case gridExtents(atEnd: Bool), addElbow(atEnd: Bool), gridLock(atEnd: Bool), flipSection
     }
     public var elementID: ElementID
     public var kind: Kind
     public var position: Vec2
     /// Glyph axis for controls (the flip arrows point both ways along it).
     public var direction: Vec2 = .unitX
-    /// Current state of a toggle control (bubble shown, equality on, dimension locked).
+    /// Current state of a toggle control (bubble shown, equality on, dimension locked). Grid ends: 2D extents.
     public var isOn = false
+    /// I4: the view whose 2D extents a grid grip edits.
+    public var viewID: ElementID? = nil
 
     public var isControl: Bool {
         switch kind {
-        case .flipWall, .flipFacing, .flipHand, .bubble, .dimensionEquality, .dimensionLock: true
+        case .flipWall, .flipFacing, .flipHand, .bubble, .dimensionEquality, .dimensionLock, .gridExtents, .addElbow, .gridLock, .flipSection: true
         default: false
         }
     }
@@ -35,13 +41,13 @@ public struct Grip: Sendable, Hashable {
 public enum GripService {
     /// `levelLine`: the drawn start and end of a level line in an elevation or section (from the view graphics), so levels
     /// without explicit extents still get end grips.
-    public static func grips(for e: Element, _ model: BIMModel, viewKind: ViewKind?, levelLine: (Double, Double)? = nil) -> [Grip] {
+    public static func grips(for e: Element, _ model: BIMModel, viewKind: ViewKind?, levelLine: (Double, Double)? = nil, viewID: ElementID? = nil) -> [Grip] {
         if let g = annotationGrips(for: e, model) { return g }
         switch e.data {
         case .wall(let w): return [Grip(elementID: e.id, kind: .start, position: w.location.start), Grip(elementID: e.id, kind: .end, position: w.location.end)]
         case .modelLine(let l): return [Grip(elementID: e.id, kind: .start, position: l.curve.start), Grip(elementID: e.id, kind: .end, position: l.curve.end)]
         case .beam(let b): return [Grip(elementID: e.id, kind: .start, position: b.curve.start), Grip(elementID: e.id, kind: .end, position: b.curve.end)]
-        case .grid(let g): return viewKind?.isPlan == true ? [Grip(elementID: e.id, kind: .start, position: g.curve.start), Grip(elementID: e.id, kind: .end, position: g.curve.end)] : []
+        case .grid(let g): return viewKind?.isPlan == true ? gridGrips(e.id, g, viewID: viewID) : []
         case .referencePlane(let r): return [Grip(elementID: e.id, kind: .start, position: r.line.start), Grip(elementID: e.id, kind: .end, position: r.line.end)]
         case .component(let c): return [Grip(elementID: e.id, kind: .point, position: c.location)]
         case .column(let c): return [Grip(elementID: e.id, kind: .point, position: c.location)]
@@ -60,6 +66,7 @@ public enum GripService {
             if let s = l.extentStart ?? levelLine?.0 { g.append(Grip(elementID: e.id, kind: .start, position: Vec2(s, l.elevation))) }
             if let en = l.extentEnd ?? levelLine?.1 { g.append(Grip(elementID: e.id, kind: .end, position: Vec2(en, l.elevation))) }
             return g
+        case .view(let vd) where viewKind?.isPlan == true && (vd.kind == .section || vd.kind == .detail): return sectionGrips(e.id, vd) // I4
         case .view: return CameraGrips.grips(for: e, viewKind: viewKind) // W2-CAM
         default: return []
         }
@@ -73,6 +80,7 @@ public enum GripService {
         if g.kind == .start || g.kind == .end, let e = tx.model[g.elementID], let w = e.wall, g.kind == .start ? w.allowJoinAtStart : w.allowJoinAtEnd,
            let q = WallGeometry.joinEndpoint(near: p, levelID: e.levelID, excluding: [e.id], tx.model) { p = q }
         if applyAnnotation(g, to: p, in: tx) { return }
+        if applyDatum(g, to: p, in: tx) { return } // I4
         tx.update(g.elementID) { e in
             switch (e.data, g.kind) {
             case (.wall(var w), .start): w.location = replaceEnd(w.location, start: p); e.data = .wall(w)
@@ -123,16 +131,21 @@ public enum GripService {
                     Grip(elementID: e.id, kind: .flipHand, position: origin - y * half, direction: x)]
         case .grid(let g) where kind?.isPlan == true:
             let r = DatumGraphics.bubbleRadius * Double(view?.view?.scale ?? 100)
-            return [false, true].map { atEnd in
-                let p = atEnd ? g.curve.end : g.curve.start
-                let side = g.curve.tangent(at: atEnd ? 1 : 0).perpendicular
-                return Grip(elementID: e.id, kind: .bubble(atEnd: atEnd), position: p + side * (r + gap), isOn: atEnd ? g.bubbleAtEnd : g.bubbleAtStart)
+            let c = g.curve(in: view?.id)
+            // I4: the bubble checkbox sits beyond the bubble along the grid, as in RevitCraft.
+            let bubbles = [false, true].map { atEnd in
+                let p = (atEnd ? c.end : c.start) + ((atEnd ? g.extent(in: view?.id)?.elbowEnd : g.extent(in: view?.id)?.elbowStart) ?? .zero)
+                let out = c.tangent(at: atEnd ? 1 : 0) * (atEnd ? 1 : -1)
+                return Grip(elementID: e.id, kind: .bubble(atEnd: atEnd), position: p + out * (2 * r + 12 * pixel), isOn: atEnd ? g.bubbleAtEnd : g.bubbleAtStart)
             }
+            return bubbles + gridControls(e, g, model, view: view, pixel: pixel, bubbleRadius: r) // I4
         case .level(let l) where kind?.isVerticalCut == true:
             guard let s = l.extentStart ?? levelLine?.0, let en = l.extentEnd ?? levelLine?.1 else { return [] }
             let left = min(s, en) == s
             return [Grip(elementID: e.id, kind: .bubble(atEnd: false), position: Vec2(s + (left ? gap : -gap), l.elevation - gap), isOn: l.showBubbleStart),
                     Grip(elementID: e.id, kind: .bubble(atEnd: true), position: Vec2(en + (left ? -gap : gap), l.elevation - gap), isOn: l.showBubbleEnd)]
+        case .view(let vd) where kind?.isPlan == true && (vd.kind == .section || vd.kind == .detail):
+            return sectionControls(e.id, vd, pixel: pixel) // I4
         case .dimension(let d) where d.kind == .linear || d.kind == .aligned:
             guard let geo = dimensionGeometry(e, model) else { return [] }
             let scale = paperScale(of: e, model)
@@ -158,12 +171,17 @@ public enum GripService {
         case .bubble: "Toggle Bubble"
         case .dimensionEquality: "Toggle Equality"
         case .dimensionLock: "Toggle Lock"
+        case .gridExtents: "Toggle 3D/2D Extents"
+        case .addElbow: "Add Elbow"
+        case .gridLock: "Toggle Alignment Lock"
+        case .flipSection: "Flip Section"
         default: nil
         }
     }
 
     /// Applies a control click. Each control toggles exactly one flag.
     public static func toggle(_ g: Grip, in tx: TransactionContext) {
+        if toggleDatum(g, in: tx) { return } // I4
         tx.update(g.elementID) { e in
             switch g.kind {
             case .flipWall: e.wall?.flipped.toggle()

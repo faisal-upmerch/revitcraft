@@ -35,9 +35,51 @@ public struct GridData: Hashable, Codable, Sendable {
     public var topElevation: Double?
     /// Scope box limiting where the grid appears (WP6a; absent in older files).
     public var scopeBoxID: ElementID?
+    /// I4: per-view 2D extents and bubble elbows, as in RevitCraft. Ends without one use the model (3D) extents.
+    /// Absent in older files.
+    public var viewExtents: [GridViewExtent]?
+    /// I4: alignment locks: a locked end moves with the ends of parallel grids aligned with it.
+    public var lockStart: Bool?
+    public var lockEnd: Bool?
     public init(curve: Curve2, bubbleAtStart: Bool = true, bubbleAtEnd: Bool = false) {
         self.curve = curve; self.bubbleAtStart = bubbleAtStart; self.bubbleAtEnd = bubbleAtEnd
     }
+
+    /// The grid's 2D extents and elbows in `viewID`, if it has any there.
+    public func extent(in viewID: ElementID?) -> GridViewExtent? {
+        guard let viewID else { return nil }
+        return viewExtents?.first { $0.viewID == viewID }
+    }
+    /// Updates (creating if needed) the 2D extents of `viewID`; extents left empty are removed.
+    public mutating func updateExtent(in viewID: ElementID, _ change: (inout GridViewExtent) -> Void) {
+        var list = viewExtents ?? []
+        var x = list.first { $0.viewID == viewID } ?? GridViewExtent(viewID: viewID)
+        change(&x)
+        list.removeAll { $0.viewID == viewID }
+        if !x.isEmpty { list.append(x) }
+        viewExtents = list.isEmpty ? nil : list
+    }
+    /// The grid as drawn in `viewID`: straight grids take that view's 2D ends where it has them.
+    public func curve(in viewID: ElementID?) -> Curve2 {
+        guard let x = extent(in: viewID), case .line(let s) = curve else { return curve }
+        return .line(Segment2(x.start ?? s.start, x.end ?? s.end))
+    }
+    public func isLocked(atEnd: Bool) -> Bool { (atEnd ? lockEnd : lockStart) ?? false }
+}
+
+/// I4: a grid's 2D extents and bubble elbows in one view (RevitCraft `GridViewExtents`).
+public struct GridViewExtent: Hashable, Codable, Sendable {
+    public var viewID: ElementID
+    /// 2D ends in this view; nil = the model (3D) end.
+    public var start: Vec2?
+    public var end: Vec2?
+    /// Elbow: the bubble's offset across the grid at that end (view units).
+    public var elbowStart: Vec2?
+    public var elbowEnd: Vec2?
+    public init(viewID: ElementID, start: Vec2? = nil, end: Vec2? = nil, elbowStart: Vec2? = nil, elbowEnd: Vec2? = nil) {
+        self.viewID = viewID; self.start = start; self.end = end; self.elbowStart = elbowStart; self.elbowEnd = elbowEnd
+    }
+    public var isEmpty: Bool { start == nil && end == nil && elbowStart == nil && elbowEnd == nil }
 }
 
 public struct ReferencePlaneData: Hashable, Codable, Sendable {

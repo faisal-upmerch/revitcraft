@@ -550,7 +550,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
 
     private var currentGrips: [Grip] {
         guard state.activeTool == nil, let id = state.session.selection.single, let e = state.model[id] else { return [] }
-        return GripService.grips(for: e, state.model, viewKind: viewElement?.view?.kind, levelLine: levelLine(id))
+        return GripService.grips(for: e, state.model, viewKind: viewElement?.view?.kind, levelLine: levelLine(id), viewID: viewID)
     }
 
     /// Click targets on the single selected element (flip arrows, bubble boxes, EQ and padlock).
@@ -581,7 +581,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
             switch g.kind {
-            case .flipWall, .flipFacing, .flipHand:
+            case .flipWall, .flipFacing, .flipHand, .flipSection:
                 // Double-headed arrow along the flip axis, on a light halo so it reads over hatching.
                 let d = g.direction.normalized
                 let u = CGVector(dx: d.x, dy: d.y), w = CGVector(dx: -d.y, dy: d.x)
@@ -618,7 +618,20 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
                 NSGraphicsContext.restoreGraphicsState()
                 // Struck through while the segments are not held equal.
                 if !g.isOn { ctx.move(to: CGPoint(x: r.minX, y: r.minY)); ctx.addLine(to: CGPoint(x: r.maxX, y: r.maxY)); ctx.strokePath() }
-            case .dimensionLock:
+            case .gridExtents:
+                // I4: "3D" for model extents, "2D" for this view's (RevitCraft).
+                let label = g.isOn ? "2D" : "3D"
+                let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10, weight: .bold), .foregroundColor: NSColor(cgColor: color) ?? Tokens.selection]
+                let size = (label as NSString).size(withAttributes: attrs)
+                NSGraphicsContext.saveGraphicsState()
+                (label as NSString).draw(at: NSPoint(x: p.x - size.width / 2, y: p.y - size.height / 2), withAttributes: attrs)
+                NSGraphicsContext.restoreGraphicsState()
+            case .addElbow:
+                // I4: a small break symbol: click to jog the bubble aside.
+                ctx.setStrokeColor(color); ctx.setLineWidth(1.5)
+                ctx.move(to: CGPoint(x: p.x - 6, y: p.y - 3)); ctx.addLine(to: CGPoint(x: p.x - 2, y: p.y - 3))
+                ctx.addLine(to: CGPoint(x: p.x + 2, y: p.y + 3)); ctx.addLine(to: CGPoint(x: p.x + 6, y: p.y + 3)); ctx.strokePath()
+            case .dimensionLock, .gridLock:
                 // Padlock: closed shackle when locked, raised to one side when unlocked.
                 let body = CGRect(x: p.x - 4.5, y: p.y - 5, width: 9, height: 6.5)
                 ctx.setFillColor(NSColor.windowBackgroundColor.cgColor); ctx.fill(body.insetBy(dx: -1.5, dy: -1.5))
@@ -641,6 +654,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         let hot = lastMouse.flatMap(grip(at:))
         for g in currentGrips {
             let p = toScreen(g.position)
+            if drawDatumGrip(g, at: p, hot: hot == g, ctx) { continue } // I4
             let radius: CGFloat
             if case .witness = g.kind { radius = 3 } else { radius = 4 }
             let r = CGRect(x: p.x - radius, y: p.y - radius, width: radius * 2, height: radius * 2)
@@ -655,6 +669,36 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
 
     /// I2: RevitCraft's tracking lines (canvas.rs `track_line`): thin light-blue (120, 170, 230) dash-dot lines.
     /// `acrossView` runs horizontal and vertical ones across the whole canvas, as RevitCraft does for axis tracking.
+    /// I4: RevitCraft's datum grips: grid ends hollow (3D extents) or filled (2D in this view), a grid elbow as a small
+    /// white dot, and a section's far clip as a white triangle pointing into the view.
+    private func drawDatumGrip(_ g: Grip, at p: NSPoint, hot: Bool, _ ctx: CGContext) -> Bool {
+        let blue = Tokens.selection.cgColor, light = NSColor(srgbRed: 120 / 255, green: 190 / 255, blue: 255 / 255, alpha: 1).cgColor
+        let isGrid = state.model[g.elementID]?.grid != nil
+        switch g.kind {
+        case .start where isGrid, .end where isGrid:
+            let r = CGRect(x: p.x - 4.5, y: p.y - 4.5, width: 9, height: 9)
+            ctx.setFillColor(hot ? light : g.isOn ? blue : NSColor.white.cgColor); ctx.fillEllipse(in: r)
+            ctx.setStrokeColor(blue); ctx.setLineWidth(1.5); ctx.strokeEllipse(in: r)
+            return true
+        case .gridElbow:
+            let r = CGRect(x: p.x - 3.5, y: p.y - 3.5, width: 7, height: 7)
+            ctx.setFillColor(hot ? light : NSColor.white.cgColor); ctx.fillEllipse(in: r)
+            ctx.setStrokeColor(blue); ctx.setLineWidth(1.5); ctx.strokeEllipse(in: r)
+            return true
+        case .sectionDepth:
+            let a = toScreen(g.position + g.direction), d = CGVector(dx: a.x - p.x, dy: a.y - p.y)
+            let l = max(hypot(d.dx, d.dy), 1e-6), u = CGVector(dx: d.dx / l, dy: d.dy / l), n = CGVector(dx: -u.dy, dy: u.dx)
+            ctx.move(to: CGPoint(x: p.x + u.dx * 8, y: p.y + u.dy * 8))
+            ctx.addLine(to: CGPoint(x: p.x - u.dx * 4 + n.dx * 6, y: p.y - u.dy * 4 + n.dy * 6))
+            ctx.addLine(to: CGPoint(x: p.x - u.dx * 4 - n.dx * 6, y: p.y - u.dy * 4 - n.dy * 6)); ctx.closePath()
+            ctx.setFillColor(hot ? light : NSColor.white.cgColor); ctx.setStrokeColor(blue); ctx.setLineWidth(1.5)
+            ctx.drawPath(using: .fillStroke)
+            return true
+        default:
+            return false
+        }
+    }
+
     private func drawGuides(_ guides: [Segment2], _ ctx: CGContext, acrossView: Bool = false) {
         guard !guides.isEmpty else { return }
         ctx.saveGState()

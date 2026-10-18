@@ -226,7 +226,7 @@ struct SelectToolTests {
         }
         let view = e.model[e.plan]
         let tool = SelectTool(ctx: e.ctx)
-        let gc = GripService.controls(for: e.model[grid]!, e.model, view: view, pixel: 0.01)
+        let gc = GripService.controls(for: e.model[grid]!, e.model, view: view, pixel: 0.01).filter { if case .bubble = $0.kind { return true }; return false } // I4 adds 3D/2D, elbow and lock controls
         #expect(gc.map(\.kind) == [.bubble(atEnd: false), .bubble(atEnd: true)])
         #expect(gc[0].isOn && !gc[1].isOn)
         tool.click(gc[1])
