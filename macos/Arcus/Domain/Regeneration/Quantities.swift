@@ -152,6 +152,8 @@ public enum QuantityEngine {
             if e.topography?.solid != nil { ToposolidParameters.quantities(e, model, &q) } // BL-SITE
         case .filledRegion(let f):
             if case .success(let p) = f.boundary.profile() { q.area = p.area; q.perimeter = p.perimeter }
+        case .mass: // F5: gross surface area and volume
+            MassGeometry.quantities(e, model, &q)
         default:
             break
         }

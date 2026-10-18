@@ -15,6 +15,8 @@ public struct TemporaryVisibility: Sendable, Hashable {
     public var temporaryTemplateID: ElementID? = nil // BL-VG
     /// Reveal Constraints: locked dimensions, alignments and EQ constraints drawn over the view.
     public var revealConstraints: Bool = false // BL-VG
+    /// F5: Massing & Site ▸ Show Mass is off: conceptual masses are hidden (set for every view from the session).
+    public var hideMass: Bool = false
     public init() {}
     public var isActive: Bool { !hiddenElements.isEmpty || !hiddenCategories.isEmpty || isolatedElements != nil || isolatedCategories != nil }
 }
@@ -93,6 +95,7 @@ public struct VisibilityResolver: Sendable {
             // Reveal hidden shows everything that exists in the model at this phase.
             return phaseStatus(e) == .future ? nil : GraphicOverride()
         }
+        if temp.hideMass, e.category == .mass { return nil } // F5: Show Mass
         if let iso = temp.isolatedElements, !iso.contains(e.id), e.category.isModel || e.category.isAnnotation { return nil }
         if let iso = temp.isolatedCategories, !iso.contains(e.category), e.category.isModel || e.category.isAnnotation { return nil }
         if temp.hiddenElements.contains(e.id) || temp.hiddenCategories.contains(e.category) { return nil }

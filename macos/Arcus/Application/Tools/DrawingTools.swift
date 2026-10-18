@@ -7,7 +7,9 @@ import ArcusDomain
 
 @MainActor
 public final class LineTool: BaseTool, InteractiveTool {
-    public enum Kind { case detail, model, roomSeparation, areaBoundary, propertyLine, referencePlane, grid, beam, insulation }
+    public enum Kind { case detail, model, roomSeparation, areaBoundary, propertyLine, referencePlane, grid, beam, insulation
+        case spaceSeparation // F5
+    }
     public let kind: Kind
     public let commandID: CommandID
     var start: Vec2?
@@ -46,6 +48,7 @@ public final class LineTool: BaseTool, InteractiveTool {
         case .grid: "Grid"
         case .beam: "Beam"
         case .insulation: "Insulation"
+        case .spaceSeparation: "Space Separator" // F5
         }
     }
     public var prompt: String {
@@ -144,8 +147,9 @@ public final class LineTool: BaseTool, InteractiveTool {
             ctx.session.perform("Create Detail Line") { tx in
                 tx.create(.detailLines, data: .modelLine(ModelLineData(curve: c, styleID: styleID, freeform: freeform)), ownerViewID: view)
             }
-        case .model, .roomSeparation, .areaBoundary, .propertyLine:
-            let cat: Category = kind == .model ? .genericModels : kind == .roomSeparation ? .roomSeparationLines : kind == .areaBoundary ? .areaBoundaryLines : .propertyLines
+        case .model, .roomSeparation, .areaBoundary, .propertyLine, .spaceSeparation: // F5: space separators
+            let cat: Category = kind == .model ? .genericModels : kind == .roomSeparation ? .roomSeparationLines : kind == .areaBoundary ? .areaBoundaryLines
+                : kind == .spaceSeparation ? .spaceSeparationLines : .propertyLines
             guard ctx.isPlan else { message("Draw these lines in a plan view."); return }
             if kind == .areaBoundary && ctx.viewData?.kind != .areaPlan { message("Draw area boundaries in an area plan (View ▸ Area Plan)."); return }
             let areaScheme = kind == .areaBoundary ? ctx.viewData?.areaSchemeID ?? AreaPlans.sortedSchemes(ctx.model).first?.id : nil

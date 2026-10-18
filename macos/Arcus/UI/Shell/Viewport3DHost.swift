@@ -97,7 +97,7 @@ final class Viewport3DHost: NSView {
         let gen = generation
         buildTask?.cancel()
         let model = state.model
-        let temp = state.session.temporaryVisibility[viewID] ?? TemporaryVisibility()
+        let temp = state.session.temporaryVisibility(for: viewID) // F5: with Show Mass
         let box = CancelBox()
         let detail = vd.detailLevel
         buildTask = Task { [weak self] in

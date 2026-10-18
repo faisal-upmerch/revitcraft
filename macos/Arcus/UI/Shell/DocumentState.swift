@@ -29,6 +29,7 @@ enum DialogKind: Identifiable, Equatable {
     case f34(F34Dialog) // F34: Structural Settings, Rebar Cover Settings
     case f67(F67Dialog) // F67: Insert tab dialogs
     case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
+    case f5(F5Dialog) // F5: Model In-place (Dialogs/F5MassingDialogs.swift)
     var id: String { String(describing: self) }
 }
 

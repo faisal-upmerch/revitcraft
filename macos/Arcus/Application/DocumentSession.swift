@@ -38,6 +38,9 @@ public final class DocumentSession {
     public private(set) var lastChange: ModelChange?
     /// Temporary hide/isolate per view (session only; not undoable, not saved).
     public var temporaryVisibility: [ElementID: TemporaryVisibility] = [:]
+    /// F5: Massing & Site ▸ Show Mass. Session only, for every view (RevitCraft `show_mass`); views get it as
+    /// `TemporaryVisibility.hideMass` through `temporaryVisibility(for:)`.
+    public var showMass = true
     /// Group being edited (Edit Group mode), if any.
     public var editingGroupID: ElementID?
     /// Instance values set in the Properties palette before placement ("New Doors"); applied to matching new elements. BL-PROPS

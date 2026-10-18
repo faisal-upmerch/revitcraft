@@ -31,6 +31,7 @@ struct RibbonItem: Hashable {
     /// ("Roof", "Stair") and long large-button captions break onto two lines at a word boundary.
     static func caption(_ id: CommandID, size: Size, split: Bool) -> String {
         if let c = f11Caption(id, size: size, split: split) { return c } // F11
+        if let c = f5Caption(id, size: size) { return c } // F5
         switch id {
         case .roofFootprint where split: return "Roof"
         case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
@@ -142,7 +143,7 @@ enum RibbonContent {
                     RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
         case .architecture:
             return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window),
-                                                        .large(.component, [.component, .componentLibrary]), .large(.structuralColumn, [.structuralColumn, .column]),
+                                                        .large(.component, [.component, .componentLibrary, .modelInPlace]), .large(.structuralColumn, [.structuralColumn, .column]), // F5: Model In-place
                                                         .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
                                                         .large(.floor, [.floor, .structuralFloor, .slabEdge]),
                                                         .small(.curtainGrid), .small(.mullion), .small(.curtainPanel)], tint: build),
@@ -188,7 +189,7 @@ enum RibbonContent {
                                                          .large(.insulation)], tint: annotate),
                     RibbonPanel(title: "Text", items: [.large(.textNote), .small(.checkSpelling), .small(.findReplace)], tint: annotate),
                     RibbonPanel(title: "Tag", items: [.large(.tagByCategory), .large(.tagAll), .small(.beamAnnotations), .small(.multiCategoryTag), .small(.materialTag),
-                                                      .small(.areaTag), .small(.roomTag), .small(.viewReference).newColumn(), .small(.treadNumber),
+                                                      .small(.areaTag), .small(.roomTag), .small(.spaceTag), .small(.viewReference).newColumn(), .small(.treadNumber), // F5: Space Tag
                                                       .large(.multiRebarAligned, [.multiRebarAligned, .multiRebarLinear]), // F34
                                                       .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser, .keynotingSettings])], tint: annotate), // F12: Keynoting Settings
                     RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
@@ -196,13 +197,17 @@ enum RibbonContent {
                                                          .small(.areaReinforcementSymbol).newColumn(), .small(.pathReinforcementSymbol), .small(.rebarSymbol),
                                                          .small(.fabricSymbol).newColumn(), .small(.northArrow), .small(.scaleBar)], tint: annotate)]
         case .analyze:
-            // Spaces & Zones arrives with the Analyze milestone (F5).
-            return [RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
+            // F5: RevitCraft's Spaces & Zones (Space, Space Separator, Tag Space).
+            return [RibbonPanel(title: "Spaces & Zones", items: [.large(.space), .large(.spaceSeparator), .large(.spaceTag)], tint: rooms),
+                    RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
                     RibbonPanel(title: "Reports & Schedules", items: [.large(.schedule, [.schedule, .materialTakeoff])], tint: view)]
         case .massing:
             // W2-DWG: Massing & Site panels.
             // BL-SITE: Toposolid is the primary site element; toposurfaces and building pads sit behind "Legacy".
-            return [RibbonPanel(title: "Model Site", items: [.large(.toposolid, [.toposolid, .toposolidFromFile, .toposolidFromImport]),
+            // F5: RevitCraft's Conceptual Mass and Model by Face panels come first.
+            return [RibbonPanel(title: "Conceptual Mass", items: [.large(.showMass), .large(.inPlaceMass)], tint: build),
+                    RibbonPanel(title: "Model by Face", items: [.large(.curtainSystemByFace), .large(.roofByFace), .large(.wallByFace), .large(.floorByFace)], tint: build),
+                    RibbonPanel(title: "Model Site", items: [.large(.toposolid, [.toposolid, .toposolidFromFile, .toposolidFromImport]),
                                                              .large(.siteComponent), .large(.parkingComponent), .large(.propertyLine), .large(.parkingLayout)], tint: site),
                     RibbonPanel(title: "Modify Site", items: [.small(.modifySubElements), .small(.subdivideToposolid), .small(.splitSurface), .small(.simplifySurface).newColumn(),
                                                               .small(.editSurface), .small(.excavateToposolid), .small(.gradedRegion).newColumn(), .small(.mergeSurfaces),

@@ -190,6 +190,9 @@ public enum ObjectStyles {
         case .detailLines: ObjectStyle(1, 1)
         case .importedCAD: ObjectStyle(1, 1)
         case .ifcReference: ObjectStyle(1, 2, color: RGBColor(0.30, 0.35, 0.50))
+        case .spaces: ObjectStyle(1, 1, color: RGBColor(0.20, 0.55, 0.50)) // F5
+        case .spaceSeparationLines: ObjectStyle(1, 1, color: RGBColor(0.20, 0.55, 0.50)) // F5
+        case .mass: ObjectStyle(1, 3, color: RGBColor(0.25, 0.25, 0.30)) // F5
         default: ObjectStyle(1, 2)
         }
     }

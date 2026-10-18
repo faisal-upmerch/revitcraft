@@ -42,9 +42,10 @@ public enum DXFLayerStandard: String, CaseIterable, Sendable {
         case .lightingFixtures: return "E-LITE"
         case .electricalFixtures: return "E-POWR"
         case .mechanicalEquipment: return "M-EQPM"
-        case .rooms: return "A-AREA-IDEN"
+        case .rooms, .spaces: return "A-AREA-IDEN" // F5: spaces
+        case .mass: return "A-MASS" // F5
         case .areas, .areaBoundaryLines: return "A-AREA"
-        case .roomSeparationLines: return "A-AREA-BNDY"
+        case .roomSeparationLines, .spaceSeparationLines: return "A-AREA-BNDY" // F5: space separators
         case .grids: return "S-GRID"
         case .levels: return "S-GRID-IDEN"
         case .referencePlanes: return "A-ANNO-REFR"
@@ -55,7 +56,7 @@ public enum DXFLayerStandard: String, CaseIterable, Sendable {
             switch model[e?.tag?.taggedID]?.category {
             case .doors?: return "A-DOOR-IDEN"
             case .windows?: return "A-GLAZ-IDEN"
-            case .rooms?, .areas?: return "A-AREA-IDEN"
+            case .rooms?, .areas?, .spaces?: return "A-AREA-IDEN" // F5
             case .walls?: return "A-WALL-IDEN"
             case .structuralColumns?, .structuralFraming?: return "S-ANNO-IDEN"
             default: return "A-ANNO-IDEN"

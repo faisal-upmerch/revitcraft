@@ -61,7 +61,7 @@ final class GraphicsStore {
         e.task?.cancel()
         let gen = e.generation
         let model = state.model
-        let temp = state.session.temporaryVisibility[viewID] ?? TemporaryVisibility()
+        let temp = state.session.temporaryVisibility(for: viewID) // F5: with Show Mass
         let placed: [ElementID: ViewGraphics] = view.sheet != nil ? cachedPlacedGraphics(sheet: viewID, model) : [:]
         let cancelBox = CancelBox()
         e.building = true

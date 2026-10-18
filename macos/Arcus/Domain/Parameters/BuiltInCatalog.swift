@@ -807,6 +807,8 @@ enum BuiltInCatalog {
             return openingInstanceParams(e)
         case .linkedModel, .pointCloud, .markup, .decal: // F67
             return F67Parameters.instance(for: e)
+        case .mass: // F5
+            return MassParameters.instance + [name] + identity + phasing + ifc
         default:
             return []
         }
@@ -879,6 +881,7 @@ enum BuiltInCatalog {
         for e in annotProbeElements { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // F34
         for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
+        for p in MassParameters.instance where d[p.id] == nil { d[p.id] = p } // F5
         return d
     }()
 

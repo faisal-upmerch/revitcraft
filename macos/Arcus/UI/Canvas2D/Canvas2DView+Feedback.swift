@@ -57,7 +57,8 @@ extension Canvas2DView {
 
     /// Categories drawn as regions whose outlines sit under walls in plan; selection and hover draw their boundary
     /// (and a light fill) above everything else so the highlight is always visible.
-    static let highlightedAreaCategories: Set<Category> = [.floors, .roofs, .ceilings, .rooms, .areas, .buildingPads, .filledRegions, .topography, .shaftOpenings]
+    static let highlightedAreaCategories: Set<Category> = [.floors, .roofs, .ceilings, .rooms, .areas, .buildingPads, .filledRegions, .topography, .shaftOpenings,
+                                                            .spaces, .mass] // F5
 
     func drawAreaHighlights(_ ctx: CGContext) {
         guard let g = graphics else { return }

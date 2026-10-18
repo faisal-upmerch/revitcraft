@@ -147,6 +147,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
     case rebar, areaReinforcement, pathReinforcement, fabricArea, fabricSheet, rebarCoupler, beamSystem, structuralSymbol, structuralSettings
 
     // F5 element kinds:
+    case mass
 
 
     // F67 element kinds:
@@ -241,6 +242,8 @@ public enum ElementData: Hashable, Codable, Sendable {
     case structuralSettings(StructuralSettingsData)
 
     // F5 element data:
+    /// F5: an in-place conceptual mass: a sketched footprint extruded (or blended to a smaller top) to a height.
+    case mass(MassData)
 
 
     // F67 element data:
@@ -334,6 +337,7 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .structuralSettings: .structuralSettings
 
         // F5 element data kinds:
+        case .mass: .mass
 
 
         // F67 element data kinds:

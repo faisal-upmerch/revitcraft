@@ -43,6 +43,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     case structuralRebar, areaReinforcement, pathReinforcement, fabricAreas, fabricReinforcement, rebarCouplers, beamSystems, structuralSettings
 
     // F5 categories:
+    case spaces, spaceSeparationLines, mass // F5
 
 
     // F67 categories:
@@ -91,6 +92,8 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .reveals: return .model // F1
         case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
         case .dwfMarkups: return .annotation // F67
+        case .spaces, .mass: return .model // F5
+        case .spaceSeparationLines: return .annotation // F5: like room separation lines, level-hosted rather than view-specific
         case .decalTypes: return .internal_ // F67
         }
     }
@@ -98,7 +101,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     public var isModel: Bool { categoryClass == .model }
     public var isAnnotation: Bool { categoryClass == .annotation }
     /// View-specific elements belong to exactly one view (annotations, detail items).
-    public var isViewSpecific: Bool { categoryClass == .annotation && self != .propertyLines && self != .roomSeparationLines && self != .areaBoundaryLines }
+    public var isViewSpecific: Bool { categoryClass == .annotation && self != .propertyLines && self != .roomSeparationLines && self != .areaBoundaryLines && self != .spaceSeparationLines } // F5
 
     /// Categories users can schedule.
     public static let schedulable: [Category] = [
@@ -107,12 +110,14 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .specialtyEquipment, .topography, .parking, .sheets, .views, .revisions, .ramps,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
         .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, // F34
+        .spaces, .mass, // F5
     ]
     /// Categories whose instances can be tagged.
     public static let taggable: [Category] = [
         .walls, .doors, .windows, .floors, .ceilings, .roofs, .rooms, .areas, .stairs, .railings, .columns,
         .structuralColumns, .structuralFraming, .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .ramps,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking, // W2-LIB
+        .spaces, // F5
     ]
 
     public var displayName: String {
@@ -216,6 +221,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .decals: "Decals"
         case .decalTypes: "Decal Types"
         case .dwfMarkups: "DWF Markups"
+        case .spaces: "Spaces" // F5
+        case .spaceSeparationLines: "Space Separation Lines"
+        case .mass: "Mass"
         }
     }
 
@@ -321,6 +329,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .decals: "Decal"
         case .decalTypes: "Decal Type"
         case .dwfMarkups: "DWF Markup"
+        case .spaces: "Space" // F5
+        case .spaceSeparationLines: "Space Separation Line"
+        case .mass: "Mass"
         }
     }
 

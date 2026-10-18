@@ -13,6 +13,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case roofExtrusion
         /// F34: beam system bays and area, path and fabric area reinforcement boundaries (SketchTool+F34.swift).
         case f34(F34SketchTarget)
+        /// F5: In-Place Mass footprints (SketchTool+F5.swift).
+        case f5(F5SketchTarget)
     }
     /// Draw tools of the contextual Draw panel (BL-CANVAS: the full set of the reference tool's boundary sketches).
     public enum DrawMode: String, CaseIterable {
@@ -53,6 +55,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public var revisionID: ElementID?
     /// Roof by extrusion: reference plane used as the work plane (nil = the view's own plane).
     public var workPlaneID: ElementID?
+    /// F5: the In-Place Mass height and top inset (Options Bar).
+    public var massOptions = MassSketchOptions.last
 
     public init(ctx: ToolContext, target: Target, commandID: CommandID, editing: ElementID? = nil) {
         self.target = target
@@ -94,6 +98,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .slopeArrow: "Slope Arrow"
         case .roofExtrusion: "Roof Profile"
         case .f34(let t): t.title // F34
+        case .f5(let t): t.title // F5
         }
     }
     public var prompt: String {
@@ -130,6 +135,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
                                 value: .text(ctx.model[workPlaneID]?.name ?? "View Plane")))
             o.append(ToolOption(id: "overhang", label: "Overhang", kind: .length, value: .double(overhang)))
         }
+        if case .f5(let t) = target { o += f5Options(t) } // F5
         if target == .revisionCloud {
             o.append(ToolOption(id: "revision", label: "Revision", kind: .choice(ctx.model.revisions.map(\.name)), value: .text(ctx.model[revisionID]?.name ?? "")))
         }
@@ -156,7 +162,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case "arrow": arrowMode = value.boolValue ?? false; start = nil
         case "revision": revisionID = ctx.model.revisions.first { $0.name == value.textValue }?.id
         case "workPlane": workPlaneID = parallelPlanes.first { $0.name == value.textValue }?.id
-        default: break
+        default: f5SetOption(id, value) // F5
         }
     }
 
@@ -447,6 +453,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
                 else { tx.create(.revisionClouds, data: .revisionCloud(RevisionCloudData(outline: outline, revisionID: rev)), ownerViewID: view) }
             }
         case .f34(let t): f34Commit(t, sketch, view: view, level: level) // F34
+        case .f5(let t): f5Commit(t, sketch, level: level) // F5
         default: break
         }
     }

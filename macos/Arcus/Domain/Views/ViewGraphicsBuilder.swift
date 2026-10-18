@@ -152,6 +152,7 @@ extension ViewGraphicsBuilder {
          .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
          .linkedModels]) // F67: linked models cut in sections and elevations with the host's elements
             .union(Category.f34Structural) // F34
+            .union([.mass]) // F5: conceptual masses (hidden when Show Mass is off)
     }
 
     func visibleModelElements() -> [(Element, GraphicOverride)] {

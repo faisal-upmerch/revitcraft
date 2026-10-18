@@ -159,6 +159,9 @@ public enum ElementTransform {
             m.rotation = t.applyVector(Vec2.fromAngle(m.rotation)).angle + (mirror ? .pi : 0)
             if mirror { m.alignment = m.alignment == .left ? .right : m.alignment == .right ? .left : .center }
             e.data = .modelText(m)
+        case .mass(var m): // F5: the footprint moves, turns and mirrors (kept counterclockwise)
+            m.boundary = Polygon2(m.boundary.map { t.apply($0) }).counterClockwise.points
+            e.data = .mass(m)
         case .wallReveal: // F1: positioned relative to its host wall
             break
         case .opening(let o): // WP3: shafts move with their sketch; wall openings are positioned relative to their host

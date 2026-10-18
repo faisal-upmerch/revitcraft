@@ -46,6 +46,7 @@ struct PlanGraphics {
         items += projectedBelow((byCategory[.roofs] ?? []) + (byCategory[.ifcReference] ?? []))
         items += topography(byCategory[.topography] ?? [])
         items += rooms()
+        items += f5Items(byCategory) // F5: spaces, space separators, masses
         items += colorFills()
         items += datumsAndLines()
         items += SitePlanGraphics.items(builder: builder) // WP6a: scope boxes, cameras, base and survey points
