@@ -236,6 +236,10 @@ final class FamilyEditorModel {
         case .label(let id): family.labels.contains { $0.id == id }
         case .nested(let id): family.nestedInstances.contains { $0.id == id }
         case .parameter(let n): family.parameter(named: n) != nil
+        case .modelLine(let id): family.modelLines.contains { $0.id == id } // F1415
+        case .control(let id): family.controls.contains { $0.id == id }
+        case .modelText(let id): family.modelTexts.contains { $0.id == id }
+        case .fill(let id): family.fills.contains { $0.id == id }
         }
     }
 
@@ -259,6 +263,10 @@ final class FamilyEditorModel {
         case .label(let id): family.labels.first { $0.id == id }.map { $0.parameterName.map { "〈\($0)〉" } ?? "“\($0.staticText)”" } ?? "Label"
         case .nested(let id): family.nestedInstances.first { $0.id == id }.map { "\($0.familyName)" + ($0.typeName.map { ": \($0)" } ?? "") } ?? "Nested family"
         case .parameter(let n): n
+        case .modelLine(let id): family.modelLines.first { $0.id == id }.map { ($0.isReference ? "Reference line" : "Model line") + " (\($0.plane.rawValue))" } ?? "Line" // F1415
+        case .control(let id): family.controls.first { $0.id == id }.map { "Control: \($0.kind.rawValue)" } ?? "Control"
+        case .modelText(let id): family.modelTexts.first { $0.id == id }.map { "“\($0.text)”" } ?? "Model Text"
+        case .fill(let id): family.fills.first { $0.id == id }.map { $0.isMasking ? "Masking region" : "Filled region" } ?? "Region"
         }
     }
 

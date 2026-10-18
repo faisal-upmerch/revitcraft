@@ -159,6 +159,8 @@ public struct ComponentData: Hashable, Codable, Sendable {
     /// Elevation above the associated level.
     public var offset: Double
     public var mirrored: Bool
+    /// F1415: Flip Facing from a family's vertical flip control (mirrors across the family's X axis); nil = not flipped.
+    public var facingFlipped: Bool?
     public init(location: Vec2, rotation: Double = 0, offset: Double = 0, mirrored: Bool = false) {
         self.location = location; self.rotation = rotation; self.offset = offset; self.mirrored = mirrored
     }

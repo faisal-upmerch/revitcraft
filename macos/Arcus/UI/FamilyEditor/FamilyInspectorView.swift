@@ -25,6 +25,10 @@ struct FamilyInspectorView: View {
                     case .line(let id)?: LineInspector(model: model, id: id)
                     case .label(let id)?: LabelInspector(model: model, id: id)
                     case .nested(let id)?: NestedInspector(model: model, id: id)
+                    case .modelLine(let id)?: ModelLineInspector(model: model, id: id) // F1415
+                    case .control(let id)?: ControlInspector(model: model, id: id)
+                    case .modelText(let id)?: ModelTextInspector(model: model, id: id)
+                    case .fill(let id)?: FillInspector(model: model, id: id)
                     }
                 }
                 .padding(12)
@@ -54,6 +58,9 @@ struct FamilyInspectorView: View {
         switch i {
         case .type: "Type"; case .parameter: "Parameter"; case .plane: "Reference Plane"; case .dimension: "Dimension"
         case .solid: "Form"; case .line: "Line"; case .label: "Label"; case .nested: "Nested Family"
+        case .modelLine(let id): model.family.modelLines.first { $0.id == id }?.isReference == true ? "Reference Line" : "Model Line" // F1415
+        case .control: "Control"; case .modelText: "Model Text"
+        case .fill(let id): model.family.fills.first { $0.id == id }?.isMasking == true ? "Masking Region" : "Filled Region"
         }
     }
 }
