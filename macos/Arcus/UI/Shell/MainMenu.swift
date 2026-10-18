@@ -15,23 +15,28 @@ enum MainMenuBuilder {
         main.addItem(submenu("View", viewItems()))
         CameraMenus.addNavigationItems(to: main.items.last?.submenu) // W2-CAM
         // The menu bar follows the ribbon tabs: Architecture, Structure, Insert, Annotate, (View above), Manage.
-        main.addItem(submenu("Architecture", commands([.wall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, nil, .door, .window, .component, .column, nil,
+        main.addItem(submenu("Architecture", commands([.wall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .column, nil, // F1: Wall: Reveal
                                                       .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
-                                                      .stairStraight, .stairL, .stairU, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .placeAreasAutomatically, .colorSchemes, nil,
-                                                      .modelLine, .shaftOpening, .wallOpening, nil, .level, .grid, .referencePlane, nil, .toposurface, .buildingPad, .propertyLine])))
+                                                      .stairStraight, .stairL, .stairU, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, nil,
+                                                      .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
+                                                      .level, .grid, .referencePlane, nil, .toposurface, .buildingPad, .propertyLine])))
         main.addItem(submenu("Structure", commands([.structuralColumn, .beam, .structuralWall, .structuralFloor, .truss, .brace, .beamSystem, nil,
                                                     .foundationIsolated, .foundationWall, .foundationSlab, nil, // F34
                                                     .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCover, .couplerOnBarEnd, .couplerBetweenBars])))
-        main.addItem(submenu("Insert", commands([.linkCAD, .linkPDF, .linkImage, .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
-                                                 .importCAD, .importIFC, .importRevit, nil,
-                                                 .loadFamily, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
+        main.addItem(submenu("Insert", commands([.linkModel, .linkIFC, .linkCAD, .linkTopography, .dwfMarkup, .placeDecal, .decalTypes, .pointCloud, .coordinationModel, .linkPDF, .linkImage, nil, // F67
+                                                 .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
+                                                 .importCAD, .importGbXML, .importPDF, .importImage, .importIFC, .importRevit, nil,
+                                                 .loadFamily, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
         main.addItem(submenu("Annotate", commands([.alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension, nil,
                                                    .spotElevation, .spotCoordinate, .spotSlope, nil, .detailLine, .filledRegion, .maskingRegion, .detailComponent, .insulation, nil,
                                                    .textNote, .tagByCategory, .tagAll, .roomTag, .colorFillLegend, .symbol, .northArrow, nil, .revisionCloud, nil,
-                                                   .beamSymbol, .areaReinforcementSymbol, .pathReinforcementSymbol, .rebarSymbol, .fabricSymbol, .multiRebarAligned, .multiRebarLinear]))) // F34
+                                                   .beamSymbol, .areaReinforcementSymbol, .pathReinforcementSymbol, .rebarSymbol, .fabricSymbol, .multiRebarAligned, .multiRebarLinear, nil, .keynotingSettings]))) // F34, F12
         main.items.last?.submenu.map { m in for i in annotMenuAdditions() { m.addItem(i) } } // W2-ANNOT
         main.addItem(submenu("Manage", commands([.projectInfo, .projectUnits, .projectParameters, .materials, .objectStyles, .lineStyles, .additionalSettings, .structuralSettings, .snapSettings, .locationSettings, nil, // BL-VG; F34
-                                                 .phases, .designOptions, nil, .familyEditor, .newFamily, .loadStandardTypes, nil,
+                                                 .globalParameters, .transferProjectStandards, nil, // F11, F67
+                                                 .specifyCoordinates, .reportCoordinates, .relocateProject, .rotateTrueNorth, .rotateProjectNorth, .mirrorProject, nil, // F11
+                                                 .phases, .designOptions, .addToSet, .pickToEdit, nil, .startingView, .decalTypes, .familyEditor, .newFamily, .loadStandardTypes, nil,
+                                                 .saveSelection, .loadSelection, .editSelection, nil,
                                                  .warnings, .selectByID, .idsOfSelection, .modelHealth, .purgeUnused, .diagnostics, nil, .keyboardShortcuts]))) // BL-VG: warnings, select by ID
         let window = submenu("Window", [
             NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"),
@@ -123,12 +128,16 @@ enum MainMenuBuilder {
         let saveAs = NSMenuItem(title: "Save As…", action: #selector(NSDocument.saveAs(_:)), keyEquivalent: "s")
         saveAs.keyEquivalentModifierMask = [.command, .shift, .option]
         let revert = NSMenuItem(title: "Revert To Saved", action: #selector(NSDocument.revertToSaved(_:)), keyEquivalent: "")
-        let export = submenu("Export", commands([.exportDXF, .exportIFC, .exportPDF, .exportImage, .exportScheduleCSV])) // BL-SCHED: no DWG export route exists
+        // F13: File ▸ Export grouped as RevitCraft does (CAD Formats, DWF/DWFx, PDF, IFC, Family Types, gbXML, Images, Reports).
+        let cad = submenu("CAD Formats", commands([.exportDXF, .exportSTL]))
+        let images = submenu("Images and Animations", commands([.exportImage]))
+        let reports = submenu("Reports", commands([.exportScheduleCSV, .exportRoomAreaReport]))
+        let export = submenu("Export", [cad] + commands([.exportDWFx, .exportPDF, .exportIFC, .exportFamilyTypes, .exportGbXML]) + [images, reports])
         let importMenu = submenu("Import", commands([.importCAD, .importIFC, .importRevit, .importScheduleCSV])) // BL-SCHED
-        let pageSetup = NSMenuItem(title: "Page Setup…", action: #selector(NSDocument.runPageLayout(_:)), keyEquivalent: "p")
-        pageSetup.keyEquivalentModifierMask = [.command, .shift]
+        let pageSetup = command(.printSetup) // F13: Print Setup (paper, zoom, hidden items) replaces the generic Page Setup
+        pageSetup.keyEquivalent = "p"; pageSetup.keyEquivalentModifierMask = [.command, .shift]
         return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
-                importMenu, export, .separator(), pageSetup, command(.print)]
+                importMenu, export, .separator(), pageSetup, command(.printPreview), command(.print)]
     }
 
     static func editItems() -> [NSMenuItem] {
@@ -143,7 +152,7 @@ enum MainMenuBuilder {
         let delete = NSMenuItem(title: "Delete", action: #selector(NSText.delete(_:)), keyEquivalent: "")
         let selectAll = NSMenuItem(title: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
         return [undo, redo, .separator(), cut, copy, paste, pasteAligned, delete, selectAll, .separator()]
-            + commands([.selectAllInstancesInView, .selectAllInstancesInProject, .selectByCategory, .filterSelection, nil,
+            + commands([.selectAllInstancesInView, .selectAllInstancesInProject, .selectByCategory, .filterSelection, .selectJoinedElements, nil, // F11
                         .move, .copy, .rotate, .mirrorPickAxis, .mirrorDrawAxis, .array, .align, .offset, nil,
                         .trimExtendCorner, .trimExtendSingle, .trimExtendMultiple, .split, .matchType, nil,
                         .pin, .unpin, .createGroup, .ungroup, .editGroup, .finishEditGroup, nil, .commandSearch])
@@ -160,7 +169,7 @@ enum MainMenuBuilder {
         let sidebar = NSMenuItem(title: "Show/Hide Sidebar", action: #selector(AppDelegate.toggleDocumentSidebar(_:)), keyEquivalent: "s") // W4-SHELL
         sidebar.keyEquivalentModifierMask = [.command, .option]
         sidebar.target = AppDelegate.shared
-        let create = submenu("Create", commands([.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, nil, .section, .elevation, .callout, .draftingView, .legend, .threeDView, nil,
+        let create = submenu("Create", commands([.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, nil, .section, .elevation, .callout, .draftingView, .legend, .keynoteLegend, .threeDView, nil,
                                                  .schedule, .materialTakeoff, .sheetList, .revisionSchedule, nil,
                                                  .duplicateView, .duplicateViewWithDetailing, .duplicateDependent, .renameView]))
         let sheets = submenu("Sheet Composition", commands([.newSheet, .placeView, nil, .revisions]))

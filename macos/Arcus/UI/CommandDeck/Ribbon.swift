@@ -225,13 +225,13 @@ enum RibbonContent {
         case .manage:
             // Export and Print live in the File menu, as in RevitCraft.
             return [RibbonPanel(title: "Settings", items: [.large(.materials), .small(.objectStyles), .small(.snapSettings), .small(.projectInfo),
-                                                           .small(.projectParameters), .small(.sharedParameters), .small(.globalParameters), .small(.purgeUnused), .small(.projectUnits), // F11: Global Parameters
+                                                           .small(.projectParameters), .small(.sharedParameters), .small(.globalParameters), .small(.transferProjectStandards), .small(.purgeUnused), .small(.projectUnits), // F11: Global Parameters; F67: Transfer Project Standards
                                                            .small(.structuralSettings), .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage), // BL-VG
                     // F11: Coordinates and Position, as RevitCraft's Project Location panel.
                     RibbonPanel(title: "Project Location", items: [.large(.locationSettings), .large(.specifyCoordinates, [.specifyCoordinates, .reportCoordinates]),
                                                                    .large(.relocateProject, [.relocateProject, .rotateTrueNorth, .mirrorProject, .rotateProjectNorth])], tint: manage),
                     RibbonPanel(title: "Design Options", items: [.large(.designOptions), .small(.addToSet), .small(.pickToEdit)], tint: manage), // F11: + the active option combo (Ribbon+F11.swift)
-                    RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .large(.startingView), .small(.familyEditor)], tint: manage), // F11: Starting View
+                    RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .small(.decalTypes), .large(.startingView), .small(.familyEditor)], tint: manage), // F11: Starting View; F67: Decal Types
                     RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
                     RibbonPanel(title: "Selection", items: [.small(.saveSelection), .small(.loadSelection), .small(.editSelection)], tint: manage), // F11
                     RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage)] // BL-VG
