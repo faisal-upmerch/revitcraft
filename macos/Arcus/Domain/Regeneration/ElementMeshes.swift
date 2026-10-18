@@ -42,6 +42,8 @@ public enum ElementMeshes {
             return ModelTextGeometry.meshParts(e, model)
         case .linkedModel, .pointCloud, .decal: // F67
             return LinkedGeometry.meshParts(e, model)
+        case .mass: // F5
+            return MassGeometry.meshParts(e, model)
         default:
             return []
         }
@@ -64,6 +66,7 @@ public enum ElementMeshes {
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: true // F34
         case .modelText: true // F1
         case .linkedModel, .pointCloud, .decal: true // F67
+        case .mass: true // F5
         default: false
         }
     }
@@ -89,6 +92,7 @@ public enum ElementMeshes {
         case .site: RGBColor(0.70, 0.70, 0.68)
         case .pointClouds: RGBColor(0.36, 0.46, 0.62) // F67
         case .coordinationModels: RGBColor(0.72, 0.74, 0.80, 0.9)
+        case .mass: RGBColor(0.72, 0.80, 0.90, 0.5) // F5: masses are translucent, as in RevitCraft
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }

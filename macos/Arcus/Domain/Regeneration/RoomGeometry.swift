@@ -20,7 +20,9 @@ public struct RoomBoundary: Sendable {
 public enum RoomGeometry {
     /// Room-bounding segments on a level at a computation height: wall faces (union outline), columns,
     /// room separation lines. Walls are cut at the computation height so openings do not leak rooms.
-    public static func boundingSegments(level: ElementID, atZ z: Double, _ model: BIMModel, areaScheme: ElementID? = nil) -> [Segment2] {
+    /// F5: `separators` replaces room separation lines by another line category (space separation lines bound spaces).
+    public static func boundingSegments(level: ElementID, atZ z: Double, _ model: BIMModel, areaScheme: ElementID? = nil,
+                                        separators: Category? = nil) -> [Segment2] {
         var polys: [Polygon2] = []
         if areaScheme == nil {
             for w in model.elements(.walls) where w.wall?.roomBounding == true && w.phaseDemolished == nil {
@@ -34,7 +36,7 @@ public enum RoomGeometry {
         }
         var segs: [Segment2] = []
         for piece in BoundaryCleanup.unionBoundary(of: polys) { segs.append(piece.segment) }
-        let lineCategory: Category = areaScheme == nil ? .roomSeparationLines : .areaBoundaryLines
+        let lineCategory: Category = areaScheme == nil ? separators ?? .roomSeparationLines : .areaBoundaryLines
         for l in model.elements(lineCategory) where l.levelID == level {
             guard let ml = l.modelLine else { continue }
             if areaScheme != nil, l.params[ParameterID("areaScheme")]?.refValue != areaScheme { continue }
@@ -57,6 +59,12 @@ public enum RoomGeometry {
             let z = lv + max(h, 0.3)
             let arr = PlanarArrangement(segments: boundingSegments(level: level, atZ: z, model))
             assign(rooms, arr, into: &out)
+        }
+        // F5: spaces share the walls and columns that bound rooms; space separators (not room separators) divide them.
+        let spaces = model.elements(.spaces).filter { $0.levelID == level }
+        if !spaces.isEmpty {
+            let z = lv + max(model[level]?.level?.computationHeight ?? 0, 0.3)
+            assign(spaces, PlanarArrangement(segments: boundingSegments(level: level, atZ: z, model, separators: .spaceSeparationLines)), into: &out)
         }
         let schemes = Set(areas.compactMap { $0.room?.areaSchemeID })
         for s in schemes.sorted() {
@@ -128,7 +136,8 @@ public final class RoomBoundaryCache: @unchecked Sendable {
     func cacheKey(level: ElementID, _ model: BIMModel) -> String {
         var h = Hasher()
         h.combine(level)
-        for c: Category in [.walls, .rooms, .areas, .roomSeparationLines, .areaBoundaryLines, .columns, .structuralColumns, .levels, .elementTypes] {
+        for c: Category in [.walls, .rooms, .areas, .roomSeparationLines, .areaBoundaryLines, .columns, .structuralColumns, .levels, .elementTypes,
+                            .spaces, .spaceSeparationLines] { // F5
             for e in model.elements(c) { h.combine(e.id); h.combine(e.revision) }
         }
         return "\(level.raw)-\(h.finalize())"

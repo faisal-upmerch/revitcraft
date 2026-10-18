@@ -102,6 +102,7 @@ struct CommandRouter {
         switch e.data {
         case .slab, .roof, .filledRegion, .railing, .revisionCloud: return e.railing.map { !$0.followsHost } ?? true
         case .beamSystem, .areaReinforcement, .fabricArea: return !Reinforcement.isWallHosted(model, e.hostID) // F34: plan sketches
+        case .mass: return true // F5: the footprint
         default: return false
         }
     }
@@ -622,8 +623,9 @@ struct CommandRouter {
 
     func doubleClick(_ e: Element) {
         if doubleClickPreference(e) { return } // BL-CANVAS: ARCUS-085
+        if f5EditInPlace(e) { return } // F5: an in-place family's instance opens it in the Family Editor
         switch e.data {
-        case .slab, .roof, .filledRegion, .revisionCloud:
+        case .slab, .roof, .filledRegion, .revisionCloud, .mass: // F5: a mass edits its footprint
             session.selection.select([e.id]); run(.editBoundary)
         case .railing(let r) where !r.followsHost:
             session.selection.select([e.id]); run(.editBoundary)

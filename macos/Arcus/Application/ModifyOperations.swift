@@ -158,7 +158,7 @@ extension ElementOperations {
 
     /// Built model elements that can be demolished (not rooms, areas, groups or imported reference geometry).
     public static func isDemolishable(_ e: Element) -> Bool {
-        e.category.isModel && !e.isType && ![.rooms, .areas, .modelGroups, .importedCAD, .ifcReference].contains(e.category)
+        e.category.isModel && !e.isType && ![.rooms, .areas, .spaces, .modelGroups, .importedCAD, .ifcReference].contains(e.category) // F5: spaces
     }
 
     /// Sets Phase Demolished to `phase` on the elements and on the doors, windows and railings they host.

@@ -86,7 +86,7 @@ extension SketchTool.DrawMode {
 
 extension LineTool {
     /// RevitCraft offers the free-form modes for model, detail, room separation and area boundary lines.
-    var usesFreeformModes: Bool { [.model, .detail, .roomSeparation, .areaBoundary].contains(kind) }
+    var usesFreeformModes: Bool { [.model, .detail, .roomSeparation, .areaBoundary, .spaceSeparation].contains(kind) } // F5
 
     static let freeformModes = ["Line", FreeformCurve.Kind.spline.rawValue, FreeformCurve.Kind.ellipse.rawValue, FreeformCurve.Kind.partialEllipse.rawValue]
 

@@ -375,6 +375,7 @@ public final class TagTool: BaseTool, InteractiveTool {
         case .roomTag: "Tag Room"
         case .multiCategoryTag: "Multi-Category Tag"
         case .areaTag: "Tag Area"
+        case .spaceTag: "Space Tag" // F5
         default: "Tag by Category"
         }
     }
@@ -405,7 +406,8 @@ public final class TagTool: BaseTool, InteractiveTool {
 
     public var prompt: String {
         guard ctx.isPlan || ctx.isVertical || ctx.isDrafting else { return "Tags are placed in plans, sections and elevations." }
-        return commandID == .roomTag ? "Click a room to tag it." : commandID == .areaTag ? "Click an area to tag it." : "Click an element to tag it."
+        return commandID == .roomTag ? "Click a room to tag it." : commandID == .areaTag ? "Click an area to tag it."
+            : commandID == .spaceTag ? "Click to place space tag." : "Click an element to tag it." // F5
     }
     public var options: [ToolOption] {
         [ToolOption(id: "orientation", label: "Orientation", kind: .choice(TagOrientation.allCases.map(\.rawValue)), value: .text(orientation.rawValue)),
@@ -443,6 +445,11 @@ public final class TagTool: BaseTool, InteractiveTool {
         switch commandID {
         case .areaTag: name = AnnotationLibrary.areaTagName
         case .multiCategoryTag: name = AnnotationLibrary.multiCategoryTagName
+        case .spaceTag: // F5
+            if !ctx.model.elements(.families).contains(where: { $0.name == SpaceTags.familyName }) {
+                ctx.session.perform("Load \(SpaceTags.familyName)") { tx in SpaceTags.ensure(in: tx) }
+            }
+            return
         default: return
         }
         guard !ctx.model.elements(.families).contains(where: { $0.name == name }) else { return }
@@ -452,7 +459,10 @@ public final class TagTool: BaseTool, InteractiveTool {
     }
 
     public func pointerDown(_ i: ToolInput) {
-        guard let e = hit(i, categories) else { message(commandID == .roomTag ? "Click a room." : commandID == .areaTag ? "Click an area." : "Click a taggable element."); return }
+        guard let e = hit(i, categories) else {
+            message(commandID == .roomTag ? "Click a room." : commandID == .areaTag ? "Click an area." : commandID == .spaceTag ? "Click a space." : "Click a taggable element.") // F5
+            return
+        }
         ensureFamily()
         guard let tt = tagType(for: e.category) else { message("No tag family is loaded for \(e.category.displayName). Load one from the library."); return }
         if !ctx.model.tags(of: e.id).filter({ $0.ownerViewID == ctx.viewID && $0.tag?.kind == nil }).isEmpty { message("This element is already tagged in this view.") }

@@ -51,9 +51,9 @@ public enum STLExporter {
 
 /// gbXML: rooms (and areas) as spaces with closed shells — floor, ceiling and one wall face per boundary edge.
 public enum GbXMLExporter {
-    /// The spaces exported: bounded rooms and areas.
+    /// The spaces exported: bounded rooms, areas and (F5) spaces.
     static func spaces(_ model: BIMModel) -> [(element: Element, profile: Profile2, z0: Double, z1: Double)] {
-        (model.elements(.rooms) + model.elements(.areas)).compactMap { r in
+        (model.elements(.rooms) + model.elements(.areas) + model.elements(.spaces)).compactMap { r in
             let b = RoomGeometry.boundary(r, model)
             guard b.state == .bounded, let p = b.profile, p.outer.points.count >= 3 else { return nil }
             let z0 = model.baseElevation(of: r)
@@ -107,7 +107,8 @@ public enum RoomAreaReport {
     static func rows(_ model: BIMModel) -> [Row] {
         GbXMLExporter.spaces(model).map { s in
             Row(number: s.element.room?.number ?? "", name: s.element.name, level: model[s.element.levelID]?.name ?? "",
-                kind: s.element.category == .areas ? "Area" : "Room", area: s.profile.area, perimeter: s.profile.perimeter, profile: s.profile)
+                kind: s.element.category == .areas ? "Area" : s.element.category == .spaces ? "Space" : "Room", // F5: spaces
+                area: s.profile.area, perimeter: s.profile.perimeter, profile: s.profile)
         }.sorted { ($0.kind, $0.level, $0.number) < ($1.kind, $1.level, $1.number) }
     }
 

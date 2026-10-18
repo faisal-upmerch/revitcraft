@@ -351,7 +351,7 @@ public enum AnnotationRenderer {
         } else {
             // No tag family: the mark (or the room name and number, or the type name) as plain text.
             let typeName = model.type(of: target)?.name ?? "?"
-            let txt = target.category == .rooms || target.category == .areas ? "\(target.name)\n\(target.room?.number ?? "")"
+            let txt = target.room != nil ? "\(target.name)\n\(target.room?.number ?? "")" // F5: spaces too
                 : (target.mark.isEmpty ? (target.category == .structuralFraming ? typeName : "?") : target.mark)
             prims.append(.text(GText(position: t.head, height: 0.0025, string: txt, rotation: rot, alignment: .center, verticalAnchor: 0.5,
                                      color: st.color, halftone: st.halftone)))

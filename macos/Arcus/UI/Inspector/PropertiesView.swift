@@ -236,6 +236,9 @@ struct PropertiesView: View {
         case .alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension: .dimensions // W2-ANNOT
         case .filledRegion: .filledRegions // W2-ANNOT
         case .repeatingDetailComponent: .detailComponents // W2-ANNOT
+        case .wallByFace, .curtainSystemByFace: .walls // F5
+        case .floorByFace: .floors // F5
+        case .roofByFace: .roofs // F5
         default: nil
         }
     }

@@ -47,11 +47,12 @@ public enum CreateSimilar {
             case .uShaped: return .stairU
             }
         case .railing: return .railing
-        case .room: return e.category == .areas ? .area : .room
+        case .room: return e.category == .areas ? .area : e.category == .spaces ? .space : .room // F5: spaces
         case .modelLine:
             switch e.category {
             case .detailLines: return e.ownerViewID == nil ? .modelLine : .detailLine
             case .roomSeparationLines: return .roomSeparator
+            case .spaceSeparationLines: return .spaceSeparator // F5
             case .areaBoundaryLines: return .areaBoundary
             case .propertyLines: return .propertyLine
             default: return nil
@@ -87,7 +88,13 @@ public enum CreateSimilar {
             case .stairPath: return .stairPath
             case .scaleBar: return .scaleBar
             }
-        case .tag(let t): return model[t.taggedID]?.category == .rooms ? .roomTag : model[t.taggedID]?.category == .areas ? .areaTag : .tagByCategory
+        case .tag(let t):
+            switch model[t.taggedID]?.category {
+            case .rooms?: return .roomTag
+            case .areas?: return .areaTag
+            case .spaces?: return .spaceTag // F5
+            default: return .tagByCategory
+            }
         case .textNote: return .textNote
         case .filledRegion(let f): return f.isMasking ? .maskingRegion : .filledRegion
         case .detailComponent(let d) where d.repeatEnd != nil: return .repeatingDetailComponent // W2-ANNOT

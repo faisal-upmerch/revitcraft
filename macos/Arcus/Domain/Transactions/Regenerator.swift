@@ -55,7 +55,7 @@ public struct Regenerator: Sendable {
             let top = tx.originalModel.elevation(ofLevel: t) + (r.ramp?.topOffset ?? 0)
             tx.propagate(r.id) { $0.ramp?.topLevelID = nil; $0.ramp?.unconnectedHeight = max(0.1, top - base) }
         }
-        for r in m.elements(.rooms) + m.elements(.areas) {
+        for r in m.elements(.rooms) + m.elements(.areas) + m.elements(.spaces) { // F5: spaces
             guard let t = r.room?.upperLimitLevelID, m[t] == nil else { continue }
             tx.propagate(r.id) { $0.room?.upperLimitLevelID = nil }
         }

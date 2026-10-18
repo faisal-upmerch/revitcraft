@@ -192,8 +192,8 @@ struct ExportPlan {
         case (.roofs, .roof): return .export(.roof)
         case (.doors, .insert): return .export(.door)
         case (.windows, .insert): return .export(.window)
-        case (.rooms, .room):
-            if RoomGeometry.boundary(e, model).profile == nil { return .skip("The room is not enclosed, so it has no boundary to export.") }
+        case (.rooms, .room), (.spaces, .room): // F5: spaces export as IfcSpace too
+            if RoomGeometry.boundary(e, model).profile == nil { return .skip("The \(e.category.singularName.lowercased()) is not enclosed, so it has no boundary to export.") }
             return .export(.space)
         case (.areas, _): return .skip("Areas are area-plan annotations and are not exported.")
         case (.columns, .column), (.structuralColumns, .column): return .export(.column)
@@ -212,10 +212,11 @@ struct ExportPlan {
         case (.importedCAD, _): return .skip("Imported CAD geometry is not exported.")
         case (.linkedModels, _), (.coordinationModels, _), (.pointClouds, _): return .skip("Linked models and point clouds are references and are not exported.") // F67
         case (.decals, _): return .skip("Decals are images for rendering and are not exported.") // F67
+        case (.mass, _): return .skip("Masses are conceptual forms and are not exported; export the walls, floors and roofs made from them.") // F5
         case (.wallOpenings, _): return .ignore // WP3: exported as IfcOpeningElement voids of their host wall
         case (.reveals, _): return .ignore // F1: the groove is part of the host wall's body
         case (.shaftOpenings, _): return .skip("Shaft openings are exported as holes in the floors, ceilings and roofs they cut.") // WP3
-        case (.roomSeparationLines, _), (.areaBoundaryLines, _), (.propertyLines, _): return .skip("Lines are not exported.")
+        case (.roomSeparationLines, _), (.areaBoundaryLines, _), (.propertyLines, _), (.spaceSeparationLines, _): return .skip("Lines are not exported.") // F5
         case (.structuralRebar, _), (.areaReinforcement, _), (.pathReinforcement, _): return .export(.reinforcingBar) // F34
         case (.fabricAreas, _), (.fabricReinforcement, _): return .export(.reinforcingMesh) // F34
         case (.beamSystems, _): return .skip("Beam systems are exported as their beams.") // F34
