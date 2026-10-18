@@ -801,6 +801,53 @@ fn paint_work_plane_grid(app: &App, painter: &egui::Painter, xf: &Xf, d: &Drawin
     painter.rect_stroke(Rect::from_two_pos(xf.s(DVec2::new(x0, y0)), xf.s(DVec2::new(x1, y1))), 0.0, Stroke::new(1.5, Color32::from_rgb(60, 130, 220)), egui::StrokeKind::Middle);
 }
 
+/// The canvas cursor as the reference app shows it: a crosshair while drawing, placing or
+/// dragging an end; the arrow with a move glyph in Move and Copy; the system's own otherwise
+/// (and "not allowed" where a hosted element cannot go, set by the tool).
+fn paint_cursor(app: &App, ui: &egui::Ui, resp: &egui::Response, painter: &egui::Painter) {
+    let Some(c) = resp.hover_pos() else { return };
+    let kind = app.tool.kind;
+    let modify = matches!(
+        kind,
+        ToolKind::Move | ToolKind::Copy | ToolKind::Rotate | ToolKind::Align | ToolKind::Offset | ToolKind::MirrorPick | ToolKind::MirrorDraw | ToolKind::Array | ToolKind::Scale | ToolKind::TrimCorner | ToolKind::TrimSingle | ToolKind::TrimMulti | ToolKind::Split | ToolKind::SplitGap
+    );
+    let end_drag = matches!(app.interact.drag, Some(Drag::Grip { .. }) | Some(Drag::SketchVertex { .. }));
+    let not_allowed = ui.ctx().output(|o| o.cursor_icon) == egui::CursorIcon::NotAllowed;
+    if matches!(kind, ToolKind::Move | ToolKind::Copy) {
+        paint_move_glyph(painter, c + vec2(13.0, 15.0));
+    } else if (!app.tool.is_select() && !modify && !not_allowed) || end_drag {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::None);
+        paint_crosshair(painter, c);
+    }
+}
+
+/// The reference app's drawing cursor: four short grey arms around a small gap and a centre dot.
+pub fn paint_crosshair(painter: &egui::Painter, c: Pos2) {
+    let (gap, arm) = (2.5, 7.0);
+    let halo = Stroke::new(3.4, Color32::from_rgba_unmultiplied(255, 255, 255, 170));
+    let ink = Stroke::new(1.6, Color32::from_rgb(78, 78, 78));
+    for st in [halo, ink] {
+        for d in [vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0)] {
+            painter.line_segment([c + d * gap, c + d * (gap + arm)], st);
+        }
+    }
+    painter.circle_filled(c, 0.8, Color32::from_rgb(78, 78, 78));
+}
+
+/// The small four-way arrow beside the pointer in Move and Copy.
+fn paint_move_glyph(painter: &egui::Painter, c: Pos2) {
+    let r = 6.0;
+    for (st, fill) in [(Stroke::new(3.0, Color32::WHITE), Color32::WHITE), (Stroke::new(1.2, Color32::BLACK), Color32::BLACK)] {
+        painter.line_segment([c - vec2(r, 0.0), c + vec2(r, 0.0)], st);
+        painter.line_segment([c - vec2(0.0, r), c + vec2(0.0, r)], st);
+        for d in [vec2(1.0, 0.0), vec2(-1.0, 0.0), vec2(0.0, 1.0), vec2(0.0, -1.0)] {
+            let n = vec2(-d.y, d.x);
+            let tip = c + d * (r + 2.0);
+            painter.add(egui::Shape::convex_polygon(vec![tip, tip - d * 3.5 + n * 2.6, tip - d * 3.5 - n * 2.6], fill, Stroke::new(st.width - 1.0, st.color)));
+        }
+    }
+}
+
 /// A light-blue dashed reference line (the location line of a snapped element).
 pub fn reference_line(painter: &egui::Painter, a: Pos2, b: Pos2) {
     painter.extend(egui::Shape::dashed_line(&[a, b], Stroke::new(1.0, style::TRACK), 5.0, 4.0));
@@ -875,13 +922,18 @@ fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
             painter.add(egui::Shape::closed_line(vec![p + vec2(-r, -r), p + vec2(r, -r), p + vec2(-r, r), p + vec2(r, r)], st));
         }
         SnapKind::Angle if axis.is_some() => {
-            // Double arrow along the axis.
+            // A hollow double arrow along the axis: two shaft lines and open heads.
             let d = if axis == Some("Horizontal") { vec2(1.0, 0.0) } else { vec2(0.0, 1.0) };
             let n = vec2(-d.y, d.x);
-            painter.line_segment([p - d * 7.0, p + d * 7.0], Stroke::new(1.6, c));
+            let st = Stroke::new(1.3, c);
+            let (len, head, w) = (9.0, 4.0, 4.5);
+            for side in [1.0f32, -1.0] {
+                painter.line_segment([p - d * (len - head) + n * 1.4 * side, p + d * (len - head) + n * 1.4 * side], st);
+            }
             for sgn in [1.0f32, -1.0] {
-                let tip = p + d * 8.0 * sgn;
-                painter.add(egui::Shape::convex_polygon(vec![tip, tip - d * 4.5 * sgn + n * 3.5, tip - d * 4.5 * sgn - n * 3.5], c, Stroke::NONE));
+                let tip = p + d * len * sgn;
+                let base = tip - d * head * sgn;
+                painter.add(egui::Shape::closed_line(vec![tip, base + n * w, base + n * 1.4, base - n * 1.4, base - n * w], st));
             }
         }
         SnapKind::Alignment | SnapKind::Extension => {
@@ -1278,6 +1330,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     let mut snapped: Option<SnapResult> = None;
     if let (Some(c), true) = (cursor, wants_snap) {
         let refp = match &app.interact.drag {
+            Some(Drag::Grip { id, grip: grips::GripKind::WallEnd(at_start), .. }) => app.doc.data.wall(*id).map(|w| if *at_start { w.end } else { w.start }),
             Some(Drag::Move { start, .. }) | Some(Drag::Grip { start, .. }) | Some(Drag::SketchVertex { start, .. }) => Some(*start),
             _ => reference,
         };
@@ -1356,6 +1409,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         painter.text(rect.left_bottom() + vec2(10.0, -10.0), egui::Align2::LEFT_BOTTOM, t, egui::FontId::proportional(12.0), style::SNAP);
     }
     let _ = tool_kind;
+    paint_cursor(app, ui, &resp, &painter);
 
     // ---- right-click menu
     context_menu(app, &resp, &view);
@@ -1508,7 +1562,9 @@ fn select_mode(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
     if resp.drag_started_by(egui::PointerButton::Primary) {
         let press = ui.input(|i| i.pointer.press_origin()).map(|p| xf.w(p)).or(cursor);
         if let Some(start) = press {
-            if let Some((kind, id, pos)) = grip_hover.clone() {
+            // The grip under the press, even when the pointer has already moved on.
+            let pressed_grip = grip_list.iter().find(|g| xf.s(g.pos).distance(xf.s(start)) <= 7.0).map(|g| (g.kind.clone(), g.id, g.pos));
+            if let Some((kind, id, pos)) = pressed_grip.or(grip_hover.clone()) {
                 app.interact.drag = Some(Drag::Grip { id, grip: kind, start: pos });
             } else {
                 let under = pick_candidates(app, view, drawing, start, tol).first().copied();

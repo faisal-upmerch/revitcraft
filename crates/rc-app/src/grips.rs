@@ -432,12 +432,26 @@ pub fn preview(app: &App, painter: &egui::Painter, xf: &Xf, view: &View, id: Id,
     let units = &p.units;
     match (p.element(id).map(|e| &e.kind), kind) {
         (Some(ElementKind::Wall(w)), GripKind::WallEnd(s)) => {
+            // As the reference app: the wall stays as it is and its new location line shows as a
+            // thick orange dashed line, with a thin tracking line beyond the cursor.
             let fixed = if *s { w.end } else { w.start };
-            let t = analysis::wall_thickness(p, w) / 2.0;
-            let d = (pt - fixed).normalize_or_zero();
-            let n = geom::perp(d);
-            let q = [fixed + n * t, pt + n * t, pt - n * t, fixed - n * t];
-            painter.add(egui::Shape::closed_line(q.iter().map(|x| xf.s(*x)).collect(), st));
+            let (a, b) = (xf.s(fixed), xf.s(pt));
+            let len = a.distance(b);
+            if len > 1.0 {
+                let d = (b - a) / len;
+                canvas::track_line(painter, b, b + d * 120.0);
+                let orange = egui::Color32::from_rgb(226, 148, 82);
+                let (dash, gap, width) = (16.0f32, 10.0f32, 5.0f32);
+                let mut t = 0.0;
+                while t < len {
+                    let (u0, u1) = (t, (t + dash).min(len));
+                    let (p0, p1) = (b - d * u0, b - d * u1);
+                    painter.line_segment([p0, p1], Stroke::new(width, orange));
+                    painter.circle_filled(p0, width / 2.0, orange);
+                    painter.circle_filled(p1, width / 2.0, orange);
+                    t += dash + gap;
+                }
+            }
             canvas::temp_dim(painter, xf, fixed, pt, &units.length(fixed.distance(pt)), -20.0);
         }
         (Some(ElementKind::Wall(w)), GripKind::WallMid) => {

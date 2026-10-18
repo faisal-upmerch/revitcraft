@@ -1295,7 +1295,8 @@ fn angle_arc(painter: &egui::Painter, xf: &Xf, a: DVec2, reference: DVec2, pt: D
         let t = t0 + sweep * k as f64 / n as f64;
         xf.s(a + DVec2::new(t.cos(), t.sin()) * r)
     }).collect();
-    painter.add(egui::Shape::line(pts, Stroke::new(1.0, style::TEMP_DIM_LINE)));
+    // A dashed arc, as the reference app draws it.
+    painter.extend(egui::Shape::dashed_line(&pts, Stroke::new(1.0, style::TEMP_DIM_LINE), 4.0, 3.0));
     // The value sits outside the arc at its middle, written along the arc as the reference
     // app does.
     let tm = t0 + sweep / 2.0;
@@ -3050,14 +3051,24 @@ fn modify_tool(app: &mut App, ui: &egui::Ui, resp: &egui::Response, painter: &eg
     let linear = |e: &Element| element_curve(e).is_some();
     match kind {
         ToolKind::Move | ToolKind::Copy | ToolKind::Paste => {
+            // As the reference app: a dashed box around what is moved, following it to the end point.
+            if kind != ToolKind::Paste {
+                let delta = match (app.tool.pts.first().copied(), point) {
+                    (Some(a), Some(b)) => b - a,
+                    _ => DVec2::ZERO,
+                };
+                selection_box(app, painter, xf, d, delta);
+            }
             let Some(pt) = point else { return };
             let start = if kind == ToolKind::Paste { app.clipboard.as_ref().map(|c| c.base) } else { app.tool.pts.first().copied() };
             if let Some(a) = start {
                 let pt = if app.opts.constrain { constrain_ortho(a, pt) } else { pt };
                 let delta = pt - a;
                 if kind != ToolKind::Paste {
-                    painter.line_segment([xf.s(a), xf.s(pt)], preview_stroke());
+                    // A thin blue rubber band with its length and angle.
+                    painter.line_segment([xf.s(a), xf.s(pt)], Stroke::new(1.0, style::TEMP_DIM_LINE));
                     temp_dim(painter, xf, a, pt, &units.length(a.distance(pt)), -18.0);
+                    angle_arc(painter, xf, a, DVec2::X, pt, &units);
                 }
                 ghost_selection(app, painter, xf, d, delta, kind == ToolKind::Paste);
                 if clicked {
@@ -3590,6 +3601,24 @@ fn ghost_selection(app: &App, painter: &egui::Painter, xf: &Xf, d: &Drawing, del
             let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q + delta)).collect();
             canvas::paint_polyline(painter, &v, *closed, st, Dash::Solid, xf);
         }
+    }
+}
+
+/// A light dashed box around the tool's elements (moved by `delta`).
+fn selection_box(app: &App, painter: &egui::Painter, xf: &Xf, d: &Drawing, delta: DVec2) {
+    let ids: std::collections::HashSet<Id> = app.tool.ids.iter().copied().collect();
+    let mut r = egui::Rect::NOTHING;
+    for (id, prim) in &d.prims {
+        if let (true, rc_core::plan::Prim::Line { pts, .. }) = (id.is_some_and(|i| ids.contains(&i)), prim) {
+            for q in pts {
+                r.extend_with(xf.s(*q + delta));
+            }
+        }
+    }
+    if r.is_positive() {
+        let r = r.expand(6.0);
+        let st = Stroke::new(1.0, Color32::from_rgb(120, 190, 200));
+        painter.extend(egui::Shape::dashed_line(&[r.left_top(), r.right_top(), r.right_bottom(), r.left_bottom(), r.left_top()], st, 4.0, 3.0));
     }
 }
 

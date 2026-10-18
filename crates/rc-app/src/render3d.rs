@@ -81,7 +81,8 @@ fn shadow_factor(world: vec3<f32>, n: vec3<f32>) -> f32 {
 fn fs_main(i: VOut) -> @location(0) vec4<f32> {
     if (clipped(i.world)) { discard; }
     // Selection overlay: a translucent blue tint in every visual style.
-    if (i.extra.y > 0.5) { return vec4<f32>(0.25, 0.5, 1.0, 0.32); }
+    // The reference app's selection blue (125, 146, 202 over white).
+    if (i.extra.y > 0.5) { return vec4<f32>(0.3627, 0.4657, 0.740, 0.8); }
     let style = u.params.z;
     // Decal images (extra.z) show in the Realistic style only.
     if (i.extra.z > 0.5 && style < 3.5) { discard; }
