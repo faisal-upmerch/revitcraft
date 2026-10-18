@@ -8,6 +8,7 @@ extension VerticalGraphics {
     /// The section polygons of a wall split into its layers, each filled with the layer material's cut pattern.
     /// nil when the wall isn't a straight compound wall or the section runs parallel to it (one fill then).
     func wallLayerCutFills(_ e: Element, _ fr: Frame, _ polys: [Polygon2], _ o: GraphicOverride) -> [GPrimitive]? {
+        if let parts = StackedWalls.parts(of: e, model) { return stackedCutFills(parts, fr, polys, o) } // F2
         guard let f = WallGeometry.frame(e, model), f.assembly.layers.count > 1, case .line(let seg) = f.location else { return nil }
         let planeLine = Segment2(fr.origin.xy - fr.right * 10_000, fr.origin.xy + fr.right * 10_000)
         let b = f.assembly.boundaries
@@ -32,6 +33,25 @@ extension VerticalGraphics {
             guard !clipped.isEmpty else { continue }
             let fill = builder.cutFill(.walls, materialID: layer.materialID, o, type: model.typeData(of: e), detail: .fine) ?? GFill(pattern: .diagonalUp)
             out.append(.fill(clipped.map(\.outer), fill))
+        }
+        return out.isEmpty ? nil : out
+    }
+}
+
+extension VerticalGraphics {
+    /// F2: a stacked wall's section, part by part: each part's height band of the cut, filled with its own layers.
+    func stackedCutFills(_ parts: [Element], _ fr: Frame, _ polys: [Polygon2], _ o: GraphicOverride) -> [GPrimitive]? {
+        var out: [GPrimitive] = []
+        let profiles = polys.map { Profile2(outer: $0) }
+        for p in parts {
+            guard let f = WallGeometry.frame(p, model) else { continue }
+            let band = Polygon2([Vec2(-1e6, f.baseZ), Vec2(1e6, f.baseZ), Vec2(1e6, f.topZ), Vec2(-1e6, f.topZ)])
+            let clipped = PolygonBoolean.intersection(profiles, [Profile2(outer: band)]).map(\.outer)
+            guard !clipped.isEmpty else { continue }
+            if let layered = wallLayerCutFills(p, fr, clipped, o) { out += layered; continue }
+            let a = f.assembly
+            let core = a.layers.indices.contains(a.coreStart) ? a.layers[a.coreStart].materialID : a.layers.first?.materialID
+            out.append(.fill(clipped, builder.cutFill(p, materialID: core, o) ?? GFill(pattern: .solid, color: .white)))
         }
         return out.isEmpty ? nil : out
     }

@@ -67,6 +67,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F2 commands:
+    case stackedWall, gridMultiSegment, workPlaneSet, workPlaneShow, workPlaneViewer, connectLevels, sketchBoundaryLine, slopeArrow, alignEaves, adjustHeight, adjustOverhang, verticalColumn, slantedColumn, columnsAtGrids, columnsAtColumns, multipleFinish, multipleCancel
 
 
     // F34 commands:

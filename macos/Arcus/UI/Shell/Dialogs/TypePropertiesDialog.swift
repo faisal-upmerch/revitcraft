@@ -69,6 +69,13 @@ struct TypePropertiesDialog: View {
                                     .id(editor.typeID)
                                     .padding(.horizontal, 10).padding(.vertical, 6)
                                 }
+                                if group == .construction, let st = t?.typeData?.stack { // F2: stacked walls
+                                    StackedWallEditor(state: state, model: editor.preview, spec: st) { s in
+                                        do throws(ParameterError) { try editor.stage(stack: s); return nil } catch { return error.message }
+                                    }
+                                    .id(editor.typeID)
+                                    .padding(.horizontal, 10).padding(.vertical, 6)
+                                }
                                 ForEach(entries, id: \.id) { e in
                                     ParamRow(state: state, entry: e, targets: [editor.typeID], labelWidth: 190) { id, v throws(ParameterError) in
                                         try editor.stage(id, value: v)
@@ -107,7 +114,7 @@ struct TypePropertiesDialog: View {
             if by[e.group] == nil { order.append(e.group) }
             by[e.group, default: []].append(e)
         }
-        if t.typeData?.assembly != nil, by[.construction] == nil { order.append(.construction); by[.construction] = [] }
+        if t.typeData?.assembly != nil || t.typeData?.stack != nil, by[.construction] == nil { order.append(.construction); by[.construction] = [] } // F2: stack
         return order.sorted().map { ($0, by[$0]!) }
     }
 

@@ -695,6 +695,7 @@ extension CommandRouter {
         .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .stairStraight, .stairL, .stairU, .railing, .ramp,
         .modelLine, .grid, .referencePlane, .shaftOpening, .buildingPad, .move, .copy,
         .wallReveal, // F1: clicks a wall face
+        .stackedWall, // F2
     ]
     /// Modify tools whose work plane is the selection's level.
     static let w23DSelectionCommands: Set<CommandID> = [.move, .copy, .rotate, .mirrorPickAxis, .mirrorDrawAxis, .array, .scale, .align, .split, .trimExtendCorner, .trimExtendSingle, .trimExtendMultiple, .offset]

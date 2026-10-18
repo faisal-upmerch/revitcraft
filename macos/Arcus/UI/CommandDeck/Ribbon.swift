@@ -31,6 +31,7 @@ struct RibbonItem: Hashable {
     /// ("Roof", "Stair") and long large-button captions break onto two lines at a word boundary.
     static func caption(_ id: CommandID, size: Size, split: Bool) -> String {
         if let c = f11Caption(id, size: size, split: split) { return c } // F11
+        if let c = f2Caption(id, size: size, split: split) { return c } // F2
         switch id {
         case .roofFootprint where split: return "Roof"
         case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
@@ -141,7 +142,7 @@ enum RibbonContent {
             return [RibbonPanel(title: "Select", items: [.large(.modify), .small(.selectAll), .small(.filterSelection), .small(.selectAllInstancesInView)], tint: modify),
                     RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
         case .architecture:
-            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window),
+            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .stackedWall, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window),
                                                         .large(.component, [.component, .componentLibrary]), .large(.structuralColumn, [.structuralColumn, .column]),
                                                         .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
                                                         .large(.floor, [.floor, .structuralFloor, .slabEdge]),

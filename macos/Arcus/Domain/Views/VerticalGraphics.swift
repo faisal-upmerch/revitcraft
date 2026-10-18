@@ -139,6 +139,7 @@ struct VerticalGraphics {
 
     /// Vertical layer boundary lines where the section plane crosses a wall.
     func wallLayerLines(_ e: Element, _ fr: Frame, _ st: GStroke) -> [GPrimitive] {
+        if let parts = StackedWalls.parts(of: e, model) { return parts.flatMap { wallLayerLines($0, fr, st) } } // F2: each part over its band
         guard let f = WallGeometry.frame(e, model) else { return [] }
         let planeLine = Segment2(fr.origin.xy - fr.right * 10_000, fr.origin.xy + fr.right * 10_000)
         var out: [GPrimitive] = []

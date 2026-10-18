@@ -49,6 +49,7 @@ public enum ElementMeshes {
 
     static func wallParts(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> [MeshPart] {
         if let curtain = CurtainWallGeometry.meshParts(e, model) { return curtain } // WP3
+        if let parts = StackedWalls.parts(of: e, model) { return parts.flatMap { wallParts($0, model, detail: detail) } } // F2
         let mesh = WallGeometry.solid(e, model)
         guard let f = WallGeometry.frame(e, model) else { return [] }
         // Material: the core layer (layer-by-layer solids would multiply geometry; plan/section views show layers).
@@ -222,6 +223,9 @@ public enum DependencyGraph {
         default:
             break
         }
+        if case .wall = e.data { // F2: a stacked wall's part types and their materials
+            for t in StackedWalls.partTypes(model.typeData(of: e)) { s.insert(t); if let a = model[t]?.typeData?.assembly { for l in a.layers { if let m = l.materialID { s.insert(m) } } } }
+        }
         if case .wall = e.data, let c = model.typeData(of: e)?.curtain { // WP3: curtain panel types
             if let p = c.panelTypeID { s.insert(p) }
             for o in e.wall?.curtain?.panels ?? [] { if let p = o.typeID { s.insert(p) } }
@@ -245,6 +249,7 @@ public enum DependencyGraph {
                     for w in m.elements(.walls) where w.wall?.topLevelID == id { out.insert(w.id) }
                 case .type:
                     for x in m.instances(ofType: id) { out.insert(x.id) }
+                    for t in m.types(for: .walls) where StackedWalls.partTypes(t.typeData).contains(id) { for x in m.instances(ofType: t.id) { out.insert(x.id) } } // F2
                 case .family:
                     for t in m.elements(.elementTypes) where t.typeData?.familyID == id { for x in m.instances(ofType: t.id) { out.insert(x.id) } }
                 case .modelLine, .column:

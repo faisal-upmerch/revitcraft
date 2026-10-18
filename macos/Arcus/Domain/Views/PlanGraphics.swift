@@ -56,6 +56,7 @@ struct PlanGraphics {
 
     func walls(_ ws: [(Element, GraphicOverride)]) -> [GItem] {
         let ws = ws.filter { !CurtainWallGeometry.isCurtain($0.0, model) } // WP3: curtain walls draw separately
+            .map { (StackedWalls.part(of: $0.0, atZ: cutZ, model), $0.1) } // F2: a stacked wall shows the part the cut passes through
         var cutPolys: [Polygon2] = []
         var owner: [Int] = []
         var projected: [(Element, GraphicOverride, Polygon2)] = []
