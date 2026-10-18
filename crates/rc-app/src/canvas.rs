@@ -425,6 +425,90 @@ pub fn paint_prims(painter: &egui::Painter, prims: &[(Option<Id>, Prim)], xf: &X
 }
 
 /// Paints the prims of `ids` as a highlight (selection/preselection).
+/// The selection blue for areas: over white it comes out as the reference app's (125, 146, 202).
+const SELECT_FILL: Color32 = Color32::from_rgba_unmultiplied_const(19, 57, 159, 140);
+
+/// Selected walls cut by a plan view fill solid selection blue between their openings, as the
+/// reference app shows them (their cut patterns and outlines turn blue over it).
+fn paint_selected_wall_fills(app: &App, painter: &egui::Painter, xf: &Xf, view: &View, ids: &HashSet<Id>, offset: DVec2) {
+    let ViewKind::FloorPlan { level, cut_height, .. } = view.kind else { return };
+    let p = &app.doc.data;
+    let selected: Vec<(Id, &Wall)> = p.walls().filter(|(e, _)| ids.contains(&e.id)).map(|(e, w)| (e.id, w)).collect();
+    if selected.is_empty() {
+        return;
+    }
+    let cut_z = p.level_elevation(level) + cut_height;
+    let footprints = rc_core::analysis::wall_footprints(p);
+    // The part of a polygon where f >= 0 (f linear).
+    let clip = |poly: &[DVec2], f: &dyn Fn(DVec2) -> f64| -> Vec<DVec2> {
+        let mut out = Vec::new();
+        for k in 0..poly.len() {
+            let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+            let (fa, fb) = (f(a), f(b));
+            if fa >= 0.0 {
+                out.push(a);
+            }
+            if (fa >= 0.0) != (fb >= 0.0) {
+                out.push(a + (b - a) * (fa / (fa - fb)));
+            }
+        }
+        out
+    };
+    for (id, w) in selected {
+        if rc_core::analysis::wall_base_z(p, w) > cut_z || rc_core::build3d::wall_top_extent(p, w) < cut_z {
+            continue;
+        }
+        let Some(fp) = footprints.get(&id) else { continue };
+        let mut poly = fp.polygon();
+        // Ends running into another wall (T-junctions) stop at that wall's face.
+        for end in [w.start, w.end] {
+            for (oe, ow) in p.walls().filter(|(e, ow)| e.id != id && ow.arc().is_none()) {
+                let Some(of) = footprints.get(&oe.id) else { continue };
+                // Only T-junctions: at L corners the mitred ends meet and stay whole.
+                let corner = end.distance(ow.start).min(end.distance(ow.end)) < rc_core::analysis::wall_thickness(p, ow) + 1.0;
+                if corner || !rc_core::geom::contains(&of.polygon(), end) {
+                    continue;
+                }
+                let (n2, h2) = (ow.normal(), rc_core::analysis::wall_thickness(p, ow) / 2.0);
+                let mid = (w.start + w.end) / 2.0;
+                let side = if (mid - ow.start).dot(n2) >= 0.0 { 1.0 } else { -1.0 };
+                let clipped = clip(&poly, &|q| side * (q - ow.start).dot(n2) - h2);
+                if clipped.len() >= 3 {
+                    poly = clipped;
+                }
+            }
+        }
+        let mut pieces = vec![poly.clone()];
+        if fp.straight {
+            let dir = (w.end - w.start).normalize_or_zero();
+            let u = move |q: DVec2| (q - w.start).dot(dir);
+            let mut openings: Vec<(f64, f64)> = rc_core::build3d::wall_openings(p, id, w).into_iter().filter(|(_, _, z0, z1)| *z0 <= cut_z && cut_z <= *z1).map(|(u0, u1, _, _)| (u0, u1)).collect();
+            openings.sort_by(|a, b| a.0.total_cmp(&b.0));
+            if !openings.is_empty() {
+                pieces.clear();
+                let mut from = f64::MIN;
+                for (u0, u1) in openings.iter().copied().chain(std::iter::once((f64::MAX, f64::MAX))) {
+                    let piece = clip(&clip(&poly, &|q| u(q) - from), &|q| u0 - u(q));
+                    if piece.len() >= 3 {
+                        pieces.push(piece);
+                    }
+                    from = from.max(u1);
+                }
+            }
+        }
+        for piece in pieces {
+            let mut mesh = egui::Mesh::default();
+            for q in &piece {
+                mesh.colored_vertex(xf.s(*q + offset), SELECT_FILL);
+            }
+            for t in rc_core::geom::triangulate(&piece) {
+                mesh.add_triangle(t[0] as u32, t[1] as u32, t[2] as u32);
+            }
+            painter.add(egui::Shape::mesh(mesh));
+        }
+    }
+}
+
 fn paint_highlight(painter: &egui::Painter, d: &Drawing, ids: &HashSet<Id>, xf: &Xf, color: Color32, offset: DVec2) {
     for (id, prim) in &d.prims {
         let Some(id) = id else { continue };
@@ -437,12 +521,14 @@ fn paint_highlight(painter: &egui::Painter, d: &Drawing, ids: &HashSet<Id>, xf: 
             }
             Prim::Line { pts, closed, stroke } => {
                 let v: Vec<Pos2> = pts.iter().map(|q| xf.s(*q + offset)).collect();
-                let w = (xf.px(stroke.width) + 1.2).max(2.0);
+                // Outlines get heavier; thin pattern lines stay thin so the fill reads as one tone.
+                let w = if xf.px(stroke.width) < 1.0 { 1.0 } else { (xf.px(stroke.width) + 1.2).max(2.0) };
                 paint_polyline(painter, &v, *closed, Stroke::new(w, color), Dash::Solid, xf);
             }
             Prim::Fill { tris, .. } => {
                 let mut mesh = egui::Mesh::default();
-                let c = Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 60);
+                // The selection blue over white comes out as the reference app's (125, 146, 202).
+                let c = if color == style::SELECT { SELECT_FILL } else { Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 60) };
                 for t in tris {
                     let i = mesh.vertices.len() as u32;
                     for q in t {
@@ -817,6 +903,9 @@ fn paint_cursor(app: &App, ui: &egui::Ui, resp: &egui::Response, painter: &egui:
     let not_allowed = ui.ctx().output(|o| o.cursor_icon) == egui::CursorIcon::NotAllowed;
     if matches!(kind, ToolKind::Move | ToolKind::Copy) {
         paint_move_glyph(painter, c + vec2(13.0, 15.0));
+    } else if app.tool.is_select() && app.interact.drag.is_none() && app.interact.hover_grip.is_none() && app.interact.hover.is_some_and(|h| app.selection.contains(&h)) {
+        // Over a selected element the pointer becomes the four-way move arrow.
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Move);
     } else if (!app.tool.is_select() && !modify && !not_allowed) || end_drag {
         ui.ctx().set_cursor_icon(egui::CursorIcon::None);
         paint_crosshair(painter, c);
@@ -1141,6 +1230,7 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
     if move_offset != DVec2::ZERO {
         paint_highlight(&painter, &drawing, &sel_draw, &xf, Color32::from_rgba_unmultiplied(20, 110, 255, 120), DVec2::ZERO);
     }
+    paint_selected_wall_fills(app, &painter, &xf, &view, &sel_draw, move_offset);
     paint_highlight(&painter, &drawing, &sel_draw, &xf, style::SELECT, move_offset);
     if is_plan(&view) {
         // Rooms and areas highlight their boundary.
