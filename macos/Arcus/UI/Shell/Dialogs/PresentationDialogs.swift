@@ -133,7 +133,7 @@ struct RenderingDialog: View {
                         Text("Width: \(size.width) pixels    Height: \(size.height) pixels").font(.caption).foregroundStyle(.secondary)
                     }
                     Section("Lighting") {
-                        Picker("Scheme:", selection: $s.sun) { Text("Exterior: Sun and Sky").tag(true); Text("Exterior: Sky only").tag(false) }
+                        Picker("Scheme:", selection: $s.sun) { Text("Exterior: Sun and shadows").tag(true); Text("Exterior: Sun, no shadows").tag(false) }
                         Text(sunText).font(.caption).foregroundStyle(.secondary)
                     }
                     Section("Background") {

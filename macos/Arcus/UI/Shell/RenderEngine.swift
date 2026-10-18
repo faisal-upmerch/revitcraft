@@ -24,7 +24,7 @@ enum RenderEngine {
         /// Printer resolution: a 10" × 6.25" image at `dpi` (else the screen size of the quality).
         var printer = false
         var dpi = 150
-        /// Exterior: sun and sky (sun shadows); off: sky light only (no sun shadows).
+        /// The sun casts shadows (the Realistic style always lights the model by the view's sun and the sky).
         var sun = true
         /// Sky background (off: the canvas background).
         var sky = true
