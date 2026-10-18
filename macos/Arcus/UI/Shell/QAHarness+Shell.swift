@@ -25,6 +25,16 @@ extension QAHarness {
         await pause(500)
         await shot(w, "shell-options-pill-\(suffix)")
         s.cancelTool()
+        // N2: every ribbon tab with nothing selected, to check panels, order and fit against RevitCraft's ribbon.
+        let kept = s.session.selection.ids
+        s.session.selection.clear()
+        for tab in RibbonTab.allCases {
+            s.ribbonTab = tab; s.ribbonShowsContextual = false
+            await pause(300)
+            await shot(w, "ribbon-\(tab.rawValue.lowercased().replacingOccurrences(of: " & ", with: "-"))-\(suffix)")
+        }
+        s.ribbonTab = .architecture
+        s.session.selection.select(Array(kept))
         if let other = s.model.views.first(where: { $0.id != plan.id && $0.view?.kind == .floorPlan }) {
             s.open(other.id)
             _ = await waitForGraphics(s, other.id)

@@ -7,7 +7,7 @@ import ArcusApplication
 
 /// Ribbon tabs, named the way users of mainstream BIM tools expect to find them.
 enum RibbonTab: String, CaseIterable, Identifiable {
-    case architecture = "Architecture", structure = "Structure", insert = "Insert", annotate = "Annotate"
+    case architecture = "Architecture", structure = "Structure", insert = "Insert", annotate = "Annotate", analyze = "Analyze"
     case massing = "Massing & Site", view = "View", manage = "Manage", modify = "Modify"
     var id: String { rawValue }
 }
@@ -32,7 +32,13 @@ struct RibbonItem: Hashable {
     static func caption(_ id: CommandID, size: Size, split: Bool) -> String {
         switch id {
         case .roofFootprint where split: return "Roof"
-        case .shaftOpening where split: return "Opening" // WP3
+        case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
+        case .structuralWall where split: return "Wall"
+        case .structuralFloor where split: return "Floor"
+        case .joinGeometry where split: return "Allow/Disallow Join"
+        case .activateViewport where split: return "Viewports"
+        case .closeHiddenViews: return "Close Inactive"
+        case .locationSettings where size == .large: return "Location"
         case .stairStraight where split: return "Stair"
         case .alignedDimension where split: return "Aligned"
         case .floorPlan where split: return "Plan\nViews"
@@ -88,47 +94,66 @@ enum RibbonContent {
     static let site = Color(red: 0.42, green: 0.58, blue: 0.22)
     static let manage = Color(red: 0.45, green: 0.45, blue: 0.50)
 
+    /// Every tab starts with Select, as in RevitCraft: Modify returns to selection mode from any tab.
+    static let selectPanel = RibbonPanel(title: "Select", items: [.large(.modify)], tint: modify)
+
+    /// N2: panel order and dropdowns follow RevitCraft (Select, Properties, Clipboard, Geometry, Modify, View, Measure,
+    /// Create). The Modify grid reads as RevitCraft's three rows (Align Offset Mirror Mirror Split Pin / Move Copy Rotate
+    /// Trim Array Unpin / Scale Trim Trim Delete); the ribbon packs icons in columns of three, so they are listed by column.
     static let modifyPanels: [RibbonPanel] = [
         RibbonPanel(title: "Clipboard", items: [.large(.paste, [.paste, .pasteAlignedSameLevel, .pasteAlignedSelectedLevels, .pasteAlignedCurrentView]),
-                                                .icon(.copyClipboard), .icon(.cut), .icon(.matchType)], tint: modify),
+                                                .icon(.cut), .icon(.copyClipboard), .icon(.matchType)], tint: modify),
         RibbonPanel(title: "Geometry", items: [.small(.joinSolids, [.joinSolids, .unjoinSolids, .switchJoinOrder]), .small(.cutGeometry, [.cutGeometry, .uncutGeometry]), // BL-VG
-                                               .small(.demolish), .small(.joinGeometry), .small(.unjoinGeometry), .small(.paint), .small(.removePaint)], tint: modify),
-        RibbonPanel(title: "Modify", items: [.icon(.align), .icon(.offset), .icon(.mirrorPickAxis), .icon(.mirrorDrawAxis),
-                                             .icon(.move), .icon(.copy), .icon(.rotate), .icon(.trimExtendCorner),
-                                             .icon(.split), .icon(.trimExtendSingle), .icon(.trimExtendMultiple), .icon(.array),
-                                             .icon(.scale), .icon(.pin), .icon(.unpin), .icon(.delete)], tint: modify),
-        RibbonPanel(title: "Measure", items: [.large(.measureBetween, [.measureBetween, .measureAlong])], tint: modify),
+                                               .small(.demolish), .small(.joinGeometry, [.joinGeometry, .unjoinGeometry]).newColumn(), .small(.paint, [.paint, .removePaint])], tint: modify),
+        RibbonPanel(title: "Modify", items: [.icon(.align), .icon(.move), .icon(.scale),
+                                             .icon(.offset), .icon(.copy), .icon(.trimExtendSingle),
+                                             .icon(.mirrorPickAxis), .icon(.rotate), .icon(.trimExtendMultiple),
+                                             .icon(.mirrorDrawAxis), .icon(.trimExtendCorner), .icon(.delete),
+                                             .icon(.split), .icon(.array), .icon(.pin).newColumn(), .icon(.unpin)], tint: modify),
         RibbonPanel(title: "View", items: [.icon(.hideInView), .icon(.temporaryIsolate), .icon(.temporaryHide),
                                            .icon(.overrideGraphicsElement), .icon(.selectionBox)], tint: view), // WP6a: override, selection box
+        RibbonPanel(title: "Measure", items: [.large(.measureBetween, [.measureBetween, .measureAlong]), .large(.alignedDimension)], tint: modify),
         RibbonPanel(title: "Create", items: [.large(.createGroup), .small(.editGroup), .small(.ungroup), .small(.createSimilar)], tint: modify),
     ]
 
     static func panels(_ tab: RibbonTab) -> [RibbonPanel] {
+        tab == .modify ? tabPanels(tab) : [selectPanel] + tabPanels(tab) // Modify has its own, fuller Select panel
+    }
+
+    /// The panels after Select. N2: panels, their order and the dropdowns follow RevitCraft's ribbon (crates/rc-app
+    /// ribbon.rs). Tools Arcus has and RevitCraft lacks stay in the panel they belong to; RevitCraft tools Arcus does
+    /// not have yet arrive with their feature milestones (Docs/RevitCraftPort.md). Draw shapes (rectangle, arc, pick
+    /// lines, pick walls) are draw modes of the tools, not dropdown entries.
+    static func tabPanels(_ tab: RibbonTab) -> [RibbonPanel] {
         switch tab {
         case .modify:
             return [RibbonPanel(title: "Select", items: [.large(.modify), .small(.selectAll), .small(.filterSelection), .small(.selectAllInstancesInView)], tint: modify),
-                    RibbonPanel(title: "Properties", items: [.large(.typeProperties)], tint: modify)] + modifyPanels
+                    RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
         case .architecture:
-            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep]), .large(.door), .large(.window),
-                                                        .large(.component, [.component, .componentLibrary]), .large(.column, [.column, .structuralColumn]),
-                                                        .large(.roofFootprint, [.roofFootprint, .roofPickWalls, .roofExtrusion, .roofSoffit]), .large(.ceiling),
-                                                        .large(.floor, [.floor, .floorPickWalls, .slabEdge])], tint: build),
-                    RibbonPanel(title: "Curtain Wall", items: [.small(.curtainGrid), .small(.mullion), .small(.curtainPanel)], tint: build),
-                    RibbonPanel(title: "Opening", items: [.large(.shaftOpening, [.shaftOpening, .wallOpening])], tint: build),
-                    RibbonPanel(title: "Circulation", items: [.large(.railing), .large(.stairStraight, [.stairStraight, .stairL, .stairU]), .large(.ramp)], tint: circulation),
+            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .curtainWall]), .large(.door), .large(.window),
+                                                        .large(.component, [.component, .componentLibrary]), .large(.structuralColumn, [.structuralColumn, .column]),
+                                                        .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
+                                                        .large(.floor, [.floor, .structuralFloor, .slabEdge]),
+                                                        .small(.curtainGrid), .small(.mullion), .small(.curtainPanel)], tint: build),
+                    RibbonPanel(title: "Circulation", items: [.large(.railing), .large(.ramp), .large(.stairStraight, [.stairStraight, .stairL, .stairU])], tint: circulation),
                     RibbonPanel(title: "Model", items: [.small(.modelLine), .small(.createGroup)], tint: build),
-                    RibbonPanel(title: "Room & Area", items: [.large(.room, [.room, .placeRoomsAutomatically]), .small(.roomSeparator), .small(.roomTag),
-                                                              .large(.area, [.area, .placeAreasAutomatically]), .small(.areaBoundary), .small(.areaPlan),
-                                                              .small(.colorSchemes).newColumn(), .small(.colorFillLegend)], tint: rooms),
-                    RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid, [.grid, .gridPickLines])], tint: datum),
+                    RibbonPanel(title: "Room & Area", items: [.large(.room, [.room, .placeRoomsAutomatically]), .small(.roomSeparator), .small(.roomTag, [.roomTag, .tagAll]),
+                                                              .large(.area, [.area, .placeAreasAutomatically]), .small(.areaBoundary), .small(.areaTag), .small(.areaPlan),
+                                                              .small(.colorSchemes).newColumn()], tint: rooms),
+                    RibbonPanel(title: "Opening", items: [.large(.shaftOpening), .small(.wallOpening)], tint: build),
+                    RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .structure:
-            return [RibbonPanel(title: "Structure", items: [.large(.beam), .large(.structuralWall), .large(.structuralColumn), .large(.structuralFloor)], tint: build), // BL-VG
+            return [RibbonPanel(title: "Structure", items: [.large(.beam), .large(.structuralWall, [.structuralWall, .wall]), .large(.structuralColumn),
+                                                            .large(.structuralFloor, [.structuralFloor, .floor])], tint: build), // BL-VG
                     RibbonPanel(title: "Foundation", items: [.large(.foundationIsolated), .large(.foundationWall), .large(.foundationSlab)], tint: build), // BL-VG
+                    RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary]), .small(.modelLine), .small(.createGroup)], tint: build),
+                    RibbonPanel(title: "Opening", items: [.large(.shaftOpening), .small(.wallOpening)], tint: build),
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .insert:
-            return [RibbonPanel(title: "Link", items: [.large(.linkCAD), .small(.linkPDF), .small(.linkImage), .small(.manageLinks)], tint: build), // BL-SCHED: one Link CAD with a format picker
+            return [RibbonPanel(title: "Manage", items: [.large(.manageLinks)], tint: build),
+                    RibbonPanel(title: "Link", items: [.large(.linkCAD), .small(.linkPDF), .small(.linkImage)], tint: build), // BL-SCHED: one Link CAD with a format picker
                     RibbonPanel(title: "Import", items: [.large(.importCAD), .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
                     RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
         case .annotate:
@@ -142,43 +167,48 @@ enum RibbonContent {
                                                          .large(.revisionCloud), .large(.detailGroupPlace, [.detailGroupPlace, .detailGroupCreate]),
                                                          .large(.insulation)], tint: annotate),
                     RibbonPanel(title: "Text", items: [.large(.textNote), .small(.checkSpelling), .small(.findReplace)], tint: annotate),
-                    RibbonPanel(title: "Tag", items: [.large(.tagByCategory), .large(.tagAll), .small(.multiCategoryTag), .small(.materialTag), .small(.areaTag),
-                                                      .small(.roomTag), .small(.viewReference), .small(.treadNumber),
-                                                      .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser]), .small(.beamAnnotations)], tint: annotate),
-                    RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend), .small(.colorSchemes)], tint: annotate),
-                    RibbonPanel(title: "Symbol", items: [.large(.symbol), .small(.northArrow), .small(.scaleBar), .small(.spanDirection), .small(.stairPath)], tint: annotate)]
+                    RibbonPanel(title: "Tag", items: [.large(.tagByCategory), .large(.tagAll), .small(.beamAnnotations), .small(.multiCategoryTag), .small(.materialTag),
+                                                      .small(.areaTag), .small(.roomTag), .small(.viewReference).newColumn(), .small(.treadNumber),
+                                                      .large(.keynoteElement, [.keynoteElement, .keynoteMaterial, .keynoteUser])], tint: annotate),
+                    RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
+                    RibbonPanel(title: "Symbol", items: [.large(.symbol), .small(.spanDirection), .small(.stairPath), .small(.northArrow), .small(.scaleBar)], tint: annotate)]
+        case .analyze:
+            // Spaces & Zones arrives with the Analyze milestone (F5).
+            return [RibbonPanel(title: "Color Fill", items: [.large(.colorFillLegend)], tint: annotate),
+                    RibbonPanel(title: "Reports & Schedules", items: [.large(.schedule, [.schedule, .materialTakeoff])], tint: view)]
         case .massing:
             // W2-DWG: Massing & Site panels.
             // BL-SITE: Toposolid is the primary site element; toposurfaces and building pads sit behind "Legacy".
             return [RibbonPanel(title: "Model Site", items: [.large(.toposolid, [.toposolid, .toposolidFromFile, .toposolidFromImport]),
-                                                             .large(.siteComponent), .large(.parkingComponent), .large(.parkingLayout)], tint: site),
-                    RibbonPanel(title: "Modify Site", items: [.small(.subdivideToposolid), .small(.splitSurface), .small(.simplifySurface), .small(.editSurface).newColumn(),
-                                                              .small(.excavateToposolid), .small(.propertyLine), .small(.gradedRegion).newColumn(), .small(.mergeSurfaces),
+                                                             .large(.siteComponent), .large(.parkingComponent), .large(.propertyLine), .large(.parkingLayout)], tint: site),
+                    RibbonPanel(title: "Modify Site", items: [.small(.modifySubElements), .small(.subdivideToposolid), .small(.splitSurface), .small(.simplifySurface).newColumn(),
+                                                              .small(.editSurface), .small(.excavateToposolid), .small(.gradedRegion).newColumn(), .small(.mergeSurfaces),
                                                               .small(.labelContours)], tint: site),
                     RibbonPanel(title: "Legacy", items: [.small(.toposurface, [.toposurface, .toposurfaceFromFile, .toposurfaceFromImport]), .small(.buildingPad),
                                                          .small(.subregion), .small(.generateToposolid).newColumn()], tint: site),
                     RibbonPanel(title: "Settings", items: [.small(.siteSettings)], tint: site)]
         case .view:
             return [RibbonPanel(title: "Graphics", items: [.large(.viewTemplatesManage, [.viewTemplatesManage, .viewTemplateCreate, .viewTemplateApplyProperties, .viewTemplateApply]), // BL-VG
-                                                           .large(.visibilityGraphics), .small(.filtersDialog), .small(.viewRange), .small(.thinLines), .small(.revealHidden),
+                                                           .large(.visibilityGraphics), .small(.filtersDialog), .small(.thinLines), .small(.viewRange), .small(.revealHidden),
                                                            .small(.showProjectBasePoint), .small(.showSurveyPoint)], tint: view),
                     RibbonPanel(title: "Create", items: [.large(.threeDView, [.threeDView, .cameraView]), .large(.section), .large(.callout),
-                                                         .large(.floorPlan, [.floorPlan, .ceilingPlan, .structuralPlan]), .large(.elevation),
+                                                         .large(.floorPlan, [.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan]), .large(.elevation),
                                                          .small(.draftingView), .small(.duplicateView, [.duplicateView, .duplicateViewWithDetailing, .duplicateDependent]),
-                                                         .small(.legend), .small(.scopeBox), .large(.schedule, [.schedule, .materialTakeoff, .sheetList, .revisionSchedule])], tint: view),
-                    RibbonPanel(title: "Sheet Composition", items: [.large(.newSheet), .small(.placeView), .small(.revisions),
-                                                                    .small(.activateViewport), .small(.deactivateViewport)], tint: sheet),
-                    RibbonPanel(title: "Windows", items: [.small(.previousView), .small(.closeHiddenViews), .small(.zoomExtents),
-                                                          .large(.userInterface, [.userInterface, .toggleProperties, .toggleNavigator, .toggleStatusBar, .toggleNavigationBar])], tint: view)] // BL-VG
+                                                         .small(.legend), .large(.schedule, [.schedule, .materialTakeoff, .sheetList, .revisionSchedule]), .small(.scopeBox)], tint: view),
+                    RibbonPanel(title: "Sheet Composition", items: [.large(.newSheet), .small(.placeView), .small(.revisions), .small(.viewReference),
+                                                                    .large(.activateViewport, [.activateViewport, .deactivateViewport])], tint: sheet),
+                    RibbonPanel(title: "Windows", items: [.small(.closeHiddenViews), .small(.previousView),
+                                                          .large(.userInterface, [.userInterface, .toggleProperties, .toggleNavigator, .toggleStatusBar, .toggleNavigationBar, .keyboardShortcuts])], tint: view)] // BL-VG
         case .manage:
-            return [RibbonPanel(title: "Settings", items: [.large(.materials), .large(.objectStyles), .small(.projectInfo), .small(.projectParameters), .small(.sharedParameters), // BL-VG
-                                                           .small(.projectUnits), .small(.lineStyles), .small(.snapSettings), .small(.locationSettings),
+            // Export and Print live in the File menu, as in RevitCraft.
+            return [RibbonPanel(title: "Settings", items: [.large(.materials), .small(.objectStyles), .small(.snapSettings), .small(.projectInfo),
+                                                           .small(.projectParameters), .small(.sharedParameters), .small(.purgeUnused), .small(.projectUnits),
                                                            .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage), // BL-VG
-                    RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
+                    RibbonPanel(title: "Project Location", items: [.large(.locationSettings)], tint: manage),
                     RibbonPanel(title: "Design Options", items: [.large(.designOptions)], tint: manage),
-                    RibbonPanel(title: "Manage Project", items: [.small(.manageLinks), .small(.purgeUnused), .small(.familyEditor)], tint: manage),
-                    RibbonPanel(title: "Inquiry", items: [.large(.warnings), .small(.idsOfSelection), .small(.selectByID), .small(.modelHealth), .small(.diagnostics)], tint: manage), // BL-VG
-                    RibbonPanel(title: "Output", items: [.large(.exportPDF), .small(.print), .small(.exportIFC), .small(.exportDXF), .small(.exportScheduleCSV)], tint: sheet)]
+                    RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .small(.familyEditor)], tint: manage),
+                    RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
+                    RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage)] // BL-VG
         }
     }
 
@@ -369,7 +399,7 @@ struct RibbonView: View {
 
     @ViewBuilder func contextualPanels(tool: (any InteractiveTool)?) -> some View {
         panelView(RibbonPanel(title: "Select", items: [.large(.modify)], tint: RibbonContent.modify), contextual: true)
-        panelView(RibbonPanel(title: "Properties", items: [.large(.typeProperties)], tint: RibbonContent.modify), contextual: true)
+        panelView(RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: RibbonContent.modify), contextual: true)
         if let tool {
             if let mode = tool.options.first(where: { $0.id == "mode" }), case .choice(let modes) = mode.kind {
                 DrawPanel(state: state, tool: tool, modes: modes, current: mode.value.textValue ?? "")

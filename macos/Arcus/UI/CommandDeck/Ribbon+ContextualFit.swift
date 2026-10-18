@@ -8,15 +8,14 @@ import ArcusApplication
 // the compact form needs ~1130 pt).
 
 extension RibbonContent {
-    /// Mode (Edit / Reset Profile), Modify Wall (Attach / Detach Top/Base, Flip Wall) and Wall Joins (Allow /
-    /// Disallow) for a selection containing walls. Flip Wall stays: the on-canvas flip arrows flip one wall, but Space
+    /// Mode (Edit / Reset Profile) and Modify Wall (Attach / Detach Top/Base, Flip Wall) for a selection containing
+    /// walls. Allow/Disallow Join sits in the shared Geometry panel, as in RevitCraft. Flip Wall stays: the on-canvas flip arrows flip one wall, but Space
     /// does not flip selected walls in this build, so the ribbon keeps the only multi-wall flip.
     static func wallPanels(_ state: DocumentState) -> [RibbonPanel] {
         let sel = state.session.selection.ids.compactMap { state.model[$0] }
         guard sel.contains(where: { $0.wall != nil }) else { return [] }
         return [RibbonPanel(title: "Mode", items: [.small(.editProfile), .small(.resetProfile)], tint: build),
-                RibbonPanel(title: "Modify Wall", items: [.small(.attachTop), .small(.detachTop), .small(.flipWall)], tint: build),
-                RibbonPanel(title: "Wall Joins", items: [.small(.joinGeometry), .small(.unjoinGeometry)], tint: build)]
+                RibbonPanel(title: "Modify Wall", items: [.small(.attachTop), .small(.detachTop), .small(.flipWall)], tint: build)]
     }
 
     /// The shared Modify panels with small buttons (and the Create panel's large one) shown as icons — titles stay in
@@ -24,7 +23,8 @@ extension RibbonContent {
     static var compactModifyPanels: [RibbonPanel] {
         var out: [RibbonPanel] = []
         var measure: [RibbonItem] = []
-        func icon(_ i: RibbonItem) -> RibbonItem { var c = i; c.size = .icon; c.breakBefore = false; return c }
+        // Icons keep their column breaks (the Modify grid); small buttons turned into icons pack freely.
+        func icon(_ i: RibbonItem) -> RibbonItem { var c = i; if c.size != .icon { c.breakBefore = false }; c.size = .icon; return c }
         for p in modifyPanels {
             if p.title == "Measure" { measure = p.items.map(icon); continue }
             out.append(RibbonPanel(title: p.title, items: p.items.map { $0.size == .small || p.title == "Create" ? icon($0) : $0 }, tint: p.tint))
