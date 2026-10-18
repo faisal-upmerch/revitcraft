@@ -31,12 +31,10 @@ struct FamilyBrowserView: View {
             header
             Divider()
             List(selection: selection) {
-                Section("Views") {
-                    ForEach(FamilyPreviewMode.allCases) { m in
-                        Label(m.viewTitle, systemImage: m.symbol).tag(FamilyBrowserRow.view(m))
-                            .fontWeight(model.view == m && model.selection == nil ? .semibold : .regular)
-                    }
-                }
+                // F1415: as RevitCraft's Project Browser lists a family's views.
+                Section("Floor Plans") { viewRow(.plan) }
+                Section("Elevations (Elevation 1)") { ForEach([FamilyPreviewMode.back, .front, .left, .right]) { viewRow($0) } }
+                Section("3D Views") { viewRow(.threeD) }
                 Section("Family Types") {
                     ForEach(model.family.types) { t in
                         Label(t.name, systemImage: t.name == model.currentType ? "checkmark.circle.fill" : "circle").tag(FamilyBrowserRow.item(.type(t.name)))
@@ -76,7 +74,7 @@ struct FamilyBrowserView: View {
                             Image(systemName: Self.icon(s.profile)).foregroundStyle(s.isVoid ? .orange : .secondary)
                             Text(s.name).lineLimit(1)
                             Spacer(minLength: 4)
-                            Text((s.isVoid ? "Void " : "") + s.profile.formName).font(.caption).foregroundStyle(.tertiary).lineLimit(1)
+                            Text((s.isVoid ? "Void " : "") + s.profile.kindName).font(.caption).foregroundStyle(.tertiary).lineLimit(1) // F1415: Swept Blend
                         }
                         .tag(FamilyBrowserRow.item(.solid(s.id)))
                         .contextMenu { itemMenu(.solid(s.id)) }
@@ -92,6 +90,7 @@ struct FamilyBrowserView: View {
                             .contextMenu { itemMenu(.line(l.id)) }
                     }
                 }
+                F1415BrowserSections(model: model) // F1415: model and reference lines, controls, model text, regions
                 if !model.family.labels.isEmpty {
                     Section("Labels") {
                         ForEach(model.family.labels) { l in
@@ -150,6 +149,13 @@ struct FamilyBrowserView: View {
         .frame(minWidth: 210)
     }
 
+    /// A view row; choosing it opens the view (and its tab).
+    func viewRow(_ m: FamilyPreviewMode) -> some View {
+        Label(m == .plan ? "Ref. Level" : m == .threeD ? "View 1 {3D}" : m.rawValue, systemImage: m.symbol).tag(FamilyBrowserRow.view(m))
+            .fontWeight(model.view == m && model.selection == nil ? .semibold : .regular)
+            .help(m.viewTitle)
+    }
+
     var header: some View {
         VStack(alignment: .leading, spacing: 2) {
             Text(model.family.name).font(.headline).lineLimit(1)
@@ -189,5 +195,56 @@ struct FamilyBrowserView: View {
         case .blend: "trapezoid.and.line.vertical"
         case .revolve: "rotate.3d"
         }
+    }
+}
+
+/// F1415: browser sections for the content RevitCraft's family editor adds.
+struct F1415BrowserSections: View {
+    let model: FamilyEditorModel
+    var body: some View {
+        if !model.family.modelLines.isEmpty {
+            Section("Model and Reference Lines") {
+                ForEach(model.family.modelLines) { l in
+                    Label(model.title(.modelLine(l.id)), systemImage: l.isReference ? "line.diagonal.arrow" : "line.diagonal")
+                        .foregroundStyle(l.isReference ? Color.green : Color.primary)
+                        .tag(FamilyBrowserRow.item(.modelLine(l.id)))
+                        .contextMenu { menu(.modelLine(l.id)) }
+                }
+            }
+        }
+        if !model.family.controls.isEmpty {
+            Section("Controls") {
+                ForEach(model.family.controls) { c in
+                    Label(c.kind.rawValue, systemImage: c.kind.isHorizontal ? "arrow.left.arrow.right" : "arrow.up.arrow.down")
+                        .tag(FamilyBrowserRow.item(.control(c.id)))
+                        .contextMenu { menu(.control(c.id)) }
+                }
+            }
+        }
+        if !model.family.modelTexts.isEmpty {
+            Section("Model Text") {
+                ForEach(model.family.modelTexts) { t in
+                    Label(t.text, systemImage: "textformat.size").lineLimit(1)
+                        .tag(FamilyBrowserRow.item(.modelText(t.id)))
+                        .contextMenu { menu(.modelText(t.id)) }
+                }
+            }
+        }
+        if !model.family.fills.isEmpty {
+            Section("Regions") {
+                ForEach(model.family.fills) { f in
+                    Label(f.isMasking ? "Masking Region" : "Filled Region", systemImage: f.isMasking ? "square.on.square.dashed" : "square.fill.on.square")
+                        .tag(FamilyBrowserRow.item(.fill(f.id)))
+                        .contextMenu { menu(.fill(f.id)) }
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    func menu(_ item: FamilyEditing.Item) -> some View {
+        Button("Show in Properties") { model.select(item) }
+        Divider()
+        Button("Delete", role: .destructive) { model.select(item); model.deleteSelection() }
     }
 }

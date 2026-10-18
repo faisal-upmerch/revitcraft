@@ -100,6 +100,7 @@ struct FamilyContentView: View {
         VStack(spacing: 0) {
             FamilyRibbonView(model: model)
             Divider()
+            FamilyViewTabs(model: model) // F1415: the family's open views
             ZStack(alignment: .topLeading) {
                 FamilyCanvas(model: model)
                 canvasTitle.padding(8)
@@ -115,6 +116,7 @@ struct FamilyContentView: View {
             switch s {
             case .familyTypes: FamilyTypesDialog(model: model)
             case .categoryAndParameters: FamilyCategoryDialog(model: model)
+            case .workPlane: FamilyWorkPlaneDialog(model: model) // F1415
             }
         }
         .onKeyPress(.init("z"), phases: .down) { press in
@@ -127,7 +129,9 @@ struct FamilyContentView: View {
     var canvasTitle: some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(model.view.viewTitle).font(.system(size: 12, weight: .semibold))
-            if let t = model.tool {
+            if let s = model.sketch { // F1415: sketch mode
+                Label(s.title + " · " + s.prompt, systemImage: "pencil.and.outline").font(.caption).foregroundStyle(Color(nsColor: .systemPink))
+            } else if let t = model.tool {
                 Label(t.prompt, systemImage: "hand.point.up.left").font(.caption).foregroundStyle(Tokens.selectionColor)
             } else if let s = model.selection {
                 Text(model.title(s)).font(.caption).foregroundStyle(.secondary)

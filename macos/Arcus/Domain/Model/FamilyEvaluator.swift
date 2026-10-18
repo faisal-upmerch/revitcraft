@@ -53,6 +53,8 @@ public struct EvaluatedFamily: Sendable {
         public var polygon: Polygon2
         public var pattern: FillPatternKind
         public var isMasking: Bool
+        /// Id of the `FamilyFill` this came from (nil for fills of nested families). // F1415
+        public var sourceID: String? = nil
     }
     public var fills: [Fill]
     public struct Label: Sendable {
@@ -76,8 +78,12 @@ public struct EvaluatedFamily: Sendable {
     public var conflictingDimensions: Set<String>
     /// Problems that make the family's geometry wrong for this type (fail the flex test).
     public var errors: [String]
-    /// Notes that don't block loading (e.g. a void that can't cut a sweep).
+    /// Notes that don't block loading.
     public var warnings: [String]
+    /// F1415: model and reference lines, in family coordinates.
+    public var modelLines: [ModelLine] = []
+    /// F1415: flip controls, in family plan coordinates.
+    public var controls: [Control] = []
 
     public var bounds: Box3 {
         var b = Box3.empty
@@ -256,7 +262,18 @@ public enum FamilyEvaluator {
                     continue
                 }
                 guard z1 - z0 > Tolerance.length else {
-                    errors.append("Solid “\(s.name)” has zero or negative height for this type.")
+                    errors.append("Solid “\(s.name)” has zero or negative \(s.workPlane.map { $0 == .xy ? "height" : "depth" } ?? "height") for this type.")
+                    continue
+                }
+                // F1415: an extrusion sketched on an elevation plane runs along that plane's normal.
+                if let wp = s.workPlane, wp != .xy {
+                    let mesh = FamilyFormGeometry.planeExtrusion(profile, plane: wp, w0: z0, w1: z1)
+                    guard let foot = FamilyFormGeometry.boxFootprint(mesh) else {
+                        errors.append("Solid “\(s.name)” can't be built for this type.")
+                        continue
+                    }
+                    let b = mesh.bounds
+                    solids.append(make(.extrusion, foot, b.min.z, b.max.z, mesh: mesh))
                     continue
                 }
                 solids.append(make(.extrusion, profile, z0, z1))
@@ -265,7 +282,23 @@ public enum FamilyEvaluator {
                 var path: [Vec2] = []
                 for p in sw.path.map(point) where path.last.map({ !$0.isAlmostEqual(p) }) ?? true { path.append(p) }
                 guard path.count >= 2 else {
-                    errors.append("Sweep “\(s.name)” needs a path of at least two distinct points.")
+                    errors.append("\(s.profile.kindName) “\(s.name)” needs a path of at least two distinct points.")
+                    continue
+                }
+                // F1415: Swept Blend, from the start profile to the end profile along the path.
+                if sw.isSweptBlend, let endPts = sw.endProfile {
+                    guard let p1 = loop(sw.profile), let p2 = loop(endPts) else {
+                        errors.append("Swept Blend “\(s.name)” needs two closed profiles with area for this type.")
+                        continue
+                    }
+                    let mesh = FamilyFormGeometry.sweptBlendMesh(path: path, z0: z0, start: p1, end: p2)
+                    let us = (p1.points + p2.points).map(\.x)
+                    guard !mesh.isEmpty, let foot = FamilyFormGeometry.sweepFootprint(path: path, uMin: us.min() ?? 0, uMax: us.max() ?? 0) else {
+                        errors.append("Swept Blend “\(s.name)” can't be built for this type.")
+                        continue
+                    }
+                    let b = mesh.bounds
+                    solids.append(make(.sweep, foot, b.min.z, b.max.z, mesh: mesh))
                     continue
                 }
                 var profile: Polygon2?
@@ -338,6 +371,30 @@ public enum FamilyEvaluator {
                 solids.append(make(.revolve, foot, b.min.z, b.max.z, mesh: mesh))
             }
         }
+        // F1415: model text, as extrusions of its glyphs from its work plane.
+        for t in family.modelTexts where visible(t.visibilityParameter) && !t.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            let w0 = bound(t.offset), w1 = w0 + max(t.depth, 0.0001)
+            for (k, prof) in FamilyFormGeometry.textProfiles(t, origin: point(t.position)).enumerated() {
+                var solid = EvaluatedFamily.Solid(name: "Model Text \(k + 1)", form: .extrusion, profile: prof, zMin: w0, zMax: w1, mesh: nil,
+                                                  materialParameter: t.materialParameter, resolvedMaterial: nil, subcategory: .general, isVoid: false,
+                                                  visibleAt: [.coarse, .medium, .fine], visibleInPlan: true, visibleIn3D: true, visibleInFrontBack: true,
+                                                  visibleInLeftRight: true, sourceID: t.id)
+                if t.plane != .xy {
+                    let mesh = FamilyFormGeometry.planeExtrusion(prof, plane: t.plane, w0: w0, w1: w1)
+                    guard let foot = FamilyFormGeometry.boxFootprint(mesh) else { continue }
+                    let b = mesh.bounds
+                    solid.mesh = mesh; solid.profile = foot; solid.zMin = b.min.z; solid.zMax = b.max.z
+                }
+                solids.append(solid)
+            }
+        }
+        var modelLines: [EvaluatedFamily.ModelLine] = family.modelLines.compactMap { l in
+            let w = bound(l.offset), a = point(l.start), b = point(l.end)
+            guard !a.isAlmostEqual(b) else { return nil }
+            return .init(start: l.plane.point(a.x, a.y, w), end: l.plane.point(b.x, b.y, w), isReference: l.isReference,
+                         subcategory: l.subcategory, visibleAt: l.visibleAt, sourceID: l.id)
+        }
+        let controls = family.controls.map { EvaluatedFamily.Control(position: point($0.position), kind: $0.kind, sourceID: $0.id) }
         func lines(_ ls: [FamilyLine]) -> [EvaluatedFamily.Line] {
             ls.filter { visible($0.visibilityParameter) }.compactMap { l in
                 switch l.shape {
@@ -356,7 +413,7 @@ public enum FamilyEvaluator {
         var annotationLines = lines(family.annotationLines)
         var fills = family.fills.compactMap { f -> EvaluatedFamily.Fill? in
             let poly = Polygon2(f.points.map(point))
-            return poly.isDegenerate ? nil : .init(polygon: poly, pattern: f.pattern, isMasking: f.isMasking)
+            return poly.isDegenerate ? nil : .init(polygon: poly, pattern: f.pattern, isMasking: f.isMasking, sourceID: f.id) // F1415
         }
         var labels = family.labels.map {
             EvaluatedFamily.Label(position: point($0.position), parameterName: $0.parameterName, staticText: $0.staticText,
@@ -420,28 +477,14 @@ public enum FamilyEvaluator {
             planLines += nev.planLines.map(placed)
             // 2D symbols (detail components, generic annotations) nested in a model family show in its plan.
             if family.template.is3D && !nf.template.is3D { planLines += nev.annotationLines.map(placed) } else { annotationLines += nev.annotationLines.map(placed) }
-            fills += nev.fills.map { var f = $0; f.polygon = Polygon2($0.polygon.points.map(t2.apply)); return f }
+            fills += nev.fills.map { var f = $0; f.polygon = Polygon2($0.polygon.points.map(t2.apply)); f.sourceID = nil; return f }
+            modelLines += nev.modelLines.filter { !$0.isReference }.map { var l = $0; l.start = t3.apply(l.start); l.end = t3.apply(l.end); l.sourceID = nil; return l } // F1415
             labels += nev.labels.map { var l = $0; l.position = t2.apply($0.position); return l }
         }
 
-        // Void extrusions cut solid extrusions exactly (prism minus prism, split at the void's heights).
-        for v in solids where v.isVoid {
-            guard v.form == .extrusion else {
-                warnings.append("Void \(v.form.rawValue.lowercased()) “\(v.name)” doesn't cut geometry; only void extrusions cut.")
-                continue
-            }
-            var next: [EvaluatedFamily.Solid] = []
-            for s in solids {
-                guard !s.isVoid, s.bounds.intersects(v.bounds) else { next.append(s); continue }
-                guard s.form == .extrusion else {
-                    warnings.append("Void “\(v.name)” can't cut the \(s.form.rawValue.lowercased()) “\(s.name)”; voids cut extrusions only.")
-                    next.append(s)
-                    continue
-                }
-                next += cut(s, by: v)
-            }
-            solids = next
-        }
+        // F1415: voids of every form cut the solids they reach. Extrusion from extrusion stays exact (prism minus prism, split
+        // at the void's heights, so plan profiles stay crisp); any other pair is cut as meshes (BSP CSG, `MeshCSG`).
+        solids = cutVoids(solids)
 
         var opening: (Double, Double, Double, Double)?
         if let o = family.opening {
@@ -453,11 +496,14 @@ public enum FamilyEvaluator {
             }
         }
         let profileLoop = family.profileLoop.count >= 3 ? Polygon2(family.profileLoop.map(point)) : nil
-        return EvaluatedFamily(values: values, planes: planes, solids: solids, planLines: planLines,
-                               annotationLines: annotationLines, fills: fills, labels: labels,
-                               opening: opening.map { (xMin: $0.0, xMax: $0.1, zMin: $0.2, zMax: $0.3) },
-                               profileLoop: profileLoop, dimensionValues: solved.measured, conflictingDimensions: solved.conflicts,
-                               errors: errors, warnings: warnings)
+        var result = EvaluatedFamily(values: values, planes: planes, solids: solids, planLines: planLines,
+                                     annotationLines: annotationLines, fills: fills, labels: labels,
+                                     opening: opening.map { (xMin: $0.0, xMax: $0.1, zMin: $0.2, zMax: $0.3) },
+                                     profileLoop: profileLoop, dimensionValues: solved.measured, conflictingDimensions: solved.conflicts,
+                                     errors: errors, warnings: warnings)
+        result.modelLines = modelLines // F1415
+        result.controls = controls
+        return result
     }
 
     /// Solid extrusion minus void extrusion: the parts below and above the void keep the full profile, the overlap keeps

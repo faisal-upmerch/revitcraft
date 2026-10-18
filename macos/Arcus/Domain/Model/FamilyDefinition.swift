@@ -133,8 +133,12 @@ public struct FamilySweep: Hashable, Codable, Sendable {
     public var profileFamily: String?
     /// Type of the profile family (nil = its first type).
     public var profileFamilyType: String?
-    public init(path: [FamilyPoint], profile: [FamilyPoint], profileFamily: String? = nil, profileFamilyType: String? = nil) {
+    /// F1415: Swept Blend. The profile at the path's end; the solid blends from `profile` at the start to it, by arc length
+    /// along the path (RevitCraft `Form::SweptBlend`). nil for a plain sweep.
+    public var endProfile: [FamilyPoint]?
+    public init(path: [FamilyPoint], profile: [FamilyPoint], profileFamily: String? = nil, profileFamilyType: String? = nil, endProfile: [FamilyPoint]? = nil) {
         self.path = path; self.profile = profile; self.profileFamily = profileFamily; self.profileFamilyType = profileFamilyType
+        self.endProfile = endProfile // F1415
     }
 }
 
@@ -212,6 +216,9 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
     public var visibleInFrontBack: Bool
     /// Shown in elevations and sections looking at the family's left or right side.
     public var visibleInLeftRight: Bool
+    /// F1415: the plane an extrusion's profile is sketched on (nil = plan, XY). On XZ and YZ the rectangle, polygon or
+    /// circle coordinates are that plane's (u, v), and `zMin`/`zMax` run along its normal (Y or X).
+    public var workPlane: FamilySketchPlane?
     public init(name: String, profile: Profile, zMin: FamilyBound, zMax: FamilyBound, materialParameter: String? = nil,
                 subcategory: FamilySubcategory = .general, isVoid: Bool = false, visibleInPlan: Bool = true) {
         id = UUID().uuidString; self.name = name; self.profile = profile; self.zMin = zMin; self.zMax = zMax
@@ -223,6 +230,7 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
     enum CodingKeys: String, CodingKey {
         case id, name, profile, zMin, zMax, materialParameter, subcategory, isVoid, visibilityParameter, visibleAt, visibleInPlan
         case visibleIn3D, visibleInFrontBack, visibleInLeftRight
+        case workPlane // F1415
     }
     /// Families written before the view-visibility settings existed decode as visible everywhere.
     public init(from decoder: any Decoder) throws {
@@ -241,6 +249,7 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
         visibleIn3D = try c.decodeIfPresent(Bool.self, forKey: .visibleIn3D) ?? true
         visibleInFrontBack = try c.decodeIfPresent(Bool.self, forKey: .visibleInFrontBack) ?? true
         visibleInLeftRight = try c.decodeIfPresent(Bool.self, forKey: .visibleInLeftRight) ?? true
+        workPlane = try c.decodeIfPresent(FamilySketchPlane.self, forKey: .workPlane) // F1415
     }
 }
 
@@ -272,11 +281,30 @@ public struct FamilyLine: Hashable, Codable, Sendable, Identifiable {
 }
 
 /// Filled region inside an annotation / detail family (solid or masking).
-public struct FamilyFill: Hashable, Codable, Sendable {
+public struct FamilyFill: Hashable, Codable, Sendable, Identifiable {
+    /// F1415: identity for selection in the editor (fills written before it get a fresh one when read).
+    public var id: String
     public var points: [FamilyPoint]
     public var pattern: FillPatternKind
     public var isMasking: Bool
-    public init(points: [FamilyPoint], pattern: FillPatternKind = .solid, isMasking: Bool = false) { self.points = points; self.pattern = pattern; self.isMasking = isMasking }
+    public init(points: [FamilyPoint], pattern: FillPatternKind = .solid, isMasking: Bool = false) {
+        id = UUID().uuidString; self.points = points; self.pattern = pattern; self.isMasking = isMasking
+    }
+    enum CodingKeys: String, CodingKey { case id, points, pattern, isMasking }
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        points = try c.decode([FamilyPoint].self, forKey: .points)
+        pattern = try c.decodeIfPresent(FillPatternKind.self, forKey: .pattern) ?? .solid
+        isMasking = try c.decodeIfPresent(Bool.self, forKey: .isMasking) ?? false
+        // Fills written before ids existed get one from their content, so reading the same file twice gives equal families.
+        id = try c.decodeIfPresent(String.self, forKey: .id) ?? FamilyFill.contentID("\(points)|\(pattern)|\(isMasking)")
+    }
+    /// A stable id from text (FNV-1a), for content written without ids.
+    static func contentID(_ s: String) -> String {
+        var h: UInt64 = 0xcbf2_9ce4_8422_2325
+        for b in s.utf8 { h = (h ^ UInt64(b)) &* 0x100_0000_01b3 }
+        return "fill-" + String(h, radix: 16)
+    }
 }
 
 /// A text label in annotation families (tags, title blocks). Shows a parameter value or fixed text.
@@ -431,15 +459,23 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
     /// A shared family nested in a host is also loaded into the project as its own family when the host is loaded,
     /// so it can be placed, scheduled and edited on its own.
     public var isShared: Bool
+    /// F1415: model and reference lines on work planes.
+    public var modelLines: [FamilyModelLine]
+    /// F1415: flip controls shown on placed instances.
+    public var controls: [FamilyControl]
+    /// F1415: 3D text.
+    public var modelTexts: [FamilyModelText]
 
     public init(name: String, template: FamilyTemplate) {
         self.name = name; self.template = template; parameters = []; types = []; referencePlanes = []; dimensions = []
         solids = []; planLines = []; annotationLines = []; fills = []; labels = []; opening = nil; profileLoop = []
         taggedCategories = []; formatVersion = FamilyDefinition.currentFormatVersion; description = ""; manufacturer = ""
         nestedFamilies = []; nestedInstances = []; isShared = false
+        modelLines = []; controls = []; modelTexts = [] // F1415
     }
     /// 2 adds sweeps, blends, revolves, nested families, EQ/locked dimensions and per-view visibility.
-    public static let currentFormatVersion = 2
+    /// 3 (F1415) adds elevation sketches, swept blends, model and reference lines, controls and model text.
+    public static let currentFormatVersion = 3
 
     public func parameter(named n: String) -> FamilyParameter? { parameters.first { $0.name == n } }
     public func type(named n: String) -> FamilyTypeDefinition? { types.first { $0.name == n } }
@@ -451,12 +487,14 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
         let v2 = solids.contains { !$0.profile.isExtrusion || !$0.visibleIn3D || !$0.visibleInFrontBack || !$0.visibleInLeftRight }
             || !nestedFamilies.isEmpty || !nestedInstances.isEmpty || isShared
             || dimensions.contains { $0.isEquality || $0.isLocked }
+        if usesF1415Content { return 3 } // F1415
         return v2 ? 2 : 1
     }
 
     enum CodingKeys: String, CodingKey {
         case name, template, parameters, types, referencePlanes, dimensions, solids, planLines, annotationLines, fills, labels, opening
         case profileLoop, taggedCategories, formatVersion, description, manufacturer, nestedFamilies, nestedInstances, isShared
+        case modelLines, controls, modelTexts // F1415
     }
     /// Tolerant decoding: format 1 families have no nested content; list fields missing from hand-written files default to empty.
     public init(from decoder: any Decoder) throws {
@@ -481,6 +519,9 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
         nestedFamilies = try c.decodeIfPresent([FamilyDefinition].self, forKey: .nestedFamilies) ?? []
         nestedInstances = try c.decodeIfPresent([NestedFamilyInstance].self, forKey: .nestedInstances) ?? []
         isShared = try c.decodeIfPresent(Bool.self, forKey: .isShared) ?? false
+        modelLines = try c.decodeIfPresent([FamilyModelLine].self, forKey: .modelLines) ?? [] // F1415
+        controls = try c.decodeIfPresent([FamilyControl].self, forKey: .controls) ?? []
+        modelTexts = try c.decodeIfPresent([FamilyModelText].self, forKey: .modelTexts) ?? []
     }
 }
 

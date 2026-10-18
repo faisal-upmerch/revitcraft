@@ -115,6 +115,7 @@ public enum FamilyInstanceGeometry {
     public static func planSymbols(_ e: Element, _ model: BIMModel, transform t: Transform2) -> [PlanSymbol] {
         guard let ev = evaluate(e, model) else { return [] }
         return ev.planLines.map { PlanSymbol(curve: $0.curve.transformed(t), subcategory: $0.subcategory, visibleAt: $0.visibleAt) }
+            + f1415ModelLineSymbols(ev, transform: t) // F1415
     }
 }
 
@@ -184,6 +185,7 @@ public enum ComponentGeometry {
         }
         var plan = Transform2.translation(loc) * Transform2.rotation(rot)
         if mirrored { plan = plan * Transform2.scale(-1, 1) }
+        if e.component?.facingFlipped == true { plan = plan * Transform2.scale(1, -1) } // F1415: vertical flip controls
         let z = model.baseElevation(of: e)
         return (plan, Transform3(plan, z: z))
     }

@@ -11,6 +11,8 @@ public enum FamilyEditing {
     public enum Item: Hashable, Sendable {
         case type(String), plane(String), dimension(String), solid(String), line(String), label(String), nested(String)
         case parameter(String)
+        /// F1415: a model or reference line, a flip control, model text and a filled or masking region (by id).
+        case modelLine(String), control(String), modelText(String), fill(String)
     }
 
     // MARK: Names and numbers
@@ -94,7 +96,7 @@ public enum FamilyEditing {
             case .rectangle(let x0, let x1, let y0, let y1): s.profile = .rectangle(xMin: b(x0), xMax: b(x1), yMin: b(y0), yMax: b(y1))
             case .polygon(let pts): s.profile = .polygon(pts.map(p))
             case .circle(let c, let r): s.profile = .circle(center: p(c), radius: f(r))
-            case .sweep(var sw): sw.path = sw.path.map(p); sw.profile = sw.profile.map(p); s.profile = .sweep(sw)
+            case .sweep(var sw): sw.path = sw.path.map(p); sw.profile = sw.profile.map(p); sw.endProfile = sw.endProfile?.map(p); s.profile = .sweep(sw) // F1415: swept blends
             case .blend(let bl): s.profile = .blend(FamilyBlend(bottom: bl.bottom.map(p), top: bl.top.map(p)))
             case .revolve(var rv): rv.profile = rv.profile.map(p); rv.axis = p(rv.axis); rv.startDegrees = f(rv.startDegrees); rv.endDegrees = f(rv.endDegrees); s.profile = .revolve(rv)
             }
@@ -119,6 +121,7 @@ public enum FamilyEditing {
             n.bindings = n.bindings.mapValues(f)
             family.nestedInstances[i] = n
         }
+        mapF1415(&family, bound: b) // F1415
     }
 
     /// Applies `f` to every plane reference (bounds locked to a plane).
@@ -131,7 +134,7 @@ public enum FamilyEditing {
             case .rectangle(let x0, let x1, let y0, let y1): s.profile = .rectangle(xMin: b(x0), xMax: b(x1), yMin: b(y0), yMax: b(y1))
             case .polygon(let pts): s.profile = .polygon(pts.map(p))
             case .circle(let c, let r): s.profile = .circle(center: p(c), radius: r)
-            case .sweep(var sw): sw.path = sw.path.map(p); sw.profile = sw.profile.map(p); s.profile = .sweep(sw)
+            case .sweep(var sw): sw.path = sw.path.map(p); sw.profile = sw.profile.map(p); sw.endProfile = sw.endProfile?.map(p); s.profile = .sweep(sw) // F1415: swept blends
             case .blend(let bl): s.profile = .blend(FamilyBlend(bottom: bl.bottom.map(p), top: bl.top.map(p)))
             case .revolve(var rv): rv.profile = rv.profile.map(p); rv.axis = p(rv.axis); s.profile = .revolve(rv)
             }
@@ -151,6 +154,7 @@ public enum FamilyEditing {
         family.profileLoop = family.profileLoop.map(p)
         if let o = family.opening { family.opening = FamilyOpening(xMin: b(o.xMin), xMax: b(o.xMax), zMin: b(o.zMin), zMax: b(o.zMax)) }
         for i in family.nestedInstances.indices { family.nestedInstances[i].x = b(family.nestedInstances[i].x); family.nestedInstances[i].y = b(family.nestedInstances[i].y); family.nestedInstances[i].z = b(family.nestedInstances[i].z) }
+        mapF1415(&family, bound: b) // F1415
     }
 
     // MARK: Types
@@ -201,6 +205,10 @@ public enum FamilyEditing {
         for l in f.annotationLines.indices where f.annotationLines[l].visibilityParameter == old { f.annotationLines[l].visibilityParameter = n }
         for l in f.labels.indices where f.labels[l].parameterName == old { f.labels[l].parameterName = n }
         for k in f.nestedInstances.indices where f.nestedInstances[k].visibilityParameter == old { f.nestedInstances[k].visibilityParameter = n }
+        for k in f.modelTexts.indices { // F1415
+            if f.modelTexts[k].visibilityParameter == old { f.modelTexts[k].visibilityParameter = n }
+            if f.modelTexts[k].materialParameter == old { f.modelTexts[k].materialParameter = n }
+        }
         mapExpressions(&f) { replacingName(in: $0, old, with: n, known: known) }
         return true
     }
@@ -218,6 +226,10 @@ public enum FamilyEditing {
         for i in f.planLines.indices where f.planLines[i].visibilityParameter == name { f.planLines[i].visibilityParameter = nil }
         for i in f.annotationLines.indices where f.annotationLines[i].visibilityParameter == name { f.annotationLines[i].visibilityParameter = nil }
         for i in f.nestedInstances.indices where f.nestedInstances[i].visibilityParameter == name { f.nestedInstances[i].visibilityParameter = nil }
+        for i in f.modelTexts.indices { // F1415
+            if f.modelTexts[i].visibilityParameter == name { f.modelTexts[i].visibilityParameter = nil }
+            if f.modelTexts[i].materialParameter == name { f.modelTexts[i].materialParameter = nil }
+        }
     }
 
     // MARK: Reference planes
@@ -325,6 +337,7 @@ public enum FamilyEditing {
                                subcategory: s.subcategory, isVoid: s.isVoid, visibleInPlan: s.visibleInPlan)
         copy.visibilityParameter = s.visibilityParameter; copy.visibleAt = s.visibleAt
         copy.visibleIn3D = s.visibleIn3D; copy.visibleInFrontBack = s.visibleInFrontBack; copy.visibleInLeftRight = s.visibleInLeftRight
+        copy.workPlane = s.workPlane // F1415
         return copy
     }
 
@@ -345,6 +358,7 @@ public enum FamilyEditing {
         case .parameter(let n):
             guard let p = f.parameter(named: n), !p.isBuiltIn else { return false }
             deleteParameter(&f, n); return true
+        case .modelLine, .control, .modelText, .fill: return deleteF1415(item, from: &f) // F1415
         }
     }
 

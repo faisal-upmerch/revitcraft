@@ -5,8 +5,10 @@ import ArcusDomain
 /// optional `thumbnails/preview.png`. See Docs/FileFormat.md.
 public enum FamilyPackage {
     /// 2: sweeps, blends, revolves, nested families, EQ/locked dimensions and per-view visibility (additive JSON).
-    public static let currentSchemaVersion = 2
-    public static let readerVersion = 2
+    /// 3 (F1415): elevation sketches, swept blends, model and reference lines, controls and model text (additive JSON;
+    /// families without them still declare reader 1 or 2).
+    public static let currentSchemaVersion = 3
+    public static let readerVersion = 3
     public static let fileExtension = "arcusfamily"
     public static let familyPath = "family.json"
 

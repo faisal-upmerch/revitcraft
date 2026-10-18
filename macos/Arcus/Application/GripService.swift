@@ -129,6 +129,8 @@ public enum GripService {
             // Facing arrows on the side the door or window faces; hand arrows opposite, pointing along the wall.
             return [Grip(elementID: e.id, kind: .flipFacing, position: origin + y * half, direction: y),
                     Grip(elementID: e.id, kind: .flipHand, position: origin - y * half, direction: x)]
+        case .component where kind?.isPlan == true: // F1415: the flip controls a family places on its instances
+            return FamilyInstanceGeometry.controls(e, model).map { Grip(elementID: e.id, kind: $0.flipsHand ? .flipHand : .flipFacing, position: $0.position, direction: $0.direction) }
         case .grid(let g) where kind?.isPlan == true:
             let r = DatumGraphics.bubbleRadius * Double(view?.view?.scale ?? 100)
             let c = g.curve(in: view?.id)
@@ -185,8 +187,8 @@ public enum GripService {
         tx.update(g.elementID) { e in
             switch g.kind {
             case .flipWall: e.wall?.flipped.toggle()
-            case .flipFacing: e.insert?.facingFlipped.toggle()
-            case .flipHand: e.insert?.handFlipped.toggle()
+            case .flipFacing: e.insert?.facingFlipped.toggle(); if let f = e.component?.facingFlipped { e.component?.facingFlipped = f ? nil : true } else if e.component != nil { e.component?.facingFlipped = true } // F1415
+            case .flipHand: e.insert?.handFlipped.toggle(); e.component?.mirrored.toggle() // F1415
             case .bubble(let atEnd):
                 if atEnd { e.grid?.bubbleAtEnd.toggle(); e.level?.showBubbleEnd.toggle() }
                 else { e.grid?.bubbleAtStart.toggle(); e.level?.showBubbleStart.toggle() }

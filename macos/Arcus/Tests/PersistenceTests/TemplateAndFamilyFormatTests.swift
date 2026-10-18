@@ -94,7 +94,7 @@ struct FamilyFormatTests {
         try FamilyPackage.write(fam, thumbnailPNG: nil, to: url, appVersion: "1", build: "1")
         let (read, _, manifest) = try FamilyPackage.read(from: url)
         #expect(read == fam)
-        #expect(manifest.schemaVersion == 2)
+        #expect(manifest.schemaVersion == FamilyPackage.currentSchemaVersion) // F1415: schema 3
         #expect(manifest.minimumReaderVersion == 2)
     }
 }

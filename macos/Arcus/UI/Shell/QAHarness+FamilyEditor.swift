@@ -26,6 +26,29 @@ extension QAHarness {
         wc.model.select(nil)
         await pause(500)
         await shot(w, "family-editor-front-\(suffix)")
+        // F1415: Back elevation, Default 3D orbited, a swept blend cut by a void revolve, a control, and sketch mode.
+        wc.model.edit("QA content") { f in
+            f.solids.append(FamilySolid(name: "Rail", profile: .sweep(FamilySweep(path: [FamilyPoint("-0.4", "-0.3"), FamilyPoint("0.4", "-0.3")],
+                                                                                 profile: [FamilyPoint("0", "0"), FamilyPoint("0.08", "0"), FamilyPoint("0.08", "0.08"), FamilyPoint("0", "0.08")],
+                                                                                 endProfile: [FamilyPoint("0", "0"), FamilyPoint("0.03", "0"), FamilyPoint("0.03", "0.03"), FamilyPoint("0", "0.03")])),
+                                        zMin: .expr("0.2"), zMax: .expr("0.2")))
+            f.solids.append(FamilySolid(name: "Bore", profile: .revolve(FamilyRevolve(profile: [FamilyPoint("0", "-0.1"), FamilyPoint("0.12", "-0.1"), FamilyPoint("0.12", "2"), FamilyPoint("0", "2")])),
+                                        zMin: .expr("0"), zMax: .expr("0"), isVoid: true))
+            f.controls.append(FamilyControl(position: FamilyPoint("0", "-0.6"), kind: .doubleHorizontal))
+        }
+        wc.model.view = .back
+        await pause(500)
+        await shot(w, "family-editor-back-\(suffix)")
+        wc.model.perform(.feDefault3D)
+        wc.model.orbit = FamilyOrbit(yaw: 120, pitch: -25)
+        await pause(700)
+        await shot(w, "family-editor-3d-orbit-\(suffix)")
+        wc.model.view = .plan
+        wc.model.perform(.feExtrusion)
+        wc.model.addSketchVertex(.init(u: -0.2, v: -0.2)); wc.model.addSketchVertex(.init(u: 0.25, v: -0.2)); wc.model.addSketchVertex(.init(u: 0.1, v: 0.3))
+        await pause(500)
+        await shot(w, "family-editor-sketch-\(suffix)")
+        wc.model.cancelSketch()
         wc.model.view = .plan
         wc.model.sheet = .familyTypes
         await pause(900)
