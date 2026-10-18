@@ -161,7 +161,7 @@ enum RibbonContent {
                     RibbonPanel(title: "Foundation", items: [.large(.foundationIsolated), .large(.foundationWall), .large(.foundationSlab)], tint: build), // BL-VG
                     RibbonPanel(title: "Reinforcement", items: [.large(.rebar), .small(.areaReinforcement), .small(.pathReinforcement), .small(.fabricArea),
                                                                 .small(.fabricSheet).newColumn(), .small(.rebarCover), .small(.rebarCoupler, [.rebarCoupler, .couplerOnBarEnd, .couplerBetweenBars])], tint: build), // F34
-                    RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary]), .small(.modelText), .small(.modelLine),
+                    RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary, .modelInPlace]), .small(.modelText), .small(.modelLine), // F5: Model In-place
                                                         .small(.placeModelGroup, [.placeModelGroup, .createGroup])], tint: build), // F1
                     RibbonPanel(title: "Opening", items: openingItems, tint: build), // F1
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),

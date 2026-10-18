@@ -29,6 +29,17 @@ public final class ModelByFaceTool: BaseTool, InteractiveTool {
         super.init(ctx: ctx)
     }
 
+    /// The type selector's choice when it suits the tool (a curtain wall type only for curtain systems), else `typeID`.
+    var currentType: ElementID? {
+        let category: Category = kind == .floor ? .floors : kind == .roof ? .roofs : .walls
+        guard let t = ctx.currentTypes[category], let td = ctx.model[t]?.typeData, td.instanceCategory == category else { return typeID }
+        switch kind {
+        case .wall: return td.curtain == nil ? t : typeID
+        case .curtainSystem: return td.curtain != nil ? t : typeID
+        case .floor, .roof: return t
+        }
+    }
+
     public var prompt: String {
         switch kind {
         case .wall: "Click a side face of a mass to put a wall on it."
@@ -68,7 +79,8 @@ public final class ModelByFaceTool: BaseTool, InteractiveTool {
         if kind == .wall || kind == .curtainSystem, face?.kind != .side { message("Walls by face go on the side faces of a mass."); return }
         let faces = face.map { [$0] }
         var made: [ElementID] = []
-        ctx.session.perform(title) { tx in made = try ModelByFace.create(kind, mass: e.id, faces: faces, typeID: typeID, in: tx) }
+        let type = currentType
+        ctx.session.perform(title) { tx in made = try ModelByFace.create(kind, mass: e.id, faces: faces, typeID: type, in: tx) }
         if let err = ctx.session.lastError { message(err.message); return }
         message("\(title): \(made.count) \(made.count == 1 ? "element" : "elements") created.")
     }
