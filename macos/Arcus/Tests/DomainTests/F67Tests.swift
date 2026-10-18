@@ -35,6 +35,7 @@ struct F67Tests {
         let (host, link, ids, _) = try linkedHost()
         let l = try #require(host[link]?.linkedModel)
         #expect(host[link]?.category == .linkedModels && l.elementCount == 4 && l.parts.allSatisfy { $0.category == .walls })
+        #expect(Parameters.value(ParameterID("f67.count"), of: host[link]!, host) == .int(4))
         // Plans: the linked walls are cut at the host view's cut plane.
         let plan = build(host, ids.planViews[ids.levels[0]]!)
         let cut = plan.items.filter { $0.elementID == link && $0.layer == .cut }
@@ -174,6 +175,9 @@ struct F67Tests {
         // The plan shows the decal as a line along the face; moving the wall carries it; deleting the wall deletes it.
         #expect(build(b.model, b.plan.id).items.contains { $0.elementID == decal })
         #expect(ElementOperations.dependentsToCarry([b.walls[0]], b.model, viewID: nil).contains(decal))
+        // Width and Height are instance properties.
+        try Fx.commit(&b.model) { tx in try Parameters.set(ParameterID("f67.decal.width"), to: .double(2), on: decal, in: tx) }
+        #expect(b.model[decal]?.decal?.width == 2 && Parameters.value(ParameterID("f67.decal.type"), of: b.model[decal]!, b.model) == .text("Sign"))
         try Fx.commit(&b.model) { tx in tx.delete(wall) }
         #expect(b.model[decal] == nil)
     }

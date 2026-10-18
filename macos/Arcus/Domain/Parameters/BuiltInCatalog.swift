@@ -801,6 +801,8 @@ enum BuiltInCatalog {
             return [ifcGUID, comments]
         case .opening: // WP3
             return openingInstanceParams(e)
+        case .linkedModel, .pointCloud, .markup, .decal: // F67
+            return F67Parameters.instance(for: e)
         default:
             return []
         }
@@ -855,7 +857,7 @@ enum BuiltInCatalog {
             .filledRegion(FilledRegionData(boundary: Sketch(loops: []))),
             .link(LinkData(format: .dxf, isLinked: false, sourcePath: "", sourceName: "", contentKey: "")),
             .material(MaterialData(materialClass: .generic, color: .white)),
-        ] + wp6aProbes
+        ] + wp6aProbes + F67Parameters.probes // F67
             + [.topography(TopographyData(points: [], solid: ToposolidData())), .topography(TopographyData(points: [], boundary: [], solid: ToposolidData()))] // BL-SITE
         for data in probes {
             let e = Element(id: ElementID(0), category: .genericModels, data: data)

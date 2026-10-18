@@ -54,14 +54,12 @@ enum LinkedGraphics {
         let cutPlane = Plane3.horizontal(z: cutZ)
         var inputs: [HLRInput] = []
         var cutPrims: [GPrimitive] = [], hits: [Polygon2] = []
-        var hull = Rect2.empty
         for (i, p) in parts.enumerated() where i < l.parts.count {
             let cat = l.parts[i].category
             if b.resolver.vg.hiddenCategories.contains(cat) || b.resolver.temp.hiddenCategories.contains(cat) { continue }
             let bb = p.mesh.bounds
             guard !p.mesh.isEmpty, bb.min.z <= cutZ, bb.max.z >= depthZ else { continue }
             inputs.append(HLRInput(tag: i, mesh: p.mesh))
-            hull.include(Rect2(min: bb.min.xy, max: bb.max.xy))
             if bb.max.z > cutZ, bb.min.z < cutZ {
                 let loops = MeshSection.section(p.mesh, plane: cutPlane)
                 guard !loops.isEmpty else { continue }
@@ -83,7 +81,8 @@ enum LinkedGraphics {
                 let st = b.stroke(l.parts[tag].category, cut: false, o)
                 prims += g.merge(byTag[tag]!).map { .polyline($0, closed: false, st) }
             }
-            if !prims.isEmpty { items.append(GItem(elementID: e.id, category: .linkedModels, layer: .model, primitives: prims, hitPolygons: hull.isEmpty ? [] : [.rectangle(hull)])) }
+            // Picked by its lines (a hull would cover the host's elements inside the link).
+            if !prims.isEmpty { items.append(GItem(elementID: e.id, category: .linkedModels, layer: .model, primitives: prims)) }
         }
         if !cutPrims.isEmpty { items.append(GItem(elementID: e.id, category: .linkedModels, layer: .cut, primitives: cutPrims, hitPolygons: hits)) }
         return items
@@ -130,14 +129,12 @@ enum LinkedGraphics {
         let s = b.paper(0.0003)
         let st = b.stroke(.pointClouds, cut: false, o)
         var byColor: [RGBColor: [Polygon2]] = [:]
-        var hull = Rect2.empty
         for (p, c) in pts {
             let col = hasColor && o.projectionLineColor == nil ? RGBColor((c.r * 8).rounded() / 8, (c.g * 8).rounded() / 8, (c.b * 8).rounded() / 8) : st.color
             byColor[col, default: []].append(.rectangle(Rect2(min: p - Vec2(s, s), max: p + Vec2(s, s))))
-            hull.include(p)
         }
         let prims: [GPrimitive] = byColor.keys.sorted { $0.hexString < $1.hexString }.map { .fill(byColor[$0]!, GFill(pattern: .solid, color: $0, halftone: st.halftone)) }
-        return GItem(elementID: e.id, category: .pointClouds, layer: .model, primitives: prims, hitPolygons: [.rectangle(hull.expanded(by: s))])
+        return GItem(elementID: e.id, category: .pointClouds, layer: .model, primitives: prims)
     }
 
     /// A decal outline with its diagonals.
@@ -165,11 +162,7 @@ enum LinkedGraphics {
             let r = Rect2(min: t.apply(pic.bounds.min), max: t.apply(pic.bounds.max))
             prims.append(.polyline(r.corners, closed: true, GStroke(weight: 1, color: .gray, pattern: .dash)))
         }
-        var hull = Rect2.empty
-        for p in m.polylines { for q in p.points { hull.include(t.apply(q)) } }
-        for x in m.texts { hull.include(t.apply(x.position)) }
-        for pic in m.pictures { hull.include(t.apply(pic.bounds.min)); hull.include(t.apply(pic.bounds.max)) }
         guard !prims.isEmpty else { return nil }
-        return GItem(elementID: e.id, category: .dwfMarkups, layer: .annotation, primitives: prims, hitPolygons: hull.isEmpty ? [] : [.rectangle(hull)])
+        return GItem(elementID: e.id, category: .dwfMarkups, layer: .annotation, primitives: prims)
     }
 }

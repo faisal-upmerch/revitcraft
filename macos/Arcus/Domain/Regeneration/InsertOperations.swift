@@ -1,6 +1,5 @@
 import Foundation
 import ArcusGeometry
-import ArcusDomain
 
 // F67: model operations behind the Insert tab (links, point clouds, linked topography, DWF markups, decals, gbXML
 // and image imports). File reading happens elsewhere (ArcusCAD readers, the UI's link loader); everything here
