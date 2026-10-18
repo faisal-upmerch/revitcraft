@@ -96,7 +96,7 @@ public enum SelectionDimensions {
             return insertDimensions(id: id, jambs: [(l.point, GeometryReference(id, .openingLeft)), (r.point, GeometryReference(id, .openingRight))],
                                     host: host, frame: f, model: model)
         case .grid(let g):
-            guard let s = g.curve.asSegment else { return [] }
+            guard !g.isMultiSegment, let s = g.curve.asSegment else { return [] } // F2
             let refs = datumLines(model).filter { $0.ref.elementID != id }
             return offsets(id, GeometryReference(id, .location), line: s, margin: 0, along: 0.5, candidates: refs)
         case .referencePlane(let r):
@@ -195,7 +195,7 @@ public enum SelectionDimensions {
         }
     }
     static func datumLines(_ model: BIMModel) -> [RefLine] {
-        model.elements(.grids).compactMap { g in g.grid?.curve.asSegment.map { RefLine(seg: $0, ref: GeometryReference(g.id, .location)) } }
+        model.elements(.grids).filter { $0.grid?.isMultiSegment != true }.compactMap { g in g.grid?.curve.asSegment.map { RefLine(seg: $0, ref: GeometryReference(g.id, .location)) } }
     }
     static func planeLines(_ model: BIMModel) -> [RefLine] {
         model.elements(.referencePlanes).compactMap { r in r.referencePlane.map { RefLine(seg: $0.line, ref: GeometryReference(r.id, .location)) } }

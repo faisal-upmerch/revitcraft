@@ -196,13 +196,13 @@ public enum ComponentGeometry {
             let h = max(top - base, Tolerance.shortCurve)
             if Parameters.familyDefinition(for: e, model) == nil {
                 let prof = columnProfile(e, model)
-                return [MeshPart(mesh: MeshBuilder.extrude(prof, bottom: 0, top: h).transformed(p.world),
-                                 materialID: model.typeParam(e, ParameterID("type.material"))?.refValue)]
+                return SlantedColumns.lean([MeshPart(mesh: MeshBuilder.extrude(prof, bottom: 0, top: h).transformed(p.world),
+                                                     materialID: model.typeParam(e, ParameterID("type.material"))?.refValue)], c, base: base, height: h) // F2
             }
             // Family columns: scale the family's height to the level-to-level height via the "Height" instance value.
             var copy = e
             copy.params[Parameters.familyParamID("Height")] = .double(h)
-            return FamilyInstanceGeometry.meshParts(copy, model, transform: p.world, detail: detail)
+            return SlantedColumns.lean(FamilyInstanceGeometry.meshParts(copy, model, transform: p.world, detail: detail), c, base: base, height: h) // F2
         }
         return FamilyInstanceGeometry.meshParts(e, model, transform: p.world, detail: detail)
     }

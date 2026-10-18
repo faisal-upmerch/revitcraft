@@ -41,6 +41,9 @@ public struct GridData: Hashable, Codable, Sendable {
     /// I4: alignment locks: a locked end moves with the ends of parallel grids aligned with it.
     public var lockStart: Bool?
     public var lockEnd: Bool?
+    /// F2: multi-segment grids: the bend points between the start and the end of `curve` (a line through the two
+    /// ends). Absent (or empty) for straight and arc grids, and in older files.
+    public var vertices: [Vec2]?
     public init(curve: Curve2, bubbleAtStart: Bool = true, bubbleAtEnd: Bool = false) {
         self.curve = curve; self.bubbleAtStart = bubbleAtStart; self.bubbleAtEnd = bubbleAtEnd
     }
@@ -61,7 +64,7 @@ public struct GridData: Hashable, Codable, Sendable {
     }
     /// The grid as drawn in `viewID`: straight grids take that view's 2D ends where it has them.
     public func curve(in viewID: ElementID?) -> Curve2 {
-        guard let x = extent(in: viewID), case .line(let s) = curve else { return curve }
+        guard !isMultiSegment, let x = extent(in: viewID), case .line(let s) = curve else { return curve } // F2: multi-segment grids keep their model ends
         return .line(Segment2(x.start ?? s.start, x.end ?? s.end))
     }
     public func isLocked(atEnd: Bool) -> Bool { (atEnd ? lockEnd : lockStart) ?? false }
@@ -172,6 +175,9 @@ public struct ColumnData: Hashable, Codable, Sendable {
     public var topOffset: Double
     public var unconnectedHeight: Double
     public var roomBounding: Bool
+    /// F2: slanted columns: the plan point at the column's top (the base is `location`). nil = vertical. Optional, so
+    /// older documents decode.
+    public var topLocation: Vec2?
     public init(location: Vec2, rotation: Double = 0, baseOffset: Double = 0, topLevelID: ElementID? = nil, topOffset: Double = 0, unconnectedHeight: Double = 3) {
         self.location = location; self.rotation = rotation; self.baseOffset = baseOffset; self.topLevelID = topLevelID
         self.topOffset = topOffset; self.unconnectedHeight = unconnectedHeight; self.roomBounding = true
@@ -332,6 +338,12 @@ public struct RoofData: Hashable, Codable, Sendable {
     public var shapePoints: [ShapePoint]?
     /// W2-DWG: horizontal soffit under the eaves (nil = none). Optional, so older documents decode.
     public var soffit: RoofSoffit?
+    /// F2: footprint slope arrows: the edge at an arrow's tail rises toward its head at the arrow's slope, from the
+    /// arrow's tail offset. Optional, so older documents decode.
+    public var slopeArrows: [SlopeArrow]?
+    /// F2: per curve of loop 0 (as `edgeSlopes`): the eave's height above the roof base (Align Eaves). nil = all at
+    /// the base. Optional, so older documents decode.
+    public var edgeOffsets: [Double]?
     public init(footprint: Sketch, edgeSlopes: [Double?], baseOffset: Double = 0, overhang: Double = 0) {
         self.footprint = footprint; self.edgeSlopes = edgeSlopes; self.baseOffset = baseOffset; self.overhang = overhang
         self.fascia = false; self.gutter = false
@@ -365,6 +377,9 @@ public struct StairData: Hashable, Codable, Sendable {
     public var turnsLeft: Bool
     /// Number of risers in the first run for L/U shapes (nil = split evenly).
     public var firstRunRisers: Int?
+    /// F2: multistory stairs (Connect Levels): the stair repeats, level to level, up to this level. Optional, so older
+    /// documents decode.
+    public var multistoryTopLevelID: ElementID?
     public init(shape: StairShape = .straight, origin: Vec2, direction: Double, width: Double = 1.1, topLevelID: ElementID? = nil) {
         self.shape = shape; self.origin = origin; self.direction = direction; self.width = width
         self.baseOffset = 0; self.topLevelID = topLevelID; self.topOffset = 0; self.unconnectedHeight = 3

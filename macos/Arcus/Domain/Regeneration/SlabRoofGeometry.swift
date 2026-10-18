@@ -94,16 +94,25 @@ public enum RoofGeometry {
 
     /// Footprint polygon and per-edge slopes (arcs are tessellated; segments inherit the curve's slope).
     public static func footprint(_ e: Element) -> (polygon: Polygon2, slopes: [Double?])? {
+        footprintEaves(e).map { ($0.polygon, $0.slopes) }
+    }
+
+    /// F2: the footprint with each edge's slope and eave height above the base: slope arrows make the edge at their
+    /// tail slope-defining (RevitCraft `roof_speeds`), and Align Eaves offsets raise or lower eaves.
+    public static func footprintEaves(_ e: Element) -> (polygon: Polygon2, slopes: [Double?], offsets: [Double])? {
         guard let r = e.roof, let loop = r.footprint.loops.first, !loop.isEmpty else { return nil }
         guard let ordered = Sketch.orderLoop(loop) else { return nil }
         // Map ordered curves back to their slope entries.
         var pts: [Vec2] = []
         var slopes: [Double?] = []
+        var offsets: [Double] = [] // F2
         for c in ordered {
             let idx = loop.firstIndex(of: c) ?? loop.firstIndex(of: c.reversed) ?? 0
-            let slope = idx < r.edgeSlopes.count ? r.edgeSlopes[idx] : nil
+            var slope = idx < r.edgeSlopes.count ? r.edgeSlopes[idx] : nil
+            var offset = (r.edgeOffsets.map { idx < $0.count ? $0[idx] : 0 }) ?? 0
+            if slope == nil, let (s, o) = RoofSlopeArrows.edgeSlope(for: c, r.slopeArrows ?? []) { slope = s; offset = o } // F2
             let t = c.tessellate(chordTolerance: 0.01)
-            for i in 0..<(t.count - 1) { pts.append(t[i]); slopes.append(slope) }
+            for i in 0..<(t.count - 1) { pts.append(t[i]); slopes.append(slope); offsets.append(offset) }
         }
         var poly = Polygon2(pts)
         guard poly.points.count == slopes.count, !poly.isDegenerate else { return nil }
@@ -112,10 +121,11 @@ public enum RoofGeometry {
             let n = pts.count
             poly = Polygon2(pts.reversed())
             var rs = [Double?](repeating: nil, count: n)
-            for i in 0..<n { rs[(n - 2 - i + n) % n] = slopes[i] }
-            slopes = rs
+            var ro = [Double](repeating: 0, count: n)
+            for i in 0..<n { rs[(n - 2 - i + n) % n] = slopes[i]; ro[(n - 2 - i + n) % n] = offsets[i] }
+            slopes = rs; offsets = ro
         }
-        return (poly, slopes)
+        return (poly, slopes, offsets)
     }
 
     public static func openings(_ e: Element) -> [Polygon2] {
@@ -130,8 +140,8 @@ public enum RoofGeometry {
     }
 
     public static func surface(_ e: Element, _ model: BIMModel) -> RoofSurface? {
-        guard let (poly, slopes) = footprint(e) else { return nil }
-        return RoofSolver.solve(footprint: poly, slopes: slopes, baseZ: baseZ(e, model))
+        guard let (poly, slopes, offsets) = footprintEaves(e) else { return nil } // F2: slope arrows, eave offsets
+        return RoofSolver.solve(footprint: poly, slopes: slopes, baseZ: baseZ(e, model), offsets: offsets.contains { $0 != 0 } ? offsets : nil)
     }
 
     /// Plane of a planar 3D polygon as z = a·x + b·y + c (nil for vertical faces).

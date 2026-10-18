@@ -716,7 +716,7 @@ enum BuiltInCatalog {
             return typed + [levelParam, componentOffset, componentRotation, componentRoom] + identity + phasing + ifc + [designOption]
         case .column:
             return typed + [levelParam, columnBaseOffset, columnTopLevel, columnTopOffset, columnHeight, columnRotation, columnRoomBounding,
-                            quantityVolume] + identity + phasing + ifc
+                            quantityVolume] + F2Parameters.column + identity + phasing + ifc // F2: Column Style
         case .beam:
             return typed + [levelParam, beamStartOffset, beamEndOffset, beamZJust, quantityLength, quantityVolume] + identity + phasing + ifc
         case .slab:
@@ -726,7 +726,7 @@ enum BuiltInCatalog {
             return typed + [levelParam, roofBaseOffset] + (e.roof?.extrusion != nil ? roofExtrusionParameters : [roofSlope, roofFascia, roofGutter])
                 + [quantityArea, quantityVolume, quantityThickness, quantityElevTop] + identity + phasing + ifc
         case .stair:
-            return typed + [levelParam, stairBaseOffset, stairTopLevel, stairTopOffset, stairHeight, stairShape, stairTurnsLeft,
+            return typed + [levelParam, stairBaseOffset, stairTopLevel, stairTopOffset, stairHeight] + F2Parameters.stair + [stairShape, stairTurnsLeft, // F2: Multistory Top Level
                             stairWidth, stairDesiredRisers, stairActualRisers, stairRiserHeight, stairTreadDepth] + identity + phasing + ifc
         case .railing:
             return typed + [levelParam, railingBaseOffset, quantityLength] + identity + phasing + ifc
@@ -879,6 +879,7 @@ enum BuiltInCatalog {
         for e in annotProbeElements { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // F34
         for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
+        for p in F2Parameters.all where d[p.id] == nil { d[p.id] = p } // F2
         return d
     }()
 
@@ -904,6 +905,7 @@ enum BuiltInCatalog {
         for e in annotProbeElements { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
         for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
+        for p in F2Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F2
         return o
     }()
 }

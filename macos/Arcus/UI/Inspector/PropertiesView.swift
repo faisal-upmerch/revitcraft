@@ -213,6 +213,7 @@ struct PropertiesView: View {
         switch cmd {
         case .wall, .wallArc, .wallRectangle, .wallPickLines: .walls
         case .curtainWall: .walls // WP3
+        case .stackedWall: .walls // F2
         case .curtainPanel: .curtainPanels // WP3
         case .door: .doors
         case .window: .windows

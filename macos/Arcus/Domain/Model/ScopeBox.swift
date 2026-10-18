@@ -179,6 +179,7 @@ public enum ScopeBoxes {
         guard let id = gd.scopeBoxID else { return true }
         guard let b = box(id, builder.model) else { return true }
         guard planSees(b, builder: builder) else { return false }
+        if gd.isMultiSegment { return b.intersects(Rect2(points: gd.polyline)) } // F2: shown whole when its box is seen
         switch gd.curve {
         case .line(let s):
             guard let c = b.clip(s) else { return false }

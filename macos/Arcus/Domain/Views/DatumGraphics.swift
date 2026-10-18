@@ -15,6 +15,7 @@ public enum DatumGraphics {
     }
 
     static func gridPlan(_ g: Element, _ gd: GridData, builder: ViewGraphicsBuilder, _ o: GraphicOverride) -> GItem {
+        if gd.isMultiSegment { return multiSegmentGridPlan(g, gd, builder: builder, o) } // F2
         let st = builder.stroke(.grids, cut: false, o)
         var prims: [GPrimitive] = []
         let r = builder.paper(bubbleRadius)

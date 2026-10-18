@@ -114,7 +114,7 @@ struct VerticalGraphics {
         let zmax = (crop?.max.y ?? max(extents.max.y, zs.max() ?? 3)) + builder.paper(0.008)
         let planeLine = Segment2(fr.origin.xy - fr.right * 10_000, fr.origin.xy + fr.right * 10_000)
         for g in model.elements(.grids) {
-            guard let o = builder.resolver.resolve(g), let seg = g.grid?.curve.asSegment else { continue }
+            guard let o = builder.resolver.resolve(g), let seg = g.grid?.segment(seenBy: planeLine) else { continue } // F2: multi-segment grids
             guard !seg.isParallel(to: planeLine), let hit = seg.lineIntersection(planeLine) else { continue }
             if data.kind == .elevation {
                 // Elevations show grids that run into the view within its depth, wherever the elevation plane sits.

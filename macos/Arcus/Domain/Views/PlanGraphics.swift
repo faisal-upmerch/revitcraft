@@ -244,9 +244,10 @@ struct PlanGraphics {
             guard let c = e.column else { continue }
             let base = model.baseElevation(of: e)
             let top = model.topElevation(base: base, topLevelID: c.topLevelID, topOffset: c.topOffset, unconnectedHeight: c.unconnectedHeight)
-            let outlines = ComponentGeometry.planOutline(e, model)
+            let shift = SlantedColumns.planShift(c, base: base, top: top, atZ: min(max(cutZ, base), top)) // F2: a slanted column where the cut passes
+            let outlines = ComponentGeometry.planOutline(e, model).map { Polygon2($0.points.map { $0 + shift }) }
             guard !outlines.isEmpty else { continue }
-            let loops = ComponentGeometry.planLoops(e, model) // W2-TYPES: hollow sections keep their holes
+            let loops = ComponentGeometry.planLoops(e, model).map { Polygon2($0.points.map { $0 + shift }) } // W2-TYPES: hollow sections keep their holes
             if base <= cutZ && top > cutZ {
                 var prims: [GPrimitive] = []
                 if let fill = builder.cutFill(e, materialID: model.typeParam(e, ParameterID("type.material"))?.refValue, o) { prims.append(.fill(loops, fill)) } // W4-HATCH
@@ -278,6 +279,7 @@ struct PlanGraphics {
 
     func stairs(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
+        let list = list.flatMap { x in (MultistoryStairs.storeys(of: x.0, model) ?? [x.0]).map { ($0, x.1) } } // F2: each storey in its level's plans
         for (e, o) in list {
             guard let l = StairGeometry.layout(e, model), l.baseZ <= cutZ + 0.01, l.topZ >= depthZ else { continue }
             let lines = StairGeometry.planLines(e, model, cutZ: cutZ)

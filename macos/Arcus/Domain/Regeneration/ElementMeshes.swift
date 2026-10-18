@@ -104,7 +104,7 @@ public enum ElementMeshes {
         case .level(let l):
             return Box3(min: Vec3(0, 0, l.elevation), max: Vec3(0, 0, l.elevation))
         case .grid(let g):
-            let r = g.curve.bounds
+            let r = g.isMultiSegment ? Rect2(points: g.polyline) : g.curve.bounds // F2
             return Box3(min: Vec3(r.min, z: 0), max: Vec3(r.max, z: 0))
         case .room(let r):
             let z = model.baseElevation(of: e)
@@ -208,10 +208,12 @@ public enum DependencyGraph {
             if let t = c.topLevelID { s.insert(t) }
         case .stair(let st):
             if let t = st.topLevelID { s.insert(t) }
+            if st.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2: every storey's levels
         case .ramp(let r):
             if let t = r.topLevelID { s.insert(t) }
         case .railing:
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
+            if model[e.hostID]?.stair?.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
         case .decal(let d): // F67: the decal type's image
@@ -246,6 +248,7 @@ public enum DependencyGraph {
                     for r in m.elements(.rooms) where r.levelID == e.levelID { out.insert(r.id) }
                 case .level:
                     for x in m.onLevel(id) { out.insert(x.id) }
+                    for x in m.elements(.stairs) where x.stair?.multistoryTopLevelID != nil { out.insert(x.id); for r in m.hosted(by: x.id) { out.insert(r.id) } } // F2
                     for w in m.elements(.walls) where w.wall?.topLevelID == id { out.insert(w.id) }
                 case .type:
                     for x in m.instances(ofType: id) { out.insert(x.id) }

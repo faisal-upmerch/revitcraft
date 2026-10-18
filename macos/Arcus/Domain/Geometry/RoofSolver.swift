@@ -63,6 +63,8 @@ public enum RoofSolver {
         var a: Vec2
         var b: Vec2
         var slope: Double?
+        /// F2: the eave's height above the roof base (Align Eaves, slope arrows' tail offsets).
+        var offset = 0.0
         var dir: Vec2 { (b - a).normalized }
         var mid: Vec2 { a.midpoint(b) }
         /// Signed distance to the left (inside for CCW footprints) as a half-plane function.
@@ -74,11 +76,12 @@ public enum RoofSolver {
             guard let s = slope else { return nil }
             let k = tan(s)
             let h = inside
-            return EdgePlane(cu: k * h.a, cv: k * h.b, c0: k * h.c)
+            return EdgePlane(cu: k * h.a, cv: k * h.b, c0: k * h.c + offset)
         }
     }
 
-    public static func solve(footprint: Polygon2, slopes: [Double?], baseZ: Double) -> RoofSurface {
+    /// - Parameter offsets: F2: per edge, the eave's height above `baseZ` (nil: every eave at `baseZ`).
+    public static func solve(footprint: Polygon2, slopes: [Double?], baseZ: Double, offsets: [Double]? = nil) -> RoofSurface {
         var warnings: [String] = []
         let n0 = footprint.count
         guard n0 >= 3, !footprint.isDegenerate else {
@@ -90,10 +93,12 @@ public enum RoofSolver {
             sl = (0..<n0).map { $0 < slopes.count ? slopes[$0] : nil }
         }
         // Normalize to CCW; edge k of the reversed loop is original edge n-2-k reversed.
+        var off = (0..<n0).map { i in offsets.map { i < $0.count ? $0[i] : 0 } ?? 0 } // F2
         var pts = footprint.points
         if !footprint.isCounterClockwise {
             pts.reverse()
             sl = (0..<n0).map { sl[((n0 - 2 - $0) % n0 + n0) % n0] }
+            off = (0..<n0).map { off[((n0 - 2 - $0) % n0 + n0) % n0] } // F2
         }
         // Normalize slopes.
         var clamped = false
@@ -106,7 +111,7 @@ public enum RoofSolver {
         if clamped { warnings.append("Negative slopes were clamped to flat.") }
         let origin = footprint.bounds.min
         let local = pts.map { $0 - origin }
-        let edges = cleanEdges(local, sl)
+        let edges = cleanEdges(local, sl, off)
         guard edges.count >= 3 else {
             return RoofSurface(isExact: false, warnings: warnings + ["Footprint is degenerate; no roof generated."])
         }
@@ -216,11 +221,11 @@ public enum RoofSolver {
     }
 
     /// Removes zero-length edges and merges consecutive collinear edges of equal slope.
-    static func cleanEdges(_ pts: [Vec2], _ slopes: [Double?]) -> [Edge] {
+    static func cleanEdges(_ pts: [Vec2], _ slopes: [Double?], _ offsets: [Double]? = nil) -> [Edge] {
         var edges: [Edge] = []
         let n = pts.count
         for i in 0..<n {
-            let e = Edge(a: pts[i], b: pts[(i + 1) % n], slope: slopes[i])
+            let e = Edge(a: pts[i], b: pts[(i + 1) % n], slope: slopes[i], offset: offsets.map { i < $0.count ? $0[i] : 0 } ?? 0) // F2
             if e.a.distance(to: e.b) > Tolerance.length { edges.append(e) }
         }
         func sameSlope(_ x: Double?, _ y: Double?) -> Bool {
@@ -236,8 +241,8 @@ public enum RoofSolver {
             for i in 0..<edges.count {
                 let j = (i + 1) % edges.count
                 let a = edges[i], b = edges[j]
-                if abs(a.dir.cross(b.dir)) <= Tolerance.angle && a.dir.dot(b.dir) > 0 && sameSlope(a.slope, b.slope) {
-                    edges[i] = Edge(a: a.a, b: b.b, slope: a.slope)
+                if abs(a.dir.cross(b.dir)) <= Tolerance.angle && a.dir.dot(b.dir) > 0 && sameSlope(a.slope, b.slope) && abs(a.offset - b.offset) <= Tolerance.length {
+                    edges[i] = Edge(a: a.a, b: b.b, slope: a.slope, offset: a.offset)
                     edges.remove(at: j)
                     changed = true
                     break

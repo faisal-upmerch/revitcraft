@@ -17,7 +17,7 @@ extension GripService {
         let x = g.extent(in: viewID)
         var out = [Grip(elementID: id, kind: .start, position: c.start, isOn: x?.start != nil, viewID: viewID),
                    Grip(elementID: id, kind: .end, position: c.end, isOn: x?.end != nil, viewID: viewID)]
-        if case .line(let s) = c {
+        if case .line(let s) = c, !g.isMultiSegment { // F2: multi-segment grids have end grips only
             let d = s.direction
             // The elbow grip sits where the jog meets the bubble: dragging it across the grid sets the offset.
             if g.bubbleAtStart, let o = x?.elbowStart { out.append(Grip(elementID: id, kind: .gridElbow(atEnd: false), position: s.start + o, direction: -d, viewID: viewID)) }
@@ -51,7 +51,7 @@ extension GripService {
     /// Grid end controls: the 3D/2D switch beside each end, Add Elbow beside a shown bubble that has none, and the
     /// padlock where the end lines up with another grid's.
     static func gridControls(_ e: Element, _ g: GridData, _ model: BIMModel, view: Element?, pixel: Double, bubbleRadius r: Double) -> [Grip] {
-        guard case .line(let s) = g.curve(in: view?.id) else { return [] }
+        guard !g.isMultiSegment, case .line(let s) = g.curve(in: view?.id) else { return [] } // F2: no 2D/elbow/lock controls
         let d = s.direction, n = d.perpendicular
         let x = g.extent(in: view?.id)
         var out: [Grip] = []
@@ -76,11 +76,11 @@ extension GripService {
 
     /// Ends of other straight grids parallel to `id` whose end lies level with its end (RevitCraft `aligned_grids`).
     public static func alignedGridEnds(_ id: ElementID, atEnd: Bool, _ model: BIMModel, viewID: ElementID?) -> [(ElementID, Bool)] {
-        guard let g = model[id]?.grid, case .line(let s) = g.curve(in: viewID) else { return [] }
+        guard let g = model[id]?.grid, !g.isMultiSegment, case .line(let s) = g.curve(in: viewID) else { return [] } // F2
         let d = s.direction, end = atEnd ? s.end : s.start
         var out: [(ElementID, Bool)] = []
         for o in model.elements(.grids) where o.id != id {
-            guard let og = o.grid, case .line(let os) = og.curve(in: viewID), abs(os.direction.cross(d)) < 1e-3 else { continue }
+            guard let og = o.grid, !og.isMultiSegment, case .line(let os) = og.curve(in: viewID), abs(os.direction.cross(d)) < 1e-3 else { continue } // F2
             for (oe, q) in [(false, os.start), (true, os.end)] where abs((q - end).dot(d)) < 0.001 { out.append((o.id, oe)) }
         }
         return out
