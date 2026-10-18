@@ -1,11 +1,16 @@
 #!/usr/bin/env bash
-# Builds Arcus, stages build/Arcus.app, validates the bundle and launches it.
+# Builds Arcus, stages build/Arcus.app, signs and validates it, installs it to /Applications and launches it from there.
 #
-#   script/build_and_run.sh               release build, stage, validate, launch
-#   script/build_and_run.sh --verify      clean-ish verify: run all tests, build, validate, launch, confirm a GUI window
-#   script/build_and_run.sh --no-launch   build and stage only
+#   script/build_and_run.sh               release build, stage, sign, validate, install, launch
+#   script/build_and_run.sh --verify      clean-ish verify: run all tests, build, validate, install, launch, confirm a GUI window
+#   script/build_and_run.sh --no-launch   build, stage and install only
+#   script/build_and_run.sh --no-install  leave the build in build/Arcus.app (launches from there)
 #   script/build_and_run.sh --debug       debug configuration
 #   script/build_and_run.sh --release-build  use BUILD_NUMBER exactly (used by release_local.sh)
+#
+# Signing: ARCUS_SIGN_IDENTITY (a name or SHA-1 from `security find-identity -v -p codesigning`) if set, otherwise the
+# first "Apple Development" identity in the keychain, otherwise ad hoc. A stable certificate keeps the app's designated
+# requirement the same from build to build, so macOS privacy grants (Accessibility, Screen Recording) survive rebuilds.
 #
 # Requires Xcode 26+ command line tools (swift, codesign, iconutil, plutil). No Homebrew, Python or network.
 set -euo pipefail
@@ -18,13 +23,16 @@ CONFIG="release"
 VERIFY=0
 LAUNCH=1
 RELEASE_BUILD=0
+INSTALL=1
+INSTALL_DIR="${ARCUS_INSTALL_DIR:-/Applications}"
 for arg in "$@"; do
   case "$arg" in
     --verify) VERIFY=1 ;;
     --no-launch) LAUNCH=0 ;;
+    --no-install) INSTALL=0 ;;
     --debug) CONFIG="debug" ;;
     --release-build) RELEASE_BUILD=1 ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,16p' "$0"; exit 0 ;;
     *) echo "Unknown option: $arg" >&2; exit 2 ;;
   esac
 done
@@ -82,7 +90,17 @@ mkdir -p "$STAGE/$APP_NAME.app/Contents/Resources/Docs"
 cp "$ROOT"/Docs/*.md "$STAGE/$APP_NAME.app/Contents/Resources/Docs/" 2>/dev/null || true
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/$APP_NAME.app/Contents/Resources/" 2>/dev/null || true
 printf 'APPL????' > "$STAGE/$APP_NAME.app/Contents/PkgInfo"
-codesign --force --sign - --timestamp=none "$STAGE/$APP_NAME.app" >/dev/null
+SIGN_IDENTITY="${ARCUS_SIGN_IDENTITY:-}"
+if [[ -z "$SIGN_IDENTITY" ]]; then
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development: /{print $2; exit}')"
+fi
+if [[ -n "$SIGN_IDENTITY" ]]; then
+  codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$STAGE/$APP_NAME.app" >/dev/null
+  SIGNED_BY="$(codesign -dv --verbose=2 "$STAGE/$APP_NAME.app" 2>&1 | sed -n 's/^Authority=//p' | head -n1)"
+else
+  codesign --force --sign - --timestamp=none "$STAGE/$APP_NAME.app" >/dev/null
+  SIGNED_BY="ad hoc (no Apple Development identity found)"
+fi
 rm -rf "$APP"
 mv "$STAGE/$APP_NAME.app" "$APP"
 rm -rf "$STAGE"
@@ -95,12 +113,30 @@ codesign --verify --strict "$APP"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" == "$BUILD" ]]
 file "$APP/Contents/MacOS/$APP_NAME" | grep -q "arm64"
 if /usr/libexec/PlistBuddy -c 'Print' "$APP/Contents/Info.plist" | grep -E "UsageDescription" >/dev/null; then echo "✗ Unexpected privacy usage description" >&2; exit 1; fi
-/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP" >/dev/null 2>&1 || true
-echo "✓ Bundle valid: $APP ($VERSION, build $BUILD)"
+echo "✓ Bundle valid: $APP ($VERSION, build $BUILD), signed by $SIGNED_BY"
+
+LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+RUN_APP="$APP"
+if [[ "$INSTALL" == "1" ]]; then
+  echo "==> Installing to $INSTALL_DIR"
+  INSTALLED="$INSTALL_DIR/$APP_NAME.app"
+  rm -rf "$INSTALLED.new"
+  ditto "$APP" "$INSTALLED.new"
+  rm -rf "$INSTALLED"
+  mv "$INSTALLED.new" "$INSTALLED"
+  codesign --verify --strict "$INSTALLED"
+  # Only the installed copy is registered, so Finder, Spotlight and `open -b` find the one in Applications.
+  "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
+  "$LSREGISTER" -f "$INSTALLED" >/dev/null 2>&1 || true
+  RUN_APP="$INSTALLED"
+  echo "✓ Installed: $INSTALLED"
+else
+  "$LSREGISTER" -f "$APP" >/dev/null 2>&1 || true
+fi
 
 if [[ "$LAUNCH" == "1" ]]; then
   echo "==> Launching"
-  /usr/bin/open -n "$APP" --args --skip-onboarding
+  /usr/bin/open -n "$RUN_APP" --args --skip-onboarding
   PID=""
   for _ in $(seq 1 60); do PID="$(pgrep -x "$APP_NAME" | head -n1 || true)"; [[ -n "$PID" ]] && break; sleep 0.2; done
   if [[ -z "$PID" ]]; then echo "✗ $APP_NAME did not start" >&2; exit 1; fi

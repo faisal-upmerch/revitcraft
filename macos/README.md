@@ -14,7 +14,7 @@ Everything runs locally. Arcus makes no network connections, collects no analyti
 
 ```bash
 script/bootstrap.sh          # checks the toolchain (installs nothing)
-script/build_and_run.sh      # builds a release build/Arcus.app, validates the bundle and launches it
+script/build_and_run.sh      # builds, signs and validates Arcus.app, installs it to /Applications and launches it
 ```
 
 Other entry points:
@@ -29,7 +29,7 @@ Other entry points:
 | `script/qa_capture.sh all <dir>` | Scripted end-to-end QA workflow plus light/dark screenshots at minimum and spacious window sizes |
 | `script/release_local.sh patch\|minor\|major` | Bumps `VERSION`/`BUILD_NUMBER`, writes release notes and builds and verifies the release. Local only: no signing identity, notarization or upload |
 
-The app bundle lands at `build/Arcus.app`. It is signed ad hoc, which is enough to run it locally.
+The app bundle is staged at `build/Arcus.app`, signed with the first "Apple Development" certificate in the keychain (or `ARCUS_SIGN_IDENTITY`; ad hoc when there is none), installed to `/Applications/Arcus.app` and launched from there. A stable certificate keeps macOS privacy grants across rebuilds. Pass `--no-install` to keep it in `build/` only.
 
 ## What you can do
 
