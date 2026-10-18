@@ -15,12 +15,15 @@ enum MainMenuBuilder {
         main.addItem(submenu("View", viewItems()))
         CameraMenus.addNavigationItems(to: main.items.last?.submenu) // W2-CAM
         // The menu bar follows the ribbon tabs: Architecture, Structure, Insert, Annotate, (View above), Manage.
-        main.addItem(submenu("Architecture", commands([.wall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .column, nil, // F1: Wall: Reveal
+        let byFace = submenu("Model by Face", commands([.curtainSystemByFace, .roofByFace, .wallByFace, .floorByFace])) // F5
+        let architecture = submenu("Architecture", commands([.wall, .stackedWall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .modelInPlace, .column, nil, // F1: Wall: Reveal; F2: Stacked; F5: In-place
                                                       .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
-                                                      .stairStraight, .stairL, .stairU, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, nil,
+                                                      .stairStraight, .stairL, .stairU, .connectLevels, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, .space, .spaceSeparator, nil, // F5: spaces
                                                       .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
-                                                      .level, .grid, .referencePlane, nil, .toposurface, .buildingPad, .propertyLine])))
-        main.addItem(submenu("Structure", commands([.structuralColumn, .beam, .structuralWall, .structuralFloor, .truss, .brace, .beamSystem, nil,
+                                                      .level, .grid, .gridMultiSegment, .referencePlane, .workPlaneSet, .workPlaneShow, .workPlaneViewer, nil, // F2
+                                                      .showMass, .inPlaceMass, nil, .toposurface, .buildingPad, .propertyLine]) + [byFace]) // F5
+        main.addItem(architecture)
+        main.addItem(submenu("Structure", commands([.structuralColumn, .verticalColumn, .slantedColumn, .columnsAtGrids, .columnsAtColumns, .beam, // F2 .structuralWall, .structuralFloor, .truss, .brace, .beamSystem, nil,
                                                     .foundationIsolated, .foundationWall, .foundationSlab, nil, // F34
                                                     .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCover, .couplerOnBarEnd, .couplerBetweenBars])))
         main.addItem(submenu("Insert", commands([.linkModel, .linkIFC, .linkCAD, .linkTopography, .dwfMarkup, .placeDecal, .decalTypes, .pointCloud, .coordinationModel, .linkPDF, .linkImage, nil, // F67
@@ -29,13 +32,14 @@ enum MainMenuBuilder {
                                                  .loadFamily, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
         main.addItem(submenu("Annotate", commands([.alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension, nil,
                                                    .spotElevation, .spotCoordinate, .spotSlope, nil, .detailLine, .filledRegion, .maskingRegion, .detailComponent, .insulation, nil,
-                                                   .textNote, .tagByCategory, .tagAll, .roomTag, .colorFillLegend, .symbol, .northArrow, nil, .revisionCloud, nil,
+                                                   .textNote, .tagByCategory, .tagAll, .roomTag, .spaceTag, .colorFillLegend, // F5 .symbol, .northArrow, nil, .revisionCloud, nil,
                                                    .beamSymbol, .areaReinforcementSymbol, .pathReinforcementSymbol, .rebarSymbol, .fabricSymbol, .multiRebarAligned, .multiRebarLinear, nil, .keynotingSettings]))) // F34, F12
         main.items.last?.submenu.map { m in for i in annotMenuAdditions() { m.addItem(i) } } // W2-ANNOT
         main.addItem(submenu("Manage", commands([.projectInfo, .projectUnits, .projectParameters, .materials, .objectStyles, .lineStyles, .additionalSettings, .structuralSettings, .snapSettings, .locationSettings, nil, // BL-VG; F34
                                                  .globalParameters, .transferProjectStandards, nil, // F11, F67
                                                  .specifyCoordinates, .reportCoordinates, .relocateProject, .rotateTrueNorth, .rotateProjectNorth, .mirrorProject, nil, // F11
                                                  .phases, .designOptions, .addToSet, .pickToEdit, nil, .startingView, .decalTypes, .familyEditor, .newFamily, .loadStandardTypes, nil,
+                                                 .feFamilyTypes, .feFamilyCategory, .feLoadIntoProject, .feLoadAndClose, .feDefault3D, .feFlexTest, .feSaveFamilyAs, nil, // F1415: Family Editor
                                                  .saveSelection, .loadSelection, .editSelection, nil,
                                                  .warnings, .selectByID, .idsOfSelection, .modelHealth, .purgeUnused, .diagnostics, nil, .keyboardShortcuts]))) // BL-VG: warnings, select by ID
         let window = submenu("Window", [

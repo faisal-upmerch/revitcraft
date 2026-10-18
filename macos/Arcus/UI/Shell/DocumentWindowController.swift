@@ -176,6 +176,7 @@ final class DocumentWindowController: NSWindowController, NSMenuItemValidation, 
             let reason = CommandRouter(state: state).disabledReason(id)
             item.toolTip = reason
             if id == .thinLines { item.state = state.thinLines ? .on : .off }
+            if id == .showMass { item.state = state.session.showMass ? .on : .off } // F5
             if id == .workspaceBIMFamiliar { item.state = state.workspace == .bimFamiliar ? .on : .off }
             if id == .workspaceMacSpacious { item.state = state.workspace == .macSpacious ? .on : .off }
             if id == .toggleNavigator { item.state = state.showNavigator ? .on : .off }

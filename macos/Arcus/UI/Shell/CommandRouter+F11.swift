@@ -80,7 +80,7 @@ extension CommandRouter {
         case .exportSTL:
             if !m.allElements.contains(where: { $0.ownerViewID == nil && $0.category.isModel && ElementMeshes.hasModelGeometry($0) }) { return "The model has no 3D elements." }
         case .exportGbXML, .exportRoomAreaReport:
-            if m.elements(.rooms).isEmpty && m.elements(.areas).isEmpty { return "The project has no rooms or areas to export." }
+            if m.elements(.rooms).isEmpty && m.elements(.areas).isEmpty && m.elements(.spaces).isEmpty { return "The project has no rooms, areas or spaces to export." } // F5: spaces count
         case .exportFamilyTypes:
             if F11Actions(state: state).editedFamily == nil { return "Open a family in the Family Editor first." }
         case .exportDWFx:

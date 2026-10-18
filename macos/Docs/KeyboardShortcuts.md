@@ -329,6 +329,26 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Dormer Opening |  |  | Cuts a roof where a dormer meets it: pick the roof, then the dormer's walls and edges. |
 | Place Model Group |  |  | Places an instance of a model group. |
 | Highlight Boundaries |  |  | Highlights the room-bounding elements of the level. |
+| Wall: Stacked |  |  | Draws walls of a stacked wall type: basic wall types stacked by height. Edit the stack in Type Properties. |
+| Grid: Multi-Segment |  |  | Sketches a grid of several connected segments. |
+| Set Work Plane |  |  | Specifies the work plane of the current view: a level, a named reference plane, or a plane you pick. |
+| Show Work Plane |  |  | Shows or hides the work plane grid in the current view. |
+| Work Plane Viewer |  |  | Opens a viewer of the current work plane. |
+| Connect Levels |  |  | Repeats the stair through the selected levels (multistory stair). |
+| Boundary Line |  |  | Draws the boundary lines of the sketch. |
+| Slope Arrow |  |  | Draws a slope arrow: the floor or roof rises from its tail to its head. |
+| Align Eaves |  |  | Aligns the eaves of the roof being sketched: pick the eave to match, then the eaves to align. |
+| Adjust Height |  |  | Aligns the picked eaves by adjusting the roof height. Available in Align Eaves mode. |
+| Adjust Overhang |  |  | Aligns the picked eaves by adjusting the overhang. Available in Align Eaves mode. |
+| Space |  |  | Places a space in a region bounded by walls or space separators. |
+| Space Separator |  |  | Draws lines that bound spaces where there are no walls. |
+| Show Mass |  |  | Shows or hides conceptual masses in every view. |
+| In-Place Mass |  |  | Sketches the footprint of a conceptual mass and extrudes it to a height. |
+| Curtain System by Face |  |  | Creates curtain walls on the vertical faces of the selected mass. |
+| Roof by Face |  |  | Creates a roof on the top face of the selected mass. |
+| Wall by Face |  |  | Creates walls on the vertical faces of the selected mass. |
+| Floor by Face |  |  | Creates floors where levels cut the selected mass (mass floors). |
+| Model In-place |  |  | Creates an in-place family: unique geometry modelled in the context of the project. |
 
 ### Structure
 
@@ -341,6 +361,12 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Foundation Slab |  |  | Sketch a structural foundation slab. |
 | Structural Wall |  |  | Draw load-bearing walls (Structural is on). |
 | Structural Floor |  | `SB` | Sketch a structural floor (Structural is on). |
+| Vertical Column |  |  | Places vertical columns. |
+| Slanted Column |  |  | Places slanted columns: click the base, then the top. |
+| Columns at Grids |  |  | Places structural columns at the intersections of the grids you select; click Finish when done. |
+| Columns at Columns |  |  | Places structural columns inside the architectural columns you select; click Finish when done. |
+| Finish Placing Columns |  |  | Places the columns. |
+| Cancel Placing Columns |  |  | Cancels placing multiple columns. |
 | Truss |  |  | Places a flat truss of chords and diagonal members between two points. |
 | Brace |  | `BR` | Adds diagonal braces from the current level up to the level above. |
 | Beam System |  | `BS` | Sketches a bay and fills it with parallel beams at a fixed spacing. |
@@ -446,6 +472,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Fabric |  |  | Places a fabric reinforcement symbol on a fabric area or sheet. |
 | Aligned Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set across the set, with its tag. |
 | Linear Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set horizontally or vertically, with its tag. |
+| Space Tag |  |  | Tags a space with its name and number. |
 | Keynoting Settings |  |  | Chooses the keynote table and how keynote tags read. |
 
 ### View
@@ -646,6 +673,44 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Save Selection |  |  | Saves the current selection so it can be loaded later. |
 | Load Selection |  |  | Loads a saved selection. |
 | Edit Selection |  |  | Renames or deletes saved selections. |
+| Extrusion |  |  | Creates a solid by extruding a closed sketch perpendicular to the work plane. |
+| Blend |  |  | Creates a solid that blends a base sketch into a top sketch. |
+| Revolve |  |  | Creates a solid by revolving a sketch about an axis. |
+| Sweep |  |  | Creates a solid by sweeping a profile along a path. |
+| Swept Blend |  |  | Creates a solid swept along a path between two profiles. |
+| Void Extrusion |  |  | Creates a void that cuts solids by extruding a closed sketch. |
+| Void Blend |  |  | Creates a void blending a base sketch into a top sketch. |
+| Void Revolve |  |  | Creates a void by revolving a sketch. |
+| Void Sweep |  |  | Creates a void by sweeping a profile along a path. |
+| Model Line |  |  | Draws lines that exist in 3D in the family. |
+| Component |  |  | Places a nested family in the family. |
+| Model Text |  |  | Places 3D text in the family. |
+| Opening |  |  | Cuts an opening in the host of a hosted family. |
+| Control |  |  | Adds flip arrows to the family. |
+| Reference Line |  |  | Draws a reference line to drive angles and rigs. |
+| Reference Plane |  |  | Draws reference planes that the family's geometry locks to. |
+| Aligned |  |  | Dimensions between parallel reference planes; label it with a parameter to make it flex. |
+| Symbolic Line |  |  | Draws lines shown in plan instead of the family's geometry. |
+| Family Types |  |  | Creates types, adds parameters and sets their values and formulas. |
+| Family Category and Parameters |  |  | Sets the family's category and its family parameters. |
+| Load into Project |  |  | Loads the family into the project. |
+| Load into Project and Close |  |  | Loads the family into the project and closes the family. |
+| Finish Edit Mode |  |  | Finishes the sketch. |
+| Cancel Edit Mode |  |  | Abandons the sketch. |
+| Default 3D View |  |  | Opens the family's default 3D view, with orbit. |
+| Single Vertical |  |  | Places a vertical flip control (flips the facing). |
+| Double Vertical |  |  | Places a double vertical flip control (flips the facing). |
+| Single Horizontal |  |  | Places a horizontal flip control (flips the hand). |
+| Double Horizontal |  |  | Places a double horizontal flip control (flips the hand). |
+| Filled Region |  |  | Sketches a filled region shown with the family in plan. |
+| Masking Region |  |  | Sketches a masking region shown with the family in plan. |
+| Text |  |  | Places static text in the family's plan (labels show a parameter instead). |
+| Set Work Plane |  |  | Specifies the work plane of the current view: a named reference plane new forms, lines and text start from. |
+| Show Work Plane |  |  | Shows or hides the work plane grid in the current view. |
+| Load Family into Family… |  |  | Loads a family file into this family, to place as a nested component or use as a sweep profile. |
+| Purge Unused Families |  |  | Removes families loaded into this family that no component or sweep uses. |
+| Flex Test |  |  | Evaluates every type, and each length parameter at 50% and 150%, reporting geometry and constraint failures. |
+| Save Family As… |  |  | Saves the family as a .arcusfamily file. |
 
 ### File
 
