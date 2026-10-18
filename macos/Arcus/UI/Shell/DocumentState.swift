@@ -30,6 +30,7 @@ enum DialogKind: Identifiable, Equatable {
     case f67(F67Dialog) // F67: Insert tab dialogs
     case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
     case f5(F5Dialog) // F5: Model In-place (Dialogs/F5MassingDialogs.swift)
+    case f810(F810Dialog) // F810: Title Block, Guide Grid, Rendering, Render Gallery
     var id: String { String(describing: self) }
 }
 
@@ -54,6 +55,8 @@ final class DocumentState {
     @ObservationIgnored weak var window: NSWindow?
 
     var openViews: [ElementID] = []
+    /// F810: View ▸ Windows ▸ Tile Views shows the open views side by side (Tab Views returns to tabs).
+    var tileViews = false
     var activeViewID: ElementID? { didSet { if activeViewID != oldValue { viewChanged(from: oldValue) } } }
     var viewHistory: [ElementID] = []
     var toolRevision = 0

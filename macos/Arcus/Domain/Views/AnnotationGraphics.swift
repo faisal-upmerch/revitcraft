@@ -99,7 +99,8 @@ struct AnnotationGraphics {
         let (detail, sheet) = refLabels(v)
         let r = paper(0.004)
         let c = Vec2(crop.max.x + r * 1.5, crop.max.y + r * 1.5)
-        var prims: [GPrimitive] = [.polyline(crop.corners, closed: true, st)]
+        let outline = v.view?.cropShape.flatMap { $0.count >= 3 ? $0 : nil } ?? crop.corners // F810: sketched callouts
+        var prims: [GPrimitive] = [.polyline(outline, closed: true, st)]
         prims.append(.polyline([Vec2(crop.max.x, crop.max.y), c - Vec2(r, r) * 0.7], closed: false, GStroke(weight: 1)))
         prims.append(.arc(Arc2(center: c, radius: r, startAngle: 0, sweep: Angle.twoPi), GStroke(weight: 1)))
         prims.append(.text(GText(position: c + Vec2(0, r * 0.4), height: 0.0018, string: detail.isEmpty ? "–" : detail, alignment: .center, verticalAnchor: 0.5)))

@@ -19,7 +19,8 @@ public enum ElementOperations {
     /// doors and windows whose wall stays behind are re-hosted on the wall at their new location.
     public static func transform(_ ids: [ElementID], by t: Transform2, in tx: TransactionContext, viewID: ElementID?,
                                  disjoin: Bool = false) throws(TransactionError) {
-        let set = dependentsToCarry(Set(ids), tx.model, viewID: viewID)
+        var set = dependentsToCarry(Set(ids), tx.model, viewID: viewID)
+        for id in set { for h in tx.model.hosted(by: id) where h.cutProfile != nil { set.insert(h.id) } } // F810: cut profiles move with their wall
         let pinned = set.filter { tx.model[$0]?.pinned == true }
         if !pinned.isEmpty { throw TransactionError("Pinned elements can't be moved. Unpin them first.", elements: Array(pinned)) }
         let before = tx.model

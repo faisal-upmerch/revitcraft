@@ -51,6 +51,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F810 categories:
+    case cutProfiles, matchlines, renderings
 
 
     // F11 categories:
@@ -95,6 +96,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .spaces, .mass: return .model // F5
         case .spaceSeparationLines: return .annotation // F5: like room separation lines, level-hosted rather than view-specific
         case .decalTypes: return .internal_ // F67
+        case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
+        case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
+        case .renderings: return .internal_ // F810: Render Gallery images
         }
     }
 
@@ -224,6 +228,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .spaces: "Spaces" // F5
         case .spaceSeparationLines: "Space Separation Lines"
         case .mass: "Mass"
+        case .cutProfiles: "Cut Profiles" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Renderings"
         }
     }
 
@@ -332,6 +339,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .spaces: "Space" // F5
         case .spaceSeparationLines: "Space Separation Line"
         case .mass: "Mass"
+        case .cutProfiles: "Cut Profile" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Rendering"
         }
     }
 

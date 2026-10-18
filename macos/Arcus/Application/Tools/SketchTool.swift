@@ -15,6 +15,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case f34(F34SketchTarget)
         /// F5: In-Place Mass footprints (SketchTool+F5.swift).
         case f5(F5SketchTarget)
+        /// F810: View ▸ Cut Profile (SketchTool+F810.swift).
+        case f810(F810SketchTarget)
     }
     /// Draw tools of the contextual Draw panel (BL-CANVAS: the full set of the reference tool's boundary sketches).
     public enum DrawMode: String, CaseIterable {
@@ -100,6 +102,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .roofExtrusion: "Roof Profile"
         case .f34(let t): t.title // F34
         case .f5(let t): t.title // F5
+        case .f810(let t): t.title // F810
         }
     }
     public var prompt: String {
@@ -146,6 +149,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         switch target {
         case .floor, .ceiling, .roof, .buildingPad: DrawMode.allCases
         case .railing, .propertyLine: [.line, .arc, .centerArc, .tangentArc, .filletArc, .pickLines, .pickWalls]
+        case .callout where commandID == .calloutSketch: DrawMode.allCases.filter { $0 != .pickWalls && $0 != .pickLines } // F810: callout of any shape
         case .callout, .revisionCloud: [.rectangle, .line]
         case .roofExtrusion: [.line, .arc, .centerArc, .tangentArc, .filletArc, .pickLines]
         default: DrawMode.allCases.filter { $0 != .pickWalls }
@@ -354,7 +358,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             }
         case .callout:
             guard let r = curves.reduce(Rect2.empty, { $0.union($1.bounds) }) as Rect2?, !r.isEmpty else { return false }
-            createCallout(r)
+            if commandID == .calloutSketch { guard f810CreateSketchedCallout() else { return false } } else { createCallout(r) } // F810
         case .roofExtrusion:
             guard commitExtrusion() else { return false }
         case .f34(let t) where t.isOpenPath: // F34: path reinforcement is an open chain
@@ -455,6 +459,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             }
         case .f34(let t): f34Commit(t, sketch, view: view, level: level) // F34
         case .f5(let t): f5Commit(t, sketch, level: level) // F5
+        case .f810(let t): f810Commit(t, sketch, view: view) // F810
         default: break
         }
     }

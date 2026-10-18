@@ -12,6 +12,7 @@ extension BuiltInCatalog {
         list += c.isPerspective ? [cameraFocalLength, cameraFieldOfView] : [cameraOrthoHeight]
         list += [cameraEyeX, cameraEyeY, cameraEyeElevation, cameraTargetX, cameraTargetY, cameraTargetElevation, cameraRoll,
                  cameraNearClip, cameraFarClipActive, cameraFarClipOffset, cameraCropWidth, cameraCropHeight, cameraAspect]
+        list += walkthroughParameters(e) // F810: Total Frames, Frame
         return list
     }
 
