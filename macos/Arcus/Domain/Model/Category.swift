@@ -33,6 +33,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
     // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
     // F1 categories:
+    case reveals
 
 
     // F2 categories:
@@ -84,6 +85,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .scopeBoxes, .projectBasePoint, .surveyPoint: return .datum // WP6a
         case .cameras: return .annotation // WP6a
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
+        case .reveals: return .model // F1
         }
     }
 
@@ -192,6 +194,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site"
+        case .reveals: "Reveals" // F1
         }
     }
 
@@ -282,6 +285,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site Component"
+        case .reveals: "Reveal" // F1
         }
     }
 

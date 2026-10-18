@@ -212,3 +212,70 @@ extension F1Tests {
         #expect(Fx.approx(Vec2.fromAngle(t.rotation), Vec2(1, 0), 1e-9) && t.alignment == .center)
     }
 }
+
+// MARK: - Wall: Reveal
+
+extension F1Tests {
+    func elevationContext() -> (ToolContext, ProjectTemplates.Ids) {
+        let (m, ids) = Fx.template()
+        let session = DocumentSession(model: m)
+        session.undoManager.groupsByEvent = false
+        session.undoManager.beginUndoGrouping()
+        return (ToolContext(session: session, viewID: m.views.first { $0.name == "South" }!.id), ids)
+    }
+
+    @Test func revealToolCutsAGrooveIntoTheFaceSeenInElevation() throws {
+        let (ctx, ids) = elevationContext()
+        var w: ElementID!
+        ctx.session.perform("Wall") { tx in w = Fx.wall(tx, ids, .zero, Vec2(8, 0)) }
+        let before = abs(WallGeometry.solid(ctx.model[w]!, ctx.model).signedVolume)
+        let key = GeometryCache.key(ctx.model[w]!, ctx.model, detail: .fine)
+        let tool = WallRevealTool(ctx: ctx)
+        #expect(tool.prompt == "Click on a wall face to place the reveal.")
+        click(tool, Vec2(3, 1.2), hit: w)
+        let r = try #require(ctx.model.elements(.reveals).first)
+        let d = try #require(r.wallReveal)
+        let f = try #require(WallGeometry.frame(ctx.model[w]!, ctx.model))
+        // The south face looks at the viewer of the South elevation.
+        let south: WallSweep.Side = f.exteriorOffset < f.interiorOffset ? .exterior : .interior
+        #expect(r.hostID == w && d.orientation == .horizontal && d.side == south)
+        #expect(Fx.approx(d.offset, 1.2 - f.baseZ) && Fx.approx(d.width, 0.05) && Fx.approx(d.depth, 0.02))
+        // The wall's solid loses the groove along its whole length and stays closed.
+        let after = abs(WallGeometry.solid(ctx.model[w]!, ctx.model).signedVolume)
+        #expect(Fx.approx(before - after, 8 * 0.05 * 0.02, 1e-7))
+        #expect(GeometryCache.key(ctx.model[w]!, ctx.model, detail: .fine) != key, "the reveal is an input of the wall's geometry")
+        // A section across the wall shows the notch: the cut is a rectangle with a groove (8 corners).
+        let cut = MeshSection.section(WallGeometry.solid(ctx.model[w]!, ctx.model), plane: Plane3(origin: Vec3(4, 0, 0), normal: .unitX, xAxis: .unitY))
+        #expect(cut.count == 1 && cut.first?.count == 8)
+        // The elevation offers the reveal for selection.
+        let g = ViewGraphicsBuilder(model: ctx.model, view: ctx.view!).build()
+        #expect(g.items.contains { $0.elementID == r.id })
+        // Vertical reveals run up the wall at the clicked station.
+        tool.setOption("orientation", .text("Vertical"))
+        click(tool, Vec2(5, 1), hit: w)
+        let v = try #require(ctx.model.elements(.reveals).first { $0.wallReveal?.orientation == .vertical }?.wallReveal)
+        #expect(Fx.approx(v.offset, 5))
+        let both = abs(WallGeometry.solid(ctx.model[w]!, ctx.model).signedVolume)
+        // The vertical groove crosses the horizontal one, where their removed volumes overlap.
+        #expect(Fx.approx(after - both, f.height * 0.05 * 0.02 - 0.05 * 0.05 * 0.02, 1e-7))
+        // Deleting the wall deletes its reveals.
+        ctx.session.perform("Delete") { tx in tx.delete(w) }
+        #expect(ctx.model.elements(.reveals).isEmpty)
+    }
+
+    @Test func revealsNeedStraightBasicWalls() throws {
+        let (ctx, ids) = context()
+        var arc: ElementID!
+        ctx.session.perform("Arc wall") { tx in
+            var wd = WallData(location: .arc(Arc2(center: .zero, radius: 5, startAngle: 0, sweep: .pi / 2)), topLevelID: ids.levels[1])
+            wd.flipped = false
+            arc = tx.create(.walls, data: .wall(wd), typeID: ids.wallTypes[Fx.generic], levelID: ids.levels[0])
+        }
+        #expect(WallRevealTool.place(WallRevealData(offset: 1), on: ctx.model[arc]!, session: ctx.session) == nil)
+        // In a plan (not 3D) the tool asks for another view.
+        var messages: [String] = []
+        ctx.showMessage = { messages.append($0) }
+        click(WallRevealTool(ctx: ctx), Vec2(5, 0), hit: arc)
+        #expect(messages.last?.contains("elevation") == true)
+    }
+}

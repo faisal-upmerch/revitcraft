@@ -243,6 +243,8 @@ public enum DependencyGraph {
                     for r in m.hosted(by: id) { out.insert(r.id) }
                 case .topography: // BL-SITE: sub-divisions follow their host
                     for r in m.hosted(by: id) { out.insert(r.id) }
+                case .wallReveal: // F1: the host wall's solid has the groove
+                    if let h = e.hostID { out.insert(h) }
                 case .opening: // WP3
                     if let h = e.hostID { out.insert(h) }
                     for x in ShaftCuts.cutElements(by: e, m) { out.insert(x.id) }
