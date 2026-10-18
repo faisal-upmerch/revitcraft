@@ -279,3 +279,32 @@ extension F1Tests {
         #expect(messages.last?.contains("elevation") == true)
     }
 }
+
+// MARK: - Place Model Group
+
+extension F1Tests {
+    @Test func placeModelGroupCopiesTheGroupTypeToTheClickedPointAndLevel() throws {
+        let (ctx, ids) = context(level: 1)
+        var walls: [ElementID] = []
+        ctx.session.perform("Group") { tx in
+            walls = [Fx.wall(tx, ids, .zero, Vec2(4, 0)), Fx.wall(tx, ids, Vec2(4, 0), Vec2(4, 3))]
+            let gid = tx.create(.modelGroups, name: "Group 1", data: .group(GroupData(members: walls, origin: Vec2(2, 1), groupTypeName: "Group 1")))
+            for w in walls { tx.update(w) { $0.groupID = gid } }
+        }
+        #expect(ModelGroups.typeNames(ctx.model) == ["Group 1"])
+        let tool = ModelGroupTool(ctx: ctx)
+        #expect(tool.groupName == "Group 1" && tool.prompt == "Click to place the group origin.")
+        tool.pointerMoved(ToolInput(point: Vec2(12, 11), rawPoint: Vec2(12, 11)))
+        #expect(tool.preview.primitives.count == 3, "the members' axes and the origin marker follow the pointer")
+        click(tool, Vec2(12, 11))
+        let groups = ctx.model.elements(.modelGroups)
+        #expect(groups.count == 2)
+        let placed = try #require(groups.first { $0.id != ctx.model[walls[0]]!.groupID })
+        #expect(ctx.session.selection.ids == [placed.id] && placed.group?.groupTypeName == "Group 1")
+        let members = try #require(placed.group?.members).compactMap { ctx.model[$0] }
+        #expect(members.count == 2 && members.allSatisfy { $0.groupID == placed.id })
+        // Moved by the origin offset (10, 10) and onto the view's level (Level 2).
+        #expect(members.allSatisfy { $0.levelID == ids.levels[1] })
+        #expect(members.contains { $0.wall?.location.asSegment.map { Fx.approx($0.start, Vec2(10, 10)) && Fx.approx($0.end, Vec2(14, 10)) } == true })
+    }
+}
