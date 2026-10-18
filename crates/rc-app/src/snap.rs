@@ -458,6 +458,13 @@ pub fn snap(inp: &SnapInput) -> SnapResult {
         match (vx, hy) {
             (Some((_, kx)), Some((_, ky))) => {
                 let q = DVec2::new(kx.x, ky.y);
+                // One of the two is the drawing's own start: the direction crossing an extension.
+                if inp.reference == Some(ky) {
+                    return SnapResult { point: q, kind: SnapKind::Extension, guides: vec![(kx, q), (ky, q)], target: None };
+                }
+                if inp.reference == Some(kx) {
+                    return SnapResult { point: q, kind: SnapKind::Extension, guides: vec![(ky, q), (kx, q)], target: None };
+                }
                 return SnapResult { point: q, kind: SnapKind::Alignment, guides: vec![(kx, q), (ky, q)], target: None };
             }
             (Some((_, k)), None) | (None, Some((_, k))) => {
@@ -470,7 +477,7 @@ pub fn snap(inp: &SnapInput) -> SnapResult {
                     let line_d = if vertical { DVec2::Y } else { DVec2::X };
                     if let Some(q) = geom::line_intersection(r, dir, line_p, line_d) {
                         if q.distance(c) <= tol * 2.0 {
-                            return SnapResult { point: q, kind: SnapKind::Alignment, guides: vec![(k, q), (r, q)], target: None };
+                            return SnapResult { point: q, kind: SnapKind::Extension, guides: vec![(k, q), (r, q)], target: None };
                         }
                     }
                 }
@@ -555,7 +562,7 @@ mod tests {
         assert!((r.point.x).abs() < 1e-9);
         // Drawing from (0, 8000) towards the right lands on the horizontal ray with a round length.
         let r = snap(&input(&g, &s, DVec2::new(2337.0, 8030.0), Some(DVec2::new(0.0, 8000.0))));
-        assert!(matches!(r.kind, SnapKind::Angle | SnapKind::Alignment));
+        assert!(matches!(r.kind, SnapKind::Angle | SnapKind::Alignment | SnapKind::Extension));
         assert!((r.point.y - 8000.0).abs() < 1e-9);
         // Perpendicular foot onto the vertical segment.
         let r = snap(&input(&g, &s, DVec2::new(4950.0, 2510.0), Some(DVec2::new(1000.0, 2500.0))));

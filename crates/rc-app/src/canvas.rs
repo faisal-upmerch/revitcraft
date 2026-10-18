@@ -1036,6 +1036,11 @@ fn paint_snap(painter: &egui::Painter, xf: &Xf, s: &SnapResult) {
     let label = match s.kind {
         SnapKind::Free => None,
         SnapKind::Angle => axis,
+        // The drawing direction crossing another point's alignment, worded as the reference app.
+        SnapKind::Extension if s.guides.len() == 2 => {
+            let d = (s.guides[1].1 - s.guides[1].0).normalize_or_zero();
+            Some(if d.y.abs() < 1e-6 { "Horizontal and Extension" } else if d.x.abs() < 1e-6 { "Vertical and Extension" } else { "Extension" })
+        }
         k => Some(k.label()),
     };
     if let Some(label) = label {
