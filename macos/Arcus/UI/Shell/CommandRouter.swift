@@ -43,6 +43,7 @@ struct CommandRouter {
     }
 
     func disabledReason(_ id: CommandID) -> String? {
+        if let reason = portDisabledReason(id) { return reason } // RevitCraft port batches (CommandRouter+Port.swift)
         if let reason = w23DDisabledReason(id) { return reason } // W2-3D
         if let reason = keysDisabledReason(id) { return reason } // BL-KEYS
         if let reason = wp4DisabledReason(id) { return reason }
@@ -127,6 +128,7 @@ struct CommandRouter {
 
     func makeTool(_ id: CommandID) -> (any InteractiveTool)? {
         guard let c = ctx() else { return nil }
+        if let t = portMakeTool(id, c) { return t } // RevitCraft port batches
         if let t = annotMakeTool(id, c) { return t } // W2-ANNOT
         if let t = blvgMakeTool(id, c) { return t } // BL-VG
         let sel = selection
@@ -235,6 +237,7 @@ struct CommandRouter {
     }
 
     func perform(_ id: CommandID) {
+        if portPerform(id) { return } // RevitCraft port batches
         if performAnnot(id) { return } // W2-ANNOT
         if keysPerform(id) { return } // BL-KEYS
         if performBLSched(id) { return } // BL-SCHED

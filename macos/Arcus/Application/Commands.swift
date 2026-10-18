@@ -60,6 +60,31 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case scheduleProperties, scheduleInsertColumn, scheduleDeleteColumn, scheduleHideColumn, scheduleUnhideAllColumns, scheduleResizeColumn // BL-SCHED
     case scheduleInsertRow, scheduleDeleteRow, scheduleMergeHeaders, scheduleGroupHeaders, scheduleUngroupHeaders, scheduleAppearance // BL-SCHED
     case scheduleFormatUnit, scheduleCalculatedField, highlightInModel // BL-SCHED
+
+    // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
+    // F1 commands:
+
+
+    // F2 commands:
+
+
+    // F34 commands:
+
+
+    // F5 commands:
+
+
+    // F67 commands:
+
+
+    // F810 commands:
+
+
+    // F11 commands:
+
+
+    // F1415 commands:
+
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
@@ -87,7 +112,10 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 }
 
 public enum CommandCatalog {
-    public static let all: [CommandInfo] = [
+    public static let all: [CommandInfo] = coreCommands + portCommands
+    /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands
+    static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),
         CommandInfo(.selectAll, "Select All", .modify, "checklist", shortcut: "⌘A", help: "Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension."), // BL-KEYS

@@ -31,6 +31,32 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     case colorSchemes, colorFillLegends
     case lightingFixtures, electricalFixtures, mechanicalEquipment, planting, entourage, site // W2-LIB
 
+    // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
+    // F1 categories:
+
+
+    // F2 categories:
+
+
+    // F34 categories:
+
+
+    // F5 categories:
+
+
+    // F67 categories:
+
+
+    // F810 categories:
+
+
+    // F11 categories:
+
+
+    // F1415 categories:
+
+
+
     public static func < (a: Category, b: Category) -> Bool { a.sortIndex < b.sortIndex }
     private var sortIndex: Int { Category.allCases.firstIndex(of: self) ?? 0 }
 

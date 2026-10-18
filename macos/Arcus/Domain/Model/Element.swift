@@ -134,6 +134,32 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
     case colorScheme, colorFillLegend
     case ramp
     case opening // WP3
+
+    // RevitCraft port feature batches: each adds its kinds right after its marker.
+    // F1 element kinds:
+
+
+    // F2 element kinds:
+
+
+    // F34 element kinds:
+
+
+    // F5 element kinds:
+
+
+    // F67 element kinds:
+
+
+    // F810 element kinds:
+
+
+    // F11 element kinds:
+
+
+    // F1415 element kinds:
+
+
 }
 
 /// Kind-specific element data.
@@ -196,6 +222,32 @@ public enum ElementData: Hashable, Codable, Sendable {
     /// View-specific legend listing the colour fill values in use.
     case colorFillLegend(ColorFillLegendData)
 
+    // RevitCraft port feature batches: each adds its cases right after its marker.
+    // F1 element data:
+
+
+    // F2 element data:
+
+
+    // F34 element data:
+
+
+    // F5 element data:
+
+
+    // F67 element data:
+
+
+    // F810 element data:
+
+
+    // F11 element data:
+
+
+    // F1415 element data:
+
+
+
     public var kind: ElementKind {
         switch self {
         case .level: .level
@@ -246,6 +298,31 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .colorFillLegend: .colorFillLegend
         case .ramp: .ramp
         case .opening: .opening
+        // RevitCraft port feature batches: each adds its cases right after its marker.
+        // F1 element data kinds:
+
+
+        // F2 element data kinds:
+
+
+        // F34 element data kinds:
+
+
+        // F5 element data kinds:
+
+
+        // F67 element data kinds:
+
+
+        // F810 element data kinds:
+
+
+        // F11 element data kinds:
+
+
+        // F1415 element data kinds:
+
+
         }
     }
 }
