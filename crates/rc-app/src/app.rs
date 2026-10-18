@@ -703,7 +703,9 @@ impl App {
 
     /// Starts a tool, switching to a suitable view when needed.
     pub fn set_tool(&mut self, kind: ToolKind) {
-        if kind.needs_plan() && self.active_level().is_none() && self.sketch.is_none() {
+        // Walls are also drawn in 3D views, on a level's plane, as in the reference app.
+        let in_3d = self.active_view().is_some_and(|v| matches!(v.kind, ViewKind::ThreeD { .. }));
+        if kind.needs_plan() && !(kind == ToolKind::Wall && in_3d) && self.active_level().is_none() && self.sketch.is_none() {
             let plan = self
                 .doc
                 .data

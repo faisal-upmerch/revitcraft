@@ -787,15 +787,17 @@ fn paint_work_plane_grid(app: &App, painter: &egui::Painter, xf: &Xf, d: &Drawin
     let Some((mn, mx)) = d.bounds() else { return };
     let (x0, y0) = ((mn.x / spacing).floor() * spacing - spacing, (mn.y / spacing).floor() * spacing - spacing);
     let (x1, y1) = ((mx.x / spacing).ceil() * spacing + spacing, (mx.y / spacing).ceil() * spacing + spacing);
-    let st = Stroke::new(1.0, Color32::from_rgba_unmultiplied(80, 150, 230, 150));
+    // As the reference app: a translucent plane with dashed grid lines and a solid border.
+    painter.rect_filled(Rect::from_two_pos(xf.s(DVec2::new(x0, y0)), xf.s(DVec2::new(x1, y1))), 0.0, Color32::from_rgba_unmultiplied(110, 170, 235, 38));
+    let st = Stroke::new(1.0, Color32::from_rgba_unmultiplied(80, 150, 230, 170));
     let mut x = x0;
     while x <= x1 + 1.0 {
-        painter.line_segment([xf.s(DVec2::new(x, y0)), xf.s(DVec2::new(x, y1))], st);
+        painter.extend(egui::Shape::dashed_line(&[xf.s(DVec2::new(x, y0)), xf.s(DVec2::new(x, y1))], st, 6.0, 4.0));
         x += spacing;
     }
     let mut y = y0;
     while y <= y1 + 1.0 {
-        painter.line_segment([xf.s(DVec2::new(x0, y)), xf.s(DVec2::new(x1, y))], st);
+        painter.extend(egui::Shape::dashed_line(&[xf.s(DVec2::new(x0, y)), xf.s(DVec2::new(x1, y))], st, 6.0, 4.0));
         y += spacing;
     }
     painter.rect_stroke(Rect::from_two_pos(xf.s(DVec2::new(x0, y0)), xf.s(DVec2::new(x1, y1))), 0.0, Stroke::new(1.5, Color32::from_rgb(60, 130, 220)), egui::StrokeKind::Middle);

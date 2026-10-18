@@ -269,7 +269,7 @@ pub fn is_3d_tool(k: crate::tools::ToolKind) -> bool {
     matches!(
         k,
         T::Move | T::Copy | T::Rotate | T::Array | T::MirrorPick | T::MirrorDraw | T::Align | T::Measure | T::Split | T::SplitGap | T::JoinGeometry | T::UnjoinGeometry
-            | T::MatchType | T::AttachTop | T::AttachBase | T::TrimCorner | T::TrimSingle | T::TrimMulti | T::ZoomRegion | T::Door | T::Window
+            | T::MatchType | T::AttachTop | T::AttachBase | T::TrimCorner | T::TrimSingle | T::TrimMulti | T::ZoomRegion | T::Door | T::Window | T::Wall
     )
 }
 
@@ -341,6 +341,61 @@ fn tool_3d(app: &mut App, resp: &egui::Response, painter: &egui::Painter, rect: 
                 }
             }
         }
+        return;
+    }
+    // Walls are drawn on the lowest level's plane: a box preview, its length, chained clicks.
+    if kind == T::Wall {
+        let Some(level) = app.doc.data.levels().first().map(|(id, _)| *id) else { return };
+        let z = app.doc.data.level_elevation(level);
+        let mut on_level = (d.z.abs() > 1e-9).then(|| (z - o.z) / d.z).filter(|t| *t > 0.0).map(|t| (o + d * t).truncate());
+        // Wall ends snap within a few pixels, so chains and corners close.
+        if let Some(c) = on_level {
+            let near = app.doc.data.elements.iter().filter_map(|e| e.as_wall()).filter(|w| w.base_level == level).flat_map(|w| [w.start, w.end]).filter_map(|q| screen_of(cam, rect, DVec3::new(q.x, q.y, z)).map(|s| (q, s))).filter(|(_, s)| resp.hover_pos().is_some_and(|h| h.distance(*s) < 10.0)).map(|(q, _)| q).next();
+            if let Some(q) = near {
+                if let Some(sq) = screen_of(cam, rect, DVec3::new(q.x, q.y, z)) {
+                    painter.rect_stroke(Rect::from_center_size(sq, egui::vec2(10.0, 10.0)), 0.0, Stroke::new(1.6, style::SNAP), egui::StrokeKind::Middle);
+                }
+                on_level = Some(q);
+            }
+            let _ = c;
+        }
+        if let Some(h) = resp.hover_pos() {
+            resp.ctx.set_cursor_icon(egui::CursorIcon::None);
+            crate::canvas::paint_crosshair(painter, h);
+        }
+        let (t, height) = (app.doc.data.sys_type(app.opts.wall_type).map(|t| t.thickness()).unwrap_or(200.0), app.opts.wall_height.max(1.0));
+        if let (Some(a), Some(b)) = (app.tool.pts.last().copied(), on_level) {
+            if a.distance(b) > 1.0 {
+                let dir = (b - a).normalize();
+                let n = rc_core::geom::perp(dir) * (t / 2.0);
+                let base = [a + n, b + n, b - n, a - n];
+                let ring = |zz: f64| base.iter().map(|q| screen_of(cam, rect, DVec3::new(q.x, q.y, zz))).collect::<Option<Vec<Pos2>>>();
+                if let (Some(lo), Some(hi)) = (ring(z), ring(z + height)) {
+                    let st = Stroke::new(1.5, style::PREVIEW);
+                    painter.add(egui::Shape::closed_line(lo.clone(), st));
+                    painter.add(egui::Shape::closed_line(hi.clone(), st));
+                    for k in 0..4 {
+                        painter.line_segment([lo[k], hi[k]], st);
+                    }
+                    let mid = lo[0] + (lo[1] - lo[0]) / 2.0;
+                    style::canvas_tooltip(painter, mid + egui::vec2(6.0, 8.0), &app.doc.data.units.length(a.distance(b)));
+                }
+            }
+        }
+        if resp.clicked_by(egui::PointerButton::Primary) {
+            if let Some(b) = on_level {
+                match app.tool.pts.last().copied() {
+                    Some(a) if a.distance(b) > 10.0 => {
+                        let o2 = app.opts.clone();
+                        app.run("Wall", |p| edit::add_wall_ex(p, level, o2.wall_type, a, b, None, height, o2.location_line, false));
+                        app.tool.pts = if app.opts.chain { vec![b] } else { Vec::new() };
+                    }
+                    Some(_) => {}
+                    None => app.tool.pts.push(b),
+                }
+            }
+        }
+        app.interact.prompt = if app.tool.pts.is_empty() { "Click to enter wall start point.".into() } else { "Click to enter wall end point.".into() };
         return;
     }
     // Doors and windows go on the wall face under the cursor.
@@ -637,6 +692,33 @@ pub fn show(app: &mut App, ui: &mut egui::Ui, view_id: Id) {
         painter.rect_stroke(rect.shrink(2.0), 0.0, Stroke::new(3.0, style::TEMP_HIDE), egui::StrokeKind::Inside);
     }
 
+    // Work Plane > Show: the lowest level's plane as a translucent grid around the model.
+    if app.show_work_plane.contains(&view_id) {
+        if let (Some((mn, mx)), Some(z)) = (app.model_bounds(), app.doc.data.levels().first().map(|(_, l)| l.elevation)) {
+            let spacing = if app.doc.data.units.system == rc_core::units::UnitSystem::Imperial { 3048.0 } else { 3000.0 };
+            let (x0, y0) = ((mn.x / spacing).floor() * spacing - spacing * 2.0, (mn.y / spacing).floor() * spacing - spacing * 2.0);
+            let (x1, y1) = ((mx.x / spacing).ceil() * spacing + spacing * 2.0, (mx.y / spacing).ceil() * spacing + spacing * 2.0);
+            let at = |x: f64, y: f64| screen_of(&cam, rect, DVec3::new(x, y, z));
+            if let (Some(a), Some(b), Some(c), Some(d)) = (at(x0, y0), at(x1, y0), at(x1, y1), at(x0, y1)) {
+                painter.add(egui::Shape::convex_polygon(vec![a, b, c, d], egui::Color32::from_rgba_unmultiplied(110, 170, 235, 45), Stroke::new(1.5, egui::Color32::from_rgb(60, 130, 220))));
+                let st = Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(80, 150, 230, 160));
+                let mut x = x0 + spacing;
+                while x < x1 - 1.0 {
+                    if let (Some(p0), Some(p1)) = (at(x, y0), at(x, y1)) {
+                        painter.extend(egui::Shape::dashed_line(&[p0, p1], st, 6.0, 4.0));
+                    }
+                    x += spacing;
+                }
+                let mut y = y0 + spacing;
+                while y < y1 - 1.0 {
+                    if let (Some(p0), Some(p1)) = (at(x0, y), at(x1, y)) {
+                        painter.extend(egui::Shape::dashed_line(&[p0, p1], st, 6.0, 4.0));
+                    }
+                    y += spacing;
+                }
+            }
+        }
+    }
     // Section box: edges and face grips.
     if let Some((mn, mx)) = view.section_box {
         section_box_ui(app, ui, &painter, &resp, rect, &cam, view_id, mn, mx);
