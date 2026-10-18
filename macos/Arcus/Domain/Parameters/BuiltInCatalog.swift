@@ -907,6 +907,7 @@ extension BuiltInCatalog {
     static var wp6aProbes: [ElementData] {
         var cam = ViewData(kind: .threeD)
         cam.camera = Camera3D(eye: .zero, target: .unitX, isPerspective: true)
+        cam.walkthrough = WalkthroughData(path: [.zero, .unitX]) // F810: walkthrough frames
         return [.referencePlane(ReferencePlaneData(line: Segment2(.zero, .unitX))), .view(cam),
                 .scopeBox(ScopeBoxData(center: .zero, halfSize: Vec2(1, 1), bottomElevation: 0, topElevation: 1))]
     }

@@ -247,6 +247,14 @@ struct F810Tests {
         // The path shows in the plan of its level.
         let g = graphics(ctx.model, plan)
         #expect(g.items.contains { $0.elementID == v.id && $0.targetViewID == v.id })
+        // Properties: Total Frames and Frame, which moves the camera.
+        var mm = ctx.model
+        #expect(Parameters.value(ParameterID("walkthrough.frames"), of: mm[v.id]!, mm) == .int(300))
+        try Fx.commit(&mm) { tx in
+            try Parameters.set(ParameterID("walkthrough.frames"), to: .int(3), on: v.id, in: tx)
+            try Parameters.set(ParameterID("walkthrough.frame"), to: .int(2), on: v.id, in: tx)
+        }
+        #expect(mm[v.id]?.view?.walkthrough?.frames == 3 && mm[v.id]?.view?.camera?.eye.isAlmostEqual(Vec3(10, 0, z)) == true)
     }
 
     // MARK: Matchline
