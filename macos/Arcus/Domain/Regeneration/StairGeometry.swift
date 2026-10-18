@@ -92,6 +92,7 @@ public enum StairGeometry {
     }
 
     public static func meshParts(_ e: Element, _ model: BIMModel) -> [MeshPart] {
+        if let storeys = MultistoryStairs.storeys(of: e, model) { return storeys.flatMap { meshParts($0, model) } } // F2
         guard let l = layout(e, model) else { return [] }
         let waist = model.typeLength(e, ParameterID("stair.waist"), default: 0.15)
         let mat = model.typeParam(e, ParameterID("type.material"))?.refValue
@@ -221,7 +222,11 @@ public enum RailingGeometry {
     }
 
     public static func meshParts(_ e: Element, _ model: BIMModel) -> [MeshPart] {
-        let pts = path(e, model)
+        if let paths = MultistoryStairs.railingPaths(e, model) { return paths.flatMap { meshParts(e, model, along: $0) } } // F2: on every storey
+        return meshParts(e, model, along: path(e, model))
+    }
+
+    static func meshParts(_ e: Element, _ model: BIMModel, along pts: [Vec3]) -> [MeshPart] {
         guard pts.count >= 2 else { return [] }
         let h = model.typeLength(e, ParameterID("railing.height"), default: 1.0)
         let spacing = model.typeLength(e, ParameterID("railing.balusterSpacing"), default: 0.12)

@@ -53,11 +53,13 @@ public enum WallGeometry {
     // MARK: Frame
 
     public static func assembly(for wall: Element, _ model: BIMModel) -> CompoundAssembly {
-        assembly(ofType: model.typeData(of: wall))
+        assembly(ofType: model.typeData(of: wall), model: model)
     }
 
-    /// The layers a wall of this type is built from (a 200 mm generic layer when the type has none).
-    public static func assembly(ofType td: TypeData?) -> CompoundAssembly {
+    /// The layers a wall of this type is built from (a 200 mm generic layer when the type has none). F2: a stacked type
+    /// reports its thickest part's layers (with `model` to look the parts up).
+    public static func assembly(ofType td: TypeData?, model: BIMModel? = nil) -> CompoundAssembly {
+        if let s = td?.stack, let model { return StackedWalls.nominalAssembly(s, model) } // F2
         if let c = td?.curtain {
             // Curtain walls: one nominal layer as deep as the mullions, so joins, footprints and rooms see a real thickness.
             return CompoundAssembly(layers: [AssemblyLayer(function: .structure, materialID: c.mullionMaterialID, thickness: c.nominalThickness)])
@@ -151,7 +153,8 @@ public enum WallGeometry {
         // Endpoint (corner / multi-way) joins.
         struct Arm { var id: ElementID; var frame: WallFrame; var atEnd: Bool; var dir: Vec2 }
         var arms: [Arm] = [Arm(id: e.id, frame: f, atEnd: atEnd, dir: tangent)]
-        for o in cands {
+        let midZ = (f.baseZ + f.topZ) / 2 // F2: a stacked neighbour joins with its part at this wall's height
+        for o in cands.map({ StackedWalls.part(of: $0, atZ: midZ, model) }) {
             guard let of = frame(o, model), let ow = o.wall else { continue }
             if of.location.start.isAlmostEqual(p, tolerance: tol), ow.allowJoinAtStart {
                 arms.append(Arm(id: o.id, frame: of, atEnd: false, dir: of.location.tangent(at: 0)))
@@ -184,7 +187,7 @@ public enum WallGeometry {
 
         // Tee joins: endpoint lies on another wall's location curve interior.
         guard f.isStraight else { return free }
-        for o in cands {
+        for o in cands.map({ StackedWalls.part(of: $0, atZ: midZ, model) }) {
             guard let of = frame(o, model) else { continue }
             let d = of.location.distance(to: p)
             // The joint must be within the other wall's thickness, and not near its ends.

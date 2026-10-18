@@ -286,6 +286,11 @@ public struct ViewData: Hashable, Codable, Sendable {
     public var colorSchemeID: ElementID?
     /// Area plans: the area scheme whose areas and boundary lines the view shows. Optional: older files decode as nil.
     public var areaSchemeID: ElementID?
+    /// F2: the view's work plane (Work Plane ▸ Set): nil = its default (a plan's level, the view plane of a section or
+    /// elevation, the 3D tools' level). Optional: older files decode as nil.
+    public var workPlane: WorkPlaneRef?
+    /// F2: Work Plane ▸ Show: the work plane's grid is drawn in the view. Optional: older files decode as nil (hidden).
+    public var showsWorkPlane: Bool?
 
     // MARK: 3D graphic display options (optional; absent in older files → defaults, see GraphicDisplayOptions.swift)
 

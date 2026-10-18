@@ -67,6 +67,7 @@ struct DialogHost: View {
             case .additionalSettings(let tab): AdditionalSettingsDialog(state: state, tab: tab) // BL-VG
             case .userInterface: UserInterfaceDialog(state: state) // BL-VG
             case .f34(let d): F34DialogHost(state: state, dialog: d) // F34
+            case .f2(let d): F2DialogHost(state: state, dialog: d) // F2
             case .f67(let d): F67DialogHost(state: state, dialog: d) // F67
             case .f11(let d): F11DialogHost(state: state, dialog: d) // F11
             case .f5(let d): F5DialogHost(state: state, dialog: d) // F5

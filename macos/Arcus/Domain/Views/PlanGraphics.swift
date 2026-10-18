@@ -57,6 +57,7 @@ struct PlanGraphics {
 
     func walls(_ ws: [(Element, GraphicOverride)]) -> [GItem] {
         let ws = ws.filter { !CurtainWallGeometry.isCurtain($0.0, model) } // WP3: curtain walls draw separately
+            .map { (StackedWalls.part(of: $0.0, atZ: cutZ, model), $0.1) } // F2: a stacked wall shows the part the cut passes through
         var cutPolys: [Polygon2] = []
         var owner: [Int] = []
         var projected: [(Element, GraphicOverride, Polygon2)] = []
@@ -244,9 +245,10 @@ struct PlanGraphics {
             guard let c = e.column else { continue }
             let base = model.baseElevation(of: e)
             let top = model.topElevation(base: base, topLevelID: c.topLevelID, topOffset: c.topOffset, unconnectedHeight: c.unconnectedHeight)
-            let outlines = ComponentGeometry.planOutline(e, model)
+            let shift = SlantedColumns.planShift(c, base: base, top: top, atZ: min(max(cutZ, base), top)) // F2: a slanted column where the cut passes
+            let outlines = ComponentGeometry.planOutline(e, model).map { Polygon2($0.points.map { $0 + shift }) }
             guard !outlines.isEmpty else { continue }
-            let loops = ComponentGeometry.planLoops(e, model) // W2-TYPES: hollow sections keep their holes
+            let loops = ComponentGeometry.planLoops(e, model).map { Polygon2($0.points.map { $0 + shift }) } // W2-TYPES: hollow sections keep their holes
             if base <= cutZ && top > cutZ {
                 var prims: [GPrimitive] = []
                 if let fill = builder.cutFill(e, materialID: model.typeParam(e, ParameterID("type.material"))?.refValue, o) { prims.append(.fill(loops, fill)) } // W4-HATCH
@@ -278,6 +280,7 @@ struct PlanGraphics {
 
     func stairs(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
+        let list = list.flatMap { x in (MultistoryStairs.storeys(of: x.0, model) ?? [x.0]).map { ($0, x.1) } } // F2: each storey in its level's plans
         for (e, o) in list {
             guard let l = StairGeometry.layout(e, model), l.baseZ <= cutZ + 0.01, l.topZ >= depthZ else { continue }
             let lines = StairGeometry.planLines(e, model, cutZ: cutZ)
@@ -312,10 +315,10 @@ struct PlanGraphics {
     func railings(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
         for (e, o) in list {
-            let path = RailingGeometry.path(e, model)
-            guard path.count >= 2 else { continue }
+            // F2: a multistory stair's railing shows on each storey's plan.
+            let paths = MultistoryStairs.railingPaths(e, model) ?? [RailingGeometry.path(e, model)]
+            guard let path = paths.first(where: { p in let z0 = p.map(\.z).min() ?? 0; return p.count >= 2 && z0 <= cutZ + 1.2 && z0 >= depthZ - 0.1 }) else { continue }
             let z0 = path.map(\.z).min() ?? 0
-            guard z0 <= cutZ + 1.2, z0 >= depthZ - 0.1 else { continue }
             let st = builder.stroke(.railings, cut: z0 < cutZ, o)
             let pts = path.map(\.xy)
             let hit = PolylineOffset.offset(pts, by: 0.05) + PolylineOffset.offset(pts, by: -0.05).reversed()

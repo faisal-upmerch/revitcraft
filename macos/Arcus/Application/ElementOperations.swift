@@ -233,7 +233,7 @@ public enum ElementOperations {
         case .wall(let w): w.location
         case .modelLine(let l): l.freeform == nil ? l.curve : nil // F1: splines and ellipses are not trimmed, split or offset
         case .beam(let b): b.curve
-        case .grid(let g): g.curve
+        case .grid(let g): g.isMultiSegment ? nil : g.curve // F2: multi-segment grids are not trimmed, split or offset
         case .referencePlane(let r): .line(r.line)
         default: nil
         }

@@ -51,6 +51,7 @@ public enum ElementMeshes {
 
     static func wallParts(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> [MeshPart] {
         if let curtain = CurtainWallGeometry.meshParts(e, model) { return curtain } // WP3
+        if let parts = StackedWalls.parts(of: e, model) { return parts.flatMap { wallParts($0, model, detail: detail) } } // F2
         let mesh = WallGeometry.solid(e, model)
         guard let f = WallGeometry.frame(e, model) else { return [] }
         // Material: the core layer (layer-by-layer solids would multiply geometry; plan/section views show layers).
@@ -107,7 +108,7 @@ public enum ElementMeshes {
         case .level(let l):
             return Box3(min: Vec3(0, 0, l.elevation), max: Vec3(0, 0, l.elevation))
         case .grid(let g):
-            let r = g.curve.bounds
+            let r = g.isMultiSegment ? Rect2(points: g.polyline) : g.curve.bounds // F2
             return Box3(min: Vec3(r.min, z: 0), max: Vec3(r.max, z: 0))
         case .room(let r):
             let z = model.baseElevation(of: e)
@@ -211,10 +212,12 @@ public enum DependencyGraph {
             if let t = c.topLevelID { s.insert(t) }
         case .stair(let st):
             if let t = st.topLevelID { s.insert(t) }
+            if st.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2: every storey's levels
         case .ramp(let r):
             if let t = r.topLevelID { s.insert(t) }
         case .railing:
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
+            if model[e.hostID]?.stair?.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
         case .decal(let d): // F67: the decal type's image
@@ -225,6 +228,9 @@ public enum DependencyGraph {
             s.formUnion(Reinforcement.inputs(of: e, model))
         default:
             break
+        }
+        if case .wall = e.data { // F2: a stacked wall's part types and their materials
+            for t in StackedWalls.partTypes(model.typeData(of: e)) { s.insert(t); if let a = model[t]?.typeData?.assembly { for l in a.layers { if let m = l.materialID { s.insert(m) } } } }
         }
         if case .wall = e.data, let c = model.typeData(of: e)?.curtain { // WP3: curtain panel types
             if let p = c.panelTypeID { s.insert(p) }
@@ -246,9 +252,11 @@ public enum DependencyGraph {
                     for r in m.elements(.rooms) where r.levelID == e.levelID { out.insert(r.id) }
                 case .level:
                     for x in m.onLevel(id) { out.insert(x.id) }
+                    for x in m.elements(.stairs) where x.stair?.multistoryTopLevelID != nil { out.insert(x.id); for r in m.hosted(by: x.id) { out.insert(r.id) } } // F2
                     for w in m.elements(.walls) where w.wall?.topLevelID == id { out.insert(w.id) }
                 case .type:
                     for x in m.instances(ofType: id) { out.insert(x.id) }
+                    for t in m.types(for: .walls) where StackedWalls.partTypes(t.typeData).contains(id) { for x in m.instances(ofType: t.id) { out.insert(x.id) } } // F2
                 case .family:
                     for t in m.elements(.elementTypes) where t.typeData?.familyID == id { for x in m.instances(ofType: t.id) { out.insert(x.id) } }
                 case .modelLine, .column:

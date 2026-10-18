@@ -83,6 +83,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     var workPlaneLevel: ElementID? {
         let m = state.model
         if let l = chosenLevel, m[l]?.level != nil, WorkPlane3D.planView(forLevel: l, in: m) != nil { return l }
+        if case .level(let l)? = m[viewID]?.view?.workPlane, WorkPlane3D.planView(forLevel: l, in: m) != nil { return l } // F2: Work Plane ▸ Set
         return WorkPlane3D.defaultLevel(in: m, recentViews: state.viewHistory)
     }
 
@@ -364,7 +365,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     func viewport3DCameraDidChange() {
-        guard state.activeTool != nil || dragTool != nil else { return }
+        guard state.activeTool != nil || dragTool != nil || showsWorkPlane else { return } // F2: a shown work plane follows the camera
         overlay.needsDisplay = true
     }
 
@@ -526,6 +527,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     /// Draws the tool or drag preview projected onto the interaction plane, the snap marker and the tooltip.
     func drawOverlay(_ cg: CGContext, bounds: CGRect) {
         guard let v = viewport else { return }
+        drawShownWorkPlane(cg, viewport: v) // F2: Work Plane ▸ Show
         let tool = state.activeTool
         let dragging = dragTool?.isDragging == true
         guard tool != nil || dragging else { return }
@@ -695,6 +697,7 @@ extension CommandRouter {
         .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .stairStraight, .stairL, .stairU, .railing, .ramp,
         .modelLine, .grid, .referencePlane, .shaftOpening, .buildingPad, .move, .copy,
         .wallReveal, // F1: clicks a wall face
+        .stackedWall, // F2
     ]
     /// Modify tools whose work plane is the selection's level.
     static let w23DSelectionCommands: Set<CommandID> = [.move, .copy, .rotate, .mirrorPickAxis, .mirrorDrawAxis, .array, .scale, .align, .split, .trimExtendCorner, .trimExtendSingle, .trimExtendMultiple, .offset]

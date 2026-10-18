@@ -175,7 +175,7 @@ public final class WallTool: BaseTool, InteractiveTool {
     // MARK: Type and side geometry
 
     var typeData: TypeData? { ctx.type(for: .walls).flatMap { ctx.model[$0]?.typeData } }
-    var assembly: CompoundAssembly { WallGeometry.assembly(ofType: typeData) }
+    var assembly: CompoundAssembly { WallGeometry.assembly(ofType: typeData, model: ctx.model) } // F2: stacked types
     var thickness: Double { assembly.totalThickness }
 
     /// Left/right face offsets of the drawn line for the current location line (exterior on the left unless flipped).

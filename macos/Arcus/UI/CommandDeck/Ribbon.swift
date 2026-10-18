@@ -32,6 +32,7 @@ struct RibbonItem: Hashable {
     static func caption(_ id: CommandID, size: Size, split: Bool) -> String {
         if let c = f11Caption(id, size: size, split: split) { return c } // F11
         if let c = f5Caption(id, size: size) { return c } // F5
+        if let c = f2Caption(id, size: size, split: split) { return c } // F2
         switch id {
         case .roofFootprint where split: return "Roof"
         case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
@@ -142,7 +143,7 @@ enum RibbonContent {
             return [RibbonPanel(title: "Select", items: [.large(.modify), .small(.selectAll), .small(.filterSelection), .small(.selectAllInstancesInView)], tint: modify),
                     RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
         case .architecture:
-            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window),
+            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .stackedWall, .wallByFace, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window), // F2: Stacked; F5: by Face
                                                         .large(.component, [.component, .componentLibrary, .modelInPlace]), .large(.structuralColumn, [.structuralColumn, .column]), // F5: Model In-place
                                                         .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
                                                         .large(.floor, [.floor, .structuralFloor, .slabEdge]),
@@ -154,7 +155,7 @@ enum RibbonContent {
                                                               .small(.colorSchemes).newColumn()], tint: rooms),
                     RibbonPanel(title: "Opening", items: openingItems, tint: build), // F1
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
-                    RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
+                    RibbonPanel(title: "Work Plane", items: workPlaneItems, tint: datum)] // F2: Set, Show, Ref Plane, Viewer
         case .structure:
             return [RibbonPanel(title: "Structure", items: [.large(.beam), .large(.structuralWall, [.structuralWall, .wall]), .large(.structuralColumn),
                                                             .large(.structuralFloor, [.structuralFloor, .floor]), .large(.truss), .large(.brace), .large(.beamSystem)], tint: build), // BL-VG, F34
@@ -165,7 +166,7 @@ enum RibbonContent {
                                                         .small(.placeModelGroup, [.placeModelGroup, .createGroup])], tint: build), // F1
                     RibbonPanel(title: "Opening", items: openingItems, tint: build), // F1
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
-                    RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
+                    RibbonPanel(title: "Work Plane", items: workPlaneItems, tint: datum)] // F2: Set, Show, Ref Plane, Viewer
         case .insert:
             // F67: RevitCraft's Insert tab (ribbon.rs insert()): Link Model, Link IFC and Link CAD large, the other links stacked.
             return [RibbonPanel(title: "Manage", items: [.large(.manageLinks)], tint: build),
@@ -273,6 +274,7 @@ enum RibbonContent {
         let wp4 = wp4SelectionItems(sel, m); if let t = wp4.title { title = t }; items += wp4.items
         let annot = annotSelectionItems(sel, m); if let t = annot.title { title = t }; items += annot.items // W2-ANNOT
         let site = siteSelectionItems(sel, m); if let t = site.title { title = t }; items += site.items // BL-SITE
+        let f2 = f2SelectionItems(sel, m); if let t = f2.title { title = t }; items += f2.items // F2: stairs (Connect Levels)
         if sel.count == 1, Parameters.familyDefinition(for: sel[0], m) != nil { items += [.large(.familyEditor)] }
         return items.isEmpty ? nil : RibbonPanel(title: title, items: items, tint: build)
     }
@@ -442,7 +444,8 @@ struct RibbonView: View {
         panelView(RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: RibbonContent.modify), contextual: true)
         if let tool {
             if let mode = tool.options.first(where: { $0.id == "mode" }), case .choice(let modes) = mode.kind {
-                DrawPanel(state: state, tool: tool, modes: modes, current: mode.value.textValue ?? "")
+                DrawPanel(state: state, tool: tool, modes: modes, current: mode.value.textValue ?? "",
+                          leading: RibbonContent.f2DrawLeading(tool), trailing: RibbonContent.f2DrawTrailing(tool)) // F2
             }
             if tool.isSketchMode {
                 ModePanel(state: state)
@@ -451,6 +454,7 @@ struct RibbonView: View {
             // use the generic panel.
             if let level = tool as? LevelTool { LevelPlanViewsPanel(state: state, tool: level) } // BL-BROWSER
             else { RibbonToolOptionsPanel(state: state, tool: tool) } // BL-KEYS: 2026 arrangement of tool options
+            ForEach(RibbonContent.f2ToolPanels(tool, state)) { p in panelView(p, contextual: true) } // F2: stair, roof, column panels
             if [.door, .window, .component].contains(tool.commandID) {
                 panelView(RibbonPanel(title: "Mode", items: [.large(.loadFamily)] + (tool.commandID == .component ? [.large(.componentLibrary)] : []), tint: RibbonContent.build), contextual: true) // W2-LIB
             }
@@ -624,7 +628,7 @@ struct RibbonButton: View {
         let info = CommandCatalog.info(item.id)
         let router = CommandRouter(state: state)
         let reason = router.disabledReason(item.id)
-        let active = state.activeTool?.commandID == item.id || (item.variants.contains { state.activeTool?.commandID == $0 })
+        let active = RibbonContent.f2IsActive(item.id, state) ?? (state.activeTool?.commandID == item.id || (item.variants.contains { state.activeTool?.commandID == $0 })) // F2: mode toggles
         let enabled = reason == nil
         Group {
             if item.variants.isEmpty {
@@ -711,9 +715,19 @@ private struct DrawPanel: View {
     let tool: any InteractiveTool
     let modes: [String]
     let current: String
+    /// F2: what to draw beside the shapes (Boundary Line, Slope Arrow), stacked before them, and commands after them
+    /// (the Grid tool's Multi-Segment), as in RevitCraft's `draw_panel`.
+    var leading: [CommandID] = []
+    var trailing: [CommandID] = []
     var body: some View {
         PanelCard(title: "Draw", contextual: true) {
             HStack(spacing: 2) {
+                if !leading.isEmpty { // F2
+                    VStack(alignment: .leading, spacing: RibbonMetrics.rowSpacing) {
+                        ForEach(leading, id: \.self) { RibbonButton(item: .small($0), state: state, tint: RibbonContent.build) }
+                    }
+                    .frame(height: RibbonMetrics.contentHeight, alignment: .center)
+                }
                 ForEach(modes, id: \.self) { m in
                     Button { tool.setOption("mode", .text(m)); state.toolChangedState() } label: {
                         VStack(spacing: 2) {
@@ -732,6 +746,7 @@ private struct DrawPanel: View {
                     .accessibilityLabel("Draw \(m)")
                     .accessibilityAddTraits(m == current ? .isSelected : [])
                 }
+                ForEach(trailing, id: \.self) { RibbonButton(item: .large($0), state: state, tint: RibbonContent.build) } // F2
             }
         }
     }

@@ -27,6 +27,7 @@ enum DialogKind: Identifiable, Equatable {
     case sheetTitle(ElementID) // BL-BROWSER: sheet number and name
     case filters(ElementID?), viewTemplates(ElementID?, ViewTemplatesMode, select: ElementID? = nil), objectStyles, warnings, selectByID, additionalSettings(AdditionalSettingsTab), userInterface // BL-VG
     case f34(F34Dialog) // F34: Structural Settings, Rebar Cover Settings
+    case f2(F2Dialog) // F2: Work Plane, Connect Levels (Dialogs/F2Dialogs.swift)
     case f67(F67Dialog) // F67: Insert tab dialogs
     case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
     case f5(F5Dialog) // F5: Model In-place (Dialogs/F5MassingDialogs.swift)

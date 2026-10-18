@@ -45,6 +45,7 @@ public enum ElementTransform {
             e.data = .component(c)
         case .column(var c):
             c.location = t.apply(c.location)
+            c.topLocation = c.topLocation.map(t.apply) // F2: slanted columns
             c.rotation = mirror ? -c.rotation + rot : c.rotation + rot
             e.data = .column(c)
         case .beam(var b):
@@ -65,6 +66,7 @@ public enum ElementTransform {
                 r.extrusion = x
             }
             r.shapePoints = r.shapePoints?.map { ShapePoint(position: t.apply($0.position), offset: $0.offset) }
+            r.slopeArrows = r.slopeArrows?.map { var a = $0; a.tail = t.apply(a.tail); a.head = t.apply(a.head); return a } // F2
             e.data = .roof(r)
         case .stair(var s):
             s.origin = t.apply(s.origin)
@@ -88,6 +90,7 @@ public enum ElementTransform {
             e.data = .modelLine(l)
         case .grid(var g):
             g.curve = t.apply(g.curve)
+            g.vertices = g.vertices?.map(t.apply) // F2: multi-segment bends
             e.data = .grid(g)
         case .referencePlane(var p):
             p.line = p.line.transformed(t)

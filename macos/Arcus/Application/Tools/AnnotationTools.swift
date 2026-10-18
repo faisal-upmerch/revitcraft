@@ -254,7 +254,7 @@ public enum EntireWallDimension {
         }
         if options.intersectingGrids {
             for g in model.elements(.grids) {
-                guard let gs = g.grid?.curve.asSegment, !gs.isParallel(to: seg), let hit = gs.lineIntersection(seg),
+                guard g.grid?.isMultiSegment != true, let gs = g.grid?.curve.asSegment, !gs.isParallel(to: seg), let hit = gs.lineIntersection(seg),
                       hit.t >= -0.001, hit.t <= 1.001, hit.u >= -1e-4, hit.u <= 1 + 1e-4 else { continue }
                 add(GeometryReference(g.id, .location))
             }

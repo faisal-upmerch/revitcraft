@@ -436,6 +436,7 @@ final class IFCFileBuilder {
         let exteriorMaterial = f.assembly.layers.first?.materialID
         let standard = !is4 && f.isStraight && w.profile == nil && abs(w.slantAngle) < 1e-9 && w.attachedTopIDs.isEmpty && w.attachedBaseIDs.isEmpty
             && WallReveals.reveals(of: e, model).isEmpty // F1: reveal grooves need the mesh body
+            && !StackedWalls.isStacked(e, model) // F2: a stacked wall's body is its parts
         var bodyRep: Int?
         var usedStandard = false
         if standard, let fp = WallGeometry.footprint(e, model), fp.count >= 3 {

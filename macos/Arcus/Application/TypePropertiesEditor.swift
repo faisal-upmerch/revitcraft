@@ -19,7 +19,7 @@ public final class TypePropertiesEditor {
     /// The document with the staged changes applied (not committed).
     public private(set) var preview: BIMModel
 
-    enum Edit: Hashable { case parameter(ParameterID, ParamValue), assembly(CompoundAssembly), rename(String) }
+    enum Edit: Hashable { case parameter(ParameterID, ParamValue), assembly(CompoundAssembly), rename(String), stack(StackedWallSpec) } // F2: stack
     enum Op: Hashable { case duplicate(source: ElementID, name: String), edit(ElementID, Edit) }
     /// Staged operations in the order made; replayed in order so a duplicate copies the values staged before it.
     private var log: [Op] = []
@@ -63,6 +63,12 @@ public final class TypePropertiesEditor {
     public func stage(assembly: CompoundAssembly) throws(ParameterError) {
         if let e = assembly.validate() { throw ParameterError(e.description) }
         try append(.edit(typeID, .assembly(assembly)))
+    }
+
+    /// F2: stages the structure of the displayed stacked wall type.
+    public func stage(stack: StackedWallSpec) throws(ParameterError) {
+        if let e = stack.validate() { throw ParameterError(e.description) }
+        try append(.edit(typeID, .stack(stack)))
     }
 
     /// Stages a new name for the displayed type.
@@ -172,6 +178,7 @@ public final class TypePropertiesEditor {
                 case .parameter(let id, let v): try Parameters.set(id, to: v, on: t, in: tx)
                 case .assembly(let a): tx.update(t) { $0.typeData?.assembly = a }
                 case .rename(let n): tx.update(t) { $0.name = n }
+                case .stack(let st): tx.update(t) { $0.typeData?.stack = st } // F2
                 }
             }
         }

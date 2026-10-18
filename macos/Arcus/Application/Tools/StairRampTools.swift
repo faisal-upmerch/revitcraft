@@ -15,6 +15,8 @@ public final class StairTool: BaseTool, InteractiveTool {
     public var topLevelID: ElementID?
     public var turnsLeft = true
     public var railings = true
+    /// F2: Connect Levels: the stair repeats up to this level (multistory).
+    public var multistoryTopLevelID: ElementID?
 
     public init(ctx: ToolContext, shape: StairShape) {
         self.shape = shape
@@ -44,6 +46,7 @@ public final class StairTool: BaseTool, InteractiveTool {
         guard let s = start, let t = ctx.type(for: .stairs), dirPoint.distance(to: s) > 0.05 else { return nil }
         var sd = StairData(shape: shape, origin: s, direction: (dirPoint - s).angle, width: width, topLevelID: topLevelID)
         sd.turnsLeft = turnsLeft
+        sd.multistoryTopLevelID = multistoryTopLevelID // F2
         return Element(id: ElementID(UInt64.max - 2), category: .stairs, data: .stair(sd), typeID: t, levelID: ctx.levelID)
     }
 

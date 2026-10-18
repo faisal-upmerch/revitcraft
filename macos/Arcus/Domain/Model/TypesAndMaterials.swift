@@ -61,6 +61,7 @@ public enum SystemFamily: String, Codable, Sendable, CaseIterable {
     case ramp = "Ramp"
     case curtainWall = "Curtain Wall"
     case curtainPanel = "System Panel"
+    case stackedWall = "Stacked Wall" // F2
 }
 
 public enum LayerFunction: String, Codable, Sendable, CaseIterable {
@@ -172,6 +173,8 @@ public struct TypeData: Hashable, Codable, Sendable {
     public var assembly: CompoundAssembly?
     /// Curtain wall types: grid, panel and mullion rules (nil for every other type).
     public var curtain: CurtainSpec?
+    /// F2: stacked wall types: the basic wall types stacked from the bottom up (nil for every other type).
+    public var stack: StackedWallSpec?
     public init(instanceCategory: Category, systemFamily: SystemFamily? = nil, familyID: ElementID? = nil, familyName: String,
                 params: [ParameterID: ParamValue] = [:], assembly: CompoundAssembly? = nil) {
         self.instanceCategory = instanceCategory; self.systemFamily = systemFamily; self.familyID = familyID

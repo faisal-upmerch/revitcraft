@@ -39,6 +39,7 @@ public struct ViewGraphicsBuilder: Sendable {
         if resolver.temp.revealConstraints { items += constraintItems() } // BL-VG: Reveal Constraints
         var extents = Rect2.empty
         for i in items where i.layer != .overlay { extents.include(i.bounds) }
+        items += WorkPlanes.shownItems(self, extents: extents) // F2: Work Plane ▸ Show
         let crop = data.cropActive ? (data.cropRegion ?? extents) : nil
         if let crop, data.cropActive {
             items = clip(items, to: crop, annotationCrop: data.annotationCropActive ? crop.expanded(by: paper(data.annotationCropOffset)) : nil)

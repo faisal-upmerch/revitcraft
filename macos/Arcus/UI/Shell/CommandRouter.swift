@@ -101,6 +101,7 @@ struct CommandRouter {
         guard let e else { return false }
         switch e.data {
         case .slab, .roof, .filledRegion, .railing, .revisionCloud: return e.railing.map { !$0.followsHost } ?? true
+        case .grid(let g): return g.isMultiSegment // F2: a multi-segment grid's sketch
         case .beamSystem, .areaReinforcement, .fabricArea: return !Reinforcement.isWallHosted(model, e.hostID) // F34: plan sketches
         case .mass: return true // F5: the footprint
         default: return false

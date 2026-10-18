@@ -59,6 +59,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public var workPlaneID: ElementID?
     /// F5: the In-Place Mass height and top inset (Options Bar).
     public var massOptions = MassSketchOptions.last
+    /// F2: roof slope arrows, eave offsets and the Align Eaves mode (SketchTool+F2.swift).
+    var f2 = SketchF2State()
 
     public init(ctx: ToolContext, target: Target, commandID: CommandID, editing: ElementID? = nil) {
         self.target = target
@@ -73,6 +75,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
                 workPlaneID = r.extrusion?.workPlaneID
             case .roof(let r): curves = r.footprint.loops.first ?? []; slopes = r.edgeSlopes
                 for loop in r.footprint.loops.dropFirst() { curves += loop; slopes += Array(repeating: nil, count: loop.count) }
+                f2.load(r) // F2: slope arrows, eave offsets
             case .filledRegion(let f): curves = f.boundary.allCurves
             case .railing(let r): curves = r.path
             case .revisionCloud(let c): curves = c.outline.edges.map { .line($0) }; revisionID = c.revisionID
@@ -106,7 +109,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
         }
     }
     public var prompt: String {
-        if arrowMode { return start == nil ? "Click the tail of the slope arrow (low end)." : "Click the head of the slope arrow." }
+        if let p = f2Prompt { return p } // F2: Align Eaves
+        if arrowMode { return start == nil ? (target == .roof && !roofSlopeArrows.isEmpty ? "Click the tail of the slope arrow (on the edge that rises), or click an arrow to remove it." : "Click the tail of the slope arrow (low end).") : "Click the head of the slope arrow." } // F2
         if target == .roofExtrusion, start == nil, drawMode == .line {
             return "Sketch the roof profile as an open chain of lines and arcs. Finish (↩) extrudes it perpendicular to the work plane."
         }
@@ -128,6 +132,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             o.append(ToolOption(id: "definesSlope", label: "Defines Slope", kind: .bool, value: .bool(definesSlope)))
             o.append(ToolOption(id: "slope", label: "Slope", kind: .angle, value: .double(defaultSlope)))
             if drawMode == .pickWalls { o.append(ToolOption(id: "overhang", label: "Overhang", kind: .length, value: .double(overhang))) }
+            o.append(ToolOption(id: "arrow", label: "Slope Arrow", kind: .bool, value: .bool(arrowMode))) // F2: roof slope arrows
         }
         if target == .floor {
             o.append(ToolOption(id: "arrow", label: "Slope Arrow", kind: .bool, value: .bool(arrowMode)))
@@ -194,6 +199,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             case .arc(let a): preview.primitives.append(.arc(a, st))
             }
         }
+        f2RebuildArrows() // F2: roof slope arrows, Align Eaves picks
         if let a = slopeArrow {
             preview.primitives.append(ctx.line(a.tail, a.head, heavy: true))
             let d = (a.head - a.tail).normalized
@@ -229,10 +235,12 @@ public final class SketchTool: BaseTool, InteractiveTool {
 
     public func pointerDown(_ i: ToolInput) {
         let p = i.point
+        if f2PointerDown(p) { rebuild(); return } // F2: Align Eaves picks
         if arrowMode {
             if let s = start {
                 // Default 2% fall; adjust Slope in Properties after finishing.
-                slopeArrow = SlopeArrow(tail: s, head: p, slope: 0.02)
+                if target == .roof { f2AddRoofArrow(tail: s, head: p) } // F2: a roof keeps every arrow, at the sketch's slope
+                else { slopeArrow = SlopeArrow(tail: s, head: p, slope: 0.02) }
                 start = nil
                 arrowMode = false
             } else { start = p }
@@ -432,9 +440,14 @@ public final class SketchTool: BaseTool, InteractiveTool {
             let oh = overhang
             // Roofs sketched on a level sit at that level; the walls below are offered for attachment.
             var created: ElementID?
+            let (arrows, offsets) = f2RoofEaves(outer) // F2: slope arrows, eave offsets
             ctx.session.perform(editing == nil ? "Create Roof" : "Edit Roof Footprint") { tx in
-                if let id = editing { tx.update(id) { $0.roof?.footprint = sketch; $0.roof?.edgeSlopes = loopSlopes } }
-                else { created = tx.create(.roofs, data: .roof(RoofData(footprint: sketch, edgeSlopes: loopSlopes, overhang: oh)), typeID: type, levelID: level) }
+                if let id = editing { tx.update(id) { $0.roof?.footprint = sketch; $0.roof?.edgeSlopes = loopSlopes; $0.roof?.slopeArrows = arrows; $0.roof?.edgeOffsets = offsets } }
+                else {
+                    var r = RoofData(footprint: sketch, edgeSlopes: loopSlopes, overhang: oh)
+                    r.slopeArrows = arrows; r.edgeOffsets = offsets
+                    created = tx.create(.roofs, data: .roof(r), typeID: type, levelID: level)
+                }
             }
             if ctx.session.lastError == nil { keepSelected(created ?? editing) } // BL-CANVAS: ARCUS-049
             if ctx.session.lastError == nil { offerWallAttachment(created) }
