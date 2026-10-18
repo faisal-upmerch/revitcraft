@@ -50,6 +50,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F810 categories:
+    case cutProfiles, matchlines, renderings
 
 
     // F11 categories:
@@ -92,6 +93,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
         case .dwfMarkups: return .annotation // F67
         case .decalTypes: return .internal_ // F67
+        case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
+        case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
+        case .renderings: return .internal_ // F810: Render Gallery images
         }
     }
 
@@ -216,6 +220,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .decals: "Decals"
         case .decalTypes: "Decal Types"
         case .dwfMarkups: "DWF Markups"
+        case .cutProfiles: "Cut Profiles" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Renderings"
         }
     }
 
@@ -321,6 +328,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .decals: "Decal"
         case .decalTypes: "Decal Type"
         case .dwfMarkups: "DWF Markup"
+        case .cutProfiles: "Cut Profile" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Rendering"
         }
     }
 

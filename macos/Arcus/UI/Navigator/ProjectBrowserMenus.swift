@@ -179,6 +179,10 @@ struct ProjectBrowserMenus {
             item("Close", "xmark.square", unavailable: state.openViews.contains(e) ? nil : "This sheet is not open.") { state.close(e) },
             .separator(),
             item("Add View…", "rectangle.badge.plus") { state.open(e); state.presented = .placeView(e) },
+            submenu("Duplicate Sheet", "doc.on.doc", [ // F810: RevitCraft's Duplicate View on sheets
+                item("Duplicate", "doc.on.doc") { actions.duplicate(e, .duplicateView) },
+                item("Duplicate with Detailing", "doc.on.doc.fill") { actions.duplicate(e, .duplicateViewWithDetailing) },
+            ]),
             .separator(),
             item("Rename…", "character.cursor.ibeam") { state.presented = .sheetTitle(e) },
             item("Properties", "slider.horizontal.3") { actions.showProperties(e) },

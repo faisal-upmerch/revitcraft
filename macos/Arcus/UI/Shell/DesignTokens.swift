@@ -25,7 +25,9 @@ enum Tokens {
     }
     /// Warm white model canvas (light) / graphite drafting field (dark).
     static let canvas = NSColor(name: "arcus.canvas") { ap in
-        ap.bestMatch(from: [.darkAqua, .accessibilityHighContrastDarkAqua]) != nil ? NSColor(srgbRed: 0.145, green: 0.150, blue: 0.160, alpha: 1) : NSColor(srgbRed: 0.985, green: 0.980, blue: 0.965, alpha: 1)
+        ap.bestMatch(from: [.darkAqua, .accessibilityHighContrastDarkAqua]) != nil
+            ? (CanvasTheme.current == .black ? CanvasTheme.blackCanvas : NSColor(srgbRed: 0.145, green: 0.150, blue: 0.160, alpha: 1)) // F810: Black canvas theme
+            : NSColor(srgbRed: 0.985, green: 0.980, blue: 0.965, alpha: 1)
     }
     static let paper = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
     static let sheetBackdrop = NSColor(name: "arcus.sheetBackdrop") { ap in

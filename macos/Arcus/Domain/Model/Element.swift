@@ -154,6 +154,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
 
     // F810 element kinds:
+    case cutProfile, matchline, rendering
 
 
     // F11 element kinds:
@@ -254,6 +255,7 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
     // F810 element data:
+    case cutProfile(CutProfileData), matchline(MatchlineData), rendering(RenderingData)
 
 
     // F11 element data:
@@ -345,6 +347,9 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
         // F810 element data kinds:
+        case .cutProfile: .cutProfile
+        case .matchline: .matchline
+        case .rendering: .rendering
 
 
         // F11 element data kinds:

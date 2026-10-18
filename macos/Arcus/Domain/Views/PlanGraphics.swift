@@ -63,7 +63,7 @@ struct PlanGraphics {
         for (w, o) in ws {
             guard let f = WallGeometry.frame(w, model) else { continue }
             if f.baseZ <= cutZ && f.topZ > cutZ {
-                let pieces = WallGeometry.planCut(w, atZ: cutZ, model)
+                let pieces = f810CutProfiles(w, WallGeometry.planCut(w, atZ: cutZ, model)) // F810: this view's cut profiles
                 guard !pieces.isEmpty else { continue }
                 cutWalls.append((w, o))
                 for p in pieces { cutPolys.append(p); owner.append(cutWalls.count - 1) }

@@ -80,6 +80,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F810 commands:
+    case showHiddenLines, removeHiddenLines, cutProfile, framingElevation, calloutSketch, walkthrough, finishWalkthrough, walkthroughPreviousFrame, walkthroughNextFrame, walkthroughPlay, walkthroughExport, titleBlock, guideGrid, matchline, switchWindows, tabViews, tileViews, canvasTheme, navigationWheel, render, renderGallery, exportOBJ
 
 
     // F11 commands:

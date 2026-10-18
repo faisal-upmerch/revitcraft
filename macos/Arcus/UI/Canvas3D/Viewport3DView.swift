@@ -49,6 +49,8 @@ import ArcusDomain
 
     /// Directional sun shadows (all styles except Wireframe).
     public var castShadows = false { didSet { if oldValue != castShadows { invalidate() } } }
+    /// F810: the Realistic style draws the sky behind the model (off: the canvas background, for renderings).
+    public var realisticSky = true { didSet { if oldValue != realisticSky { invalidate() } } }
     /// Screen-space ambient occlusion ("ambient shadows").
     public var ambientOcclusion = false { didSet { if oldValue != ambientOcclusion { invalidate() } } }
     /// Heavy outlines at depth discontinuities.
@@ -342,7 +344,7 @@ import ArcusDomain
         case .realistic:
             u.style = 5; u.edgeWidth = 0.7 * scale * contrast
             u.edgeColor = SIMD4(tintEdge.x, tintEdge.y, tintEdge.z, increaseContrast ? 0.1 : 0.7)
-            u.flags |= ViewportUniforms.flagSky
+            if realisticSky { u.flags |= ViewportUniforms.flagSky } // F810: Rendering ▸ Background
         }
         if cf.camera.isPerspective {
             u.edgePull = 0.0012

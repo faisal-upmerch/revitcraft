@@ -69,6 +69,7 @@ struct DialogHost: View {
             case .f34(let d): F34DialogHost(state: state, dialog: d) // F34
             case .f67(let d): F67DialogHost(state: state, dialog: d) // F67
             case .f11(let d): F11DialogHost(state: state, dialog: d) // F11
+            case .f810(let d): F810DialogHost(state: state, dialog: d) // F810
             }
         }
         .frame(minWidth: 420)

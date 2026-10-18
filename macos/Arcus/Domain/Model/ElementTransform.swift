@@ -178,6 +178,13 @@ public enum ElementTransform {
         case .markup(var m):
             m.offset = t.apply(m.offset)
             e.data = .markup(m)
+        case .matchline(var m): // F810
+            m.start = t.apply(m.start); m.end = t.apply(m.end)
+            e.data = .matchline(m)
+        case .cutProfile(var c): // F810: moves with its wall
+            c.region = c.region.map(t.apply)
+            if mirror { c.region.reverse() }
+            e.data = .cutProfile(c)
         default:
             return false
         }

@@ -212,15 +212,19 @@ enum RibbonContent {
                     RibbonPanel(title: "Settings", items: [.small(.siteSettings)], tint: site)]
         case .view:
             return [RibbonPanel(title: "Graphics", items: [.large(.viewTemplatesManage, [.viewTemplatesManage, .viewTemplateCreate, .viewTemplateApplyProperties, .viewTemplateApply]), // BL-VG
-                                                           .large(.visibilityGraphics), .small(.filtersDialog), .small(.thinLines), .small(.viewRange), .small(.revealHidden),
+                                                           .large(.visibilityGraphics), .small(.filtersDialog), .small(.thinLines), .small(.showHiddenLines), // F810: Show/Remove Hidden Lines, Cut Profile
+                                                           .small(.removeHiddenLines), .small(.cutProfile), .small(.viewRange), .small(.revealHidden),
                                                            .small(.showProjectBasePoint), .small(.showSurveyPoint)], tint: view),
-                    RibbonPanel(title: "Create", items: [.large(.threeDView, [.threeDView, .cameraView]), .large(.section), .large(.callout),
-                                                         .large(.floorPlan, [.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan]), .large(.elevation),
+                    RibbonPanel(title: "Presentation", items: [.large(.render), .small(.renderGallery), .small(.exportOBJ)], tint: view), // F810
+                    RibbonPanel(title: "Create", items: [.large(.threeDView, [.threeDView, .cameraView, .walkthrough]), .large(.section), .large(.callout, [.callout, .calloutSketch]), // F810
+                                                         .large(.floorPlan, [.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan]), .large(.elevation, [.elevation, .framingElevation]), // F810
                                                          .small(.draftingView), .small(.duplicateView, [.duplicateView, .duplicateViewWithDetailing, .duplicateDependent]),
                                                          .small(.legend, [.legend, .keynoteLegend]), .large(.schedule, [.schedule, .materialTakeoff, .sheetList, .revisionSchedule]), .small(.scopeBox)], tint: view), // F12: Keynote Legend
-                    RibbonPanel(title: "Sheet Composition", items: [.large(.newSheet), .small(.placeView), .small(.revisions), .small(.viewReference),
+                    RibbonPanel(title: "Sheet Composition", items: [.large(.newSheet), .small(.placeView), .small(.titleBlock), .small(.revisions), // F810: Title Block, Guide Grid, Matchline
+                                                                    .small(.guideGrid), .small(.matchline), .small(.viewReference),
                                                                     .large(.activateViewport, [.activateViewport, .deactivateViewport])], tint: sheet),
-                    RibbonPanel(title: "Windows", items: [.small(.closeHiddenViews), .small(.previousView),
+                    RibbonPanel(title: "Windows", items: [.small(.switchWindows), .small(.closeHiddenViews), .small(.previousView), // F810: Switch, Tab, Tile, Canvas Theme
+                                                          .small(.tabViews).newColumn(), .small(.tileViews), .small(.canvasTheme),
                                                           .large(.userInterface, [.userInterface, .toggleProperties, .toggleNavigator, .toggleStatusBar, .toggleNavigationBar, .keyboardShortcuts])], tint: view)] // BL-VG
         case .manage:
             // Export and Print live in the File menu, as in RevitCraft.
@@ -308,6 +312,7 @@ extension RibbonContent {
         if let t = state.activeTool as? SketchTool { return t.ribbonTitle(state.model) } // BL-CANVAS: "Modify | Create Floor Boundary"
         if let t = state.activeTool { return "\(t.isSketchMode ? "Modify | Sketch" : "Modify | Place") \(t.title)" }
         if let s = scheduleContextualTitle(state) { return s } // BL-SCHED
+        if let s = f810ContextualTitle(state) { return s } // F810: Edit Walkthrough
         return selectionTitle(state).map { "Modify | \($0)" }
     }
 }
@@ -444,6 +449,7 @@ struct RibbonView: View {
             if [.door, .window, .component].contains(tool.commandID) {
                 panelView(RibbonPanel(title: "Mode", items: [.large(.loadFamily)] + (tool.commandID == .component ? [.large(.componentLibrary)] : []), tint: RibbonContent.build), contextual: true) // W2-LIB
             }
+            ForEach(RibbonContent.f810ContextualPanels(state)) { p in panelView(p, contextual: true) } // F810: Finish Walkthrough
             if [.room, .area].contains(tool.commandID) {
                 panelView(RibbonPanel(title: tool.commandID == .area ? "Area" : "Room",
                                       items: [.large(tool.commandID == .area ? .placeAreasAutomatically : .placeRoomsAutomatically)]
@@ -456,6 +462,7 @@ struct RibbonView: View {
             ForEach(wallPanels.isEmpty ? RibbonContent.modifyPanels : RibbonContent.compactModifyPanels) { p in panelView(p, contextual: true) } // BL-SITE
             ForEach(wallPanels) { p in panelView(p, contextual: true) } // BL-SITE
             if let p = RibbonContent.selectionPanel(state) { panelView(p, contextual: true) }
+            ForEach(RibbonContent.f810ContextualPanels(state)) { p in panelView(p, contextual: true) } // F810: Edit Walkthrough
         }
     }
 }
