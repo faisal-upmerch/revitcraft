@@ -195,6 +195,42 @@ struct F34Tests {
         #expect(m[sym] == nil && m[multi] == nil)
     }
 
+    @Test func sectionsCutTheBarsAnd3DShowsThem() throws {
+        var (m, _, floor) = try Self.slab(w: 6, h: 4)
+        let bt = Self.barType(m, "15M")
+        var (area, section) = (ElementID(0), ElementID(0))
+        try Fx.commit(&m) { tx in
+            area = tx.create(.areaReinforcement, data: .areaReinforcement(AreaReinforcementData(boundary: [.zero, Vec2(6, 0), Vec2(6, 4), Vec2(0, 4)], major: .unitX,
+                                                                                                layers: Array(repeating: RebarLayer(barTypeID: bt, spacing: 0.3), count: 4))), hostID: floor)
+            var v = ViewData(kind: .section, scale: 20)
+            v.planeOrigin = Vec3(0, 2, 0); v.viewDirection = Vec2(0, 1); v.farClip = 5
+            section = tx.create(.views, name: "Section 1", data: .view(v))
+        }
+        let g = ViewGraphicsBuilder(model: m, view: m[section]!).build()
+        // The bars running across the section line are cut: one small loop per bar of the two minor layers.
+        let cut = try #require(g.items.first { $0.elementID == area && $0.layer == .cut })
+        #expect(cut.hitPolygons.count == 2 * 20)
+        #expect(cut.hitPolygons.allSatisfy { $0.area < 0.0003 })
+        #expect(ElementMeshes.hasModelGeometry(m[area]!) && !ElementMeshes.parts(m[area]!, m).isEmpty)
+    }
+
+    @Test func reinforcementElementsSurviveCoding() throws {
+        let data: [ElementData] = [
+            .rebar(RebarData(start: .zero, end: Vec2(2, 0), count: 3, spacing: 0.2)),
+            .areaReinforcement(AreaReinforcementData(boundary: [.zero, .unitX, Vec2(1, 1)], major: .unitX, layers: [RebarLayer(on: false, barTypeID: ElementID(7), spacing: 0.25)])),
+            .pathReinforcement(PathReinforcementData(path: [.zero, .unitX], barTypeID: nil, spacing: 0.3, length: 1.8, top: false, flip: true)),
+            .fabricArea(FabricAreaData(boundary: [.zero, .unitX, Vec2(1, 1)], major: .unitY, fabricTypeID: ElementID(3))),
+            .fabricSheet(FabricSheetData(center: Vec2(1, 2), angle: 0.5)), .rebarCoupler(RebarCouplerData(atEnd: false, otherRebarID: ElementID(9))),
+            .beamSystem(BeamSystemData(boundary: [.zero, .unitX, Vec2(1, 1)], direction: .unitY, spacing: 1.2, beamTypeID: nil, elevation: 0.3)),
+            .structuralSymbol(StructuralSymbolData(kind: .multiRebarLinear, position: Vec2(4, 5))), .structuralSettings(StructuralSettingsData()),
+        ]
+        for d in data {
+            let e = Element(id: ElementID(1), category: .genericModels, data: d)
+            let back = try JSONDecoder().decode(Element.self, from: JSONEncoder().encode(e))
+            #expect(back.data == d)
+        }
+    }
+
     @Test func movingReinforcementMovesItsBars() throws {
         var (m, _, floor) = try Self.slab(w: 6, h: 4)
         let bt = Self.barType(m, "15M")
@@ -225,6 +261,16 @@ struct F34Tests {
         try Fx.commit(&m) { tx in try Parameters.set(ParameterID("rebar.quantity"), to: .int(5), on: rb, in: tx) }
         #expect(m[rb]?.rebar?.count == 5)
         #expect(Category.schedulable.contains(.structuralRebar))
+        // A rebar schedule lists the set's quantity and total bar length.
+        var def = ScheduleDefinition(kind: .category, categories: [.structuralRebar],
+                                     fields: [ScheduleTemplates.field("familyAndType", "Type"), ScheduleTemplates.field("rebar.quantity", "Quantity", total: .total),
+                                              ScheduleTemplates.field("rebar.totalLength", "Total Bar Length", total: .total)])
+        def.itemizeEveryInstance = true
+        var sid = ElementID(0)
+        try Fx.commit(&m) { tx in sid = tx.create(.schedules, name: "Rebar Schedule", data: .schedule(def)) }
+        let t = ScheduleEngine.compute(try #require(m[sid]), m)
+        let rows = t.rows.filter { $0.kind == .data }
+        #expect(rows.count == 1 && rows[0].cells[1].text == "5" && rows[0].cells[2].text.hasPrefix("10000"))
     }
 }
 
@@ -374,6 +420,13 @@ struct F34ToolTests {
         let s = try #require(ctx.model.elements(.beamSystems).first)
         #expect(ctx.model.hosted(by: s.id).filter { $0.beam != nil }.count == 3)
         #expect(ctx.model.hosted(by: s.id).contains { $0.structuralSymbol?.kind == .beamSystem })
+        // Edit Boundary: a narrower bay keeps the direction and rebuilds the beams.
+        let edit = SketchTool(ctx: ctx, target: .f34(try #require(F34SketchTarget.editing(s))), commandID: .editBoundary, editing: s.id)
+        #expect(edit.curves.count == 4)
+        edit.curves = Polygon2.rectangle(Rect2(min: Vec2(0, 20), max: Vec2(8, 23))).edges.map { .line($0) }
+        #expect(edit.finish())
+        #expect(ctx.model.hosted(by: s.id).filter { $0.beam != nil }.count == 1)
+        #expect(ctx.model[s.id]?.beamSystem?.direction == Vec2(1, 0))
         // Undo removes the system with its beams.
         ctx.session.undoManager.endUndoGrouping()
         ctx.session.undoManager.undo()

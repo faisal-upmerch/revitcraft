@@ -22,6 +22,23 @@ public enum F34SketchTarget: Sendable, Equatable {
         }
     }
     public var isOpenPath: Bool { if case .pathReinforcement = self { return true }; return false }
+    /// The boundary of a beam system, area reinforcement or fabric area as sketch lines (Edit Boundary).
+    public static func boundaryCurves(_ e: Element) -> [Curve2] {
+        let b = e.beamSystem?.boundary ?? e.areaReinforcement?.boundary ?? e.fabricArea?.boundary ?? []
+        return b.count >= 3 ? Polygon2(b).edges.map { .line($0) } : []
+    }
+
+    /// The sketch that edits `e`'s boundary, or nil.
+    public static func editing(_ e: Element) -> F34SketchTarget? {
+        guard let h = e.hostID ?? (e.beamSystem != nil ? ElementID(0) : nil) else { return nil }
+        switch e.data {
+        case .beamSystem: return .beamSystem
+        case .areaReinforcement: return .areaReinforcement(host: h)
+        case .fabricArea: return .fabricArea(host: h)
+        default: return nil
+        }
+    }
+
     public var host: ElementID? {
         switch self {
         case .beamSystem: nil
@@ -57,6 +74,19 @@ extension SketchTool {
         let model = ctx.model
         let inPlan = ctx.isPlan
         var created: ElementID?
+        if let id = editingID {
+            // Edit Boundary: the new boundary (host coordinates), keeping the element's directions and layers.
+            guard let pts = t.host.flatMap({ f34HostPoints(outline.points, host: $0) }) ?? (t == .beamSystem ? outline.points : nil) else { return }
+            ctx.session.perform("Edit Boundary") { tx in
+                tx.update(id) { e in
+                    e.beamSystem?.boundary = pts
+                    e.areaReinforcement?.boundary = pts
+                    e.fabricArea?.boundary = pts
+                }
+            }
+            if ctx.session.lastError == nil { ctx.session.selection.select([id]) }
+            return
+        }
         switch t {
         case .beamSystem:
             let type = ctx.type(for: .structuralFraming)

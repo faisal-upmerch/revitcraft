@@ -16,6 +16,12 @@ extension CommandRouter {
         // A single selected floor or wall becomes the host of Area, Path and Fabric Area.
         let host = selection.count == 1 ? selection[0] : nil
         switch id {
+        case .editBoundary:
+            // Beam systems and floor reinforcement edit their boundary in sketch mode.
+            guard let h = host, let e = model[h], let target = F34SketchTarget.editing(e) else { return nil }
+            let t = SketchTool(ctx: c, target: .f34(target), commandID: .editBoundary, editing: h)
+            t.drawMode = .line
+            return t
         case .truss: return TrussBraceTool(ctx: c, kind: .truss)
         case .brace: return TrussBraceTool(ctx: c, kind: .brace)
         case .beamSystem:

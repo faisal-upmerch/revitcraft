@@ -162,7 +162,9 @@ public final class ReinforcementSketchTool: InteractiveTool {
     public init(ctx: ToolContext, kind: Kind, host: ElementID? = nil) {
         self.ctx = ctx
         self.kind = kind
-        if let host, let e = ctx.model[host], Reinforcement.canHost(e) { begin(e) }
+        // A selected floor (in a plan) or wall (in a view looking straight at it) is the host.
+        if let host, let e = ctx.model[host], Reinforcement.canHost(e),
+           e.slab != nil ? ctx.isPlan : (ctx.viewData.map { Reinforcement.viewFacesWall($0, e.id, ctx.model) } ?? false) { begin(e) }
     }
 
     public var commandID: CommandID {
