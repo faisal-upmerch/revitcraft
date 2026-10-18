@@ -54,7 +54,7 @@ public struct SheetGraphicsBuilder: Sendable {
             guard let vp = vpEl.viewport, let v = model[vp.viewID] else { return nil }
             if v.schedule != nil {
                 let table = ScheduleEngine.compute(v, model)
-                let h = ScheduleLayout.height(table) // BL-SCHED: title, header group row, headers, rows
+                let h = ScheduleLayout.height(table, rows: vp.scheduleRows) // BL-SCHED: title, header group row, headers, rows; F12: header rows, Split & Place segment
                 let box = Rect2(min: vp.center - Vec2(table.totalWidth / 2, h / 2), max: vp.center + Vec2(table.totalWidth / 2, h / 2))
                 return (ViewportLayout(viewportID: vpEl.id, viewID: v.id, box: box, transform: .identity, scale: 1), nil)
             }
@@ -232,113 +232,14 @@ public struct SheetGraphicsBuilder: Sendable {
 
     func scheduleItem(_ l: ViewportLayout, _ schedule: Element) -> GItem {
         let table = ScheduleEngine.compute(schedule, model)
-        let prims = ScheduleLayout.primitives(table, topLeft: Vec2(l.box.min.x, l.box.max.y))
+        let rows = model[l.viewportID]?.viewport?.scheduleRows // F12: Split & Place segment
+        let prims = ScheduleLayout.primitives(table, topLeft: Vec2(l.box.min.x, l.box.max.y), rows: rows)
         return GItem(elementID: l.viewportID, category: .viewports, layer: .annotation, primitives: prims, targetViewID: l.viewID,
                      hitPolygons: [.rectangle(l.box)])
     }
 }
 
-/// Lays out schedule tables as vector primitives (paper meters) for sheets and PDF.
-public enum ScheduleLayout {
-    public static let rowHeight = 0.0055
-    public static let titleHeight = 0.008
-    public static let textHeight = 0.0022
-
-    /// Height on paper of a laid-out table: title band, header group row, header row, optional blank row and rows. // BL-SCHED
-    public static func height(_ t: ScheduleTable) -> Double {
-        var h = Double(t.rows.count) * rowHeight
-        if t.showTitle { h += titleHeight }
-        if t.showHeaders { h += rowHeight * (t.headerSpans.isEmpty ? 1 : 2) }
-        if t.appearance.blankRowBeforeData { h += rowHeight }
-        return h
-    }
-
-    public static func primitives(_ t: ScheduleTable, topLeft: Vec2) -> [GPrimitive] {
-        var prims: [GPrimitive] = []
-        let ap = t.appearance // BL-SCHED: appearance, title/header visibility and header groups
-        let width = t.totalWidth
-        var y = topLeft.y
-        let thin = GStroke(weight: 1), heavy = GStroke(weight: ap.outline ? 3 : 1)
-        func rule(_ y: Double, _ s: GStroke) { if ap.gridLines || s.weight > 1 { prims.append(.polyline([Vec2(topLeft.x, y), Vec2(topLeft.x + width, y)], closed: false, s)) } }
-        if t.showTitle {
-            prims.append(.text(GText(position: Vec2(topLeft.x + width / 2, y - titleHeight / 2), height: ap.titleTextHeight, string: t.title.uppercased(), alignment: .center, verticalAnchor: 0.5, bold: ap.boldTitle)))
-            y -= titleHeight
-            rule(y, heavy)
-        }
-        let headerTop = y
-        if t.showHeaders {
-            let spans = t.headerSpans
-            let offsets = t.columns.reduce(into: [topLeft.x]) { $0.append($0.last! + $1.width) }
-            let rows = spans.isEmpty ? 1.0 : 2.0
-            if let shade = ap.headerShading {
-                prims.append(.fill([Polygon2.rectangle(Rect2(min: Vec2(topLeft.x, y - rows * rowHeight), max: Vec2(topLeft.x + width, y)))], GFill(pattern: .solid, color: shade)))
-            }
-            if !spans.isEmpty {
-                for sp in spans {
-                    let x0 = offsets[sp.columns.lowerBound], x1 = offsets[sp.columns.upperBound]
-                    prims.append(.text(GText(position: Vec2((x0 + x1) / 2, y - rowHeight / 2), height: ap.headerTextHeight, string: sp.title, alignment: .center, verticalAnchor: 0.5, bold: ap.boldHeaders)))
-                    prims.append(.polyline([Vec2(x0, y - rowHeight), Vec2(x1, y - rowHeight)], closed: false, thin))
-                }
-                y -= rowHeight
-            }
-            for (i, c) in t.columns.enumerated() {
-                let inSpan = spans.contains { $0.columns.contains(i) }
-                let cy = inSpan || spans.isEmpty ? y - rowHeight / 2 : y // outside a group the heading centres over both header rows
-                prims.append(.text(GText(position: Vec2(offsets[i] + c.width / 2, cy), height: ap.headerTextHeight, string: c.heading, alignment: .center, verticalAnchor: 0.5, bold: ap.boldHeaders)))
-            }
-            y -= rowHeight
-            rule(y, heavy)
-        }
-        if ap.blankRowBeforeData { y -= rowHeight; rule(y, thin) }
-        var x = topLeft.x
-        for r in t.rows {
-            switch r.kind {
-            case .blank:
-                break
-            case .groupHeader:
-                prims.append(.text(GText(position: Vec2(topLeft.x + 0.0015, y - rowHeight / 2), height: ap.bodyTextHeight, string: r.title, verticalAnchor: 0.5, bold: true)))
-            default:
-                x = topLeft.x
-                if !r.title.isEmpty {
-                    prims.append(.text(GText(position: Vec2(topLeft.x + 0.0015, y - rowHeight / 2), height: ap.bodyTextHeight, string: r.title, verticalAnchor: 0.5, bold: r.kind != .data)))
-                }
-                for (i, cell) in r.cells.enumerated() where i < t.columns.count {
-                    let c = t.columns[i]
-                    if let bg = cell.background {
-                        prims.append(.fill([Polygon2.rectangle(Rect2(min: Vec2(x, y - rowHeight), max: Vec2(x + c.width, y)))], GFill(pattern: .solid, color: bg)))
-                    }
-                    if !(r.kind != .data && i == 0 && !r.title.isEmpty) {
-                        let tx: Double
-                        switch cell.alignment {
-                        case .left: tx = x + 0.0015
-                        case .center: tx = x + c.width / 2
-                        case .right: tx = x + c.width - 0.0015
-                        }
-                        let al: TextAlignment = cell.alignment == .left ? .left : (cell.alignment == .center ? .center : .right)
-                        prims.append(.text(GText(position: Vec2(tx, y - rowHeight / 2), height: ap.bodyTextHeight, string: cell.text, alignment: al, verticalAnchor: 0.5, bold: r.kind != .data)))
-                    }
-                    x += c.width
-                }
-            }
-            y -= rowHeight
-            rule(y, r.kind == .grandTotal ? heavy : thin)
-        }
-        // Column lines and frame.
-        if ap.gridLines {
-            let spans = t.headerSpans
-            x = topLeft.x
-            for (i, c) in t.columns.dropLast().enumerated() {
-                x += c.width
-                // Inside a header group the column line starts under the group's title cell.
-                let top = t.showHeaders && spans.contains { $0.columns.contains(i) && $0.columns.contains(i + 1) } ? headerTop - rowHeight : headerTop
-                prims.append(.polyline([Vec2(x, top), Vec2(x, y)], closed: false, thin))
-            }
-        }
-        let frameTop = t.showTitle ? topLeft.y - titleHeight : topLeft.y
-        prims.append(.polyline(Rect2(min: Vec2(topLeft.x, y), max: Vec2(topLeft.x + width, frameTop)).corners, closed: true, heavy))
-        return prims
-    }
-}
+// BL-SCHED: ScheduleLayout moved to Schedules/ScheduleLayout.swift (F12: a grid of styled cells, header rows, segments).
 
 /// Placing views and schedules on sheets (Place View dialog and dragging from the Project Browser).
 public enum SheetPlacement {

@@ -111,6 +111,7 @@ extension ContextMenuBuilder {
         if router.disabledReason(.familyEditor) == nil { menu.addItem(item("Edit Family", "square.and.pencil", .familyEditor)) }
         menu.addItem(.separator())
         menu.addItem(item("Select Previous", "clock.arrow.circlepath", .selectPrevious))
+        if e.wall != nil { menu.addItem(item("Select Joined Elements", "link", .selectJoinedElements)) } // F11: as RevitCraft's canvas menu
         if e.typeID != nil {
             menu.addItem(submenu("Select All Instances", "square.stack.3d.up", [
                 item("Visible in View", "square.stack.3d.up", .selectAllInstancesInView),

@@ -85,6 +85,7 @@ public enum Parameters {
                                       value: e.params[d.id] ?? d.defaultValue, formula: d.formula, tooltip: d.tooltip,
                                       readOnlyReason: d.formula != nil ? "Driven by a formula." : nil))
         }
+        out = GlobalParameters.lock(out, of: e, model) // F11: parameters associated with a global parameter are read-only
         return out.sorted { ($0.group, $0.orderKey) < ($1.group, $1.orderKey) }
     }
 
@@ -162,6 +163,7 @@ public enum Parameters {
         let ctx = ParameterContext(model: model)
         let fam = familyDefinition(for: e, model)
         let familyName: String? = id.key.hasPrefix(familyPrefix) ? String(id.key.dropFirst(familyPrefix.count)) : nil
+        if GlobalParameters.association(e.id, id, model) != nil { return false } // F11
         // Instance side, in allEntries order: built-ins, family instance parameters, project instance parameters.
         if let b = BuiltInCatalog.instance(for: e).first(where: { $0.id == id }) { return !b.isReadOnly && b.lockedReason?(e, ctx) == nil }
         if let familyName, let p = fam?.parameter(named: familyName), p.isInstance { return p.formula == nil }

@@ -55,6 +55,12 @@ public struct PDFExportJob: Sendable {
     public var internalLinks = true
     /// Exclude the overlay layer (crop boundaries, guide grids).
     public var hideCropBoundaries = true
+    /// F13: Print Setup options (PrintFiltering.swift): leave out reference planes, scope boxes and the tags of views
+    /// not placed on a sheet; print in color, black lines or grayscale.
+    public var hideReferencePlanes = false
+    public var hideScopeBoxes = false
+    public var hideUnreferencedViewTags = false
+    public var colors: PrintSetup.Colors = .color
     /// PDF Creator metadata. No user or account name is ever written.
     public var creator = "Arcus"
     public init(items: [PDFExportItem], outputDirectory: URL) {

@@ -42,6 +42,8 @@ public final class DocumentSession {
     public var editingGroupID: ElementID?
     /// Instance values set in the Properties palette before placement ("New Doors"); applied to matching new elements. BL-PROPS
     @ObservationIgnored public var creationDefaults: CreationDefaults?
+    /// The design option being edited (Manage ▸ Design Options combo, Pick to Edit): new model elements join it. nil = main model. // F11
+    public var activeDesignOptionID: ElementID?
 
     @ObservationIgnored public weak var observer: (any TransactionObserver)?
     /// Runs inside every `perform` just before commit (e.g. Structural Wall marks the walls its tool creates). // BL-VG
@@ -75,6 +77,7 @@ public final class DocumentSession {
             try build(tx)
             creationDefaults?.apply(in: tx, createdSince: model) // BL-PROPS
             MarkNumbering.apply(tx) // BL-CANVAS: ARCUS-045
+            DesignOptionEditing.assignNewElements(to: activeDesignOptionID, in: tx, createdSince: model) // F11
         } catch let e as TransactionError {
             lastError = e
             return nil

@@ -15,15 +15,23 @@ extension RibbonContent {
 
     @MainActor static func schedulePanels(_ state: DocumentState) -> [RibbonPanel]? {
         guard scheduleContextualTitle(state) != nil else { return nil }
+        // F12: RevitCraft's panels and order (rc-app ribbon.rs, the Schedule/Quantities tab), plus Arcus's Appearance dialog
+        // and CSV exchange.
         return [
             RibbonPanel(title: "Properties", items: [.large(.scheduleProperties)], tint: view),
-            RibbonPanel(title: "Parameters", items: [.small(.scheduleFormatUnit), .small(.scheduleCalculatedField)], tint: view),
+            RibbonPanel(title: "Parameters", items: [.small(.scheduleFormatUnit), .small(.scheduleCalculatedField), .small(.scheduleCombineParameters)], tint: view),
             RibbonPanel(title: "Columns", items: [.large(.scheduleInsertColumn), .small(.scheduleDeleteColumn), .small(.scheduleResizeColumn),
                                                   .small(.scheduleHideColumn), .small(.scheduleUnhideAllColumns).newColumn()], tint: view),
-            RibbonPanel(title: "Rows", items: [.large(.scheduleInsertRow), .small(.scheduleDeleteRow)], tint: view),
-            RibbonPanel(title: "Titles & Headers", items: [.large(.scheduleMergeHeaders), .small(.scheduleGroupHeaders), .small(.scheduleUngroupHeaders)], tint: view),
-            RibbonPanel(title: "Appearance", items: [.large(.scheduleAppearance)], tint: view),
+            RibbonPanel(title: "Rows", items: [.large(.scheduleInsertHeaderRow, [.scheduleInsertRowAbove, .scheduleInsertRowBelow]), .small(.scheduleInsertRow),
+                                               .small(.scheduleDeleteRow), .small(.scheduleResizeRow)], tint: view),
+            RibbonPanel(title: "Titles & Headers", items: [.large(.scheduleMergeHeaders), .small(.scheduleInsertImage), .small(.scheduleClearCell), .small(.scheduleGroupHeaders),
+                                                           .small(.scheduleUngroupHeaders), .small(.scheduleFreezeHeader)], tint: view),
+            RibbonPanel(title: "Appearance", items: [.small(.scheduleShading), .small(.scheduleBorders), .small(.scheduleResetAppearance), .small(.scheduleFont),
+                                                     .small(.scheduleAlignLeft, [.scheduleAlignLeft, .scheduleAlignCenter, .scheduleAlignRight]),
+                                                     .small(.scheduleAlignMiddle, [.scheduleAlignTop, .scheduleAlignMiddle, .scheduleAlignBottom]),
+                                                     .small(.scheduleAppearance).newColumn()], tint: view),
             RibbonPanel(title: "Element", items: [.large(.highlightInModel)], tint: view),
+            RibbonPanel(title: "Split", items: [.large(.scheduleSplitAndPlace)], tint: sheet),
             RibbonPanel(title: "Export", items: [.small(.exportScheduleCSV), .small(.importScheduleCSV)], tint: sheet),
         ]
     }

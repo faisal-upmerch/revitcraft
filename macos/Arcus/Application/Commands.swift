@@ -83,6 +83,13 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F11 commands:
+    case globalParameters, specifyCoordinates, reportCoordinates, relocateProject, rotateTrueNorth, rotateProjectNorth, mirrorProject // F11
+    case addToSet, pickToEdit, startingView, saveSelection, loadSelection, editSelection, selectJoinedElements // F11
+    case scheduleCombineParameters, scheduleInsertHeaderRow, scheduleInsertRowAbove, scheduleInsertRowBelow, scheduleResizeRow // F12
+    case scheduleInsertImage, scheduleClearCell, scheduleFreezeHeader, scheduleShading, scheduleBorders, scheduleResetAppearance, scheduleFont // F12
+    case scheduleAlignLeft, scheduleAlignCenter, scheduleAlignRight, scheduleAlignTop, scheduleAlignMiddle, scheduleAlignBottom, scheduleSplitAndPlace // F12
+    case keynoteLegend, keynotingSettings // F12
+    case exportDWFx, exportSTL, exportGbXML, exportRoomAreaReport, exportFamilyTypes, printPreview, printSetup // F13
 
 
     // F1415 commands:

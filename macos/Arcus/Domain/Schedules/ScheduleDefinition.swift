@@ -9,6 +9,7 @@ public enum ScheduleKind: String, Codable, Sendable, CaseIterable {
     case viewList = "View List"
     case revisionSchedule = "Revision Schedule"
     case noteBlock = "Note Block"
+    case keynoteLegend = "Keynote Legend" // F12
 }
 
 public enum ScheduleFieldSource: Hashable, Codable, Sendable {
@@ -24,6 +25,8 @@ public enum ScheduleFieldSource: Hashable, Codable, Sendable {
     case percentage(of: String, byGroup: Bool)
     /// Parameter of the room the element is in (e.g. "Room: Name").
     case roomParameter(ParameterID)
+    /// Combine Parameters: several parameters' values in one column (ScheduleFormatting.swift). // F12
+    case combined([ScheduleCombinedPart])
 }
 
 public enum ScheduleTotal: String, Codable, Sendable, CaseIterable {
@@ -99,6 +102,8 @@ public struct ScheduleDefinition: Hashable, Codable, Sendable {
     /// Read and write them through `appearance` and `headerGroups` (ScheduleEditing.swift). // BL-SCHED
     var appearanceStorage: ScheduleAppearance?
     var headerGroupStorage: [ScheduleHeaderGroup]?
+    /// Header rows, cell styles, title image and Freeze Header; read and write through `formatting`. // F12
+    var formattingStorage: ScheduleFormatting?
     public init(kind: ScheduleKind, categories: [Category], fields: [ScheduleField] = []) {
         self.kind = kind; self.categories = categories; self.fields = fields; filters = []; sorting = []
         itemizeEveryInstance = true; grandTotals = false; grandTotalTitle = "Grand total"; showTitle = true; showHeaders = true

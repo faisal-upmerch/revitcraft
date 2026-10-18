@@ -388,8 +388,8 @@ public enum AnnotationRenderer {
             let tri = sp.leaderHead
             prims.append(.polyline([tri, tri + Vec2(-a, a * 1.4), tri + Vec2(a, a * 1.4)], closed: true, st))
         case .coordinate:
-            let e = sp.point.x - info.surveyPoint.x + info.surveyEasting
-            let n = sp.point.y - info.surveyPoint.y + info.surveyNorthing
+            let shared = SharedCoordinates.shared(Vec3(sp.point, z: 0), info) // F11: shared coordinates turn with true north
+            let e = shared.eastWest, n = shared.northSouth
             text = "N " + Parameters.format(.double(n), type: .length, model: model) + "\nE " + Parameters.format(.double(e), type: .length, model: model)
         case .slope:
             text = Parameters.format(.double(sp.slope), type: .slope, model: model)

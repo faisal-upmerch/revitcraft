@@ -7,7 +7,13 @@ public enum DXFWriter {
     /// Exports a 2D view display list (view coordinates in meters) to ASCII DXF (AC1015/R2000) with a layer per category, polylines/arcs/text/hatches, $INSUNITS and a unit scale.
     public static func write(_ g: ViewGraphics, units: CADUnits = .millimeters, layerName: (ArcusDomain.Category) -> String = { $0.displayName }) -> Data {
         var w = DXFEmitter(units: units == .unitless ? .millimeters : units, scale: max(1, g.scale))
-        return w.build(g, layerName: layerName)
+        return w.build(g, layerName: { layerName($0.category) })
+    }
+
+    /// F13: exports with layers named by a standard (AIA CAD layer guidelines or category names).
+    public static func write(_ g: ViewGraphics, units: CADUnits = .millimeters, layers: DXFLayerStandard, model: BIMModel) -> Data {
+        var w = DXFEmitter(units: units == .unitless ? .millimeters : units, scale: max(1, g.scale))
+        return w.build(g, layerName: { layers.layer(for: $0, model) })
     }
 
     /// Standard DXF lineweights (1/100 mm).
@@ -81,7 +87,7 @@ private struct DXFEmitter {
 
     // MARK: Build
 
-    mutating func build(_ gr: ViewGraphics, layerName: (ArcusDomain.Category) -> String) -> Data {
+    mutating func build(_ gr: ViewGraphics, layerName: (GItem) -> String) -> Data {
         // Pass 1: entities (collect layers and linetypes).
         let msRecord = "1F", psRecord = "1E"
         var ents = DXFEmitter(units: units, scale: scale)
@@ -90,7 +96,7 @@ private struct DXFEmitter {
         ents.layerIndex = ["0": 0]
         var ext = Rect2.empty
         for item in gr.items {
-            let lname = DXFWriter.sanitize(layerName(item.category))
+            let lname = DXFWriter.sanitize(layerName(item))
             let style = ObjectStyles.style(item.category)
             let li = ents.addLayer(lname, color: style.color, weight: style.projectionWeight)
             for p in item.primitives {

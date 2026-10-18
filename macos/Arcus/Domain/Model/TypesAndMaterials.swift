@@ -258,6 +258,8 @@ public struct ProjectInfoData: Hashable, Codable, Sendable {
     public var sheetNumberPrefix: String
     /// Project Object Styles: per category/subcategory line weights, colour, pattern and material. Optional: older files decode as nil.
     public var objectStyles: ObjectStyleSettings? // BL-VG
+    /// Global parameters, saved selections, starting view, keynoting and print setup (ManageProjectData.swift). Optional: older files decode as nil. // F11
+    public var f11: ManageProjectData?
 
     public init(projectName: String = "Project Name", units: UnitsSettings = .metric) {
         projectNumber = "0001"; self.projectName = projectName; clientName = "Owner"; address = ""; status = "Project Status"
