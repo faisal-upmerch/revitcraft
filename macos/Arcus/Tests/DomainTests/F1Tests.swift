@@ -131,3 +131,84 @@ struct F1Tests {
         #expect(ShaftCuts.cutElements(by: ctx.model[id]!, ctx.model).map(\.id) == [roof])
     }
 }
+
+// MARK: - Model Text
+
+/// Block glyphs for tests (DomainTests can't reach ArcusOutput's CoreText outliner): every character is a 0.6 × 1
+/// box advancing 0.7, and "O" has a box-shaped hole.
+enum TestGlyphs {
+    static func install() {
+        guard !ModelTextGlyphs.isInstalled else { return }
+        ModelTextGlyphs.install { line, _ in
+            var contours: [[Vec2]] = []
+            for (k, ch) in line.enumerated() where ch != " " {
+                let x = Double(k) * 0.7
+                contours.append([Vec2(x, 0), Vec2(x + 0.6, 0), Vec2(x + 0.6, 1), Vec2(x, 1)])
+                if ch == "O" { contours.append([Vec2(x + 0.2, 0.2), Vec2(x + 0.2, 0.8), Vec2(x + 0.4, 0.8), Vec2(x + 0.4, 0.2)]) }
+            }
+            return (contours, Double(line.count) * 0.7)
+        }
+    }
+}
+
+extension F1Tests {
+    @Test func modelTextToolPlacesExtrudedTextOnTheLevel() throws {
+        TestGlyphs.install()
+        let (ctx, ids) = context()
+        // Without a host to ask, the tool waits for its text.
+        let blank = ModelTextTool(ctx: ctx)
+        #expect(blank.text == nil && blank.prompt == "Type the text in Edit Text.")
+        ctx.requestText = { prompt, _, done in #expect(prompt == "Edit Text"); done("HO") }
+        let tool = ModelTextTool(ctx: ctx)
+        #expect(tool.text == "HO" && Fx.approx(tool.size, 0.3) && Fx.approx(tool.depth, 0.05))
+        tool.pointerMoved(ToolInput(point: Vec2(1, 2), rawPoint: Vec2(1, 2)))
+        #expect(!tool.preview.primitives.isEmpty, "the outline follows the pointer")
+        var done = false
+        ctx.toolFinished = { done = true }
+        click(tool, Vec2(1, 2))
+        #expect(done)
+        let e = try #require(ctx.model.elements(.genericModels).first { $0.modelText != nil })
+        #expect(ctx.session.selection.ids == [e.id] && e.levelID == ids.levels[0])
+        let shapes = ModelTextGeometry.shapes(ModelTextGeometry.localContours(e.modelText!))
+        #expect(shapes.count == 2 && shapes.map(\.holes.count).reduce(0, +) == 1, "H and O, with the O's counter as a hole")
+        // 3D: capitals 0.3 tall in plan, extruded 0.05 up from the level.
+        let mesh = ElementMeshes.parts(e, ctx.model).reduce(into: Mesh()) { $0.append($1.mesh) }
+        let b = mesh.bounds
+        #expect(Fx.approx(b.min.z, 0, 1e-9) && Fx.approx(b.max.z, 0.05, 1e-9))
+        #expect(Fx.approx(b.max.y - b.min.y, 0.3, 1e-6) && Fx.approx(b.min.x, 1, 1e-9))
+        // The plan shows the glyph outlines (H, O and the O's hole).
+        let g = ViewGraphicsBuilder(model: ctx.model, view: ctx.model[ids.planViews[ids.levels[0]]!]!).build()
+        let item = try #require(g.items.first { $0.elementID == e.id })
+        #expect(item.primitives.count == 3)
+    }
+
+    @Test func modelTextParametersEditTheTextAndStandItUp() throws {
+        TestGlyphs.install()
+        let (ctx, ids) = context()
+        let id = try #require(ModelTextTool.place(ModelTextData(text: "AB", position: .zero), level: ids.levels[0], session: ctx.session))
+        let names = Parameters.instanceEntries(ctx.model[id]!, ctx.model).map(\.name)
+        for n in ["Work Plane", "Elevation", "Text", "Horizontal Align", "Material", "Depth", "Text Size"] { #expect(names.contains(n)) }
+        func set(_ name: String, _ v: ParamValue) throws {
+            let pid = try #require(Parameters.id(named: name, for: ctx.model[id]!, ctx.model))
+            ctx.session.perform("Set") { tx in try Parameters.set(pid, to: v, on: id, in: tx) }
+        }
+        try set("Text", .text("ABC"))
+        try set("Horizontal Align", .text("Center"))
+        try set("Elevation", .double(1))
+        #expect(ctx.model[id]?.modelText?.text == "ABC")
+        try set("Text", .text("  "))
+        #expect(ctx.session.lastError != nil && ctx.model[id]?.modelText?.text == "ABC", "model text cannot be empty")
+        // Centred: the line's advance width (3 × 0.7 capital heights) straddles the insertion point.
+        let lb = try #require(ModelTextGeometry.localBounds(ctx.model[id]!.modelText!))
+        #expect(Fx.approx(lb.min.x, -3 * 0.7 * 0.3 / 2, 1e-9))
+        // Upright text stands as tall as its capitals and is extruded behind its plane.
+        ctx.session.perform("Upright") { tx in tx.update(id) { $0.modelText?.upright = true } }
+        let b = ElementMeshes.parts(ctx.model[id]!, ctx.model).reduce(into: Mesh()) { $0.append($1.mesh) }.bounds
+        #expect(Fx.approx(b.min.z, 1, 1e-9) && Fx.approx(b.max.z, 1.3, 1e-6))
+        #expect(Fx.approx(b.min.y, -0.05, 1e-9) && Fx.approx(b.max.y, 0, 1e-9))
+        // Rotating turns the text; mirroring keeps it readable.
+        ctx.session.perform("Mirror") { tx in tx.update(id) { ElementTransform.apply(.mirror(through: .zero, direction: Vec2(0, 1)), to: &$0) } }
+        let t = try #require(ctx.model[id]?.modelText)
+        #expect(Fx.approx(Vec2.fromAngle(t.rotation), Vec2(1, 0), 1e-9) && t.alignment == .center)
+    }
+}

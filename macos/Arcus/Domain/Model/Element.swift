@@ -137,6 +137,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
     // RevitCraft port feature batches: each adds its kinds right after its marker.
     // F1 element kinds:
+    case modelText
 
 
     // F2 element kinds:
@@ -224,6 +225,8 @@ public enum ElementData: Hashable, Codable, Sendable {
 
     // RevitCraft port feature batches: each adds its cases right after its marker.
     // F1 element data:
+    /// Model Text: 3D text extruded from glyph outlines (RevitCraft `ModelText`).
+    case modelText(ModelTextData)
 
 
     // F2 element data:
@@ -300,6 +303,7 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .opening: .opening
         // RevitCraft port feature batches: each adds its cases right after its marker.
         // F1 element data kinds:
+        case .modelText: .modelText
 
 
         // F2 element data kinds:

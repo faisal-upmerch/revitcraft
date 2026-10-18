@@ -36,6 +36,8 @@ public enum ElementMeshes {
             return [MeshPart(mesh: TopographyGeometry.mesh(e), materialID: e.topography?.materialID)] // W2-DWG: sub-region material
         case .referenceGeometry(let r):
             return [MeshPart(mesh: r.mesh, materialID: nil)]
+        case .modelText: // F1
+            return ModelTextGeometry.meshParts(e, model)
         default:
             return []
         }
@@ -55,6 +57,7 @@ public enum ElementMeshes {
     public static func hasModelGeometry(_ e: Element) -> Bool {
         switch e.data {
         case .wall, .insert, .component, .column, .beam, .slab, .roof, .stair, .railing, .topography, .referenceGeometry, .ramp: true
+        case .modelText: true // F1
         default: false
         }
     }

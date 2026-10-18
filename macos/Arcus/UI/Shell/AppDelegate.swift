@@ -28,6 +28,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     public func applicationWillFinishLaunching(_ notification: Notification) {
         NSApp.mainMenu = MainMenuBuilder.build()
+        AppDelegate.f1Launch() // F1: Model Text glyphs from CoreText
         Signpost.sink = { name, seconds in DiagnosticsLog.shared.recordTiming(name, seconds: seconds) }
         UserDefaults.standard.register(defaults: ["NSQuitAlwaysKeepsWindows": true, "selection.modifiers": SelectionModel.ModifierStyle.bim.rawValue])
         SelectionModel.modifierStyle = SelectionModel.ModifierStyle(rawValue: UserDefaults.standard.string(forKey: "selection.modifiers") ?? "") ?? .bim

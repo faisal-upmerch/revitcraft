@@ -8,6 +8,8 @@ extension CommandRouter {
     /// The tool for one of this batch's commands, or nil.
     func f1MakeTool(_ id: CommandID, _ c: ToolContext) -> (any InteractiveTool)? {
         switch id {
+        case .modelText:
+            return ModelTextTool(ctx: c) // asks for the text (Edit Text), then places it
         case .verticalOpening, .faceOpening, .dormerOpening:
             let kind: HostedOpeningKind = id == .verticalOpening ? .vertical : id == .faceOpening ? .byFace : .dormer
             // A single selected host starts the sketch on it, as when it is picked.
@@ -23,6 +25,8 @@ extension CommandRouter {
     /// Why one of this batch's commands can't run now, or nil.
     func f1DisabledReason(_ id: CommandID) -> String? {
         switch id {
+        case .modelText:
+            return isPlan ? nil : "Open a plan view to place model text."
         case .verticalOpening, .faceOpening:
             guard isPlan else { return "Open a plan view to sketch the opening." }
             return model.elements([.floors, .ceilings, .roofs]).contains { HostedOpenings.canHost($0, kind: .vertical) } ? nil : "The project has no floors, ceilings or roofs to cut."

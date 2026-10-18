@@ -37,6 +37,7 @@ struct PlanGraphics {
             items += ramps(byCategory[.ramps] ?? [])
             items += components([Category.furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .parking,
                                  .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site].flatMap { byCategory[$0] ?? [] }) // W2-LIB
+            items += modelTexts(byCategory[.genericModels] ?? []) // F1
         } else {
             items += ceilingFixtures([Category.lightingFixtures, .mechanicalEquipment].flatMap { byCategory[$0] ?? [] }) // W2-LIB: lights in ceiling plans
         }
@@ -326,7 +327,7 @@ struct PlanGraphics {
 
     func components(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
-        for (e, o) in list {
+        for (e, o) in list where e.modelText == nil { // F1: Model Text draws its own glyphs
             let base = model.baseElevation(of: e)
             guard base <= cutZ + Tolerance.length, base >= depthZ - 0.5 else { continue }
             if e.levelID != levelID, base < bottomZ - 0.01 { continue }
