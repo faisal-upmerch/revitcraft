@@ -38,6 +38,8 @@ public enum ElementMeshes {
             return [MeshPart(mesh: r.mesh, materialID: nil)]
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34
             return Reinforcement.meshParts(e, model)
+        case .modelText: // F1
+            return ModelTextGeometry.meshParts(e, model)
         default:
             return []
         }
@@ -58,6 +60,7 @@ public enum ElementMeshes {
         switch e.data {
         case .wall, .insert, .component, .column, .beam, .slab, .roof, .stair, .railing, .topography, .referenceGeometry, .ramp: true
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: true // F34
+        case .modelText: true // F1
         default: false
         }
     }
@@ -104,7 +107,7 @@ public enum ElementMeshes {
             }
             return Box3(min: Vec3(r.point, z: z), max: Vec3(r.point, z: z))
         case .modelLine(let l):
-            let r = l.curve.bounds
+            let r = l.drawnBounds // F1
             let z = model.elevation(ofLevel: e.levelID)
             return Box3(min: Vec3(r.min, z: z), max: Vec3(r.max, z: z))
         case .link(let l):
@@ -245,6 +248,8 @@ public enum DependencyGraph {
                     for r in m.hosted(by: id) { out.insert(r.id) }
                 case .topography: // BL-SITE: sub-divisions follow their host
                     for r in m.hosted(by: id) { out.insert(r.id) }
+                case .wallReveal: // F1: the host wall's solid has the groove
+                    if let h = e.hostID { out.insert(h) }
                 case .opening: // WP3
                     if let h = e.hostID { out.insert(h) }
                     for x in ShaftCuts.cutElements(by: e, m) { out.insert(x.id) }

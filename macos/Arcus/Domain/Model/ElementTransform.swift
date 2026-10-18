@@ -82,6 +82,7 @@ public enum ElementTransform {
             e.data = .room(r)
         case .modelLine(var l):
             l.curve = t.apply(l.curve)
+            l.freeform = l.freeform?.transformed(t) // F1
             e.data = .modelLine(l)
         case .grid(var g):
             g.curve = t.apply(g.curve)
@@ -151,6 +152,13 @@ public enum ElementTransform {
         case .colorFillLegend(var l):
             l.position = t.apply(l.position)
             e.data = .colorFillLegend(l)
+        case .modelText(var m): // F1: the text turns with the transform; a mirror keeps it readable (it reads the other way)
+            m.position = t.apply(m.position)
+            m.rotation = t.applyVector(Vec2.fromAngle(m.rotation)).angle + (mirror ? .pi : 0)
+            if mirror { m.alignment = m.alignment == .left ? .right : m.alignment == .right ? .left : .center }
+            e.data = .modelText(m)
+        case .wallReveal: // F1: positioned relative to its host wall
+            break
         case .opening(let o): // WP3: shafts move with their sketch; wall openings are positioned relative to their host
             if case .shaft(var sh) = o { sh.boundary = sh.boundary.transformed(t); e.data = .opening(.shaft(sh)) }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler, .beamSystem, .structuralSymbol: // F34

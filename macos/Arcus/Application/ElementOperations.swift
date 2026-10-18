@@ -168,7 +168,7 @@ public enum ElementOperations {
         let curve: Curve2?
         switch e.data {
         case .wall(let w): curve = w.location
-        case .modelLine(let l): curve = l.curve
+        case .modelLine(let l): curve = l.freeform == nil ? l.curve : nil // F1: splines and ellipses aren't split
         case .beam(let b): curve = b.curve
         default: curve = nil
         }
@@ -230,7 +230,7 @@ public enum ElementOperations {
     public static func curveOf(_ e: Element) -> Curve2? {
         switch e.data {
         case .wall(let w): w.location
-        case .modelLine(let l): l.curve
+        case .modelLine(let l): l.freeform == nil ? l.curve : nil // F1: splines and ellipses are not trimmed, split or offset
         case .beam(let b): b.curve
         case .grid(let g): g.curve
         case .referencePlane(let r): .line(r.line)

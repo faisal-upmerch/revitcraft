@@ -204,6 +204,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     /// Tools that pick a host face take the surface point under the pointer rather than the work plane.
     private func prefersSurface(_ tool: any InteractiveTool) -> Bool {
         tool is InsertTool || tool is SplitTool || tool is PickHostTool || tool is TagTool || tool is AlignTool || tool is TrimExtendTool
+            || tool is WallRevealTool // F1
     }
 
     // MARK: Input
@@ -693,6 +694,7 @@ extension CommandRouter {
         .wall, .wallArc, .wallRectangle, .wallPickLines, .curtainWall, .door, .window, .component, .column, .structuralColumn, .beam,
         .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .stairStraight, .stairL, .stairU, .railing, .ramp,
         .modelLine, .grid, .referencePlane, .shaftOpening, .buildingPad, .move, .copy,
+        .wallReveal, // F1: clicks a wall face
     ]
     /// Modify tools whose work plane is the selection's level.
     static let w23DSelectionCommands: Set<CommandID> = [.move, .copy, .rotate, .mirrorPickAxis, .mirrorDrawAxis, .array, .scale, .align, .split, .trimExtendCorner, .trimExtendSingle, .trimExtendMultiple, .offset]

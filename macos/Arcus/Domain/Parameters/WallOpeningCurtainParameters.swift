@@ -204,6 +204,8 @@ extension BuiltInCatalog {
         switch e.opening {
         case .wall?:
             return [wallOpeningHost, wallOpeningWidth, wallOpeningHeight, wallOpeningSill, mark, comments, phaseCreated, phaseDemolished]
+        case .shaft(let s)? where s.hosted != nil: // F1: hosted openings cut their host through its depth
+            return [levelParam, wallOpeningHost, mark, comments, phaseCreated, phaseDemolished]
         case .shaft?:
             return [levelParam] + shaftParams + [mark, comments, phaseCreated, phaseDemolished]
         case nil:

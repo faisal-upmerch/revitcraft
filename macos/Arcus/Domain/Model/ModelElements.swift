@@ -406,7 +406,9 @@ public struct ModelLineData: Hashable, Codable, Sendable {
     public var curve: Curve2
     /// Line style element for detail/model lines.
     public var styleID: ElementID?
-    public init(curve: Curve2, styleID: ElementID? = nil) { self.curve = curve; self.styleID = styleID }
+    /// F1: a spline or (partial) ellipse drawn as one line; `curve` is then its chord. Optional, so older documents decode.
+    public var freeform: FreeformCurve?
+    public init(curve: Curve2, styleID: ElementID? = nil, freeform: FreeformCurve? = nil) { self.curve = curve; self.styleID = styleID; self.freeform = freeform }
 }
 
 public struct TopographyData: Hashable, Codable, Sendable {

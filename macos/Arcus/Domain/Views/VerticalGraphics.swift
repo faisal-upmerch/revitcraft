@@ -95,6 +95,7 @@ struct VerticalGraphics {
         items += colorFills(fr)
         items += f34Items(fr) // F34: wall-hosted reinforcement
         items += wallOpeningItems(fr) // WP3: selectable wall openings
+        items += wallRevealItems(fr) // F1: selectable wall reveals
         // Datums.
         var extents = Rect2.empty
         for i in items { extents.include(i.bounds) }

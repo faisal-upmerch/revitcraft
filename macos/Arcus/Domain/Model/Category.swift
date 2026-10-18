@@ -33,6 +33,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
     // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
     // F1 categories:
+    case reveals
 
 
     // F2 categories:
@@ -86,6 +87,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
         case .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, .beamSystems: return .model // F34
         case .structuralSettings: return .internal_ // F34
+        case .reveals: return .model // F1
         }
     }
 
@@ -203,6 +205,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Couplers"
         case .beamSystems: "Structural Beam Systems"
         case .structuralSettings: "Structural Settings"
+        case .reveals: "Reveals" // F1
         }
     }
 
@@ -301,6 +304,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Coupler"
         case .beamSystems: "Structural Beam System"
         case .structuralSettings: "Structural Settings"
+        case .reveals: "Reveal" // F1
         }
     }
 

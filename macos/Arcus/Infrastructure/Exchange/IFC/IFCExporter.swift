@@ -211,6 +211,7 @@ struct ExportPlan {
         case (.modelGroups, .group): return .export(.group)
         case (.importedCAD, _): return .skip("Imported CAD geometry is not exported.")
         case (.wallOpenings, _): return .ignore // WP3: exported as IfcOpeningElement voids of their host wall
+        case (.reveals, _): return .ignore // F1: the groove is part of the host wall's body
         case (.shaftOpenings, _): return .skip("Shaft openings are exported as holes in the floors, ceilings and roofs they cut.") // WP3
         case (.roomSeparationLines, _), (.areaBoundaryLines, _), (.propertyLines, _): return .skip("Lines are not exported.")
         case (.structuralRebar, _), (.areaReinforcement, _), (.pathReinforcement, _): return .export(.reinforcingBar) // F34

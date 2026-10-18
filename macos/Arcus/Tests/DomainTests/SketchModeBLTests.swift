@@ -37,7 +37,7 @@ struct SketchModeBLTests {
         let t = SketchTool(ctx: ctx, target: .floor, commandID: .floor)
         guard case .choice(let modes)? = t.options.first(where: { $0.id == "mode" })?.kind else { Issue.record("no draw modes"); return }
         #expect(modes == ["Line", "Rectangle", "Inscribed Polygon", "Circumscribed Polygon", "Circle", "Start-End-Radius Arc", "Center-ends Arc",
-                          "Tangent End Arc", "Fillet Arc", "Pick Lines", "Pick Walls"])
+                          "Tangent End Arc", "Fillet Arc", "Spline", "Ellipse", "Partial Ellipse", "Pick Lines", "Pick Walls"]) // F1
         #expect(t.options.contains { $0.id == "offset" })
         #expect(t.ribbonTitle(ctx.model) == "Modify | Create Floor Boundary")
         let roof = SketchTool(ctx: ctx, target: .roof, commandID: .roofFootprint)

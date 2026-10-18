@@ -799,6 +799,10 @@ enum BuiltInCatalog {
             return typed + annotDetailParams(e) + [comments] // W2-ANNOT
         case .referenceGeometry:
             return [ifcGUID, comments]
+        case .modelText: // F1
+            return ModelTextParameters.instance + identity + phasing + ifc
+        case .wallReveal: // F1
+            return WallRevealParameters.instance + identity + phasing
         case .opening: // WP3
             return openingInstanceParams(e)
         default:
@@ -872,6 +876,7 @@ enum BuiltInCatalog {
         for e in wp3InstanceProbes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // F34
+        for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
         return d
     }()
 
@@ -896,6 +901,7 @@ enum BuiltInCatalog {
         for td in wp3TypeProbes { for p in type(for: td) where o[p.id] == nil { o[p.id] = i; i += 1 } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
+        for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         return o
     }()
 }
