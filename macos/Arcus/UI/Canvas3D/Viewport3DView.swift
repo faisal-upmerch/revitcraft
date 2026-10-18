@@ -35,6 +35,9 @@ import ArcusDomain
     public var reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency { didSet { invalidate() } }
     public var increaseContrast: Bool = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast { didSet { invalidate() } }
     public var selectionColor: ArcusDomain.RGBColor = ArcusDomain.RGBColor(hex: 0x2F6FA8) { didSet { invalidate() } }
+    /// I1: the flat tint over selected faces (sRGB). RevitCraft's (0.3627, 0.4657, 0.740) reads as (125, 146, 202) at
+    /// 80 % over white.
+    public var selectionFaceColor: ArcusDomain.RGBColor = ArcusDomain.RGBColor(0.3627, 0.4657, 0.740) { didSet { invalidate() } }
     public var backgroundTop: ArcusDomain.RGBColor = ArcusDomain.RGBColor(hex: 0xF8F6F2) { didSet { backgroundIsCustom = true; invalidate() } }
     public var backgroundBottom: ArcusDomain.RGBColor = ArcusDomain.RGBColor(hex: 0xDCDBD8) { didSet { backgroundIsCustom = true; invalidate() } }
     /// Camera used by `orient(to: .home)`; nil frames the scene from the southwest.
@@ -310,6 +313,7 @@ import ArcusDomain
         }
         u.selectionColor = selectionColor.linear
         u.preselectColor = selectionColor.mixed(with: .white, amount: 0.35).linear
+        u.selectionFace = selectionFaceColor.linear
         u.capColor = (dark ? ArcusDomain.RGBColor(0.24, 0.245, 0.25) : ArcusDomain.RGBColor(0.46, 0.455, 0.45)).linear
         u.faceColor = (dark ? ArcusDomain.RGBColor(hex: 0x2E3033) : ArcusDomain.RGBColor(hex: 0xFCFBF9)).linear
         u.viewport = SIMD2(Float(pixelSize.width), Float(pixelSize.height))

@@ -253,6 +253,23 @@ struct ParityTests {
         try check("highlight_hidden", g, s, o, Tolerance(mismatch: 0.008))
     }
 
+    /// I1: RevitCraft's selection fill (a translucent blue laid over fills) and heavier outlines match on both paths.
+    @Test func highlightFillTint() throws {
+        let s = CanvasSetup.model(zoom: 40, viewScale: 100)
+        let g = Harness.graphics([
+            Harness.item(20, .fills, [.fill([Polygon2([s.view(20, 20), s.view(140, 20), s.view(140, 90), s.view(20, 90)])], GFill(pattern: .solid, color: RGBColor(0.3, 0.3, 0.3)))]),
+            Harness.item(21, .fills, [.fill([Polygon2([s.view(160, 20), s.view(280, 20), s.view(280, 90), s.view(160, 90)])], GFill(pattern: .solid, color: .white))]),
+            Harness.item(22, .cut, [.polyline([s.view(20, 120), s.view(280, 120)], closed: false, GStroke(weight: 5))]),
+            Harness.item(23, .model, [.polyline([s.view(20, 160), s.view(280, 160)], closed: false, GStroke(weight: 1))]),
+        ])
+        var o = RenderOptions()
+        let blue = RGBColor(24 / 255, 84 / 255, 216 / 255)
+        let tint = RGBColor(19 / 255, 57 / 255, 159 / 255, 140 / 255)
+        o.highlight = [ElementID(20): blue, ElementID(21): blue, ElementID(22): blue, ElementID(23): blue]
+        o.highlightFill = [ElementID(20): tint, ElementID(21): tint]
+        try check("highlight_fill_tint", g, s, o, Tolerance(mismatch: 0.008))
+    }
+
     @Test func overlayLayerVisibility() throws {
         let s = CanvasSetup.model(zoom: 40, viewScale: 100)
         let g = Harness.graphics([

@@ -87,7 +87,8 @@ extension ToolContext {
             if orthoOnly || settings.enabled.contains(.angle) {
                 out.append(Guide(origin: f, direction: .unitX, label: "HORIZONTAL", kind: .angle, ids: [], anchor: f, throughStart: true))
                 out.append(Guide(origin: f, direction: .unitY, label: "VERTICAL", kind: .angle, ids: [], anchor: f, throughStart: true))
-                let inc = orthoOnly ? 90 : max(settings.angleIncrement, 1)
+                let inc = orthoOnly ? 90 : settings.angleIncrement > 0 ? max(settings.angleIncrement, 1)
+                    : SnapSettings.adaptiveIncrement(pixels: (raw - f).length / max(pixel, 1e-12)) // I2
                 let deg = (Angle.degrees((raw - f).angle) / inc).rounded() * inc
                 let normalized = (deg.truncatingRemainder(dividingBy: 180) + 180).truncatingRemainder(dividingBy: 180)
                 if normalized > 1e-6, abs(normalized - 90) > 1e-6 {

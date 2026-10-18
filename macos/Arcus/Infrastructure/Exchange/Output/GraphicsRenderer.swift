@@ -124,6 +124,7 @@ struct RenderPass {
             if item.layer == .overlay && !o.showOverlays { continue }
             if let id = item.elementID, o.hiddenElements.contains(id) { continue }
             let highlight = item.elementID.flatMap { o.highlight[$0] }
+            let highlightFill = highlight == nil ? nil : item.elementID.flatMap { o.highlightFill[$0] }
             var contained = true
             if let vc = viewCull {
                 if item.bounds.isEmpty || !vc.intersects(item.bounds) {
@@ -142,7 +143,7 @@ struct RenderPass {
                 case .arc(let a, let st):
                     addArc(a, st, scale: scale, highlight: highlight, cull: !contained)
                 case .fill(let polys, let f):
-                    drawFill(polys, f, scale: scale, highlight: highlight, isMaskingLayer: item.layer == .masking)
+                    drawFill(polys, f, scale: scale, highlight: highlight, highlightFill: highlightFill, isMaskingLayer: item.layer == .masking)
                 case .text(let tx):
                     drawText(tx, highlight: highlight)
                 }
@@ -200,7 +201,21 @@ struct RenderPass {
             let lengths = pattern.map { CGFloat($0 / 1000 * ppm) }
             if lengths.reduce(0, +) >= devicePixel * 1.5 { dash = lengths }
         }
-        return StrokeKey(width: strokeWidth(weight: st.weight, scale: scale), color: ink(st.color, halftone: st.halftone, highlight: highlight), dash: dash)
+        var width = strokeWidth(weight: st.weight, scale: scale)
+        if highlight != nil { width = Self.highlightedWidth(width) }
+        return StrokeKey(width: width, color: ink(st.color, halftone: st.halftone, highlight: highlight), dash: dash)
+    }
+
+    /// I1: highlighted outlines get heavier, as in RevitCraft (`paint_highlight`): under a point stays one point,
+    /// otherwise 1.2 pt wider and at least 2 pt. The Metal canvas applies the same rule.
+    static func highlightedWidth(_ w: CGFloat) -> CGFloat { w < 1 ? 1 : max(w + 1.2, 2) }
+
+    /// `top` composited over `bottom` (straight alpha).
+    static func over(_ top: RGBColor, _ bottom: RGBColor) -> RGBColor {
+        let a = top.a + bottom.a * (1 - top.a)
+        guard a > 1e-9 else { return RGBColor(top.r, top.g, top.b, 0) }
+        func ch(_ t: Double, _ b: Double) -> Double { (t * top.a + b * bottom.a * (1 - top.a)) / a }
+        return RGBColor(ch(top.r, bottom.r), ch(top.g, bottom.g), ch(top.b, bottom.b), a)
     }
 
     @inline(__always) func dev(_ p: Vec2) -> CGPoint {
@@ -252,7 +267,7 @@ struct RenderPass {
 
     // MARK: Fills
 
-    mutating func drawFill(_ polys: [Polygon2], _ f: GFill, scale: Int, highlight: RGBColor?, isMaskingLayer: Bool) {
+    mutating func drawFill(_ polys: [Polygon2], _ f: GFill, scale: Int, highlight: RGBColor?, highlightFill: RGBColor? = nil, isMaskingLayer: Bool) {
         flush()
         let path = CGMutablePath()
         for poly in polys where poly.points.count >= 3 {
@@ -281,7 +296,8 @@ struct RenderPass {
             ctx.fillPath(using: .evenOdd)
         }
         var color = ink(f.color, halftone: f.halftone, highlight: nil)
-        if let h = highlight { color = color.mixed(with: RGBColor(h.r, h.g, h.b, color.a), amount: 0.65) }
+        if let t = highlightFill { color = Self.over(t, color) }
+        else if let h = highlight { color = color.mixed(with: RGBColor(h.r, h.g, h.b, color.a), amount: 0.65) }
         if f.pattern == .solid {
             ctx.setFillColor(cgColor(color))
             ctx.addPath(path)

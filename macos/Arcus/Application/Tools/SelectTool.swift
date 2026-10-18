@@ -106,6 +106,8 @@ public final class SelectTool: BaseTool, InteractiveTool {
         if let err = ctx.session.lastError { message(err.message) }
     }
     public var isDragging: Bool { dragging }
+    /// A grip (an end or shape handle) is being dragged, rather than the selected elements.
+    public var isDraggingGrip: Bool { dragging && dragGrip != nil }
 
     /// A dashed guide through the grab point along the move, a little beyond both ends.
     func grabGuide(from s: Vec2, by v: Vec2) -> Segment2? {

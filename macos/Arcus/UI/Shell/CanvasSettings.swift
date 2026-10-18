@@ -18,8 +18,8 @@ nonisolated enum CanvasSettings {
         /// Built-in colour for light and dark canvases.
         func defaultColor(dark: Bool) -> RGBColor {
             switch self {
-            case .selection: dark ? RGBColor(hex: 0x4D94FF) : RGBColor(hex: 0x0050D0)
-            case .preselection: dark ? RGBColor(hex: 0x8CBDFF) : RGBColor(hex: 0x4F95F2)
+            case .selection: dark ? RGBColor(hex: 0x4D94FF) : RGBColor(hex: 0x1854D8) // I1: RevitCraft SELECT (24, 84, 216)
+            case .preselection: dark ? RGBColor(hex: 0x8CBDFF) : RGBColor(hex: 0x143296) // I1: RevitCraft PRESELECT (20, 50, 150)
             case .alert: dark ? RGBColor(hex: 0xFF9A3C) : RGBColor(hex: 0xF07000)
             }
         }

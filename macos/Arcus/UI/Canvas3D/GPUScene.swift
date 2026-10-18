@@ -36,6 +36,8 @@ nonisolated struct ViewportUniforms {
     var backgroundBottom = SIMD4<Float>(0.8, 0.8, 0.8, 1)
     var shadowParams = SIMD4<Float>(0, 0, 0, 1.25)
     var lightParams = SIMD4<Float>(1, 0.85, 1, 0)
+    /// I1: flat tint laid over selected faces (linear), as RevitCraft's selection overlay.
+    var selectionFace = SIMD4<Float>(0.108, 0.183, 0.508, 1)
 
     static let flagIncreaseContrast: UInt32 = 1
     static let flagShadows: UInt32 = 2

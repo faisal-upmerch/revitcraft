@@ -689,10 +689,27 @@ struct SnapTests {
         #expect(r2?.kind == .perpendicular && abs((q - .zero).normalized.dot(perp) - 1) < 1e-9)
     }
 
+    /// I2: RevitCraft's adaptive increments: 45° for a short rubber band, then 15°, 5° and 1° as it grows on screen.
+    @MainActor @Test func adaptiveAngleIncrementFollowsTheRubberBandLength() {
+        #expect(SnapSettings().angleIncrement == 0)
+        #expect(SnapSettings.adaptiveIncrement(pixels: 40) == 45)
+        #expect(SnapSettings.adaptiveIncrement(pixels: 100) == 15)
+        #expect(SnapSettings.adaptiveIncrement(pixels: 500) == 5)
+        #expect(SnapSettings.adaptiveIncrement(pixels: 2000) == 1)
+        let ctx = ToolContext(session: DocumentSession(model: BIMModel()), viewID: ElementID(99))
+        ctx.pixel = 0.01
+        // 20 m is 2,000 pt on screen: 1° steps, so a 2° direction snaps to its own guide.
+        let (p, r) = ctx.snap(Vec2(20, 20 * tan(Angle.radians(2))), from: .zero)
+        #expect(r?.kind == .angle && abs(Angle.degrees(p.angle) - 2) < 1e-6)
+        // 0.4 m is 40 pt: 45° steps, so 30° is too far from any guide to snap.
+        #expect(ctx.snap(Vec2.fromAngle(Angle.radians(30), length: 0.4), from: .zero).1?.kind != .angle)
+    }
+
     @MainActor @Test func angleSnapToleranceIsAScreenDistance() {
         let session = DocumentSession(model: BIMModel())
         let ctx = ToolContext(session: session, viewID: ElementID(99))
         ctx.pixel = 0.01            // 6 pt tolerance = 0.06 m
+        ctx.snapSettings.angleIncrement = 15 // a fixed increment (the default is adaptive)
         // 2° off horizontal at 20 m is 0.7 m off the line: far away on screen, so no angle snap.
         let far = Vec2(20, 20 * tan(Angle.radians(2)))
         #expect(ctx.snap(far, from: .zero).1 == nil)

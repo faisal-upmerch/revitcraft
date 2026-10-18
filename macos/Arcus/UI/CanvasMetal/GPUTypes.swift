@@ -95,7 +95,8 @@ nonisolated struct GPUGlyph: Sendable {
 nonisolated struct GPUItem: Sendable {
     var highlight: SIMD4<Float> = .zero
     var flags: UInt32 = 0
-    var pad0: UInt32 = 0
+    /// I1: packed RGBA8 colour laid over the item's fills while highlighted (alpha = coverage); 0 = blend 65 %.
+    var fillTint: UInt32 = 0
     var pad1: UInt32 = 0
     var pad2: UInt32 = 0
 

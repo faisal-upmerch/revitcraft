@@ -36,8 +36,8 @@ final class Viewport3DHost: NSView {
             viewport.sectionBox = vd.sectionBoxActive ? vd.sectionBox : nil
             viewport.apply(vd.displayOptions, project: state.model.projectInfo)
         }
-        viewport.selectionColor = RGBColor.from(Tokens.selection)
-        NotificationCenter.default.addObserver(forName: .arcusCanvasSettingsChanged, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.viewport.selectionColor = RGBColor.from(Tokens.selection) } } // BL-CANVAS
+        applySelectionColors()
+        NotificationCenter.default.addObserver(forName: .arcusCanvasSettingsChanged, object: nil, queue: .main) { [weak self] _ in MainActor.assumeIsolated { self?.applySelectionColors() } } // BL-CANVAS
         viewport.onSelect = { [weak self] id, flags in
             guard let self else { return }
             self.state.session.selection.click(id, shift: flags.contains(.shift), command: flags.contains(.command))
@@ -126,4 +126,14 @@ final class Viewport3DHost: NSView {
     }
 
     func applyTemporaryChange() { rebuild() }
+}
+
+extension Viewport3DHost {
+    /// I1: selection edges in the canvas selection colour; selected faces in RevitCraft's flat blue, or a lighter form
+    /// of a colour chosen in Settings ▸ Colors.
+    func applySelectionColors() {
+        viewport.selectionColor = RGBColor.from(Tokens.selection)
+        viewport.selectionFaceColor = CanvasSettings.customColor(.selection).map { $0.mixed(with: .white, amount: 0.45) }
+            ?? RGBColor(0.3627, 0.4657, 0.740)
+    }
 }

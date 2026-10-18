@@ -114,7 +114,7 @@ struct StrokeStyle { float widthMM; uint color; uint dash; uint flags; };
 struct FillInst { uint color; uint background; float alpha; uint flags; float scale; float pen1MM; float spacing; float pad; float4 bbox; };
 struct TextInst { float2 anchorH; float2 anchorL; float2 rot; float height; float emPerCap; uint color; uint flags; };
 struct Glyph { float2 planeMin; float2 planeMax; float2 uvMin; float2 uvMax; };
-struct Item { float4 highlight; uint flags; uint pad0; uint pad1; uint pad2; };
+struct Item { float4 highlight; uint flags; uint fillTint; uint pad1; uint pad2; };
 
 struct VOut {
     float4 pos [[position]];
@@ -510,6 +510,11 @@ vertex VOut canvas_vertex(uint vid [[vertex_id]],
     if (kind == K_SEG || kind == K_ARC) {
         StrokeStyle st = strokes[r.style];
         float w = strokeWidthPx(st.widthMM, F);
+        if ((it.flags & I_HL) != 0u && (st.flags & 2u) == 0u) {
+            // I1: highlighted outlines get heavier (GraphicsRenderer.highlightedWidth, in points); hatch lines stay thin.
+            float pt = w / max(F.pixelsPerPoint, 1e-3);
+            w = (pt < 1.0 ? 1.0 : max(pt + 1.2, 2.0)) * F.pixelsPerPoint;
+        }
         float h = 0.5 * w + 1.0;
         o.color = strokeInk(st.color, (st.flags & 1u) != 0u, it, colors, F);
         o.u0.y = st.dash;
@@ -590,7 +595,16 @@ vertex VOut canvas_vertex(uint vid [[vertex_id]],
             return o;
         }
         float4 c = ink(colors[fi.color], (fi.flags & 64u) != 0u || (it.flags & I_FORCE_HT) != 0u, F);
-        if ((it.flags & I_HL) != 0u) c.rgb = mix(c.rgb, it.highlight.rgb, 0.65);
+        if ((it.flags & I_HL) != 0u) {
+            if (it.fillTint != 0u) {
+                // I1: the tint laid over the fill (straight alpha), as GraphicsRenderer.over.
+                float4 t = unpack_unorm4x8_to_float(it.fillTint);
+                float a = t.a + c.a * (1.0 - t.a);
+                c = a > 1e-6 ? float4((t.rgb * t.a + c.rgb * c.a * (1.0 - t.a)) / a, a) : float4(t.rgb, 0.0);
+            } else {
+                c.rgb = mix(c.rgb, it.highlight.rgb, 0.65);
+            }
+        }
         o.color = c;
         o.color2 = fi.background != 0xFFFFFFFFu ? colors[fi.background] : float4(0.0);
         uint pattern = fi.flags & 31u;

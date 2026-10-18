@@ -49,6 +49,7 @@ struct Uniforms {
     float4 backgroundBottom;  // linear
     float4 shadowParams;      // x shadow texel (uv), y normal offset (m), z depth bias (0..1 units), w PCF radius (texels)
     float4 lightParams;       // x exposure, y shadow strength, z ambient scale, w unused
+    float4 selectionFace;     // linear: flat tint over selected faces (I1)
 };
 
 struct PostUniforms {
@@ -227,12 +228,10 @@ fragment float4 face_fragment(FaceIn in [[stage_in]], constant Uniforms &u [[buf
         result = float4(lit, base.a);
         if (u.style == 4) result.a = min(base.a, u.faceAlpha);
     }
-    // Selection tints keep the shading (luminance-scaled accent) so selected faces stay readable.
-    float lum = dot(result.rgb, float3(0.2126, 0.7152, 0.0722));
+    // I1: as in RevitCraft, selected faces take a flat translucent blue in every visual style (125, 146, 202 over
+    // white); pre-selection shows only on the edges.
     if (in.state & 1u) {
-        result.rgb = mix(result.rgb, u.selectionColor.rgb * (0.45 + 1.9 * lum), 0.72);
-    } else if (in.state & 2u) {
-        result.rgb = mix(result.rgb, u.preselectColor.rgb * (0.6 + 1.3 * lum), 0.35);
+        result.rgb = mix(result.rgb, u.selectionFace.rgb, 0.8);
     }
     // Premultiplied alpha for blending.
     return float4(result.rgb * result.a, result.a);
@@ -308,7 +307,7 @@ vertex EdgeOut edge_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
 
     uint element = va.element;
     uint state = states[element];
-    float width = u.edgeWidth * ((state & 1u) ? 1.6 : 1.0);
+    float width = u.edgeWidth * ((state & 1u) ? 3.0 : ((state & 2u) ? 1.6 : 1.0)); // I1: RevitCraft's thick selection edges
     // Extend slightly along the segment so joints close.
     float2 offset = nrm * side * width * 0.5 + dir * (atB ? 0.5 : -0.5) * width * 0.5;
 
@@ -327,7 +326,7 @@ vertex EdgeOut edge_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
     float3 col = mix(u.edgeColor.rgb, tint, u.edgeColor.a);
     float alpha = 1.0;
     if (state & 1u) col = u.selectionColor.rgb * 0.85;
-    else if (state & 2u) col = mix(col, u.preselectColor.rgb, 0.5);
+    else if (state & 2u) col = u.preselectColor.rgb;
     o.color = float4(col * alpha, alpha);
     return o;
 }

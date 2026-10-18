@@ -23,6 +23,9 @@ public struct RenderOptions: Sendable {
     public var canvasColor: RGBColor? = nil
     /// Selection / preselection tint per element: strokes and text take this color, fills are blended toward it.
     public var highlight: [ElementID: RGBColor] = [:]
+    /// I1: colour laid over the fills of a highlighted element (its alpha is the coverage), as RevitCraft paints its
+    /// selection blue over areas. Highlighted elements without an entry blend their fills 65 % toward `highlight`.
+    public var highlightFill: [ElementID: RGBColor] = [:]
     /// Fraction (0…1) by which halftoned graphics blend toward the background.
     public var halftoneAmount = 0.55
     /// Draw `.overlay` items (crop outlines, guide grids).

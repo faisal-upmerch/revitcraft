@@ -69,10 +69,16 @@ public struct SnapResult: Sendable, Hashable {
 public struct SnapSettings: Sendable, Hashable, Codable {
     public var enabled: Set<SnapKind> = Set(SnapKind.allCases)
     public var pixelRadius: Double = 10
-    /// Angle increments for orthogonal/angle snapping (degrees).
-    public var angleIncrement: Double = 15
+    /// Angle increments for orthogonal/angle snapping (degrees). 0 = adaptive, as in RevitCraft: 45° while the
+    /// rubber band is short on screen, then 15°, 5° and 1° as it grows (`SnapSettings.adaptiveIncrement`).
+    public var angleIncrement: Double = 0
     public var snapsOn = true
     public init() {}
+
+    /// RevitCraft's adaptive angle increment (snap.rs `angle_increment`) for a rubber band `pixels` long on screen.
+    public static func adaptiveIncrement(pixels: Double) -> Double {
+        pixels < 60 ? 45 : pixels < 220 ? 15 : pixels < 900 ? 5 : 1
+    }
 }
 
 /// Snappable geometry of a view, built from the view's display list plus semantic plan geometry.

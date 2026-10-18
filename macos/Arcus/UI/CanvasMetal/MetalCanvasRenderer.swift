@@ -430,10 +430,19 @@ public final class MetalCanvasRenderer {
         itemsVersion &+= 1
     }
 
+    /// RGBA8, red in the low byte (Metal's `unpack_unorm4x8_to_float`).
+    static func packRGBA8(_ c: ArcusDomain.RGBColor) -> UInt32 {
+        func b(_ v: Double) -> UInt32 { UInt32(max(0, min(255, (v * 255).rounded()))) }
+        return b(c.r) | b(c.g) << 8 | b(c.b) << 16 | b(c.a) << 24
+    }
+
     private func itemState(_ i: Int, id: ElementID) -> GPUItem {
         var it = GPUItem(flags: scene?.itemStaticFlags[i] ?? 0)
         if options.hiddenElements.contains(id) { it.flags |= GPUItem.hidden }
-        if let h = options.highlight[id] { it.flags |= GPUItem.highlighted; it.highlight = h.simd }
+        if let h = options.highlight[id] {
+            it.flags |= GPUItem.highlighted; it.highlight = h.simd
+            if let t = options.highlightFill[id] { it.fillTint = Self.packRGBA8(t) }
+        }
         if halftoneElements.contains(id) { it.flags |= GPUItem.forceHalftone }
         return it
     }
@@ -445,7 +454,9 @@ public final class MetalCanvasRenderer {
             sceneColorTable = c.table(scene?.rawColors ?? [.white])
             colorsVersion &+= 1
         }
-        if options.highlight != appliedHighlight || options.hiddenElements != appliedHidden { updateItems(forcedHalftone: halftoneElements) }
+        if options.highlight != appliedHighlight || options.highlightFill != old.highlightFill || options.hiddenElements != appliedHidden {
+            updateItems(forcedHalftone: halftoneElements, fillChanged: Set(options.highlightFill.keys).union(old.highlightFill.keys).filter { options.highlightFill[$0] != old.highlightFill[$0] })
+        }
     }
 
     private func overlayOptionsChanged(from old: RenderOptions) {
@@ -456,7 +467,7 @@ public final class MetalCanvasRenderer {
     }
 
     /// Re-evaluates only the items whose element changed highlight, visibility or forced halftone.
-    private func updateItems(forcedHalftone oldHalftone: Set<ElementID>) {
+    private func updateItems(forcedHalftone oldHalftone: Set<ElementID>, fillChanged: Set<ElementID> = []) {
         guard let sc = scene else {
             appliedHighlight = options.highlight
             appliedHidden = options.hiddenElements
@@ -467,6 +478,7 @@ public final class MetalCanvasRenderer {
         for id in appliedHighlight.keys where options.highlight[id] == nil { changed.insert(id) }
         changed.formUnion(options.hiddenElements.symmetricDifference(appliedHidden))
         changed.formUnion(halftoneElements.symmetricDifference(oldHalftone))
+        changed.formUnion(fillChanged)
         appliedHighlight = options.highlight
         appliedHidden = options.hiddenElements
         var touched = false

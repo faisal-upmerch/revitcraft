@@ -1,4 +1,5 @@
 import AppKit
+import ArcusGeometry
 import ArcusDomain
 import ArcusApplication
 
@@ -16,6 +17,15 @@ extension QAHarness {
         if let wall = s.model.elements(.walls).first(where: { $0.levelID == plan.levelID }) { s.session.selection.select([wall.id]) }
         await pause(600)
         await shot(w, "sidebar-floating-\(suffix)")
+        // I1: the selected wall up close: RevitCraft's even blue fill, heavier outlines and blue grip dots.
+        if let c = s.canvases[plan.id] as? Canvas2DView, let id = s.session.selection.single, let wall = s.model[id],
+           let fp = WallGeometry.footprint(wall, s.model) {
+            let r = Rect2(points: fp.points)
+            c.zoom(to: Rect2(center: r.center, halfSize: Vec2(max(r.width, r.height) * 0.3, max(r.width, r.height) * 0.3)))
+            await pause(600)
+            await shot(w, "wall-selected-zoom-\(suffix)")
+            c.zoomToFit()
+        }
         // W4-WIRE: the ribbon minimized to its tab pill; a tool with its Options pill; a second open view's tab pills.
         s.ribbonCollapsed = true
         await pause(500)

@@ -45,6 +45,7 @@ struct SnapsDialog: View {
                     Toggle("Parallel and perpendicular to nearby or recently hovered lines", isOn: Binding(get: { state.snapSettings.enabled.contains(.parallel) },
                                                         set: { on in if on { state.snapSettings.enabled.insert(.parallel) } else { state.snapSettings.enabled.remove(.parallel) } }))
                     Picker("Angle increment", selection: $state.snapSettings.angleIncrement) {
+                        Text("Adaptive (45° to 1° as you zoom)").tag(0.0) // I2: RevitCraft's increments
                         ForEach([90.0, 45, 30, 15, 10, 5, 1], id: \.self) { Text("\(Int($0))°").tag($0) }
                     }
                     .frame(maxWidth: 240)

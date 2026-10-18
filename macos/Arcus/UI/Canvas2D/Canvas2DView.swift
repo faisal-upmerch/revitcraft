@@ -282,17 +282,38 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             opts.minimumDevicePixel = 1
         }
         var hl: [ElementID: RGBColor] = [:]
+        var fills: [ElementID: RGBColor] = [:]
         let sel = RGBColor.from(Tokens.selection)
-        for id in state.session.selection.ids { hl[id] = sel }
-        for p in state.session.selection.preselectedIDs where hl[p] == nil { hl[p] = RGBColor.from(Tokens.preselection) }
-        if let tool = state.activeTool { for id in tool.preview.highlight { hl[id] = RGBColor.from(Tokens.preselection) } }
+        let pre = RGBColor.from(Tokens.preselection)
+        for id in state.session.selection.ids { hl[id] = sel; fills[id] = Self.selectionFill }
+        for p in state.session.selection.preselectedIDs where hl[p] == nil { hl[p] = pre; fills[p] = RGBColor(pre.r, pre.g, pre.b, 60 / 255) }
+        if let tool = state.activeTool { for id in tool.preview.highlight { hl[id] = pre; fills[id] = RGBColor(pre.r, pre.g, pre.b, 60 / 255) } }
         opts.highlight = hl
+        opts.highlightFill = fills // I1: RevitCraft lays its selection blue over areas (canvas.rs SELECT_FILL)
         return opts
+    }
+
+    /// RevitCraft's selection blue for areas, (19, 57, 159) at 55 %: over white it reads as (125, 146, 202).
+    static let selectionFill = RGBColor(19 / 255, 57 / 255, 159 / 255, 140 / 255)
+
+    /// I1: selected walls cut by a floor plan fill evenly with the selection blue between their openings, as in
+    /// RevitCraft (`paint_selected_wall_fills`). The cut pieces already stop at openings and at the walls they join.
+    private var selectedWallFills: [GPrimitive] {
+        guard viewElement?.view?.kind == .floorPlan, let g = graphics else { return [] }
+        let sel = Set(state.session.selection.ids)
+        guard !sel.isEmpty else { return [] }
+        var polys: [Polygon2] = []
+        for item in g.items where item.layer == .cut && item.category == .walls {
+            if let id = item.elementID, sel.contains(id) { polys += item.hitPolygons }
+        }
+        guard !polys.isEmpty else { return [] }
+        let c = Self.selectionFill
+        return [.fill(polys, GFill(pattern: .solid, color: RGBColor(c.r, c.g, c.b), transparency: 1 - c.a))]
     }
 
     /// Tool and selection-drag preview geometry (drawn in the overlay pass).
     private var previewPrimitives: [GPrimitive] {
-        var previews: [GPrimitive] = []
+        var previews: [GPrimitive] = selectedWallFills
         if let tool = state.activeTool { previews += tool.preview.primitives }
         if selectTool.isDragging { previews += selectTool.preview.primitives }
         return previews
@@ -527,7 +548,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         let hover = lastMouse.flatMap(control(at:))
         for g in currentControls {
             let p = toScreen(g.position)
-            let color = (hover == g ? Tokens.selection.blended(withFraction: 0.35, of: .labelColor) ?? Tokens.selection : Tokens.selection).cgColor
+            let color = (hover == g ? Tokens.preselection : Tokens.selection).cgColor // I1: RevitCraft's PRESELECT when hot
             ctx.saveGState()
             ctx.setLineCap(.round)
             ctx.setLineJoin(.round)
@@ -551,9 +572,9 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
                 ctx.setLineWidth(1.6); arrow(); ctx.strokePath()
             case .bubble:
                 // Check box: ticked when the bubble is shown at that end.
-                let r = CGRect(x: p.x - 5, y: p.y - 5, width: 10, height: 10)
+                let r = CGRect(x: p.x - 4.5, y: p.y - 4.5, width: 9, height: 9)
                 ctx.setFillColor(NSColor.white.cgColor); ctx.fill(r)
-                ctx.setStrokeColor(color); ctx.setLineWidth(1.2); ctx.stroke(r)
+                ctx.setStrokeColor(color); ctx.setLineWidth(1); ctx.stroke(r)
                 if g.isOn {
                     ctx.move(to: CGPoint(x: r.minX + 2, y: r.midY)); ctx.addLine(to: CGPoint(x: r.minX + 4.2, y: r.minY + 2.2))
                     ctx.addLine(to: CGPoint(x: r.maxX - 2, y: r.maxY - 2)); ctx.setLineWidth(1.5); ctx.strokePath()
@@ -587,77 +608,130 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
     }
 
     private func drawGrips(_ ctx: CGContext) {
+        // I1: RevitCraft's grips (grips.rs `paint`): solid blue dots (64, 112, 210) with a dark blue rim (20, 60, 160),
+        // lighter (110, 165, 250) under the pointer; smaller on witness lines.
+        let hot = lastMouse.flatMap(grip(at:))
         for g in currentGrips {
             let p = toScreen(g.position)
-            // Filled blue dots, as in other BIM tools: ends and shape handles, smaller ones on witness lines.
             let radius: CGFloat
-            if case .witness = g.kind { radius = 3.5 } else { radius = 5.5 }
+            if case .witness = g.kind { radius = 3 } else { radius = 4 }
             let r = CGRect(x: p.x - radius, y: p.y - radius, width: radius * 2, height: radius * 2)
-            ctx.setFillColor(Tokens.selection.blended(withFraction: 0.35, of: .white)?.cgColor ?? Tokens.selection.cgColor)
+            let fill = hot == g ? NSColor(srgbRed: 110 / 255, green: 165 / 255, blue: 250 / 255, alpha: 1) : NSColor(srgbRed: 64 / 255, green: 112 / 255, blue: 210 / 255, alpha: 1)
+            ctx.setFillColor(fill.cgColor)
             ctx.fillEllipse(in: r)
-            ctx.setStrokeColor(Tokens.selection.blended(withFraction: 0.3, of: .black)?.cgColor ?? Tokens.selection.cgColor)
+            ctx.setStrokeColor(NSColor(srgbRed: 20 / 255, green: 60 / 255, blue: 160 / 255, alpha: 1).cgColor)
             ctx.setLineWidth(1)
             ctx.strokeEllipse(in: r)
         }
     }
 
-    private func drawGuides(_ guides: [Segment2], _ ctx: CGContext) {
+    /// I2: RevitCraft's tracking lines (canvas.rs `track_line`): thin light-blue (120, 170, 230) dash-dot lines.
+    /// `acrossView` runs horizontal and vertical ones across the whole canvas, as RevitCraft does for axis tracking.
+    private func drawGuides(_ guides: [Segment2], _ ctx: CGContext, acrossView: Bool = false) {
         guard !guides.isEmpty else { return }
         ctx.saveGState()
-        ctx.setStrokeColor(Tokens.selection.withAlphaComponent(0.7).cgColor)
+        ctx.setStrokeColor(NSColor(srgbRed: 120 / 255, green: 170 / 255, blue: 230 / 255, alpha: 1).cgColor)
         ctx.setLineWidth(1)
-        ctx.setLineDash(phase: 0, lengths: [6, 4])
-        for g in guides { ctx.move(to: toScreen(g.start)); ctx.addLine(to: toScreen(g.end)) }
+        ctx.setLineDash(phase: 0, lengths: [12, 3, 2, 3])
+        let span = max(bounds.width, bounds.height) * 2
+        for g in guides {
+            let a = toScreen(g.start), b = toScreen(g.end)
+            let d = CGVector(dx: b.x - a.x, dy: b.y - a.y), len = hypot(d.dx, d.dy)
+            if acrossView, len > 1e-6, abs(d.dx) < 1e-6 * len || abs(d.dy) < 1e-6 * len {
+                let u = CGVector(dx: d.dx / len, dy: d.dy / len)
+                ctx.move(to: CGPoint(x: a.x - u.dx * span, y: a.y - u.dy * span)); ctx.addLine(to: CGPoint(x: a.x + u.dx * span, y: a.y + u.dy * span))
+            } else {
+                ctx.move(to: a); ctx.addLine(to: b)
+            }
+        }
         ctx.strokePath()
         ctx.restoreGState()
     }
 
+    /// The snap colour RevitCraft draws its markers in (style.rs SNAP).
+    static let snapColor = NSColor(srgbRed: 230 / 255, green: 0, blue: 210 / 255, alpha: 1)
+
+    /// The label RevitCraft shows beside a snap: the kind ("Endpoint"), "Horizontal" / "Vertical" for axis tracking,
+    /// "Horizontal and Extension" where the drawing direction crosses an alignment. Other angles show no label.
+    static func snapTooltip(_ s: SnapResult) -> String? {
+        let text = s.shortLabel ?? s.kind.rawValue
+        if s.kind == .angle && text.hasPrefix("Angle") { return nil }
+        return text.isEmpty ? nil : text
+    }
+
     private func drawSnap(_ s: SnapResult, _ ctx: CGContext) {
         let p = toScreen(s.point)
-        // Dashed alignment guides (extensions, horizontal/vertical through the start point).
-        drawGuides(s.guides, ctx)
+        let axis = s.kind == .angle && (s.label == "HORIZONTAL" || s.label == "VERTICAL")
+        // Tracking guides (extensions, horizontal/vertical through the start point).
+        drawGuides(s.guides, ctx, acrossView: axis)
         ctx.saveGState()
-        ctx.setStrokeColor(NSColor.systemPink.cgColor)
-        ctx.setLineWidth(1.5)
+        ctx.setStrokeColor(Self.snapColor.cgColor)
+        ctx.setLineWidth(1.6)
+        // I2: RevitCraft's markers (canvas.rs `paint_snap`), mirrored for this view's upward y axis.
         let r: CGFloat = 5
-        switch s.kind.markerShape {
-        case "square": ctx.stroke(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
-        case "triangle":
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x, y: p.y + r)); ctx.closePath(); ctx.strokePath()
-        case "cross":
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y + r))
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y + r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y - r)); ctx.strokePath()
-        case "circle": ctx.strokeEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
-        case "diamond":
-            ctx.move(to: CGPoint(x: p.x, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y)); ctx.addLine(to: CGPoint(x: p.x, y: p.y + r)); ctx.addLine(to: CGPoint(x: p.x - r, y: p.y)); ctx.closePath(); ctx.strokePath()
-        case "perpendicular":
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y - r))
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x - r, y: p.y + r)); ctx.strokePath()
-        case "parallel":
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r * 0.4)); ctx.addLine(to: CGPoint(x: p.x + r * 0.4, y: p.y + r))
-            ctx.move(to: CGPoint(x: p.x - r * 0.4, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y + r * 0.4)); ctx.strokePath()
-        case "none":
-            // Horizontal / vertical lock: a double-headed arrow along the locked direction.
-            if s.kind == .angle, let l = s.label, l == "HORIZONTAL" || l == "VERTICAL" {
-                let h = l == "HORIZONTAL"
-                let a = h ? CGPoint(x: p.x - 9, y: p.y) : CGPoint(x: p.x, y: p.y - 9)
-                let b = h ? CGPoint(x: p.x + 9, y: p.y) : CGPoint(x: p.x, y: p.y + 9)
-                ctx.setLineWidth(2)
-                ctx.move(to: a); ctx.addLine(to: b)
-                for (tip, s) in [(a, CGFloat(1)), (b, CGFloat(-1))] {
-                    let back = h ? CGPoint(x: tip.x + 4 * s, y: tip.y) : CGPoint(x: tip.x, y: tip.y + 4 * s)
-                    let w = h ? CGVector(dx: 0, dy: 3.5) : CGVector(dx: 3.5, dy: 0)
-                    ctx.move(to: CGPoint(x: back.x + w.dx, y: back.y + w.dy)); ctx.addLine(to: tip); ctx.addLine(to: CGPoint(x: back.x - w.dx, y: back.y - w.dy))
+        func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: p.x + x, y: p.y - y) }
+        func poly(_ q: [CGPoint], close: Bool = true) { ctx.move(to: q[0]); for c in q.dropFirst() { ctx.addLine(to: c) }; if close { ctx.closePath() }; ctx.strokePath() }
+        switch s.kind {
+        case .endpoint: ctx.stroke(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+        case .midpoint: poly([pt(0, -r), pt(r, r * 0.8), pt(-r, r * 0.8)])
+        case .center:
+            ctx.strokeEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
+            poly([pt(-3, 0), pt(3, 0)], close: false)
+        case .intersection, .gridIntersection:
+            poly([pt(-r, -r), pt(r, r)], close: false); poly([pt(r, -r), pt(-r, r)], close: false)
+        case .perpendicular:
+            poly([pt(-r, r), pt(r, r)], close: false); poly([pt(-r * 0.2, r), pt(-r * 0.2, -r)], close: false)
+            poly([pt(-r * 0.2, r * 0.2), pt(r * 0.4, r * 0.2)], close: false)
+        case .tangent:
+            let c = pt(0, 3)
+            ctx.strokeEllipse(in: CGRect(x: c.x - r * 0.7, y: c.y - r * 0.7, width: r * 1.4, height: r * 1.4))
+            poly([pt(-r, -r * 0.5), pt(r, -r * 0.5)], close: false)
+        case .quadrant: poly([pt(0, -r), pt(r, 0), pt(0, r), pt(-r, 0)])
+        case .nearest: poly([pt(-r, -r), pt(r, -r), pt(-r, r), pt(r, r)])
+        case .midBetweenPoints:
+            poly([pt(0, -r), pt(r, r * 0.8), pt(-r, r * 0.8)]); poly([pt(-r, -r * 0.2), pt(r, -r * 0.2)], close: false)
+        case .parallel:
+            poly([pt(-r, r * 0.4), pt(r * 0.4, -r)], close: false); poly([pt(-r * 0.4, r), pt(r, -r * 0.4)], close: false)
+        case .extension:
+            poly([pt(-4, -4), pt(4, 4)], close: false); poly([pt(4, -4), pt(-4, 4)], close: false)
+        case .angle:
+            if axis {
+                // A hollow double arrow along the axis: two shaft lines and open heads.
+                let h = s.label == "HORIZONTAL"
+                let d = h ? CGVector(dx: 1, dy: 0) : CGVector(dx: 0, dy: 1), n = CGVector(dx: -d.dy, dy: d.dx)
+                let (len, head, w): (CGFloat, CGFloat, CGFloat) = (9, 4, 4.5)
+                func q(_ along: CGFloat, _ across: CGFloat) -> CGPoint { CGPoint(x: p.x + d.dx * along + n.dx * across, y: p.y + d.dy * along + n.dy * across) }
+                ctx.setLineWidth(1.3)
+                for side: CGFloat in [1, -1] { poly([q(-(len - head), 1.4 * side), q(len - head, 1.4 * side)], close: false) }
+                for sgn: CGFloat in [1, -1] {
+                    let base = (len - head) * sgn
+                    poly([q(len * sgn, 0), q(base, w), q(base, 1.4), q(base, -1.4), q(base, -w)])
                 }
-                ctx.strokePath()
             }
-        default:
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y - r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y + r))
-            ctx.move(to: CGPoint(x: p.x - r, y: p.y + r)); ctx.addLine(to: CGPoint(x: p.x + r, y: p.y - r))
-            ctx.addEllipse(in: CGRect(x: p.x - r / 2, y: p.y - r / 2, width: r, height: r)); ctx.strokePath()
         }
         ctx.restoreGState()
-        // The snap's name appears in the cursor tooltip (after a short rest); the status bar has the full text.
+        // I2: the label shows at once beside the snap, as in RevitCraft (Tooltip Assistance None hides it).
+        if let text = Self.snapTooltip(s), CanvasSettings.tooltipAssistance != .none { drawSnapLabel(text, at: pt(8, 12), ctx) }
+    }
+
+    /// RevitCraft's snap label (style.rs `canvas_tooltip`): small grey text in a flat light box with a grey border,
+    /// its top-left corner at `topLeft`, kept inside the canvas.
+    private func drawSnapLabel(_ text: String, at topLeft: CGPoint, _ ctx: CGContext) {
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: NSColor(white: 60 / 255, alpha: 1)]
+        let size = (text as NSString).size(withAttributes: attrs)
+        var box = CGRect(x: topLeft.x + 3, y: topLeft.y - size.height - 3, width: ceil(size.width) + 6, height: ceil(size.height) + 2)
+        box.origin.x = min(max(box.minX, bounds.minX + 2), bounds.maxX - 2 - box.width)
+        box.origin.y = min(max(box.minY, bounds.minY + 2), bounds.maxY - 2 - box.height)
+        ctx.saveGState()
+        ctx.setFillColor(NSColor(white: 245 / 255, alpha: 1).cgColor)
+        ctx.fill(box)
+        ctx.setStrokeColor(NSColor(white: 170 / 255, alpha: 1).cgColor)
+        ctx.setLineWidth(1)
+        ctx.stroke(box.insetBy(dx: 0.5, dy: 0.5))
+        ctx.restoreGState()
+        NSGraphicsContext.saveGraphicsState()
+        (text as NSString).draw(at: CGPoint(x: box.minX + 3, y: box.minY + 1), withAttributes: attrs)
+        NSGraphicsContext.restoreGraphicsState()
     }
 
     // MARK: Cursor tooltip
@@ -666,7 +740,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
     private var cursorTooltipText: String? {
         if selectTool.isDragging { return assistedTooltip("Drag to new position", isPrompt: false) } // BL-CANVAS: Tooltip Assistance
         guard let tool = state.activeTool else { return elementTooltipText } // BL-CANVAS: ARCUS-026
-        if let s = snap, !(tool is InsertTool) { return assistedTooltip(s.shortLabel ?? s.kind.rawValue, isPrompt: false) }
+        if snap != nil, !(tool is InsertTool) { return nil } // I2: the snap label is drawn at once beside the snap
         return assistedTooltip(tool.prompt, isPrompt: true)
     }
 
@@ -692,9 +766,8 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         let r = CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(b.x - a.x), height: abs(b.y - a.y))
         let crossing = b.x < a.x
         ctx.saveGState()
-        ctx.setFillColor(Tokens.selection.withAlphaComponent(0.08).cgColor)
-        ctx.fill(r)
-        ctx.setStrokeColor(Tokens.selection.cgColor)
+        // I1: a plain thin rectangle as in RevitCraft: solid for window, dashed for crossing selection, no fill.
+        ctx.setStrokeColor(isDark && !isPaper ? NSColor(white: 0.85, alpha: 1).cgColor : NSColor(white: 40 / 255, alpha: 1).cgColor)
         ctx.setLineWidth(1)
         if crossing { ctx.setLineDash(phase: 0, lengths: [5, 3]) }
         ctx.stroke(r)
@@ -912,12 +985,13 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             drag = .pan(sp)
         default: break
         }
+        updateCursor() // I1: crosshair while an end is dragged, four-way arrow while elements are
         needsDisplay = true
     }
 
     override func mouseUp(with event: NSEvent) {
         let sp = convert(event.locationInWindow, from: nil)
-        defer { drag = .none; dragCurrent = nil; needsDisplay = true }
+        defer { drag = .none; dragCurrent = nil; needsDisplay = true; updateCursor() }
         switch drag {
         case .tool:
             state.activeTool?.pointerUp(input(for: event))
@@ -1080,16 +1154,32 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
 
     override func cursorUpdate(with event: NSEvent) { updateCursor() }
     private func updateCursor() {
-        let onClickTarget = state.activeTool == nil && lastMouse.map { control(at: $0) != nil || selectionDimension(at: $0) != nil } == true
-        let c: ToolCursor = state.activeTool?.preview.cursor ?? (onClickTarget ? .pick : lastMouse.flatMap(grip(at:)) != nil ? .move : .arrow)
-        switch c {
-        case .arrow: NSCursor.arrow.set()
-        case .crosshair, .crosshairPlus: NSCursor.crosshair.set()
-        case .move: NSCursor.openHand.set()
-        case .notAllowed: NSCursor.operationNotAllowed.set()
-        case .pick: NSCursor.pointingHand.set()
-        case .rotate: NSCursor.crosshair.set()
-        case .copy: NSCursor.dragCopy.set()
+        // I1: RevitCraft's cursors. Drawing, placing and dragging an end: the small grey crosshair. Move and Copy: the
+        // arrow with a move glyph. The other Modify tools: the arrow. Over a selected element: the four-way move arrow.
+        if let tool = state.activeTool {
+            let c = tool.preview.cursor
+            switch c {
+            case .crosshair, .crosshairPlus, .rotate, .move:
+                if [.move, .copy].contains(tool.commandID) { CanvasCursors.arrowWithMove.set() }
+                else if Self.arrowCursorTools.contains(tool.commandID) { NSCursor.arrow.set() }
+                else { CanvasCursors.crosshair.set() }
+            case .arrow: NSCursor.arrow.set()
+            case .notAllowed: NSCursor.operationNotAllowed.set()
+            case .pick: NSCursor.pointingHand.set()
+            case .copy: NSCursor.dragCopy.set()
+            }
+            return
+        }
+        if selectTool.isDraggingGrip { CanvasCursors.crosshair.set(); return }
+        if selectTool.isDragging { CanvasCursors.fourWayMove.set(); return }
+        guard let m = lastMouse else { NSCursor.arrow.set(); return }
+        if control(at: m) != nil || selectionDimension(at: m) != nil { NSCursor.pointingHand.set(); return }
+        if grip(at: m) != nil { NSCursor.arrow.set(); return }
+        let sel = state.session.selection
+        if !sel.isEmpty, let hit = hitCandidates(at: m).first, sel.ids.contains(hit), state.model[hit]?.pinned != true {
+            CanvasCursors.fourWayMove.set()
+        } else {
+            NSCursor.arrow.set()
         }
     }
 
