@@ -327,7 +327,7 @@ public enum DWFxReader {
                 let fill = attr(tag, "Fill").flatMap(color)
                 for f in figs where f.count >= 2 {
                     if let fill, f.count >= 3 { page.polylines.append(MarkupData.Polyline(points: f, color: fill, filled: true)) }
-                    if stroke != nil || fill == nil { page.polylines.append(MarkupData.Polyline(points: f, color: stroke ?? RGBColor(1, 0, 0))) }
+                    if let stroke { page.polylines.append(MarkupData.Polyline(points: f, color: stroke)) }
                 }
                 if !tag.hasSuffix("/>") { openPath = (Rect2(points: figs.flatMap { $0 }), 0) }
             } else if tag.hasPrefix("</Path>") {
