@@ -93,6 +93,14 @@ extension SketchTool {
 
     /// Align Eaves clicks: the first picks the reference eave, later ones align eaves with it. True when handled.
     func f2PointerDown(_ p: Vec2) -> Bool {
+        // Slope Arrow: a first click on an existing roof arrow removes it.
+        if arrowMode, start == nil, target == .roof,
+           let k = f2.roofArrows.firstIndex(where: { Segment2($0.tail, $0.head).distance(to: p) <= ctx.pixel * 6 }) {
+            f2.roofArrows.remove(at: k)
+            arrowMode = false
+            message("Slope arrow removed.")
+            return true
+        }
         guard f2.aligningEaves else { return false }
         guard let k = curves.indices.min(by: { curves[$0].distance(to: p) < curves[$1].distance(to: p) }),
               curves[k].distance(to: p) <= ctx.pixel * 12 else { message("Pick a footprint line."); return true }

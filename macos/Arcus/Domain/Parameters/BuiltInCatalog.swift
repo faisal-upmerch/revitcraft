@@ -716,7 +716,7 @@ enum BuiltInCatalog {
             return typed + [levelParam, componentOffset, componentRotation, componentRoom] + identity + phasing + ifc + [designOption]
         case .column:
             return typed + [levelParam, columnBaseOffset, columnTopLevel, columnTopOffset, columnHeight, columnRotation, columnRoomBounding,
-                            quantityVolume] + F2Parameters.column + identity + phasing + ifc // F2: Column Style
+                            quantityVolume] + (e.column?.topLocation != nil ? F2Parameters.column : []) + identity + phasing + ifc // F2: Column Style of slanted columns
         case .beam:
             return typed + [levelParam, beamStartOffset, beamEndOffset, beamZJust, quantityLength, quantityVolume] + identity + phasing + ifc
         case .slab:

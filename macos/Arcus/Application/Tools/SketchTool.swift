@@ -101,7 +101,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
     }
     public var prompt: String {
         if let p = f2Prompt { return p } // F2: Align Eaves
-        if arrowMode { return start == nil ? "Click the tail of the slope arrow (low end)." : "Click the head of the slope arrow." }
+        if arrowMode { return start == nil ? (target == .roof && !roofSlopeArrows.isEmpty ? "Click the tail of the slope arrow (on the edge that rises), or click an arrow to remove it." : "Click the tail of the slope arrow (low end).") : "Click the head of the slope arrow." } // F2
         if target == .roofExtrusion, start == nil, drawMode == .line {
             return "Sketch the roof profile as an open chain of lines and arcs. Finish (↩) extrudes it perpendicular to the work plane."
         }

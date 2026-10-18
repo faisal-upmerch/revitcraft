@@ -265,6 +265,11 @@ struct F2Tests {
         #expect(t.isDrawingSlopeArrow)
         click(t, Vec2(5, 0)); click(t, Vec2(5, 8))
         #expect(t.roofSlopeArrows.count == 1 && !t.isDrawingSlopeArrow)
+        // A click on an arrow in Slope Arrow mode removes it; draw it again.
+        ctx.pixel = 0.01
+        t.drawSlopeArrow(); click(t, Vec2(5, 4))
+        #expect(t.roofSlopeArrows.isEmpty)
+        t.drawSlopeArrow(); click(t, Vec2(5, 0)); click(t, Vec2(5, 8))
         #expect(t.finish())
         let roof = try #require(ctx.model.elements(.roofs).first)
         #expect(roof.roof?.slopeArrows?.count == 1)
