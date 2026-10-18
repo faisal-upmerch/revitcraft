@@ -48,6 +48,7 @@ struct RibbonItem: Hashable {
         case .filledRegion where split: return "Region" // W2-ANNOT
         case .detailComponent where split: return "Component" // W2-ANNOT
         case .detailGroupPlace where split: return "Detail\nGroup" // W2-ANNOT
+        case .placeModelGroup where split: return size == .large ? "Model\nGroup" : "Model Group" // F1
         case .keynoteElement where split: return "Keynote" // W2-ANNOT
         case .threeDView where split: return "3D\nView" // WP6a
         case .componentLibrary where size == .large: return "Component\nLibrary" // W2-LIB
@@ -124,31 +125,35 @@ enum RibbonContent {
     /// ribbon.rs). Tools Arcus has and RevitCraft lacks stay in the panel they belong to; RevitCraft tools Arcus does
     /// not have yet arrive with their feature milestones (Docs/RevitCraftPort.md). Draw shapes (rectangle, arc, pick
     /// lines, pick walls) are draw modes of the tools, not dropdown entries.
+    /// F1: RevitCraft's Opening panel (Architecture and Structure): By Face, Shaft, Wall, Vertical, Dormer.
+    static let openingItems: [RibbonItem] = [.small(.faceOpening), .large(.shaftOpening), .small(.wallOpening), .small(.verticalOpening), .small(.dormerOpening)]
+
     static func tabPanels(_ tab: RibbonTab) -> [RibbonPanel] {
         switch tab {
         case .modify:
             return [RibbonPanel(title: "Select", items: [.large(.modify), .small(.selectAll), .small(.filterSelection), .small(.selectAllInstancesInView)], tint: modify),
                     RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
         case .architecture:
-            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .curtainWall]), .large(.door), .large(.window),
+            return [RibbonPanel(title: "Build", items: [.large(.wall, [.wall, .structuralWall, .wallSweep, .wallReveal, .curtainWall]), .large(.door), .large(.window),
                                                         .large(.component, [.component, .componentLibrary]), .large(.structuralColumn, [.structuralColumn, .column]),
                                                         .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
                                                         .large(.floor, [.floor, .structuralFloor, .slabEdge]),
                                                         .small(.curtainGrid), .small(.mullion), .small(.curtainPanel)], tint: build),
                     RibbonPanel(title: "Circulation", items: [.large(.railing), .large(.ramp), .large(.stairStraight, [.stairStraight, .stairL, .stairU])], tint: circulation),
-                    RibbonPanel(title: "Model", items: [.small(.modelLine), .small(.createGroup)], tint: build),
-                    RibbonPanel(title: "Room & Area", items: [.large(.room, [.room, .placeRoomsAutomatically]), .small(.roomSeparator), .small(.roomTag, [.roomTag, .tagAll]),
+                    RibbonPanel(title: "Model", items: [.small(.modelText), .small(.modelLine), .small(.placeModelGroup, [.placeModelGroup, .createGroup])], tint: build), // F1
+                    RibbonPanel(title: "Room & Area", items: [.large(.room, [.room, .placeRoomsAutomatically, .highlightBoundaries]), .small(.roomSeparator), .small(.roomTag, [.roomTag, .tagAll]),
                                                               .large(.area, [.area, .placeAreasAutomatically]), .small(.areaBoundary), .small(.areaTag), .small(.areaPlan),
                                                               .small(.colorSchemes).newColumn()], tint: rooms),
-                    RibbonPanel(title: "Opening", items: [.large(.shaftOpening), .small(.wallOpening)], tint: build),
+                    RibbonPanel(title: "Opening", items: openingItems, tint: build), // F1
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .structure:
             return [RibbonPanel(title: "Structure", items: [.large(.beam), .large(.structuralWall, [.structuralWall, .wall]), .large(.structuralColumn),
                                                             .large(.structuralFloor, [.structuralFloor, .floor])], tint: build), // BL-VG
                     RibbonPanel(title: "Foundation", items: [.large(.foundationIsolated), .large(.foundationWall), .large(.foundationSlab)], tint: build), // BL-VG
-                    RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary]), .small(.modelLine), .small(.createGroup)], tint: build),
-                    RibbonPanel(title: "Opening", items: [.large(.shaftOpening), .small(.wallOpening)], tint: build),
+                    RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary]), .small(.modelText), .small(.modelLine),
+                                                        .small(.placeModelGroup, [.placeModelGroup, .createGroup])], tint: build), // F1
+                    RibbonPanel(title: "Opening", items: openingItems, tint: build), // F1
                     RibbonPanel(title: "Datum", items: [.small(.level), .small(.grid)], tint: datum),
                     RibbonPanel(title: "Work Plane", items: [.small(.referencePlane)], tint: datum)]
         case .insert:

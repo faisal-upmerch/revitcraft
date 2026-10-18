@@ -75,12 +75,15 @@ extension PlanGraphics {
     func shafts(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
         for (e, o) in list {
-            guard let (z0, z1) = ShaftCuts.range(e, model), z0 <= cutZ + Tolerance.length, z1 >= cutZ - Tolerance.length,
+            // F1: hosted openings (Vertical, By Face, Dormer) show their outline wherever their host is in the view range,
+            // without the shaft's diagonals; the host draws the hole.
+            let hosted = e.opening?.shaft?.hosted != nil
+            guard let (z0, z1) = ShaftCuts.range(e, model), z0 <= cutZ + Tolerance.length, z1 >= (hosted ? depthZ : cutZ) - Tolerance.length,
                   let p = ShaftCuts.profile(e) else { continue }
             let st = builder.stroke(.shaftOpenings, cut: false, o)
             var prims: [GPrimitive] = p.loops.map { .polyline($0.points, closed: true, st) }
             let b = p.bounds
-            for d in [Segment2(b.min, b.max), Segment2(Vec2(b.min.x, b.max.y), Vec2(b.max.x, b.min.y))] {
+            for d in hosted ? [] : [Segment2(b.min, b.max), Segment2(Vec2(b.min.x, b.max.y), Vec2(b.max.x, b.min.y))] {
                 for s in segmentsInside(d, [p.outer]) where !p.holes.contains(where: { $0.contains(s.midpoint, onBoundary: false) }) {
                     prims.append(.polyline([s.start, s.end], closed: false, st))
                 }

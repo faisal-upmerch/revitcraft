@@ -63,6 +63,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
     // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
     // F1 commands:
+    case modelText, wallReveal, faceOpening, verticalOpening, dormerOpening, placeModelGroup, highlightBoundaries
 
 
     // F2 commands:
