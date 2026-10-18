@@ -151,6 +151,7 @@ public enum AnnotationRenderer {
             if let pt = o.projectionLinePattern { ls.pattern = pt }
             let prim: GPrimitive
             switch l.curve {
+            case _ where l.freeform != nil: prim = .polyline(l.freeform!.points, closed: false, ls) // F1: splines and ellipses
             case .line(let sg): prim = .polyline([sg.start, sg.end], closed: false, ls)
             case .arc(let a): prim = .arc(a, ls)
             }

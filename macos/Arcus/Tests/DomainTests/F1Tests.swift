@@ -308,3 +308,94 @@ extension F1Tests {
         #expect(members.contains { $0.wall?.location.asSegment.map { Fx.approx($0.start, Vec2(10, 10)) && Fx.approx($0.end, Vec2(14, 10)) } == true })
     }
 }
+
+// MARK: - Spline, Ellipse, Partial Ellipse
+
+extension F1Tests {
+    func lines(_ ctx: ToolContext) -> [Element] { ctx.model.elements(.detailLines).filter { $0.ownerViewID == nil } }
+
+    @Test func splineModelLineIsOneElementThroughItsPoints() throws {
+        let (ctx, _) = context()
+        let tool = LineTool(ctx: ctx, kind: .model, commandID: .modelLine)
+        #expect(tool.options.first { $0.id == "mode" }.map { $0.kind == .choice(["Line", "Spline", "Ellipse", "Partial Ellipse"]) } == true)
+        tool.setOption("mode", .text("Spline"))
+        #expect(tool.prompt == "Click to enter the spline start point.")
+        for p in [Vec2(0, 0), Vec2(2, 1), Vec2(4, 0)] { click(tool, p) }
+        #expect(lines(ctx).isEmpty)
+        click(tool, Vec2(4, 0)) // the last point again finishes
+        let e = try #require(lines(ctx).first)
+        let ml = try #require(e.modelLine)
+        let f = try #require(ml.freeform)
+        #expect(f.kind == .spline && f.points.count > 10)
+        #expect(Fx.approx(f.points.first!, .zero) && Fx.approx(f.points.last!, Vec2(4, 0)) && f.points.contains { Fx.approx($0, Vec2(2, 1)) }, "it passes through the clicks")
+        #expect(ml.curve.asSegment.map { Fx.approx($0.start, .zero) && Fx.approx($0.end, Vec2(4, 0)) } == true, "the curve is the chord")
+        #expect(QuantityEngine.quantities(for: e, in: ctx.model).length ?? 0 > 4.5)
+        // The plan draws it as one polyline through the spline's points.
+        let g = ViewGraphicsBuilder(model: ctx.model, view: ctx.view!).build()
+        let item = try #require(g.items.first { $0.elementID == e.id })
+        #expect(item.primitives.count == 1)
+        if case .polyline(let pts, false, _) = item.primitives[0] { #expect(pts.count == f.points.count) } else { Issue.record("expected a polyline") }
+        // Move carries the points; an end grip stretches the curve; it can't be split.
+        ctx.session.perform("Move") { tx in tx.update(e.id) { ElementTransform.apply(.translation(Vec2(1, 1)), to: &$0) } }
+        #expect(ctx.model[e.id]?.modelLine?.freeform?.points.first.map { Fx.approx($0, Vec2(1, 1)) } == true)
+        let grip = try #require(GripService.grips(for: ctx.model[e.id]!, ctx.model, viewKind: .floorPlan).first { $0.kind == .end })
+        ctx.session.perform("Grip") { tx in GripService.apply(grip, to: Vec2(9, 1), in: tx) }
+        let moved = try #require(ctx.model[e.id]?.modelLine?.freeform)
+        #expect(Fx.approx(moved.points.first!, Vec2(1, 1)) && Fx.approx(moved.points.last!, Vec2(9, 1)))
+        #expect(ElementOperations.curveOf(ctx.model[e.id]!) == nil, "splines aren't trimmed, split or offset")
+        // Enter also finishes; Esc clears the clicks.
+        let detail = LineTool(ctx: ctx, kind: .detail, commandID: .detailLine)
+        detail.setOption("mode", .text("Spline"))
+        click(detail, Vec2(0, 5)); click(detail, Vec2(3, 6))
+        #expect(detail.finish())
+        #expect(ctx.model.elements(.detailLines).contains { $0.ownerViewID != nil && $0.modelLine?.freeform?.kind == .spline })
+        click(detail, Vec2(0, 7))
+        #expect(detail.escape() == .stayInTool && detail.freeformDraft?.points.isEmpty == true)
+    }
+
+    @Test func ellipseRoomSeparationBoundsARoom() throws {
+        let (ctx, ids) = context()
+        let tool = LineTool(ctx: ctx, kind: .roomSeparation, commandID: .roomSeparator)
+        tool.setOption("mode", .text("Ellipse"))
+        click(tool, Vec2(5, 5)); click(tool, Vec2(7, 5))
+        #expect(tool.prompt == "Click to enter the other radius.")
+        click(tool, Vec2(5, 6))
+        let halves = ctx.model.elements(.roomSeparationLines)
+        #expect(halves.count == 2 && halves.allSatisfy { $0.modelLine?.freeform?.kind == .ellipse }, "a full ellipse is two halves")
+        let perimeter = halves.reduce(0) { $0 + ($1.modelLine?.drawnLength ?? 0) }
+        #expect(abs(perimeter - Double.pi * (9 - (35.0).squareRoot())) < 0.02)
+        var room: ElementID!
+        ctx.session.perform("Room") { tx in room = tx.create(.rooms, data: .room(RoomData(point: Vec2(5, 5), number: "1")), levelID: ids.levels[0]) }
+        let b = RoomGeometry.boundary(ctx.model[room]!, ctx.model)
+        #expect(b.state == .bounded && abs(b.area - Double.pi * 2) < 0.03)
+        // Partial ellipse: half the ellipse on the clicked axis, bulging to the third click's side.
+        let half = LineTool(ctx: ctx, kind: .model, commandID: .modelLine)
+        half.setOption("mode", .text("Partial Ellipse"))
+        click(half, Vec2(20, 0)); click(half, Vec2(24, 0)); click(half, Vec2(22, -1))
+        let p = try #require(lines(ctx).first { $0.modelLine?.freeform?.kind == .partialEllipse }?.modelLine?.freeform)
+        #expect(p.points.count == 25 && p.points.contains { Fx.approx($0, Vec2(22, -1), 1e-9) })
+    }
+
+    @Test func sketchesDrawEllipsesAndSplinesAsBoundaryLines() throws {
+        let (ctx, ids) = context()
+        let floor = SketchTool(ctx: ctx, target: .floor, commandID: .floor)
+        #expect(floor.options.first { $0.id == "mode" }.map { if case .choice(let c) = $0.kind { return c.contains("Spline") && c.contains("Partial Ellipse") }; return false } == true)
+        floor.setOption("mode", .text("Ellipse"))
+        #expect(floor.prompt == "Click to enter the ellipse center.")
+        click(floor, Vec2(5, 4)); click(floor, Vec2(8, 4)); click(floor, Vec2(5, 6))
+        #expect(floor.curves.count == 48)
+        #expect(floor.finish())
+        let f = try #require(ctx.model.elements(.floors).first)
+        #expect(f.levelID == ids.levels[0])
+        #expect(abs((QuantityEngine.quantities(for: f, in: ctx.model).area ?? 0) - Double.pi * 6) < 0.1)
+        // A spline in progress becomes boundary lines on Finish.
+        let region = SketchTool(ctx: ctx, target: .filledRegion, commandID: .filledRegion)
+        region.setOption("mode", .text("Line"))
+        click(region, Vec2(0, 0)); click(region, Vec2(4, 0))
+        _ = region.escape()
+        region.setOption("mode", .text("Spline"))
+        click(region, Vec2(4, 0)); click(region, Vec2(2, 2))
+        region.commitPendingSpline()
+        #expect(region.curves.count > 2)
+    }
+}

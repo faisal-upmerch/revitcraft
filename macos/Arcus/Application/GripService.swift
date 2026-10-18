@@ -85,8 +85,8 @@ public enum GripService {
             switch (e.data, g.kind) {
             case (.wall(var w), .start): w.location = replaceEnd(w.location, start: p); e.data = .wall(w)
             case (.wall(var w), .end): w.location = replaceEnd(w.location, end: p); e.data = .wall(w)
-            case (.modelLine(var l), .start): l.curve = replaceEnd(l.curve, start: p); e.data = .modelLine(l)
-            case (.modelLine(var l), .end): l.curve = replaceEnd(l.curve, end: p); e.data = .modelLine(l)
+            case (.modelLine(var l), .start): l.curve = replaceEnd(l.curve, start: p); l.freeform = l.freeform?.stretched(start: p, end: l.curve.end); e.data = .modelLine(l) // F1
+            case (.modelLine(var l), .end): l.curve = replaceEnd(l.curve, end: p); l.freeform = l.freeform?.stretched(start: l.curve.start, end: p); e.data = .modelLine(l) // F1
             case (.beam(var b), .start): b.curve = replaceEnd(b.curve, start: p); e.data = .beam(b)
             case (.beam(var b), .end): b.curve = replaceEnd(b.curve, end: p); e.data = .beam(b)
             case (.grid(var gd), .start): gd.curve = replaceEnd(gd.curve, start: p); e.data = .grid(gd)

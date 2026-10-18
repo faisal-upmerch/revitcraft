@@ -104,7 +104,7 @@ public enum ElementMeshes {
             }
             return Box3(min: Vec3(r.point, z: z), max: Vec3(r.point, z: z))
         case .modelLine(let l):
-            let r = l.curve.bounds
+            let r = l.drawnBounds // F1
             let z = model.elevation(ofLevel: e.levelID)
             return Box3(min: Vec3(r.min, z: z), max: Vec3(r.max, z: z))
         case .link(let l):

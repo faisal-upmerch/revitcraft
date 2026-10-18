@@ -82,6 +82,7 @@ public enum ElementTransform {
             e.data = .room(r)
         case .modelLine(var l):
             l.curve = t.apply(l.curve)
+            l.freeform = l.freeform?.transformed(t) // F1
             e.data = .modelLine(l)
         case .grid(var g):
             g.curve = t.apply(g.curve)

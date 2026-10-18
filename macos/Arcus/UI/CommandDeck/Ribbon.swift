@@ -270,6 +270,9 @@ enum RibbonContent {
         case "Start-End-Radius Arc": "point.topleft.down.to.point.bottomright.curvepath" // BL-CANVAS
         case "Center-ends Arc": "circle.bottomhalf.filled" // BL-CANVAS
         case "Tangent End Arc": "arrow.turn.up.right" // BL-CANVAS
+        case "Spline": "point.bottomleft.forward.to.point.topright.scurvepath" // F1
+        case "Ellipse": "oval" // F1
+        case "Partial Ellipse": "oval.bottomhalf.filled" // F1
         default: "pencil.line"
         }
     }

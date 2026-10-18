@@ -109,6 +109,7 @@ public final class HostedOpeningTool: BaseTool, InteractiveTool {
     /// Validates the sketch (one closed loop; more loops cut more holes) and creates the opening.
     public func finish() -> Bool {
         guard let s = sketch, let host = hostID, let h = ctx.model[host] else { return false }
+        s.commitPendingSpline()
         let loops = s.splitLoops(s.curves)
         if let issue = SketchValidation.validate(s.curves, loops: loops) {
             s.presentSketchIssue(issue)
