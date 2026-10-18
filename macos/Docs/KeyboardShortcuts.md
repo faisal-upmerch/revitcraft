@@ -556,6 +556,28 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Hide by Filter… |  |  | Open Visibility/Graphics on its Filters to hide elements by a filter in this view. |
 | Override Graphics by Category… |  |  | Open Visibility/Graphics to override the graphics of a whole category in this view. |
 | Override Graphics by Filter… |  |  | Open Visibility/Graphics on its Filters to override graphics by a filter in this view. |
+| Show Hidden Lines |  |  | Shows the lines of an element hidden by another element as dashed lines. |
+| Remove Hidden Lines |  |  | Stops showing the hidden lines of an element. |
+| Cut Profile |  |  | Changes the shape of a cut wall in this view only: pick the wall, then sketch the region to add or cut away. |
+| Render |  | `RR` | Renders the 3D view: quality, resolution, sun lighting and sky; save the image to the project or export it. |
+| Render Gallery |  |  | Shows the renderings saved in the project, to export as PNG images or delete. |
+| Export OBJ |  |  | Exports the model as OBJ with materials, for visualisation apps. |
+| Framing Elevation |  |  | Places an elevation beside a grid, looking at it and cropped to it: click near the grid on the side to look from. |
+| Sketch |  |  | Sketches the boundary of a callout of any shape. |
+| Walkthrough |  |  | Places a walkthrough in a plan: click the camera's path, then Finish Walkthrough. |
+| Finish Walkthrough |  |  | Creates the walkthrough from the clicked path. |
+| Previous Frame |  |  | Shows the walkthrough's previous frame. |
+| Next Frame |  |  | Shows the walkthrough's next frame. |
+| Play |  |  | Plays the walkthrough from the current frame (again to stop). |
+| Export |  |  | Exports the walkthrough's frames as PNG images, or as a QuickTime movie. |
+| Title Block |  |  | Changes the title block of the sheet. |
+| Guide Grid |  |  | Shows a guide grid on the sheet; viewports snap to it. |
+| Matchline |  |  | Draws a matchline where a plan continues on another sheet. |
+| Switch Windows |  |  | Switches to another open view. |
+| Tab Views |  | `TW` | Arranges open views as tabs. |
+| Tile Views |  | `WT` | Tiles open views side by side. |
+| Canvas Theme |  |  | Switches the view canvas between the light, dark and black theme. |
+| Navigation Wheel |  |  | The 2D Wheel (Zoom, Pan, Rewind) of plans, sections and sheets, or the Full Navigation Wheel of 3D views: press a wedge and drag. Esc closes it. |
 | Combine Parameters |  |  | Combines several parameters into one column. |
 | Insert Row |  |  | Inserts a row in the header. |
 | Insert Row Above Selected |  |  | Inserts a header row above the selected row. |

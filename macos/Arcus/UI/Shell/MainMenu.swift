@@ -42,7 +42,7 @@ enum MainMenuBuilder {
             NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"),
             NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""),
             .separator(),
-        ] + commands([.toggleNavigator, .toggleProperties, .workspaceBIMFamiliar, .workspaceMacSpacious, .resetWorkspace, nil, .previousView, .closeHiddenViews]) + viewTabMenuItems() + [ // BL-BROWSER
+        ] + commands([.toggleNavigator, .toggleProperties, .workspaceBIMFamiliar, .workspaceMacSpacious, .resetWorkspace, .canvasTheme, nil, .previousView, .closeHiddenViews, .switchWindows, .tabViews, .tileViews]) + viewTabMenuItems() + [ // BL-BROWSER; F810
             .separator(),
             NSMenuItem(title: "Bring All to Front", action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: ""),
         ])
@@ -129,8 +129,9 @@ enum MainMenuBuilder {
         saveAs.keyEquivalentModifierMask = [.command, .shift, .option]
         let revert = NSMenuItem(title: "Revert To Saved", action: #selector(NSDocument.revertToSaved(_:)), keyEquivalent: "")
         // F13: File ▸ Export grouped as RevitCraft does (CAD Formats, DWF/DWFx, PDF, IFC, Family Types, gbXML, Images, Reports).
-        let cad = submenu("CAD Formats", commands([.exportDXF, .exportSTL]))
-        let images = submenu("Images and Animations", commands([.exportImage]))
+        let cad = submenu("CAD Formats", commands([.exportDXF, .exportOBJ, .exportSTL]))
+        let frames = command(.walkthroughExport); frames.title = "Walkthrough…" // F810: the command's own title is just "Export"
+        let images = submenu("Images and Animations", commands([.exportImage]) + [frames])
         let reports = submenu("Reports", commands([.exportScheduleCSV, .exportRoomAreaReport]))
         let export = submenu("Export", [cad] + commands([.exportDWFx, .exportPDF, .exportIFC, .exportFamilyTypes, .exportGbXML]) + [images, reports])
         let importMenu = submenu("Import", commands([.importCAD, .importIFC, .importRevit, .importScheduleCSV])) // BL-SCHED
@@ -169,11 +170,13 @@ enum MainMenuBuilder {
         let sidebar = NSMenuItem(title: "Show/Hide Sidebar", action: #selector(AppDelegate.toggleDocumentSidebar(_:)), keyEquivalent: "s") // W4-SHELL
         sidebar.keyEquivalentModifierMask = [.command, .option]
         sidebar.target = AppDelegate.shared
-        let create = submenu("Create", commands([.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, nil, .section, .elevation, .callout, .draftingView, .legend, .keynoteLegend, .threeDView, nil,
+        let graphics = submenu("Graphics", commands([.showHiddenLines, .removeHiddenLines, .cutProfile])) // F810
+        let presentation = submenu("Presentation", commands([.render, .renderGallery])) // F810
+        let create = submenu("Create", commands([.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, nil, .section, .elevation, .framingElevation, .callout, .calloutSketch, .draftingView, .legend, .keynoteLegend, .threeDView, .walkthrough, nil, // F810
                                                  .schedule, .materialTakeoff, .sheetList, .revisionSchedule, nil,
                                                  .duplicateView, .duplicateViewWithDetailing, .duplicateDependent, .renameView]))
-        let sheets = submenu("Sheet Composition", commands([.newSheet, .placeView, nil, .revisions]))
-        return [create, sheets, .separator()] + commands([.zoomExtents, .zoomIn, .zoomOut, .zoomOutTwice, .zoomRegion, .zoomSheetSize, nil, .previousPanZoom, .nextPanZoom, nil, .thinLines, .visibilityGraphics, .viewRange, .cropView, .toggleCropVisible, .sectionBox, .saveOrientation]) +
+        let sheets = submenu("Sheet Composition", commands([.newSheet, .placeView, .titleBlock, nil, .revisions, .guideGrid, .matchline])) // F810
+        return [graphics, presentation, create, sheets, .separator()] + commands([.navigationWheel, nil]) + commands([.zoomExtents, .zoomIn, .zoomOut, .zoomOutTwice, .zoomRegion, .zoomSheetSize, nil, .previousPanZoom, .nextPanZoom, nil, .thinLines, .visibilityGraphics, .viewRange, .cropView, .toggleCropVisible, .sectionBox, .saveOrientation]) +
             [detail, styles, .separator(), temp] + commands([.revealHidden, .hideInView, .unhideInView, nil, .toggleNavigator, .toggleProperties]) + [sidebar, .separator(), fullScreen] // W4-SHELL
     }
 }
