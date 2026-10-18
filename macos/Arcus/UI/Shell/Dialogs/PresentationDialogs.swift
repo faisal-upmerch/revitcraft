@@ -144,7 +144,7 @@ struct RenderingDialog: View {
                 .frame(width: 330)
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Button("Render") { render() }.keyboardShortcut("r", modifiers: [])
+                        Button("Render") { render() }
                         Spacer()
                         Button("Save to Project") { save() }.disabled(image == nil || saved)
                         Button("Export…") { export() }.disabled(image == nil)

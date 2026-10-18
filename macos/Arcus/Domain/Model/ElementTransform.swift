@@ -155,6 +155,15 @@ public enum ElementTransform {
             if case .shaft(var sh) = o { sh.boundary = sh.boundary.transformed(t); e.data = .opening(.shaft(sh)) }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler, .beamSystem, .structuralSymbol: // F34
             return ReinforcementTransform.apply(t, to: &e)
+        case .matchline(var m): // F810
+            m.start = t.apply(m.start); m.end = t.apply(m.end)
+            e.data = .matchline(m)
+            return true
+        case .cutProfile(var c): // F810: moves with its wall
+            c.region = c.region.map(t.apply)
+            if mirror { c.region.reverse() }
+            e.data = .cutProfile(c)
+            return true
         default:
             return false
         }

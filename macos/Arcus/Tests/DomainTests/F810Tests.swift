@@ -56,7 +56,12 @@ struct F810Tests {
         let show = HiddenLinesTool(ctx: ctx, show: true)
         click(show, Vec2(10, 4), hit: b.walls[1])
         #expect(show.obscuring == b.walls[1] && show.prompt == "Select element whose lines are hidden.")
-        click(show, Vec2(10, 4), hit: floor)
+        // The wall lies on top: the second pick looks past it to the floor below.
+        var second = ToolInput(point: Vec2(10, 4), rawPoint: Vec2(10, 4))
+        second.hit = b.walls[1]
+        second.hitCandidates = [b.walls[1], floor]
+        show.pointerMoved(second)
+        show.pointerDown(second)
         #expect(ctx.model[plan]?.view?.hiddenLines == [HiddenLinePair(obscuring: b.walls[1], hidden: floor)])
         // The floor's east edge runs along the east wall's centreline: dashed, on top of the wall's poché.
         let dashed = dashedLines(graphics(ctx.model, plan), floor)
@@ -140,6 +145,11 @@ struct F810Tests {
         #expect(cut.cutProfile?.region.count == 4)
         // A region away from the wall is refused.
         #expect(throws: TransactionError.self) { try Fx.commit(&m2) { tx in try CutProfiles.create(region: [Vec2(0, 3), Vec2(1, 3), Vec2(1, 4)], wall: wall, view: plan, tx) } }
+        // Moving the wall moves its cut profiles.
+        let before = try #require(m2.elements(.cutProfiles).first { $0.cutProfile?.adds == true }?.cutProfile?.region.first)
+        try Fx.commit(&m2) { tx in try ElementOperations.transform([wall], by: .translation(Vec2(0, 1)), in: tx, viewID: plan) }
+        let after = try #require(m2.elements(.cutProfiles).first { $0.cutProfile?.adds == true }?.cutProfile?.region.first)
+        #expect(Fx.approx(after, before + Vec2(0, 1)))
         // Deleting the wall deletes its cut profiles.
         try Fx.commit(&m2) { tx in tx.delete(wall) }
         #expect(m2.elements(.cutProfiles).isEmpty)
@@ -268,6 +278,9 @@ struct F810Tests {
         click(tool, Vec2(2, 3))
         let ml = try #require(ctx.model.elements(.matchlines).first)
         #expect(ml.matchline == MatchlineData(start: Vec2(2, -3), end: Vec2(2, 3)) && ml.ownerViewID == nil)
+        var moved = ctx.model
+        try Fx.commit(&moved) { tx in try ElementOperations.transform([ml.id], by: .translation(Vec2(1, 0)), in: tx, viewID: nil) }
+        #expect(moved[ml.id]?.matchline?.start == Vec2(3, -3))
         for l in ids.levels {
             let item = graphics(ctx.model, ids.planViews[l]!).items.first { $0.elementID == ml.id }
             #expect(item?.primitives.contains { if case .polyline(_, _, let st) = $0 { return st.pattern == .dashDot }; return false } == true)

@@ -21,12 +21,12 @@ public final class HiddenLinesTool: BaseTool, InteractiveTool {
 
     public var prompt: String { obscuring == nil ? "Select an element that is obscuring other elements." : "Select element whose lines are hidden." }
 
-    /// Model elements only (view-specific annotation can't hide or be hidden).
+    /// Model elements only (view-specific annotation can't hide or be hidden). The second pick looks past the
+    /// obscuring element, which usually lies on top.
     func target(_ i: ToolInput) -> Element? {
-        for id in [i.hit].compactMap({ $0 }) + i.hitCandidates {
-            if let e = ctx.model[id], e.ownerViewID == nil, e.category.isModel { return e }
-        }
-        return nil
+        let ids = [i.hit].compactMap({ $0 }) + i.hitCandidates
+        let models = ids.compactMap { ctx.model[$0] }.filter { $0.ownerViewID == nil && $0.category.isModel }
+        return models.first { $0.id != obscuring } ?? models.first
     }
 
     public func pointerMoved(_ i: ToolInput) {
