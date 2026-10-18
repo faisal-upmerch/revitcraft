@@ -143,7 +143,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
 
     // F34 element kinds:
-
+    case rebar, areaReinforcement, pathReinforcement, fabricArea, fabricSheet, rebarCoupler, beamSystem, structuralSymbol, structuralSettings
 
     // F5 element kinds:
 
@@ -230,7 +230,9 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
     // F34 element data:
-
+    case rebar(RebarData), areaReinforcement(AreaReinforcementData), pathReinforcement(PathReinforcementData), fabricArea(FabricAreaData)
+    case fabricSheet(FabricSheetData), rebarCoupler(RebarCouplerData), beamSystem(BeamSystemData), structuralSymbol(StructuralSymbolData)
+    case structuralSettings(StructuralSettingsData)
 
     // F5 element data:
 
@@ -306,7 +308,15 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
         // F34 element data kinds:
-
+        case .rebar: .rebar
+        case .areaReinforcement: .areaReinforcement
+        case .pathReinforcement: .pathReinforcement
+        case .fabricArea: .fabricArea
+        case .fabricSheet: .fabricSheet
+        case .rebarCoupler: .rebarCoupler
+        case .beamSystem: .beamSystem
+        case .structuralSymbol: .structuralSymbol
+        case .structuralSettings: .structuralSettings
 
         // F5 element data kinds:
 

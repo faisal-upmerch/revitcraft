@@ -71,6 +71,7 @@ enum ExportKind: Equatable {
     case reference(String)
     case group
     case light, vegetation // W2-LIB: lighting fixtures, planting
+    case reinforcingBar, reinforcingMesh // F34: rebar sets, area and path reinforcement; fabric
 }
 
 struct PlannedElement {
@@ -212,6 +213,9 @@ struct ExportPlan {
         case (.wallOpenings, _): return .ignore // WP3: exported as IfcOpeningElement voids of their host wall
         case (.shaftOpenings, _): return .skip("Shaft openings are exported as holes in the floors, ceilings and roofs they cut.") // WP3
         case (.roomSeparationLines, _), (.areaBoundaryLines, _), (.propertyLines, _): return .skip("Lines are not exported.")
+        case (.structuralRebar, _), (.areaReinforcement, _), (.pathReinforcement, _): return .export(.reinforcingBar) // F34
+        case (.fabricAreas, _), (.fabricReinforcement, _): return .export(.reinforcingMesh) // F34
+        case (.beamSystems, _): return .skip("Beam systems are exported as their beams.") // F34
         default:
             if ElementMeshes.hasModelGeometry(e) { return .export(.proxy) }
             return .skip("\(e.category.displayName) elements without 3D geometry are not exported.")

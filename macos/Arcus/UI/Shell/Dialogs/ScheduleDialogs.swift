@@ -39,6 +39,8 @@ struct NewScheduleDialog: View {
         case .walls: fs += [ScheduleTemplates.field("q.length", "Length", total: .total, align: .right), ScheduleTemplates.field("q.area", "Area", total: .total, align: .right)]
         case .floors, .ceilings, .roofs: fs += [ScheduleTemplates.field("q.area", "Area", total: .total, align: .right), ScheduleTemplates.field("q.volume", "Volume", total: .total, align: .right)]
         case .rooms: fs = [ScheduleTemplates.field("room.number", "Number"), ScheduleTemplates.field("name", "Name", width: 0.04), ScheduleTemplates.field("q.area", "Area", total: .total, align: .right)]
+        case .structuralRebar, .areaReinforcement, .pathReinforcement: // F34: rebar quantities
+            fs += [ScheduleTemplates.field("rebar.quantity", "Quantity", total: .total, align: .right), ScheduleTemplates.field("rebar.totalLength", "Total Bar Length", total: .total, align: .right)]
         default: fs.insert(ScheduleTemplates.field("mark", "Mark", width: 0.015), at: 0)
         }
         fs.append(ScheduleField(source: .count, heading: "Count", width: 0.015, alignment: .right))

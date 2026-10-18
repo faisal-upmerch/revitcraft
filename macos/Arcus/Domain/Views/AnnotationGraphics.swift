@@ -191,6 +191,8 @@ public enum AnnotationRenderer {
             return nil
         case .colorFillLegend(let l):
             return colorFillLegend(e, l, model: model, scale: s, st: st)
+        case .structuralSymbol(let sym): // F34
+            return StructuralSymbolGraphics.item(e, sym, model: model, scale: s, st: st)
         default:
             return nil
         }

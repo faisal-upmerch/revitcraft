@@ -31,6 +31,7 @@ struct PlanGraphics {
         items += slabs((byCategory[.floors] ?? []) + (byCategory[.buildingPads] ?? []) + (ceiling ? (byCategory[.ceilings] ?? []) : []))
         items += columns((byCategory[.columns] ?? []) + (byCategory[.structuralColumns] ?? []))
         items += beams(byCategory[.structuralFraming] ?? [])
+        items += f34Items(byCategory) // F34: reinforcement and beam systems
         if !ceiling {
             items += stairs(byCategory[.stairs] ?? [])
             items += railings(byCategory[.railings] ?? [])
@@ -260,7 +261,7 @@ struct PlanGraphics {
     func beams(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
         for (e, o) in list {
-            guard let outline = BeamGeometry.planOutline(e, model) else { continue }
+            guard let outline = f34CutBack(BeamGeometry.planOutline(e, model), e) else { continue } // F34: symbolic cutback
             let top = model.elevation(ofLevel: e.levelID) + (e.beam?.startOffset ?? 0)
             guard top >= depthZ, top <= topZ + 0.5 else { continue }
             var st = builder.stroke(.structuralFraming, cut: false, o)

@@ -147,9 +147,10 @@ public struct ViewGraphicsBuilder: Sendable {
 extension ViewGraphicsBuilder {
     /// Model elements drawn in model views.
     var modelCategories: Set<Category> {
-        [.walls, .doors, .windows, .floors, .ceilings, .roofs, .stairs, .railings, .columns, .structuralColumns, .structuralFraming,
+        Set<Category>([.walls, .doors, .windows, .floors, .ceilings, .roofs, .stairs, .railings, .columns, .structuralColumns, .structuralFraming,
          .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .topography, .buildingPads, .parking, .ifcReference, .ramps,
-         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site] // W2-LIB
+         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site]) // W2-LIB
+            .union(Category.f34Structural) // F34
     }
 
     func visibleModelElements() -> [(Element, GraphicOverride)] {

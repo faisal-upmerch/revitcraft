@@ -66,6 +66,7 @@ struct DialogHost: View {
             case .selectByID: SelectByIDDialog(state: state) // BL-VG
             case .additionalSettings(let tab): AdditionalSettingsDialog(state: state, tab: tab) // BL-VG
             case .userInterface: UserInterfaceDialog(state: state) // BL-VG
+            case .f34(let d): F34DialogHost(state: state, dialog: d) // F34
             }
         }
         .frame(minWidth: 420)
