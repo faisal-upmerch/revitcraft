@@ -15,6 +15,7 @@ extension CommandRouter {
     func f34MakeTool(_ id: CommandID, _ c: ToolContext) -> (any InteractiveTool)? {
         // A single selected floor or wall becomes the host of Area, Path and Fabric Area.
         let host = selection.count == 1 ? selection[0] : nil
+        f34EnsureTypes(id)
         switch id {
         case .editBoundary:
             // Beam systems and floor reinforcement edit their boundary in sketch mode.
@@ -46,6 +47,17 @@ extension CommandRouter {
         case .multiRebarAligned: return StructuralSymbolTool(ctx: c, kind: .multiRebarAligned, commandID: id)
         case .multiRebarLinear: return StructuralSymbolTool(ctx: c, kind: .multiRebarLinear, commandID: id)
         default: return nil
+        }
+    }
+
+    /// The bar and fabric sheet types are made when a reinforcement tool first starts, as in RevitCraft, so the type
+    /// selector lists them.
+    func f34EnsureTypes(_ id: CommandID) {
+        if [.rebar, .areaReinforcement, .pathReinforcement].contains(id), model.types(for: .structuralRebar).isEmpty {
+            session.perform("Rebar Types") { tx in Reinforcement.ensureBarTypes(in: tx) }
+        }
+        if [.fabricArea, .fabricSheet].contains(id), model.types(for: .fabricReinforcement).isEmpty {
+            session.perform("Fabric Sheet Types") { tx in Reinforcement.ensureFabricType(in: tx) }
         }
     }
 
