@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<!--
+  Arcus Bridge add-in manifest. Copy this file and ArcusBridge.dll (plus, for .NET Framework builds,
+  System.Text.Json.dll and its dependencies) into the Revit Addins folder, e.g.
+  %AppData%\Autodesk\Revit\Addins\2025\  (see README.md). Adjust <Assembly> if the DLL lives elsewhere.
+-->
+<RevitAddIns>
+  <AddIn Type="Application">
+    <Name>Arcus Bridge</Name>
+    <Assembly>ArcusBridge.dll</Assembly>
+    <AddInId>6F1D3A52-8C4B-4E27-9A0D-5B7E2C91F4A3</AddInId>
+    <FullClassName>Arcus.Bridge.ArcusBridgeApp</FullClassName>
+    <VendorId>ARCUS</VendorId>
+    <VendorDescription>Arcus — exports to the open Arcus Exchange format</VendorDescription>
+  </AddIn>
+</RevitAddIns>

@@ -1,0 +1,832 @@
+{
+  "documentID" : "22222222-3333-4444-8555-666666666666",
+  "elements" : [
+    {
+      "category" : "projectInfo",
+      "data" : {
+        "projectInfo" : {
+          "_0" : {
+            "address" : "",
+            "author" : "",
+            "buildingName" : "",
+            "clientName" : "Owner",
+            "elevationAboveSeaLevel" : 0,
+            "extentsWarningDistance" : 32000,
+            "issueDate" : "",
+            "latitude" : 0,
+            "longitude" : 0,
+            "organization" : "",
+            "projectBasePoint" : {
+              "x" : 0,
+              "y" : 0,
+              "z" : 0
+            },
+            "projectName" : "Schema 2 House",
+            "projectNumber" : "0001",
+            "sheetNumberPrefix" : "A",
+            "siteName" : "Default Site",
+            "status" : "Project Status",
+            "surveyEasting" : 0,
+            "surveyElevation" : 0,
+            "surveyNorthing" : 0,
+            "surveyPoint" : {
+              "x" : 0,
+              "y" : 0,
+              "z" : 0
+            },
+            "trueNorthAngle" : 0,
+            "units" : {
+              "angleDecimals" : 2,
+              "area" : "squareMeters",
+              "areaDecimals" : 2,
+              "currencySymbol" : "$",
+              "length" : "millimeters",
+              "lengthRounding" : 0.001,
+              "numberDecimals" : 2,
+              "slope" : "degrees",
+              "slopeDecimals" : 2,
+              "system" : "metric",
+              "volume" : "cubicMeters",
+              "volumeDecimals" : 2
+            }
+          }
+        }
+      },
+      "id" : 1,
+      "ifcGUID" : {
+        "value" : "3RX6OSNVn3QuRKzSIDRhN7"
+      },
+      "name" : "Project Information",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545299
+    },
+    {
+      "category" : "levels",
+      "data" : {
+        "level" : {
+          "_0" : {
+            "computationHeight" : 0,
+            "elevation" : 0,
+            "isBuildingStorey" : true,
+            "isStructural" : false,
+            "showBubbleEnd" : true,
+            "showBubbleStart" : false
+          }
+        }
+      },
+      "id" : 2,
+      "ifcGUID" : {
+        "value" : "2PavPR7LD5xx_0ADP_FqEm"
+      },
+      "name" : "Level 1",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545300
+    },
+    {
+      "category" : "levels",
+      "data" : {
+        "level" : {
+          "_0" : {
+            "computationHeight" : 0,
+            "elevation" : 3,
+            "isBuildingStorey" : true,
+            "isStructural" : false,
+            "showBubbleEnd" : true,
+            "showBubbleStart" : false
+          }
+        }
+      },
+      "id" : 3,
+      "ifcGUID" : {
+        "value" : "20ZfPR7L15xwn_ADL_FqEm"
+      },
+      "name" : "Level 2",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545301
+    },
+    {
+      "category" : "materials",
+      "data" : {
+        "material" : {
+          "_0" : {
+            "color" : {
+              "a" : 1,
+              "b" : 0.6862745098039216,
+              "g" : 0.7137254901960784,
+              "r" : 0.7254901960784313
+            },
+            "cost" : 0,
+            "cutPatternColor" : {
+              "a" : 1,
+              "b" : 0,
+              "g" : 0,
+              "r" : 0
+            },
+            "description" : "",
+            "keynote" : "",
+            "manufacturer" : "",
+            "mark" : "",
+            "materialClass" : "Concrete",
+            "model" : "",
+            "surfacePatternColor" : {
+              "a" : 1,
+              "b" : 0,
+              "g" : 0,
+              "r" : 0
+            },
+            "transparency" : 0
+          }
+        }
+      },
+      "id" : 4,
+      "ifcGUID" : {
+        "value" : "2latDShLz6zukPh9Op87AL"
+      },
+      "name" : "Concrete",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545302
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "assembly" : {
+              "coreEnd" : 1,
+              "coreStart" : 0,
+              "layers" : [
+                {
+                  "function" : "Structure [1]",
+                  "isVariable" : false,
+                  "materialID" : 4,
+                  "thickness" : 0.2,
+                  "wraps" : false
+                }
+              ],
+              "wrappingAtEnds" : "Do not wrap",
+              "wrappingAtInserts" : "Do not wrap"
+            },
+            "familyName" : "Basic Wall",
+            "instanceCategory" : "walls",
+            "params" : {
+
+            },
+            "systemFamily" : "Basic Wall"
+          }
+        }
+      },
+      "id" : 5,
+      "ifcGUID" : {
+        "value" : "0nWNaMZav6vx7iaEJS$yyc"
+      },
+      "name" : "Concrete 200",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545303
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "assembly" : {
+              "coreEnd" : 1,
+              "coreStart" : 0,
+              "layers" : [
+                {
+                  "function" : "Structure [1]",
+                  "isVariable" : false,
+                  "materialID" : 4,
+                  "thickness" : 0.2,
+                  "wraps" : false
+                }
+              ],
+              "wrappingAtEnds" : "Do not wrap",
+              "wrappingAtInserts" : "Do not wrap"
+            },
+            "familyName" : "Floor",
+            "instanceCategory" : "floors",
+            "params" : {
+
+            },
+            "systemFamily" : "Floor"
+          }
+        }
+      },
+      "id" : 6,
+      "ifcGUID" : {
+        "value" : "1ALEbLS053rf0Er3RKSCjs"
+      },
+      "name" : "Slab 200",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545304
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "assembly" : {
+              "coreEnd" : 1,
+              "coreStart" : 0,
+              "layers" : [
+                {
+                  "function" : "Structure [1]",
+                  "isVariable" : false,
+                  "materialID" : 4,
+                  "thickness" : 0.25,
+                  "wraps" : false
+                }
+              ],
+              "wrappingAtEnds" : "Do not wrap",
+              "wrappingAtInserts" : "Do not wrap"
+            },
+            "familyName" : "Basic Roof",
+            "instanceCategory" : "roofs",
+            "params" : {
+
+            },
+            "systemFamily" : "Basic Roof"
+          }
+        }
+      },
+      "id" : 7,
+      "ifcGUID" : {
+        "value" : "3hsTJsiZPCDhU86AS8yuTQ"
+      },
+      "name" : "Roof 250",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545305
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "familyName" : "Assembled Stair",
+            "instanceCategory" : "stairs",
+            "params" : {
+              "stair.maxRiser" : {
+                "double" : {
+                  "_0" : 0.18
+                }
+              },
+              "stair.minTread" : {
+                "double" : {
+                  "_0" : 0.28
+                }
+              }
+            },
+            "systemFamily" : "Assembled Stair"
+          }
+        }
+      },
+      "id" : 8,
+      "ifcGUID" : {
+        "value" : "1jLt79jBT97xCqiHC7Vs8x"
+      },
+      "name" : "Stair 180",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545306
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "familyName" : "Railing",
+            "instanceCategory" : "railings",
+            "params" : {
+              "railing.height" : {
+                "double" : {
+                  "_0" : 1.1
+                }
+              }
+            },
+            "systemFamily" : "Railing"
+          }
+        }
+      },
+      "id" : 9,
+      "ifcGUID" : {
+        "value" : "32pxKQg41AXOzd4vetUWev"
+      },
+      "name" : "Guard",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545307
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 10,
+                    "y" : 0
+                  },
+                  "start" : {
+                    "x" : 0,
+                    "y" : 0
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 3,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 10,
+      "ifcGUID" : {
+        "value" : "1sg14pyRH1mwsa9RY5AHET"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545308,
+      "typeID" : 5
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 10,
+                    "y" : 8
+                  },
+                  "start" : {
+                    "x" : 10,
+                    "y" : 0
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 3,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 11,
+      "ifcGUID" : {
+        "value" : "0fgX4pyRL1mu2c9Rc5AHET"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545309,
+      "typeID" : 5
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 0,
+                    "y" : 8
+                  },
+                  "start" : {
+                    "x" : 10,
+                    "y" : 8
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 3,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 12,
+      "ifcGUID" : {
+        "value" : "0GfH4pyR91mvEe9Rg5AHET"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545310,
+      "typeID" : 5
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 0,
+                    "y" : 0
+                  },
+                  "start" : {
+                    "x" : 0,
+                    "y" : 8
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 3,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 13,
+      "ifcGUID" : {
+        "value" : "33fX4pyRD1mwQf9Rk5AHET"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545311,
+      "typeID" : 5
+    },
+    {
+      "category" : "floors",
+      "data" : {
+        "slab" : {
+          "_0" : {
+            "boundary" : {
+              "loops" : [
+                [
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 10,
+                          "y" : 0
+                        },
+                        "start" : {
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 10,
+                          "y" : 8
+                        },
+                        "start" : {
+                          "x" : 10,
+                          "y" : 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 0,
+                          "y" : 8
+                        },
+                        "start" : {
+                          "x" : 10,
+                          "y" : 8
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 0,
+                          "y" : 0
+                        },
+                        "start" : {
+                          "x" : 0,
+                          "y" : 8
+                        }
+                      }
+                    }
+                  }
+                ]
+              ]
+            },
+            "offset" : 0,
+            "roomBounding" : true,
+            "structural" : false
+          }
+        }
+      },
+      "id" : 14,
+      "ifcGUID" : {
+        "value" : "0KYG72Cav8cuCNwQHnYat0"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545312,
+      "typeID" : 6
+    },
+    {
+      "category" : "roofs",
+      "data" : {
+        "roof" : {
+          "_0" : {
+            "baseOffset" : 0,
+            "edgeSlopes" : [
+              0.46364760900080615,
+              null,
+              0.46364760900080615,
+              null
+            ],
+            "fascia" : false,
+            "footprint" : {
+              "loops" : [
+                [
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 10,
+                          "y" : 0
+                        },
+                        "start" : {
+                          "x" : 0,
+                          "y" : 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 10,
+                          "y" : 8
+                        },
+                        "start" : {
+                          "x" : 10,
+                          "y" : 0
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 0,
+                          "y" : 8
+                        },
+                        "start" : {
+                          "x" : 10,
+                          "y" : 8
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "line" : {
+                      "_0" : {
+                        "end" : {
+                          "x" : 0,
+                          "y" : 0
+                        },
+                        "start" : {
+                          "x" : 0,
+                          "y" : 8
+                        }
+                      }
+                    }
+                  }
+                ]
+              ]
+            },
+            "gutter" : false,
+            "overhang" : 0.5
+          }
+        }
+      },
+      "id" : 15,
+      "ifcGUID" : {
+        "value" : "0eI5chhUzAtx8iHm0M3tmD"
+      },
+      "levelID" : 3,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545313,
+      "typeID" : 7
+    },
+    {
+      "category" : "stairs",
+      "data" : {
+        "stair" : {
+          "_0" : {
+            "baseOffset" : 0,
+            "direction" : 0,
+            "origin" : {
+              "x" : 2,
+              "y" : 2
+            },
+            "shape" : "Straight",
+            "topLevelID" : 3,
+            "topOffset" : 0,
+            "turnsLeft" : true,
+            "unconnectedHeight" : 3,
+            "width" : 1.1
+          }
+        }
+      },
+      "id" : 16,
+      "ifcGUID" : {
+        "value" : "2lVNCEqkv9mguIT7_X_Zlg"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545314,
+      "typeID" : 8
+    },
+    {
+      "category" : "railings",
+      "data" : {
+        "railing" : {
+          "_0" : {
+            "baseOffset" : 0,
+            "followsHost" : true,
+            "hostSideLeft" : true,
+            "path" : [
+
+            ]
+          }
+        }
+      },
+      "hostID" : 16,
+      "id" : 17,
+      "ifcGUID" : {
+        "value" : "3oIMEauF9E1ePLNBoxKY2_"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545315,
+      "typeID" : 9
+    },
+    {
+      "category" : "railings",
+      "data" : {
+        "railing" : {
+          "_0" : {
+            "baseOffset" : 0,
+            "followsHost" : true,
+            "hostSideLeft" : false,
+            "path" : [
+
+            ]
+          }
+        }
+      },
+      "hostID" : 16,
+      "id" : 18,
+      "ifcGUID" : {
+        "value" : "3bcCbPksP4Yx3cDU1_Bcvs"
+      },
+      "levelID" : 2,
+      "name" : "",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1877317455608545316,
+      "typeID" : 9
+    }
+  ],
+  "nextID" : 19,
+  "projectParameters" : [
+
+  ],
+  "referenceDrawings" : {
+
+  },
+  "revision" : 1,
+  "viewSheetSets" : [
+
+  ]
+}

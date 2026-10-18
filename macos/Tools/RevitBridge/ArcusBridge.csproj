@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Arcus Bridge — Revit add-in that exports to the open Arcus Exchange format (.arcusx).
+    UNVERIFIED: written without access to Revit or the .NET SDK on the development machine; see README.md.
+
+    Build (Revit 2025 and later, .NET 8):
+      dotnet build -c Release
+      dotnet build -c Release -p:RevitVersion=2026
+    Build (Revit 2023/2024, .NET Framework 4.8; see README.md):
+      dotnet build -c Release -p:TargetFramework=net48 -p:RevitVersion=2024
+    RevitAPI.dll / RevitAPIUI.dll are referenced from your local Revit installation and are never copied or committed.
+  -->
+  <PropertyGroup>
+    <TargetFramework Condition="'$(TargetFramework)' == ''">net8.0-windows</TargetFramework>
+    <RevitVersion Condition="'$(RevitVersion)' == ''">2025</RevitVersion>
+    <RevitInstallDir Condition="'$(RevitInstallDir)' == ''">C:\Program Files\Autodesk\Revit $(RevitVersion)</RevitInstallDir>
+    <OutputType>Library</OutputType>
+    <AssemblyName>ArcusBridge</AssemblyName>
+    <RootNamespace>Arcus.Bridge</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <PlatformTarget>x64</PlatformTarget>
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <Version>0.1.0</Version>
+    <Product>Arcus Bridge</Product>
+    <Description>Exports Revit projects and families to the open Arcus Exchange format.</Description>
+    <!-- Revit loads the add-in from the Addins folder; the Revit API assemblies come from Revit itself. -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <!-- Revit 2023/2024: .NET Framework 4.8. Revit 2023 and earlier use ElementId.IntegerValue and BuiltInParameterGroup. -->
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <DefineConstants>$(DefineConstants);REVIT_NETFX</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(RevitVersion)' == '2023'">
+    <DefineConstants>$(DefineConstants);REVIT2023_OR_EARLIER</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="RevitAPI">
+      <HintPath>$(RevitInstallDir)\RevitAPI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="RevitAPIUI">
+      <HintPath>$(RevitInstallDir)\RevitAPIUI.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(TargetFramework)' == 'net48'">
+    <PackageReference Include="System.Text.Json" Version="8.0.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The C++ BimRv bridge sketch and the DTO generator are not part of the add-in. -->
+    <Compile Remove="BimRvBridge/**" />
+    <None Remove="BimRvBridge/**" />
+    <None Include="ArcusBridge.addin" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

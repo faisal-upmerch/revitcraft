@@ -1,0 +1,28 @@
+ISO-10303-21;
+HEADER;
+/* Hand-written Arcus test fixture (CC0). IFC4, millimetre units. */
+FILE_DESCRIPTION(('ViewDefinition [ReferenceView_V1.2]'),'2;1');
+FILE_NAME('small-ifc4-mm.ifc','2026-01-01T00:00:00',('Arcus Tests'),('Arcus'),'hand written','hand written','');
+FILE_SCHEMA(('IFC4'));
+ENDSEC;
+DATA;
+#1=IFCSIUNIT(*,.LENGTHUNIT.,.MILLI.,.METRE.);
+#2=IFCSIUNIT(*,.PLANEANGLEUNIT.,$,.RADIAN.);
+#3=IFCUNITASSIGNMENT((#1,#2));
+#4=IFCCARTESIANPOINT((0.,0.,0.));
+#5=IFCAXIS2PLACEMENT3D(#4,$,$);
+#6=IFCGEOMETRICREPRESENTATIONCONTEXT($,'Model',3,1.E-05,#5,$);
+#7=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Body','Model',*,*,*,*,#6,$,.MODEL_VIEW.,$);
+#8=IFCGEOMETRICREPRESENTATIONSUBCONTEXT('Axis','Model',*,*,*,*,#6,$,.GRAPH_VIEW.,$);
+#10=IFCPROJECT('0ArcusFixturesProj0001',$,'Hand Project',$,$,$,$,(#6),#3);
+#11=IFCLOCALPLACEMENT($,#5);
+#12=IFCSITE('0ArcusFixturesSite0001',$,'Site',$,$,#11,$,$,.ELEMENT.,$,$,$,$,$);
+#13=IFCLOCALPLACEMENT(#11,#5);
+#14=IFCBUILDING('0ArcusFixturesBldg0001',$,'Building',$,$,#13,$,$,.ELEMENT.,$,$,$);
+#15=IFCLOCALPLACEMENT(#13,#5);
+#16=IFCBUILDINGSTOREY('0ArcusFixturesStor0001',$,'Ground Floor',$,$,#15,$,$,.ELEMENT.,0.);
+#17=IFCCARTESIANPOINT((0.,0.,3500.));
+#18=IFCAXIS2PLACEMENT3D(#17,$,$);
+#19=IFCLOCALPLACEMENT(#13,#18);
+#20=IFCBUILDINGSTOREY('0ArcusFixturesStor0002',$,'Upper Floor',$,$,#19,$,$,.ELEMENT.,3500.);
+#21=IFCRELAGGREGATES('0ArcusFixturesRelA0001',$,$,$,

@@ -1,0 +1,7 @@
+.build/
+.build-*/
+.agents/
+build/
+*.xcuserstate
+.DS_Store
+.swiftpm/

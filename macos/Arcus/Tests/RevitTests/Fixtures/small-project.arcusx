@@ -1,0 +1,222 @@
+{
+  "format": "arcus-exchange",
+  "schemaVersion": "1.0",
+  "generator": { "name": "Hand-authored fixture", "version": "1.0", "host": "none", "exportedAt": "2026-09-25T10:00:00Z" },
+  "documentKind": "project",
+  "source": { "fileName": "Small House.rvt", "documentId": "fixture-small-house" },
+  "units": { "system": "imperial" },
+  "projectInfo": {
+    "name": "Small House", "number": "2026-017", "clientName": "A. Client", "address": "1 Example Road",
+    "author": "Fixture", "latitude": 51.5, "longitude": -0.12, "trueNorthAngle": 0.1
+  },
+  "materials": [
+    { "id": "m-concrete", "uniqueId": "sh-mat-concrete", "name": "Concrete - Cast-in-Place", "materialClass": "Concrete", "color": "#B9B6AF" },
+    { "id": "m-brick", "uniqueId": "sh-mat-brick", "name": "Brick, Common Red", "materialClass": "Masonry", "color": "#A9573F" },
+    { "id": "m-insulation", "uniqueId": "sh-mat-insulation", "name": "Rigid Insulation", "materialClass": "Insulation", "color": "#E7D57C" },
+    { "id": "m-gypsum", "uniqueId": "sh-mat-gypsum", "name": "Gypsum Wall Board", "materialClass": "Plaster", "color": "#EEEBE4" },
+    { "id": "m-stud", "uniqueId": "sh-mat-stud", "name": "Timber Stud", "materialClass": "Wood", "color": "#CFA774" },
+    { "id": "m-oak", "uniqueId": "sh-mat-oak", "name": "Oak Flooring", "materialClass": "Wood", "color": "#B88A5A" },
+    { "id": "m-tile", "uniqueId": "sh-mat-tile", "name": "Roof Tile, Clay", "materialClass": "Ceramic", "color": "#8F4B36" },
+    { "id": "m-glass", "uniqueId": "sh-mat-glass", "name": "Glass, Clear", "materialClass": "Glass", "color": "#9FC4D6", "transparency": 0.7 },
+    { "id": "m-alu", "uniqueId": "sh-mat-alu", "name": "Aluminium", "materialClass": "Metal", "color": "#B9BEC4" }
+  ],
+  "levels": [
+    { "id": "L1", "uniqueId": "sh-level-1", "name": "Level 1", "elevation": 0.0, "isBuildingStorey": true },
+    { "id": "L2", "uniqueId": "sh-level-2", "name": "Level 2", "elevation": 3.0, "isBuildingStorey": true }
+  ],
+  "grids": [
+    { "id": "G1", "uniqueId": "sh-grid-1", "name": "1", "curve": { "type": "line", "start": [0, -2], "end": [0, 10] } },
+    { "id": "GA", "uniqueId": "sh-grid-a", "name": "A", "curve": { "type": "line", "start": [-2, 0], "end": [12, 0] } }
+  ],
+  "types": [
+    {
+      "id": "wt-ext", "uniqueId": "sh-type-wall-ext", "name": "Exterior - Brick on Block", "familyName": "Basic Wall", "category": "walls", "kind": "basic",
+      "function": "Exterior", "typeMark": "W1",
+      "layers": [
+        { "function": "finish1", "materialId": "m-brick", "thickness": 0.1 },
+        { "function": "thermal", "materialId": "m-insulation", "thickness": 0.05 },
+        { "function": "membrane", "thickness": 0 },
+        { "function": "structure", "materialId": "m-concrete", "thickness": 0.2 },
+        { "function": "finish2", "materialId": "m-gypsum", "thickness": 0.0125 }
+      ],
+      "coreStart": 3, "coreEnd": 4, "wrappingAtInserts": "exterior"
+    },
+    {
+      "id": "wt-int", "uniqueId": "sh-type-wall-int", "name": "Interior - 138mm Partition", "category": "walls", "kind": "basic",
+      "function": "Interior",
+      "layers": [
+        { "function": "finish2", "materialId": "m-gypsum", "thickness": 0.0125 },
+        { "function": "structure", "materialId": "m-stud", "thickness": 0.113, "isCore": true },
+        { "function": "finish2", "materialId": "m-gypsum", "thickness": 0.0125 }
+      ]
+    },
+    { "id": "wt-cw", "uniqueId": "sh-type-wall-curtain", "name": "Storefront", "category": "walls", "kind": "curtain" },
+    {
+      "id": "ft-1", "uniqueId": "sh-type-floor", "name": "Timber on Concrete 300mm", "category": "floors",
+      "layers": [ { "function": "finish1", "materialId": "m-oak", "thickness": 0.02 }, { "function": "structure", "materialId": "m-concrete", "thickness": 0.28 } ]
+    },
+    {
+      "id": "rt-1", "uniqueId": "sh-type-roof", "name": "Tiled Roof 250mm", "category": "roofs",
+      "layers": [ { "function": "finish1", "materialId": "m-tile", "thickness": 0.05 }, { "function": "structure", "materialId": "m-stud", "thickness": 0.2 } ]
+    },
+    {
+      "id": "col-1", "uniqueId": "sh-type-column", "name": "Concrete 400 x 400", "familyName": "Concrete-Rectangular-Column", "category": "structuralColumns",
+      "section": { "shape": "rectangle", "width": 0.4, "depth": 0.4 }, "materialId": "m-concrete"
+    }
+  ],
+  "families": [
+    {
+      "id": "fam-door", "uniqueId": "sh-family-door", "name": "Single-Flush", "category": "doors", "revitCategory": "Doors", "hostKind": "wall",
+      "parameters": [
+        { "name": "Width", "dataType": "length", "builtIn": "width" },
+        { "name": "Height", "dataType": "length", "builtIn": "height" },
+        { "name": "Frame Width", "dataType": "length" },
+        { "name": "Rough Width", "dataType": "length", "formula": "Width + 2 * Frame Width" },
+        { "name": "Panel Material", "dataType": "material", "group": "materials" },
+        { "name": "Leaf Label", "dataType": "text", "isInstance": true, "group": "identity" }
+      ],
+      "types": [
+        { "id": "door-0915", "uniqueId": "sh-type-door-0915", "name": "0915 x 2134mm", "typeMark": "D1",
+          "values": { "Width": 0.915, "Height": 2.134, "Frame Width": 0.05, "Panel Material": { "materialId": "m-oak" } } },
+        { "id": "door-0813", "uniqueId": "sh-type-door-0813", "name": "0813 x 2134mm", "typeMark": "D2",
+          "values": { "Width": 0.813, "Height": 2.134, "Frame Width": 0.05, "Panel Material": { "materialId": "m-oak" } } }
+      ],
+      "referencePlanes": [
+        { "name": "Left", "axis": "x", "offset": "-Width / 2", "strength": "left" },
+        { "name": "Right", "axis": "x", "offset": "Width / 2", "strength": "right" },
+        { "name": "Bottom", "axis": "z", "offset": 0, "strength": "bottom" },
+        { "name": "Top", "axis": "z", "offset": "Height", "strength": "top" }
+      ],
+      "geometry": [
+        {
+          "kind": "extrusion", "name": "Panel", "extrusionAxis": "y", "extent": [-0.02, 0.02],
+          "loops": [[
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Bottom" }], "end": [{ "plane": "Right" }, { "plane": "Bottom" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Bottom" }], "end": [{ "plane": "Right" }, { "plane": "Top" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Top" }], "end": [{ "plane": "Left" }, { "plane": "Top" }] },
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Top" }], "end": [{ "plane": "Left" }, { "plane": "Bottom" }] }
+          ]],
+          "materialParameter": "Panel Material", "subcategory": "Panel"
+        },
+        {
+          "kind": "extrusion", "name": "Frame", "extrusionAxis": "z", "extent": [0, "Height + Frame Width"],
+          "loops": [[
+            { "type": "line", "start": ["-Width / 2 - Frame Width", -0.05], "end": [{ "plane": "Left" }, -0.05] },
+            { "type": "line", "start": [{ "plane": "Left" }, -0.05], "end": [{ "plane": "Left" }, 0.05] },
+            { "type": "line", "start": [{ "plane": "Left" }, 0.05], "end": ["-Width / 2 - Frame Width", 0.05] },
+            { "type": "line", "start": ["-Width / 2 - Frame Width", 0.05], "end": ["-Width / 2 - Frame Width", -0.05] }
+          ]],
+          "materialId": "m-oak", "subcategory": "Frame/Mullion"
+        }
+      ],
+      "opening": { "xMin": "-Width / 2 - Frame Width", "xMax": "Width / 2 + Frame Width", "zMin": 0, "zMax": "Height + Frame Width" }
+    },
+    {
+      "id": "fam-window", "uniqueId": "sh-family-window", "name": "Fixed", "category": "windows", "revitCategory": "Windows", "hostKind": "wall",
+      "parameters": [
+        { "name": "Width", "dataType": "length" },
+        { "name": "Height", "dataType": "length" },
+        { "name": "Glass Material", "dataType": "material" }
+      ],
+      "types": [
+        { "id": "win-0915", "uniqueId": "sh-type-window-0915", "name": "0915 x 1220mm",
+          "values": { "Width": 0.915, "Height": 1.22, "Glass Material": { "materialId": "m-glass" } } }
+      ],
+      "referencePlanes": [
+        { "name": "Left", "axis": "x", "offset": "-Width / 2", "strength": "left" },
+        { "name": "Right", "axis": "x", "offset": "Width / 2", "strength": "right" },
+        { "name": "Sill", "axis": "z", "offset": 0, "strength": "bottom" },
+        { "name": "Head", "axis": "z", "offset": "Height", "strength": "top" }
+      ],
+      "geometry": [
+        {
+          "kind": "extrusion", "name": "Glass", "extrusionAxis": "y", "extent": [-0.012, 0.012],
+          "loops": [[
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Sill" }], "end": [{ "plane": "Right" }, { "plane": "Sill" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Sill" }], "end": [{ "plane": "Right" }, { "plane": "Head" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Head" }], "end": [{ "plane": "Left" }, { "plane": "Head" }] },
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Head" }], "end": [{ "plane": "Left" }, { "plane": "Sill" }] }
+          ]],
+          "materialParameter": "Glass Material", "subcategory": "Glass"
+        }
+      ]
+    },
+    {
+      "id": "fam-table", "uniqueId": "sh-family-table", "name": "Dining Table", "category": "furniture", "revitCategory": "Furniture",
+      "parameters": [
+        { "name": "Width", "dataType": "length" }, { "name": "Depth", "dataType": "length" }, { "name": "Height", "dataType": "length" }
+      ],
+      "types": [ { "id": "table-1200", "uniqueId": "sh-type-table-1200", "name": "1200 x 800", "values": { "Width": 1.2, "Depth": 0.8, "Height": 0.74 } } ],
+      "geometry": [
+        {
+          "kind": "extrusion", "name": "Top", "extrusionAxis": "z", "extent": ["Height - 0.04 m", "Height"],
+          "loops": [[
+            { "type": "line", "start": ["-Width / 2", "-Depth / 2"], "end": ["Width / 2", "-Depth / 2"] },
+            { "type": "line", "start": ["Width / 2", "-Depth / 2"], "end": ["Width / 2", "Depth / 2"] },
+            { "type": "line", "start": ["Width / 2", "Depth / 2"], "end": ["-Width / 2", "Depth / 2"] },
+            { "type": "line", "start": ["-Width / 2", "Depth / 2"], "end": ["-Width / 2", "-Depth / 2"] }
+          ]]
+        }
+      ]
+    },
+    {
+      "id": "fam-sofa", "uniqueId": "sh-family-sofa", "name": "Sofa (parameters only)", "category": "furniture", "definitionIncluded": false,
+      "types": [ { "id": "sofa-1", "uniqueId": "sh-type-sofa", "name": "Standard" } ]
+    }
+  ],
+  "walls": [
+    { "id": "W1", "uniqueId": "sh-wall-1", "typeId": "wt-ext", "levelId": "L1", "curve": { "type": "line", "start": [0, 0], "end": [0, 8] },
+      "locationLine": "wallCenterline", "baseOffset": 0, "topLevelId": "L2", "topOffset": 0, "unconnectedHeight": 3, "flipped": false, "structural": true, "mark": "W-01" },
+    { "id": "W2", "uniqueId": "sh-wall-2", "typeId": "wt-ext", "levelId": "L1", "curve": { "type": "line", "start": [0, 8], "end": [10, 8] },
+      "locationLine": "wallCenterline", "topLevelId": "L2" },
+    { "id": "W3", "uniqueId": "sh-wall-3", "typeId": "wt-ext", "levelId": "L1", "curve": { "type": "line", "start": [10, 8], "end": [10, 0] },
+      "locationLine": "finishFaceExterior", "topLevelId": "L2", "joinAtEnd": true },
+    { "id": "W4", "uniqueId": "sh-wall-4", "typeId": "wt-ext", "levelId": "L1", "curve": { "type": "line", "start": [10, 0], "end": [0, 0] },
+      "topLevelId": "L2", "comments": "South facade" },
+    { "id": "W5", "uniqueId": "sh-wall-5", "typeId": "wt-cw", "levelId": "L2", "curve": { "type": "line", "start": [0, 8], "end": [4, 8] },
+      "mesh": { "positions": [0, 8, 3,  4, 8, 3,  4, 8, 5,  0, 8, 5], "indices": [0, 1, 2,  0, 2, 3] } }
+  ],
+  "floors": [
+    { "id": "F1", "uniqueId": "sh-floor-1", "typeId": "ft-1", "levelId": "L1", "offset": 0, "structural": true,
+      "boundary": [[
+        { "type": "line", "start": [0, 0], "end": [10, 0] }, { "type": "line", "start": [10, 0], "end": [10, 8] },
+        { "type": "line", "start": [10, 8], "end": [0, 8] }, { "type": "line", "start": [0, 8], "end": [0, 0] }
+      ]] }
+  ],
+  "roofs": [
+    { "id": "R1", "uniqueId": "sh-roof-1", "typeId": "rt-1", "levelId": "L2", "kind": "footprint", "baseOffset": 0, "overhang": 0.5,
+      "footprint": [[
+        { "type": "line", "start": [-0.5, -0.5], "end": [10.5, -0.5], "definesSlope": true, "slopeAngle": 0.5235987756 },
+        { "type": "line", "start": [10.5, -0.5], "end": [10.5, 8.5], "definesSlope": true, "slopeAngle": 0.5235987756 },
+        { "type": "line", "start": [10.5, 8.5], "end": [-0.5, 8.5], "definesSlope": true, "slopeAngle": 0.5235987756 },
+        { "type": "line", "start": [-0.5, 8.5], "end": [-0.5, -0.5], "definesSlope": true, "slopeAngle": 0.5235987756 }
+      ]] }
+  ],
+  "inserts": [
+    { "id": "D1", "uniqueId": "sh-door-1", "category": "doors", "typeId": "door-0915", "hostId": "W4", "levelId": "L1",
+      "location": [5, 0, 0], "transform": { "origin": [5, 0, 0], "basisX": [-1, 0, 0], "basisY": [0, -1, 0], "basisZ": [0, 0, 1] },
+      "mark": "101", "parameters": { "Leaf Label": "Entrance", "Unknown Parameter": 3 } },
+    { "id": "WN1", "uniqueId": "sh-window-1", "category": "windows", "typeId": "win-0915", "hostId": "W2", "levelId": "L1",
+      "location": [3, 8, 0.9], "transform": { "origin": [3, 8, 0.9], "basisX": [-1, 0, 0], "basisY": [0, -1, 0], "basisZ": [0, 0, 1] } }
+  ],
+  "rooms": [
+    { "id": "RM1", "uniqueId": "sh-room-1", "name": "Living", "number": "101", "levelId": "L1", "point": [2.5, 4],
+      "upperLimitLevelId": "L1", "limitOffset": 2.7, "department": "Residential" }
+  ],
+  "columns": [
+    { "id": "C1", "uniqueId": "sh-column-1", "category": "structuralColumns", "typeId": "col-1", "levelId": "L1", "location": [5, 4],
+      "rotation": 0, "topLevelId": "L2", "topOffset": 0 }
+  ],
+  "components": [
+    { "id": "T1", "uniqueId": "sh-table-1", "category": "furniture", "typeId": "table-1200", "levelId": "L1",
+      "transform": { "origin": [7, 5, 0], "basisX": [0, 1, 0], "basisY": [-1, 0, 0], "basisZ": [0, 0, 1] } },
+    { "id": "S1", "uniqueId": "sh-sofa-1", "category": "furniture", "revitCategory": "Furniture", "typeId": "sofa-1", "levelId": "L1",
+      "transform": { "origin": [3, 2, 0], "basisX": [1, 0, 0], "basisY": [0, 1, 0], "basisZ": [0, 0, 1] },
+      "mesh": { "positions": [3, 2, 0,  4, 2, 0,  4, 3, 0,  3, 2, 0.8], "indices": [0, 1, 2,  0, 1, 3,  1, 2, 3,  2, 0, 3] } }
+  ],
+  "meshes": [
+    { "id": "ME1", "uniqueId": "sh-planting-1", "category": "other", "revitCategory": "Planting", "name": "Tree", "levelId": "L1",
+      "positions": [12, 2, 0,  13, 2, 0,  12.5, 3, 0,  12.5, 2.5, 4], "indices": [0, 1, 2,  0, 1, 3,  1, 2, 3,  2, 0, 3],
+      "reason": "no Arcus equivalent", "parameters": { "Height": 4, "Species": "Oak" } }
+  ]
+}

@@ -1,0 +1,166 @@
+{
+  "format": "arcus-exchange",
+  "schemaVersion": "1.0",
+  "generator": { "name": "Hand-authored fixture", "version": "1.0", "host": "none" },
+  "documentKind": "family",
+  "source": { "fileName": "Single-Flush Parametric.rfa", "documentId": "fixture-door-doc" },
+  "units": { "system": "metric" },
+  "materials": [
+    { "id": "m-oak", "uniqueId": "fx-mat-oak", "name": "Oak, Red", "materialClass": "Wood", "color": "#B88A5A" },
+    { "id": "m-paint", "uniqueId": "fx-mat-paint", "name": "Paint - White", "materialClass": "Paint/Coating", "color": "#F7F6F2" }
+  ],
+  "families": [
+    {
+      "id": "fam-door",
+      "uniqueId": "fx-family-single-flush",
+      "name": "Single-Flush Parametric",
+      "category": "doors",
+      "revitCategory": "Doors",
+      "description": "Single flush door, frame and panel driven by Width and Height.",
+      "hostKind": "wall",
+      "someFutureField": { "ignored": true },
+      "parameters": [
+        { "name": "Width", "dataType": "length", "isInstance": false, "group": "dimensions", "isBuiltIn": true, "builtIn": "width" },
+        { "name": "Height", "dataType": "length", "isInstance": false, "group": "dimensions", "isBuiltIn": true, "builtIn": "height" },
+        { "name": "Frame Width", "dataType": "length", "group": "dimensions" },
+        { "name": "Frame Depth", "dataType": "length", "group": "dimensions" },
+        { "name": "Panel Thickness", "dataType": "length", "group": "construction" },
+        { "name": "Rough Width", "dataType": "length", "group": "dimensions", "formula": "Width + 2 * Frame Width" },
+        { "name": "Rough Height", "dataType": "length", "group": "dimensions", "formula": "Height + Frame Width" },
+        { "name": "Frame Material", "dataType": "material", "group": "materials" },
+        { "name": "Panel Material", "dataType": "material", "group": "materials" },
+        { "name": "Has Kick Plate", "dataType": "yesNo", "isInstance": true, "group": "graphics" },
+        { "name": "Nested Hardware", "dataType": "familyType", "group": "other" }
+      ],
+      "types": [
+        {
+          "id": "ft-0915",
+          "uniqueId": "fx-type-0915",
+          "name": "0915 x 2134mm",
+          "typeMark": "D1",
+          "values": {
+            "Width": 0.915, "Height": 2.134, "Frame Width": 0.05, "Frame Depth": 0.1, "Panel Thickness": 0.045,
+            "Frame Material": { "materialId": "m-oak" }, "Panel Material": { "materialId": "m-paint" },
+            "Has Kick Plate": false, "Rough Width": 99.0
+          }
+        },
+        {
+          "id": "ft-1015",
+          "uniqueId": "fx-type-1015",
+          "name": "1015 x 2134mm",
+          "typeMark": "D2",
+          "values": {
+            "Width": 1.015, "Height": 2.134, "Frame Width": 0.05, "Frame Depth": 0.1, "Panel Thickness": 0.045,
+            "Frame Material": { "materialId": "m-oak" }, "Panel Material": { "materialId": "m-oak" },
+            "Has Kick Plate": true
+          }
+        }
+      ],
+      "referencePlanes": [
+        { "name": "Center (Left/Right)", "axis": "x", "offset": 0, "strength": "centerLeftRight", "definesOrigin": true },
+        { "name": "Left", "axis": "x", "offset": "-Width / 2", "strength": "left" },
+        { "name": "Right", "axis": "x", "offset": "Width / 2", "strength": "right" },
+        { "name": "Center (Front/Back)", "axis": "y", "offset": 0, "strength": "centerFrontBack", "definesOrigin": true },
+        { "name": "Bottom", "axis": "z", "offset": 0, "strength": "bottom" },
+        { "name": "Top", "axis": "z", "offset": "Height", "strength": "top" }
+      ],
+      "dimensions": [
+        { "planeA": "Left", "planeB": "Right", "label": "Width" },
+        { "planeA": "Bottom", "planeB": "Top", "label": "Height" }
+      ],
+      "geometry": [
+        {
+          "kind": "extrusion", "name": "Left Jamb", "extrusionAxis": "z",
+          "extent": [{ "plane": "Bottom" }, "Height + Frame Width"],
+          "loops": [[
+            { "type": "line", "start": ["-Width / 2 - Frame Width", "-Frame Depth / 2"], "end": [{ "plane": "Left" }, "-Frame Depth / 2"] },
+            { "type": "line", "start": [{ "plane": "Left" }, "-Frame Depth / 2"], "end": [{ "plane": "Left" }, "Frame Depth / 2"] },
+            { "type": "line", "start": [{ "plane": "Left" }, "Frame Depth / 2"], "end": ["-Width / 2 - Frame Width", "Frame Depth / 2"] },
+            { "type": "line", "start": ["-Width / 2 - Frame Width", "Frame Depth / 2"], "end": ["-Width / 2 - Frame Width", "-Frame Depth / 2"] }
+          ]],
+          "materialParameter": "Frame Material", "subcategory": "Frame/Mullion", "visibleAt": ["coarse", "medium", "fine"]
+        },
+        {
+          "kind": "extrusion", "name": "Right Jamb", "extrusionAxis": "z",
+          "extent": [0, "Height + Frame Width"],
+          "loops": [[
+            { "type": "line", "start": [{ "plane": "Right" }, "-Frame Depth / 2"], "end": ["Width / 2 + Frame Width", "-Frame Depth / 2"] },
+            { "type": "line", "start": ["Width / 2 + Frame Width", "Frame Depth / 2"], "end": [{ "plane": "Right" }, "Frame Depth / 2"] },
+            { "type": "line", "start": ["Width / 2 + Frame Width", "-Frame Depth / 2"], "end": ["Width / 2 + Frame Width", "Frame Depth / 2"] },
+            { "type": "line", "start": [{ "plane": "Right" }, "Frame Depth / 2"], "end": [{ "plane": "Right" }, "-Frame Depth / 2"] }
+          ]],
+          "materialParameter": "Frame Material", "subcategory": "Frame/Mullion"
+        },
+        {
+          "kind": "extrusion", "name": "Head", "extrusionAxis": "y",
+          "extent": ["-Frame Depth / 2", "Frame Depth / 2"],
+          "loops": [[
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Top" }], "end": [{ "plane": "Right" }, { "plane": "Top" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Top" }], "end": [{ "plane": "Right" }, "Height + Frame Width"] },
+            { "type": "line", "start": [{ "plane": "Right" }, "Height + Frame Width"], "end": [{ "plane": "Left" }, "Height + Frame Width"] },
+            { "type": "line", "start": [{ "plane": "Left" }, "Height + Frame Width"], "end": [{ "plane": "Left" }, { "plane": "Top" }] }
+          ]],
+          "materialParameter": "Frame Material", "subcategory": "Frame/Mullion"
+        },
+        {
+          "kind": "extrusion", "name": "Panel", "extrusionAxis": "y",
+          "extent": ["-Panel Thickness / 2", "Panel Thickness / 2"],
+          "loops": [[
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Bottom" }], "end": [{ "plane": "Right" }, { "plane": "Bottom" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Bottom" }], "end": [{ "plane": "Right" }, { "plane": "Top" }] },
+            { "type": "line", "start": [{ "plane": "Right" }, { "plane": "Top" }], "end": [{ "plane": "Left" }, { "plane": "Top" }] },
+            { "type": "line", "start": [{ "plane": "Left" }, { "plane": "Top" }], "end": [{ "plane": "Left" }, { "plane": "Bottom" }] }
+          ]],
+          "materialParameter": "Panel Material", "subcategory": "Panel", "visibleInPlan": false
+        },
+        {
+          "kind": "extrusion", "name": "Vision Panel Cut", "isVoid": true, "extrusionAxis": "y",
+          "extent": [-0.1, 0.1],
+          "loops": [[
+            { "type": "line", "start": [-0.15, 1.5], "end": [0.15, 1.5] },
+            { "type": "line", "start": [0.15, 1.5], "end": [0.15, 1.9] },
+            { "type": "line", "start": [0.15, 1.9], "end": [-0.15, 1.9] },
+            { "type": "line", "start": [-0.15, 1.9], "end": [-0.15, 1.5] }
+          ]]
+        },
+        {
+          "kind": "extrusion", "name": "Kick Plate", "extrusionAxis": "y",
+          "extent": ["Panel Thickness / 2", "Panel Thickness / 2 + 0.002 m"],
+          "loops": [[
+            { "type": "line", "start": ["-Width / 2 + 0.05 m", 0.05], "end": ["Width / 2 - 0.05 m", 0.05] },
+            { "type": "line", "start": ["Width / 2 - 0.05 m", 0.05], "end": ["Width / 2 - 0.05 m", 0.3] },
+            { "type": "line", "start": ["Width / 2 - 0.05 m", 0.3], "end": ["-Width / 2 + 0.05 m", 0.3] },
+            { "type": "line", "start": ["-Width / 2 + 0.05 m", 0.3], "end": ["-Width / 2 + 0.05 m", 0.05] }
+          ]],
+          "materialId": "m-paint", "visibilityParameter": "Has Kick Plate", "visibleAt": ["medium", "fine"]
+        },
+        {
+          "kind": "extrusion", "name": "Door Stop", "extrusionAxis": "z",
+          "extent": [0, 0.03],
+          "loops": [[
+            { "type": "arc", "start": [0.32, -0.6], "mid": [0.3, -0.58], "end": [0.28, -0.6], "center": [0.3, -0.6], "radius": 0.02 },
+            { "type": "arc", "start": [0.28, -0.6], "mid": [0.3, -0.62], "end": [0.32, -0.6], "center": [0.3, -0.6], "radius": 0.02 }
+          ]]
+        },
+        {
+          "kind": "mesh", "name": "Hinge", "sourceKind": "revolution",
+          "positions": [-0.5, 0.04, 0.2,  -0.48, 0.04, 0.2,  -0.49, 0.06, 0.2,  -0.49, 0.05, 0.3],
+          "indices": [0, 1, 2,  0, 1, 3,  1, 2, 3,  2, 0, 3]
+        },
+        { "kind": "sweep", "name": "Unknown Kind" }
+      ],
+      "planLines": [
+        {
+          "curve": { "type": "arc", "start": [-0.4575, -0.965], "mid": [0.1895027, -0.6970027], "end": [0.4575, -0.05],
+                     "center": ["-Width / 2", "-Frame Depth / 2"], "radius": "Width" },
+          "subcategory": "Plan Swing"
+        },
+        {
+          "curve": { "type": "line", "start": [{ "plane": "Left" }, "-Frame Depth / 2"], "end": [{ "plane": "Left" }, "-Frame Depth / 2 - Width"] },
+          "subcategory": "Panel"
+        }
+      ],
+      "opening": { "xMin": "-Width / 2 - Frame Width", "xMax": "Width / 2 + Frame Width", "zMin": { "plane": "Bottom" }, "zMax": "Height + Frame Width" }
+    }
+  ]
+}

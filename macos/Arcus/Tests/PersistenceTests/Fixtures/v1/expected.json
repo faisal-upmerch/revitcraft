@@ -1,0 +1,1888 @@
+{
+  "documentID" : "11111111-2222-4333-8444-555555555555",
+  "elements" : [
+    {
+      "category" : "projectInfo",
+      "data" : {
+        "projectInfo" : {
+          "_0" : {
+            "address" : "",
+            "author" : "",
+            "buildingName" : "",
+            "clientName" : "Owner",
+            "elevationAboveSeaLevel" : 0,
+            "extentsWarningDistance" : 32000,
+            "issueDate" : "",
+            "latitude" : 0,
+            "longitude" : 0,
+            "organization" : "",
+            "projectBasePoint" : {
+              "x" : 0,
+              "y" : 0,
+              "z" : 0
+            },
+            "projectName" : "Fixture House",
+            "projectNumber" : "0001",
+            "sheetNumberPrefix" : "A",
+            "siteName" : "Default Site",
+            "status" : "Project Status",
+            "surveyEasting" : 0,
+            "surveyElevation" : 0,
+            "surveyNorthing" : 0,
+            "surveyPoint" : {
+              "x" : 0,
+              "y" : 0,
+              "z" : 0
+            },
+            "trueNorthAngle" : 0,
+            "units" : {
+              "angleDecimals" : 2,
+              "area" : "squareMeters",
+              "areaDecimals" : 2,
+              "currencySymbol" : "$",
+              "length" : "millimeters",
+              "lengthRounding" : 0.001,
+              "numberDecimals" : 2,
+              "slope" : "degrees",
+              "slopeDecimals" : 2,
+              "system" : "metric",
+              "volume" : "cubicMeters",
+              "volumeDecimals" : 2
+            }
+          }
+        }
+      },
+      "id" : 1,
+      "ifcGUID" : {
+        "value" : "1_vFeNFdz6hAnCtHOQo$No"
+      },
+      "name" : "Project Information",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "phases",
+      "data" : {
+        "phase" : {
+          "_0" : {
+            "description" : "",
+            "order" : 0
+          }
+        }
+      },
+      "id" : 2,
+      "ifcGUID" : {
+        "value" : "0OrFepUlL2ywMkVQXyFkGK"
+      },
+      "name" : "Existing",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "phases",
+      "data" : {
+        "phase" : {
+          "_0" : {
+            "description" : "",
+            "order" : 1
+          }
+        }
+      },
+      "id" : 3,
+      "ifcGUID" : {
+        "value" : "3AKZP46e5EvwtQdvNwReNM"
+      },
+      "name" : "New Construction",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "levels",
+      "data" : {
+        "level" : {
+          "_0" : {
+            "computationHeight" : 0,
+            "elevation" : 0,
+            "isBuildingStorey" : true,
+            "isStructural" : false,
+            "showBubbleEnd" : true,
+            "showBubbleStart" : false
+          }
+        }
+      },
+      "id" : 4,
+      "ifcGUID" : {
+        "value" : "0PhNSQNOnBag3oTTX$67Zn"
+      },
+      "name" : "Level 1",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "levels",
+      "data" : {
+        "level" : {
+          "_0" : {
+            "computationHeight" : 0,
+            "elevation" : 3,
+            "isBuildingStorey" : true,
+            "isStructural" : false,
+            "showBubbleEnd" : true,
+            "showBubbleStart" : false
+          }
+        }
+      },
+      "id" : 5,
+      "ifcGUID" : {
+        "value" : "1$cYmND056BgX1jnF1w8C3"
+      },
+      "name" : "Level 2",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "materials",
+      "data" : {
+        "material" : {
+          "_0" : {
+            "color" : {
+              "a" : 1,
+              "b" : 0.24705882352941178,
+              "g" : 0.3411764705882353,
+              "r" : 0.6627450980392157
+            },
+            "cost" : 0,
+            "cutPatternColor" : {
+              "a" : 1,
+              "b" : 0,
+              "g" : 0,
+              "r" : 0
+            },
+            "description" : "",
+            "keynote" : "",
+            "manufacturer" : "",
+            "mark" : "",
+            "materialClass" : "Masonry",
+            "model" : "",
+            "surfacePatternColor" : {
+              "a" : 1,
+              "b" : 0,
+              "g" : 0,
+              "r" : 0
+            },
+            "transparency" : 0
+          }
+        }
+      },
+      "id" : 6,
+      "ifcGUID" : {
+        "value" : "04fhOyVS5DeuP5uvcP1z39"
+      },
+      "name" : "Brick",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "assembly" : {
+              "coreEnd" : 1,
+              "coreStart" : 0,
+              "layers" : [
+                {
+                  "function" : "Structure [1]",
+                  "isVariable" : false,
+                  "materialID" : 6,
+                  "thickness" : 0.2,
+                  "wraps" : false
+                }
+              ],
+              "wrappingAtEnds" : "Do not wrap",
+              "wrappingAtInserts" : "Do not wrap"
+            },
+            "familyName" : "Basic Wall",
+            "instanceCategory" : "walls",
+            "params" : {
+              "type.function" : {
+                "text" : {
+                  "_0" : "Exterior"
+                }
+              }
+            },
+            "systemFamily" : "Basic Wall"
+          }
+        }
+      },
+      "id" : 7,
+      "ifcGUID" : {
+        "value" : "2e7lsHw5X40PNnzb$7w2jD"
+      },
+      "name" : "Brick 200",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "families",
+      "data" : {
+        "family" : {
+          "_0" : {
+            "annotationLines" : [
+
+            ],
+            "description" : "Single-leaf flush door with timber frame.",
+            "dimensions" : [
+              {
+                "id" : "C57C4779-76E0-4569-A6F2-109D2D3762F9",
+                "isEquality" : false,
+                "labelParameter" : "Width",
+                "planeA" : "Left",
+                "planeB" : "Right"
+              },
+              {
+                "id" : "4D9E803F-3444-49E2-A4A7-A2B6CB67AA5B",
+                "isEquality" : false,
+                "labelParameter" : "Height",
+                "planeA" : "Bottom",
+                "planeB" : "Top"
+              }
+            ],
+            "fills" : [
+
+            ],
+            "formatVersion" : 1,
+            "labels" : [
+
+            ],
+            "manufacturer" : "",
+            "name" : "Door - Single Flush",
+            "opening" : {
+              "xMax" : {
+                "expr" : {
+                  "_0" : "Width \/ 2 + Frame Width"
+                }
+              },
+              "xMin" : {
+                "expr" : {
+                  "_0" : "-Width \/ 2 - Frame Width"
+                }
+              },
+              "zMax" : {
+                "expr" : {
+                  "_0" : "Height + Frame Width"
+                }
+              },
+              "zMin" : {
+                "plane" : {
+                  "_0" : "Bottom"
+                }
+              }
+            },
+            "parameters" : [
+              {
+                "group" : "Dimensions",
+                "isBuiltIn" : true,
+                "isInstance" : false,
+                "name" : "Width",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "group" : "Dimensions",
+                "isBuiltIn" : true,
+                "isInstance" : false,
+                "name" : "Height",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "group" : "Dimensions",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Frame Width",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "group" : "Dimensions",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Frame Depth",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "group" : "Dimensions",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Panel Thickness",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "formula" : "Width + 2 * Frame Width",
+                "group" : "Dimensions",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Rough Width",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "formula" : "Height + Frame Width",
+                "group" : "Dimensions",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Rough Height",
+                "type" : {
+                  "length" : {
+
+                  }
+                }
+              },
+              {
+                "group" : "Materials and Finishes",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Frame Material",
+                "type" : {
+                  "elementRef" : {
+                    "_0" : "materials"
+                  }
+                }
+              },
+              {
+                "group" : "Materials and Finishes",
+                "isBuiltIn" : false,
+                "isInstance" : false,
+                "name" : "Panel Material",
+                "type" : {
+                  "elementRef" : {
+                    "_0" : "materials"
+                  }
+                }
+              }
+            ],
+            "planLines" : [
+              {
+                "id" : "4E70A546-E551-41A7-9FB6-8A9CB59D9B29",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 - Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "33F032D7-7FA9-46D1-A61D-1F2143E19A83",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Fine",
+                  "Coarse",
+                  "Medium"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "E375C978-0D0F-4927-BEA9-EBAC62DA9E68",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 - Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Fine",
+                  "Medium"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "2FC163B5-AB53-4F1F-AA88-ECFD04B45D83",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 - Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 - Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "3359F3CD-6300-437B-8513-A1845A6B2403",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2 + Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Medium",
+                  "Coarse",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "A33923E2-6FBA-494C-B4CD-3C9C5667A596",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2 + Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2 + Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "DD3B8798-39DF-449C-88F2-66235B230739",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2 + Frame Width"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "34C17EFD-6BD3-4768-9654-5A31D347F8B2",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Fine",
+                  "Coarse",
+                  "Medium"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "1BF7578E-CA66-481A-88A4-964776B5FDF2",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2 - Width"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 + Panel Thickness"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2 - Width"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Panel",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "C49F7ABB-5418-4475-8824-E1E30FAD5162",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 + Panel Thickness"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2 - Width"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 + Panel Thickness"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Panel",
+                "visibleAt" : [
+                  "Fine",
+                  "Medium",
+                  "Coarse"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "0E10CB39-2F83-4863-A829-5D8370E84A58",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2 + Panel Thickness"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Panel",
+                "visibleAt" : [
+                  "Coarse",
+                  "Medium",
+                  "Fine"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "7C0F885D-0F11-4768-9757-8F5374472BD0",
+                "shape" : {
+                  "line" : {
+                    "_0" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "_1" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2 - Width"
+                        }
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Panel",
+                "visibleAt" : [
+                  "Fine",
+                  "Medium",
+                  "Coarse"
+                ],
+                "weight" : 1
+              },
+              {
+                "id" : "3FA3B721-35D6-43EB-BA02-0B1E9EC05D7B",
+                "shape" : {
+                  "arc" : {
+                    "center" : {
+                      "x" : {
+                        "expr" : {
+                          "_0" : "-Width \/ 2"
+                        }
+                      },
+                      "y" : {
+                        "expr" : {
+                          "_0" : "-Frame Depth \/ 2"
+                        }
+                      }
+                    },
+                    "radius" : "Width",
+                    "startDegrees" : "-90",
+                    "sweepDegrees" : "90"
+                  }
+                },
+                "subcategory" : "Plan Swing",
+                "visibleAt" : [
+                  "Fine",
+                  "Medium",
+                  "Coarse"
+                ],
+                "weight" : 1
+              }
+            ],
+            "profileLoop" : [
+
+            ],
+            "referencePlanes" : [
+              {
+                "axis" : "X",
+                "definesOrigin" : true,
+                "name" : "Center (Left\/Right)",
+                "offset" : "0",
+                "strength" : "Center (Left\/Right)"
+              },
+              {
+                "axis" : "X",
+                "definesOrigin" : false,
+                "name" : "Left",
+                "offset" : "-Width \/ 2",
+                "strength" : "Left"
+              },
+              {
+                "axis" : "X",
+                "definesOrigin" : false,
+                "name" : "Right",
+                "offset" : "Width \/ 2",
+                "strength" : "Right"
+              },
+              {
+                "axis" : "Y",
+                "definesOrigin" : true,
+                "name" : "Center (Front\/Back)",
+                "offset" : "0",
+                "strength" : "Center (Front\/Back)"
+              },
+              {
+                "axis" : "Z",
+                "definesOrigin" : true,
+                "name" : "Bottom",
+                "offset" : "0",
+                "strength" : "Bottom"
+              },
+              {
+                "axis" : "Z",
+                "definesOrigin" : false,
+                "name" : "Top",
+                "offset" : "Height",
+                "strength" : "Top"
+              }
+            ],
+            "solids" : [
+              {
+                "id" : "DF8B9D39-9F50-40F5-9D86-486D6C4EB033",
+                "isVoid" : false,
+                "materialParameter" : "Frame Material",
+                "name" : "Left Jamb",
+                "profile" : {
+                  "rectangle" : {
+                    "xMax" : {
+                      "plane" : {
+                        "_0" : "Left"
+                      }
+                    },
+                    "xMin" : {
+                      "expr" : {
+                        "_0" : "-Width \/ 2 - Frame Width"
+                      }
+                    },
+                    "yMax" : {
+                      "expr" : {
+                        "_0" : "Frame Depth \/ 2"
+                      }
+                    },
+                    "yMin" : {
+                      "expr" : {
+                        "_0" : "-Frame Depth \/ 2"
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Coarse",
+                  "Fine",
+                  "Medium"
+                ],
+                "visibleInPlan" : true,
+                "zMax" : {
+                  "expr" : {
+                    "_0" : "Height + Frame Width"
+                  }
+                },
+                "zMin" : {
+                  "plane" : {
+                    "_0" : "Bottom"
+                  }
+                }
+              },
+              {
+                "id" : "0F64F692-99D6-4CF8-BCB4-4052A0BB9F44",
+                "isVoid" : false,
+                "materialParameter" : "Frame Material",
+                "name" : "Right Jamb",
+                "profile" : {
+                  "rectangle" : {
+                    "xMax" : {
+                      "expr" : {
+                        "_0" : "Width \/ 2 + Frame Width"
+                      }
+                    },
+                    "xMin" : {
+                      "plane" : {
+                        "_0" : "Right"
+                      }
+                    },
+                    "yMax" : {
+                      "expr" : {
+                        "_0" : "Frame Depth \/ 2"
+                      }
+                    },
+                    "yMin" : {
+                      "expr" : {
+                        "_0" : "-Frame Depth \/ 2"
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Medium",
+                  "Coarse",
+                  "Fine"
+                ],
+                "visibleInPlan" : true,
+                "zMax" : {
+                  "expr" : {
+                    "_0" : "Height + Frame Width"
+                  }
+                },
+                "zMin" : {
+                  "plane" : {
+                    "_0" : "Bottom"
+                  }
+                }
+              },
+              {
+                "id" : "3550F64F-8F9B-4CAE-AB98-26678F7941A5",
+                "isVoid" : false,
+                "materialParameter" : "Frame Material",
+                "name" : "Head",
+                "profile" : {
+                  "rectangle" : {
+                    "xMax" : {
+                      "plane" : {
+                        "_0" : "Right"
+                      }
+                    },
+                    "xMin" : {
+                      "plane" : {
+                        "_0" : "Left"
+                      }
+                    },
+                    "yMax" : {
+                      "expr" : {
+                        "_0" : "Frame Depth \/ 2"
+                      }
+                    },
+                    "yMin" : {
+                      "expr" : {
+                        "_0" : "-Frame Depth \/ 2"
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Frame\/Mullion",
+                "visibleAt" : [
+                  "Fine",
+                  "Medium",
+                  "Coarse"
+                ],
+                "visibleInPlan" : true,
+                "zMax" : {
+                  "expr" : {
+                    "_0" : "Height + Frame Width"
+                  }
+                },
+                "zMin" : {
+                  "plane" : {
+                    "_0" : "Top"
+                  }
+                }
+              },
+              {
+                "id" : "4EE958E2-F3B4-4433-884D-41521F4A5BF3",
+                "isVoid" : false,
+                "materialParameter" : "Panel Material",
+                "name" : "Panel",
+                "profile" : {
+                  "rectangle" : {
+                    "xMax" : {
+                      "plane" : {
+                        "_0" : "Right"
+                      }
+                    },
+                    "xMin" : {
+                      "plane" : {
+                        "_0" : "Left"
+                      }
+                    },
+                    "yMax" : {
+                      "expr" : {
+                        "_0" : "Panel Thickness \/ 2"
+                      }
+                    },
+                    "yMin" : {
+                      "expr" : {
+                        "_0" : "-Panel Thickness \/ 2"
+                      }
+                    }
+                  }
+                },
+                "subcategory" : "Panel",
+                "visibleAt" : [
+                  "Medium",
+                  "Fine",
+                  "Coarse"
+                ],
+                "visibleInPlan" : false,
+                "zMax" : {
+                  "plane" : {
+                    "_0" : "Top"
+                  }
+                },
+                "zMin" : {
+                  "plane" : {
+                    "_0" : "Bottom"
+                  }
+                }
+              }
+            ],
+            "taggedCategories" : [
+
+            ],
+            "template" : "Door",
+            "types" : [
+              {
+                "name" : "900 x 2100",
+                "values" : {
+                  "Frame Depth" : {
+                    "double" : {
+                      "_0" : 0.12
+                    }
+                  },
+                  "Frame Width" : {
+                    "double" : {
+                      "_0" : 0.05
+                    }
+                  },
+                  "Height" : {
+                    "double" : {
+                      "_0" : 2.1
+                    }
+                  },
+                  "Panel Thickness" : {
+                    "double" : {
+                      "_0" : 0.04
+                    }
+                  },
+                  "Width" : {
+                    "double" : {
+                      "_0" : 0.9
+                    }
+                  }
+                }
+              },
+              {
+                "name" : "820 x 2040",
+                "values" : {
+                  "Frame Depth" : {
+                    "double" : {
+                      "_0" : 0.12
+                    }
+                  },
+                  "Frame Width" : {
+                    "double" : {
+                      "_0" : 0.05
+                    }
+                  },
+                  "Height" : {
+                    "double" : {
+                      "_0" : 2.04
+                    }
+                  },
+                  "Panel Thickness" : {
+                    "double" : {
+                      "_0" : 0.04
+                    }
+                  },
+                  "Width" : {
+                    "double" : {
+                      "_0" : 0.82
+                    }
+                  }
+                }
+              },
+              {
+                "name" : "1000 x 2100",
+                "values" : {
+                  "Frame Depth" : {
+                    "double" : {
+                      "_0" : 0.12
+                    }
+                  },
+                  "Frame Width" : {
+                    "double" : {
+                      "_0" : 0.05
+                    }
+                  },
+                  "Height" : {
+                    "double" : {
+                      "_0" : 2.1
+                    }
+                  },
+                  "Panel Thickness" : {
+                    "double" : {
+                      "_0" : 0.04
+                    }
+                  },
+                  "Width" : {
+                    "double" : {
+                      "_0" : 1
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      "id" : 8,
+      "ifcGUID" : {
+        "value" : "1ROrxhrpD9ju6w7Ea0QKVX"
+      },
+      "name" : "Door - Single Flush",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "elementTypes",
+      "data" : {
+        "type" : {
+          "_0" : {
+            "familyID" : 8,
+            "familyName" : "Door - Single Flush",
+            "instanceCategory" : "doors",
+            "params" : {
+              "width" : {
+                "double" : {
+                  "_0" : 0.9
+                }
+              }
+            }
+          }
+        }
+      },
+      "id" : 9,
+      "ifcGUID" : {
+        "value" : "0xL9GlMfL1YeqWLUVTYf2W"
+      },
+      "name" : "900 x 2100",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 8,
+                    "y" : 0
+                  },
+                  "start" : {
+                    "x" : 0,
+                    "y" : 0
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 5,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 10,
+      "ifcGUID" : {
+        "value" : "3Ve1$tJ6r3eRyvm7l9fF6b"
+      },
+      "levelID" : 4,
+      "name" : "",
+      "params" : {
+
+      },
+      "phaseCreated" : 2,
+      "pinned" : false,
+      "revision" : 1,
+      "typeID" : 7
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 8,
+                    "y" : 6
+                  },
+                  "start" : {
+                    "x" : 8,
+                    "y" : 0
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 5,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 11,
+      "ifcGUID" : {
+        "value" : "0idn$tJ6n3eP8xm7p9fF6b"
+      },
+      "levelID" : 4,
+      "name" : "",
+      "params" : {
+
+      },
+      "phaseCreated" : 2,
+      "pinned" : false,
+      "revision" : 1,
+      "typeID" : 7
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 0,
+                    "y" : 6
+                  },
+                  "start" : {
+                    "x" : 8,
+                    "y" : 6
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 5,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "id" : 12,
+      "ifcGUID" : {
+        "value" : "15f1$tJ6z3ePasm7d9fF6b"
+      },
+      "levelID" : 4,
+      "name" : "",
+      "params" : {
+
+      },
+      "phaseCreated" : 2,
+      "pinned" : false,
+      "revision" : 1,
+      "typeID" : 7
+    },
+    {
+      "category" : "walls",
+      "data" : {
+        "wall" : {
+          "_0" : {
+            "allowJoinAtEnd" : true,
+            "allowJoinAtStart" : true,
+            "attachedBaseIDs" : [
+
+            ],
+            "attachedTopIDs" : [
+
+            ],
+            "baseOffset" : 0,
+            "flipped" : false,
+            "location" : {
+              "line" : {
+                "_0" : {
+                  "end" : {
+                    "x" : 0,
+                    "y" : 0
+                  },
+                  "start" : {
+                    "x" : 0,
+                    "y" : 6
+                  }
+                }
+              }
+            },
+            "locationLine" : "Wall Centerline",
+            "roomBounding" : true,
+            "slantAngle" : 0,
+            "structural" : false,
+            "topLevelID" : 5,
+            "topOffset" : 0,
+            "unconnectedHeight" : 3
+          }
+        }
+      },
+      "designOptionID" : 16,
+      "id" : 13,
+      "ifcGUID" : {
+        "value" : "2IeX$tJ6v3eQmum7h9fF6b"
+      },
+      "levelID" : 4,
+      "name" : "",
+      "params" : {
+        "user:fire" : {
+          "text" : {
+            "_0" : "60 min"
+          }
+        }
+      },
+      "phaseCreated" : 2,
+      "pinned" : false,
+      "revision" : 1,
+      "typeID" : 7
+    },
+    {
+      "category" : "doors",
+      "data" : {
+        "insert" : {
+          "_0" : {
+            "facingFlipped" : false,
+            "handFlipped" : false,
+            "location" : {
+              "x" : 4,
+              "y" : 0
+            },
+            "sillHeight" : 0
+          }
+        }
+      },
+      "hostID" : 10,
+      "id" : 14,
+      "ifcGUID" : {
+        "value" : "3fJW5YP$P5tAOPuj3MohmP"
+      },
+      "levelID" : 4,
+      "name" : "",
+      "params" : {
+        "mark" : {
+          "text" : {
+            "_0" : "D1"
+          }
+        }
+      },
+      "phaseCreated" : 3,
+      "pinned" : false,
+      "revision" : 1,
+      "typeID" : 9
+    },
+    {
+      "category" : "rooms",
+      "data" : {
+        "room" : {
+          "_0" : {
+            "baseOffset" : 0,
+            "limitOffset" : 2.7,
+            "number" : "1",
+            "point" : {
+              "x" : 4,
+              "y" : 3
+            }
+          }
+        }
+      },
+      "id" : 15,
+      "ifcGUID" : {
+        "value" : "3QZiJm7nH5ewTXrT3z7pxu"
+      },
+      "levelID" : 4,
+      "name" : "Living",
+      "params" : {
+
+      },
+      "phaseCreated" : 3,
+      "pinned" : false,
+      "revision" : 1
+    },
+    {
+      "category" : "designOptions",
+      "data" : {
+        "designOption" : {
+          "_0" : {
+            "isPrimary" : true,
+            "setName" : "Porch"
+          }
+        }
+      },
+      "id" : 16,
+      "ifcGUID" : {
+        "value" : "3yc6Mhen5DeA$_g2pLZFYb"
+      },
+      "name" : "Option A",
+      "params" : {
+
+      },
+      "pinned" : false,
+      "revision" : 1
+    }
+  ],
+  "nextID" : 17,
+  "projectParameters" : [
+    {
+      "categories" : [
+        "walls",
+        "doors"
+      ],
+      "group" : "Identity Data",
+      "id" : "user:fire",
+      "isInstance" : true,
+      "name" : "Fire Rating",
+      "tooltip" : "",
+      "type" : {
+        "text" : {
+
+        }
+      }
+    }
+  ],
+  "referenceDrawings" : {
+    "ref-86077743f05d233b01b5de62d6ecb458" : {
+      "blocks" : {
+        "Door" : [
+          {
+            "arc" : {
+              "_0" : {
+                "center" : {
+                  "x" : 0,
+                  "y" : 0
+                },
+                "radius" : 0.9,
+                "startAngle" : 0,
+                "sweep" : 1.5707963267948966
+              },
+              "_1" : {
+                "handle" : "",
+                "layer" : 1
+              }
+            }
+          }
+        ]
+      },
+      "entities" : [
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 7,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 7,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H0",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 7.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 7.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H1",
+              "layer" : 1
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 8,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 8,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H2",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 8.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 8.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H3",
+              "layer" : 1
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 9,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 9,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H4",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 9.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 9.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H5",
+              "layer" : 1
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 10,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 10,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H6",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 10.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 10.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H7",
+              "layer" : 1
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 11,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 11,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H8",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 11.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 11.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H9",
+              "layer" : 1
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 12,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 12,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H10",
+              "layer" : 0
+            }
+          }
+        },
+        {
+          "line" : {
+            "_0" : {
+              "end" : {
+                "x" : 12.5,
+                "y" : 10
+              },
+              "start" : {
+                "x" : 12.5,
+                "y" : 0
+              }
+            },
+            "_1" : {
+              "handle" : "H11",
+              "layer" : 1
+            }
+          }
+        }
+      ],
+      "extents" : {
+        "max" : {
+          "x" : 100,
+          "y" : 10
+        },
+        "min" : {
+          "x" : 0,
+          "y" : 0
+        }
+      },
+      "layers" : [
+        {
+          "color" : {
+            "a" : 1,
+            "b" : 0,
+            "g" : 0,
+            "r" : 0
+          },
+          "isFrozen" : false,
+          "isLocked" : false,
+          "isOn" : true,
+          "lineType" : "Continuous",
+          "name" : "A-WALL",
+          "plots" : true
+        },
+        {
+          "color" : {
+            "a" : 1,
+            "b" : 0,
+            "g" : 0,
+            "r" : 0
+          },
+          "isFrozen" : false,
+          "isLocked" : false,
+          "isOn" : true,
+          "lineType" : "Continuous",
+          "lineWeight" : 0.35,
+          "name" : "A-DOOR",
+          "plots" : true
+        }
+      ],
+      "metadata" : {
+        "seed" : "7",
+        "source" : "survey.dxf"
+      }
+    }
+  },
+  "revision" : 1,
+  "viewSheetSets" : [
+    {
+      "id" : "A6E0CBD2-164D-4A15-917E-406CE4C5D9DE",
+      "members" : [
+        4,
+        5
+      ],
+      "name" : "Planning"
+    }
+  ]
+}

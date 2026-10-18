@@ -1,0 +1,347 @@
+{
+  "cores" : 18,
+  "date" : "2026-09-25T12:56:46Z",
+  "footprintMB" : {
+    "baseline" : 2.1098785400390625,
+    "courtyard" : 90.0476303100586,
+    "stress" : 285.51656341552734
+  },
+  "measurements" : [
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 27.477917,
+      "medianMs" : 18.88125,
+      "minMs" : 16.515416,
+      "name" : "Generate reference project",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 20.667125,
+      "medianMs" : 16.167875,
+      "minMs" : 15.567833,
+      "name" : "Save .arcus package",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 14.838291,
+      "medianMs" : 13.325208,
+      "minMs" : 13.125458,
+      "name" : "Open .arcus package",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 12.525041,
+      "medianMs" : 7.247541,
+      "minMs" : 7.199416,
+      "name" : "Floor plan graphics (Ground Floor)",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 64.238958,
+      "medianMs" : 47.058875,
+      "minMs" : 46.897625,
+      "name" : "Section graphics with hidden lines",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 133.813959,
+      "medianMs" : 130.563375,
+      "minMs" : 129.536583,
+      "name" : "Elevation graphics with hidden lines",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 8.242375,
+      "medianMs" : 7.431875,
+      "minMs" : 7.393459,
+      "name" : "Sheet graphics (A101)",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 3.3675,
+      "medianMs" : 0.687292,
+      "minMs" : 0.683583,
+      "name" : "Schedule: Area by Department",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 9.937166,
+      "medianMs" : 9.925125,
+      "minMs" : 9.879541,
+      "name" : "Schedule: Door Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.100292,
+      "medianMs" : 0.0825,
+      "minMs" : 0.075667,
+      "name" : "Schedule: Floor Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 2.6385,
+      "medianMs" : 2.555584,
+      "minMs" : 2.511084,
+      "name" : "Schedule: Furniture Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.014917,
+      "medianMs" : 0.010375,
+      "minMs" : 0.010041,
+      "name" : "Schedule: Revision Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 1.807125,
+      "medianMs" : 1.78925,
+      "minMs" : 1.783458,
+      "name" : "Schedule: Room Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.193291,
+      "medianMs" : 0.121708,
+      "minMs" : 0.119875,
+      "name" : "Schedule: Sheet List",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 1.869833,
+      "medianMs" : 1.850083,
+      "minMs" : 1.83075,
+      "name" : "Schedule: Wall Material Takeoff",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 1.697958,
+      "medianMs" : 1.676083,
+      "minMs" : 1.662916,
+      "name" : "Schedule: Wall Quantities",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 1.238083,
+      "medianMs" : 1.209625,
+      "minMs" : 1.197417,
+      "name" : "Schedule: Window Schedule",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 20.314583,
+      "medianMs" : 19.920417,
+      "minMs" : 19.853458,
+      "name" : "All 10 schedules recompute",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 17.01625,
+      "medianMs" : 16.712416,
+      "minMs" : 16.531416,
+      "name" : "3D meshes, all elements (cold)",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.038709,
+      "medianMs" : 0.026166,
+      "minMs" : 0.02575,
+      "name" : "Room boundaries (all rooms)",
+      "note" : "",
+      "runs" : 7
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 14.209625,
+      "medianMs" : 13.736292,
+      "minMs" : 13.695625,
+      "name" : "Model health check",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 253.481375,
+      "medianMs" : 231.956958,
+      "minMs" : 231.819625,
+      "name" : "IFC4 export",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 92.798208,
+      "medianMs" : 89.680083,
+      "minMs" : 86.963209,
+      "name" : "IFC4 import into template",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 1098.063167,
+      "medianMs" : 1083.932291,
+      "minMs" : 1076.503875,
+      "name" : "Vector PDF, all 16 sheets",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.532542,
+      "medianMs" : 0.280125,
+      "minMs" : 0.274667,
+      "name" : "Move a hosting wall (commit + regen)",
+      "note" : "",
+      "runs" : 15
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.19875,
+      "medianMs" : 0.1725,
+      "minMs" : 0.171125,
+      "name" : "Undo",
+      "note" : "",
+      "runs" : 15
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.236833,
+      "medianMs" : 0.177334,
+      "minMs" : 0.172667,
+      "name" : "Redo",
+      "note" : "",
+      "runs" : 15
+    },
+    {
+      "fixture" : "courtyard",
+      "maxMs" : 0.241417,
+      "medianMs" : 0.200042,
+      "minMs" : 0.047541,
+      "name" : "Change door width (family parameter)",
+      "note" : "",
+      "runs" : 9
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 102.263167,
+      "medianMs" : 102.263167,
+      "minMs" : 102.263167,
+      "name" : "Generate stress model",
+      "note" : "",
+      "runs" : 1
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 111.368417,
+      "medianMs" : 110.587125,
+      "minMs" : 104.99675,
+      "name" : "Save .arcus package",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 98.468791,
+      "medianMs" : 93.589084,
+      "minMs" : 93.56775,
+      "name" : "Open .arcus package",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 134.52425,
+      "medianMs" : 127.9605,
+      "minMs" : 123.21725,
+      "name" : "Floor plan graphics",
+      "note" : "",
+      "runs" : 3
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 77.469542,
+      "medianMs" : 77.469542,
+      "minMs" : 77.469542,
+      "name" : "3D meshes, all elements (cold)",
+      "note" : "",
+      "runs" : 1
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 8.415917,
+      "medianMs" : 6.380292,
+      "minMs" : 6.182333,
+      "name" : "Move one wall (commit + regen)",
+      "note" : "",
+      "runs" : 9
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 1.208416,
+      "medianMs" : 1.135791,
+      "minMs" : 1.108458,
+      "name" : "Undo",
+      "note" : "",
+      "runs" : 9
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 1.2005,
+      "medianMs" : 1.122459,
+      "minMs" : 1.088541,
+      "name" : "Redo",
+      "note" : "",
+      "runs" : 9
+    },
+    {
+      "fixture" : "stress",
+      "maxMs" : 100.222917,
+      "medianMs" : 99.334292,
+      "minMs" : 98.627042,
+      "name" : "Move all 10000 walls (one transaction)",
+      "note" : "",
+      "runs" : 3
+    }
+  ],
+  "os" : "Version 27.0 (Build 26A428)",
+  "physicalMemoryGB" : 48,
+  "stressElements" : 20166
+}

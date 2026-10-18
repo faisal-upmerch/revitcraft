@@ -1,0 +1,326 @@
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1024
+  9
+$INSUNITS
+ 70
+4
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+STYLE
+ 70
+1
+  0
+STYLE
+  2
+Standard
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+2.5
+  3
+romans.shx
+  4
+
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+BLOCKS
+  0
+BLOCK
+  5
+40
+  8
+0
+  2
+SITE
+ 70
+4
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+SITE
+  1
+xrefs\site_plan.dxf
+  0
+ENDBLK
+  5
+90
+  8
+0
+  0
+BLOCK
+  5
+41
+  8
+0
+  2
+SURVEY
+ 70
+4
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+SURVEY
+  1
+missing/survey.dxf
+  0
+ENDBLK
+  5
+91
+  8
+0
+  0
+BLOCK
+  5
+42
+  8
+0
+  2
+EVIL
+ 70
+4
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+EVIL
+  1
+../../etc/passwd.dxf
+  0
+ENDBLK
+  5
+92
+  8
+0
+  0
+BLOCK
+  5
+43
+  8
+0
+  2
+ABS
+ 70
+4
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  3
+ABS
+  1
+/etc/hosts.dxf
+  0
+ENDBLK
+  5
+93
+  8
+0
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LINE
+  5
+100
+  8
+A-GRID
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+10000.0
+ 21
+0.0
+ 31
+0.0
+  0
+INSERT
+  5
+101
+  8
+X-REF
+  2
+SITE
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  0
+INSERT
+  5
+102
+  8
+X-REF
+  2
+SURVEY
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  0
+INSERT
+  5
+103
+  8
+X-REF
+  2
+EVIL
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  0
+INSERT
+  5
+104
+  8
+X-REF
+  2
+ABS
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+  0
+IMAGE
+  5
+105
+  8
+0
+ 10
+0.0
+ 20
+0.0
+ 30
+0.0
+ 11
+1.0
+ 21
+0.0
+ 31
+0.0
+ 12
+0.0
+ 22
+1.0
+ 32
+0.0
+ 13
+4.0
+ 23
+4.0
+340
+60
+  0
+IMAGE
+  5
+106
+  8
+0
+ 10
+10.0
+ 20
+0.0
+ 30
+0.0
+ 11
+1.0
+ 21
+0.0
+ 31
+0.0
+ 12
+0.0
+ 22
+1.0
+ 32
+0.0
+ 13
+4.0
+ 23
+4.0
+340
+61
+  0
+ENDSEC
+  0
+SECTION
+  2
+OBJECTS
+  0
+IMAGEDEF
+  5
+60
+  1
+images/aerial.png
+ 10
+4.0
+ 20
+4.0
+  0
+IMAGEDEF
+  5
+61
+  1
+images/missing.jpg
+ 10
+4.0
+ 20
+4.0
+  0
+ENDSEC
+  0
+EOF

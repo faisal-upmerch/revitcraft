@@ -1,0 +1,363 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arcus.app/schemas/arcus-exchange-1.0.schema.json",
+  "title": "Arcus Exchange 1.0 (.arcusx)",
+  "description": "Open interchange format written by the Arcus Bridge Revit add-in and read by Arcus. Lengths in meters, areas m², volumes m³, angles radians, slopes rise/run; Z up. Unknown properties are ignored by readers (forward compatibility). Normative prose: Docs/RevitInterop.md. Keep in sync with Arcus/Infrastructure/Exchange/Revit/Exchange/ExchangeSchema.swift and Tools/RevitBridge/src/Schema/ExchangeModel.cs.",
+  "type": "object",
+  "required": ["format", "schemaVersion"],
+  "properties": {
+    "format": { "const": "arcus-exchange" },
+    "schemaVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+$", "description": "MAJOR.MINOR. Readers reject a newer MAJOR and ignore unknown content of a newer MINOR." },
+    "generator": { "$ref": "#/$defs/generator" },
+    "documentKind": { "enum": ["project", "family"] },
+    "source": { "$ref": "#/$defs/source" },
+    "units": { "$ref": "#/$defs/units" },
+    "projectInfo": { "$ref": "#/$defs/projectInfo" },
+    "materials": { "type": "array", "items": { "$ref": "#/$defs/material" } },
+    "levels": { "type": "array", "items": { "$ref": "#/$defs/level" } },
+    "grids": { "type": "array", "items": { "$ref": "#/$defs/grid" } },
+    "types": { "type": "array", "items": { "$ref": "#/$defs/type" } },
+    "families": { "type": "array", "items": { "$ref": "#/$defs/family" } },
+    "walls": { "type": "array", "items": { "$ref": "#/$defs/wall" } },
+    "floors": { "type": "array", "items": { "$ref": "#/$defs/slab" } },
+    "ceilings": { "type": "array", "items": { "$ref": "#/$defs/slab" } },
+    "roofs": { "type": "array", "items": { "$ref": "#/$defs/roof" } },
+    "inserts": { "type": "array", "items": { "$ref": "#/$defs/insert" } },
+    "rooms": { "type": "array", "items": { "$ref": "#/$defs/room" } },
+    "columns": { "type": "array", "items": { "$ref": "#/$defs/column" } },
+    "beams": { "type": "array", "items": { "$ref": "#/$defs/beam" } },
+    "stairs": { "type": "array", "items": { "$ref": "#/$defs/stair" } },
+    "railings": { "type": "array", "items": { "$ref": "#/$defs/railing" } },
+    "components": { "type": "array", "items": { "$ref": "#/$defs/component" } },
+    "meshes": { "type": "array", "items": { "$ref": "#/$defs/meshElement" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "description": "Unique within the file; used for references." },
+    "uniqueId": { "type": "string", "description": "Stable source identity (Revit UniqueId). Arcus derives GlobalIds from it so re-imports keep identity." },
+    "point2": { "type": "array", "items": { "type": "number" }, "minItems": 2, "maxItems": 3 },
+    "point3": { "type": "array", "items": { "type": "number" }, "minItems": 3, "maxItems": 3 },
+    "scalar": {
+      "description": "Number (meters), Arcus formula expression (constants need units, e.g. \"-Width / 2 - 0.05 m\"), or a reference plane.",
+      "oneOf": [
+        { "type": "number" },
+        { "type": "string" },
+        { "type": "object", "properties": { "plane": { "type": "string" } }, "required": ["plane"] },
+        { "type": "object", "properties": { "expr": { "type": "string" } }, "required": ["expr"] }
+      ]
+    },
+    "value": {
+      "description": "Parameter value in SI units, or a reference.",
+      "oneOf": [
+        { "type": "number" }, { "type": "boolean" }, { "type": "string" }, { "type": "null" },
+        { "type": "object", "properties": { "materialId": { "type": "string" } }, "required": ["materialId"] },
+        { "type": "object", "properties": { "elementId": { "type": "string" } }, "required": ["elementId"] }
+      ]
+    },
+    "values": { "type": "object", "additionalProperties": { "$ref": "#/$defs/value" } },
+    "curve": {
+      "type": "object",
+      "description": "Plan curve. line: start/end. arc: start/mid/end (three points on the arc). circle: center/radius. Roof footprint curves add definesSlope/slopeAngle/overhang.",
+      "properties": {
+        "type": { "enum": ["line", "arc", "circle"] },
+        "start": { "$ref": "#/$defs/point2" },
+        "end": { "$ref": "#/$defs/point2" },
+        "mid": { "$ref": "#/$defs/point2" },
+        "center": { "$ref": "#/$defs/point2" },
+        "radius": { "type": "number" },
+        "definesSlope": { "type": "boolean" },
+        "slopeAngle": { "type": "number", "description": "Radians from horizontal." },
+        "overhang": { "type": "number" }
+      }
+    },
+    "loops": { "type": "array", "items": { "type": "array", "items": { "$ref": "#/$defs/curve" } } },
+    "transform": {
+      "type": "object",
+      "properties": {
+        "origin": { "$ref": "#/$defs/point3" },
+        "basisX": { "$ref": "#/$defs/point3" },
+        "basisY": { "$ref": "#/$defs/point3" },
+        "basisZ": { "$ref": "#/$defs/point3" }
+      }
+    },
+    "mesh": {
+      "type": "object",
+      "properties": {
+        "positions": { "type": "array", "items": { "type": "number" }, "description": "Flat x, y, z triples (meters)." },
+        "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 }, "description": "Three per triangle." }
+      }
+    },
+    "generator": {
+      "type": "object",
+      "properties": { "name": { "type": "string" }, "version": { "type": "string" }, "host": { "type": "string" }, "exportedAt": { "type": "string" } }
+    },
+    "source": {
+      "type": "object",
+      "properties": { "fileName": { "type": "string" }, "path": { "type": "string" }, "documentId": { "type": "string" }, "application": { "type": "string" } }
+    },
+    "units": {
+      "type": "object",
+      "properties": { "system": { "enum": ["metric", "imperial"] }, "length": { "type": "string" } }
+    },
+    "projectInfo": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }, "number": { "type": "string" }, "clientName": { "type": "string" }, "address": { "type": "string" },
+        "status": { "type": "string" }, "issueDate": { "type": "string" }, "author": { "type": "string" }, "organization": { "type": "string" },
+        "buildingName": { "type": "string" }, "siteName": { "type": "string" },
+        "latitude": { "type": "number", "description": "Degrees." }, "longitude": { "type": "number", "description": "Degrees." },
+        "elevation": { "type": "number" }, "trueNorthAngle": { "type": "number", "description": "Radians, counter-clockwise from project north." },
+        "projectBasePoint": { "$ref": "#/$defs/point3" }, "surveyPoint": { "$ref": "#/$defs/point3" }
+      }
+    },
+    "material": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" },
+        "materialClass": { "type": "string" }, "color": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" },
+        "transparency": { "type": "number", "minimum": 0, "maximum": 1 },
+        "description": { "type": "string" }, "manufacturer": { "type": "string" }, "model": { "type": "string" },
+        "mark": { "type": "string" }, "keynote": { "type": "string" }, "cost": { "type": "number" }
+      }
+    },
+    "level": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" },
+        "elevation": { "type": "number", "description": "Above the internal origin." },
+        "isBuildingStorey": { "type": "boolean" }, "isStructural": { "type": "boolean" }
+      }
+    },
+    "grid": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" },
+        "curve": { "$ref": "#/$defs/curve" }, "bottomElevation": { "type": "number" }, "topElevation": { "type": "number" }
+      }
+    },
+    "layer": {
+      "type": "object",
+      "properties": {
+        "function": { "enum": ["structure", "substrate", "thermal", "membrane", "finish1", "finish2", "structuralDeck"] },
+        "materialId": { "type": "string" }, "thickness": { "type": "number", "minimum": 0 },
+        "wraps": { "type": "boolean" }, "isVariable": { "type": "boolean" }, "isCore": { "type": "boolean" }
+      }
+    },
+    "section": {
+      "type": "object",
+      "properties": { "shape": { "enum": ["rectangle", "circle"] }, "width": { "type": "number" }, "depth": { "type": "number" }, "diameter": { "type": "number" } }
+    },
+    "stairTypeInfo": {
+      "type": "object",
+      "properties": { "maxRiserHeight": { "type": "number" }, "minTreadDepth": { "type": "number" }, "treadThickness": { "type": "number" }, "waist": { "type": "number" } }
+    },
+    "railingTypeInfo": {
+      "type": "object",
+      "properties": { "height": { "type": "number" }, "balusterSpacing": { "type": "number" }, "balusterSize": { "type": "number" }, "railSize": { "type": "number" } }
+    },
+    "type": {
+      "type": "object",
+      "description": "System type. Layers exterior→interior (walls) or top→bottom (floors, roofs, ceilings).",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" }, "familyName": { "type": "string" },
+        "category": { "enum": ["walls", "floors", "ceilings", "roofs", "buildingPads", "columns", "structuralColumns", "structuralFraming", "stairs", "railings"] },
+        "kind": { "enum": ["basic", "curtain", "stacked"] },
+        "layers": { "type": "array", "items": { "$ref": "#/$defs/layer" } },
+        "coreStart": { "type": "integer", "minimum": 0 }, "coreEnd": { "type": "integer", "minimum": 0 },
+        "wrappingAtInserts": { "enum": ["doNotWrap", "exterior", "interior", "both"] },
+        "wrappingAtEnds": { "enum": ["doNotWrap", "exterior", "interior", "both"] },
+        "thickness": { "type": "number" }, "function": { "type": "string" }, "typeMark": { "type": "string" },
+        "description": { "type": "string" }, "fireRating": { "type": "string" }, "materialId": { "type": "string" },
+        "section": { "$ref": "#/$defs/section" }, "stair": { "$ref": "#/$defs/stairTypeInfo" }, "railing": { "$ref": "#/$defs/railingTypeInfo" },
+        "parameters": { "$ref": "#/$defs/values" }
+      }
+    },
+    "familyParameter": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "dataType": { "type": "string", "description": "length | area | volume | angle | slope | number | integer | percentage | currency | text | multilineText | yesNo | url | material (others are skipped)" },
+        "isInstance": { "type": "boolean" },
+        "group": { "enum": ["constraints", "construction", "graphics", "materials", "dimensions", "structural", "identity", "phasing", "text", "ifc", "other"] },
+        "formula": { "type": "string" }, "isBuiltIn": { "type": "boolean" }, "isShared": { "type": "boolean" }, "isReporting": { "type": "boolean" },
+        "builtIn": { "enum": ["width", "height"] }
+      }
+    },
+    "familyType": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" },
+        "values": { "$ref": "#/$defs/values" }, "typeMark": { "type": "string" }, "description": { "type": "string" }, "fireRating": { "type": "string" }
+      }
+    },
+    "referencePlane": {
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" }, "axis": { "enum": ["x", "y", "z"] }, "offset": { "$ref": "#/$defs/scalar" },
+        "strength": { "enum": ["notAReference", "weak", "strong", "left", "centerLeftRight", "right", "front", "centerFrontBack", "back", "bottom", "centerElevation", "top"] },
+        "definesOrigin": { "type": "boolean" }
+      }
+    },
+    "familyDimension": {
+      "type": "object",
+      "properties": { "planeA": { "type": "string" }, "planeB": { "type": "string" }, "label": { "type": "string" } }
+    },
+    "scalarPoint": { "type": "array", "items": { "$ref": "#/$defs/scalar" }, "minItems": 2, "maxItems": 2 },
+    "profileCurve": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["line", "arc", "circle"] },
+        "start": { "$ref": "#/$defs/scalarPoint" }, "end": { "$ref": "#/$defs/scalarPoint" }, "mid": { "$ref": "#/$defs/scalarPoint" },
+        "center": { "$ref": "#/$defs/scalarPoint" }, "radius": { "$ref": "#/$defs/scalar" }
+      }
+    },
+    "familyGeometry": {
+      "type": "object",
+      "properties": {
+        "kind": { "enum": ["extrusion", "mesh"] }, "name": { "type": "string" }, "isVoid": { "type": "boolean" },
+        "extrusionAxis": { "enum": ["x", "y", "z"] },
+        "extent": { "type": "array", "items": { "$ref": "#/$defs/scalar" }, "minItems": 2, "maxItems": 2 },
+        "loops": { "type": "array", "items": { "type": "array", "items": { "$ref": "#/$defs/profileCurve" } } },
+        "positions": { "type": "array", "items": { "type": "number" } }, "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "materialParameter": { "type": "string" }, "materialId": { "type": "string" }, "subcategory": { "type": "string" },
+        "visibilityParameter": { "type": "string" },
+        "visibleAt": { "type": "array", "items": { "enum": ["coarse", "medium", "fine"] } },
+        "visibleInPlan": { "type": "boolean" },
+        "sourceKind": { "type": "string" }
+      }
+    },
+    "familyLine": {
+      "type": "object",
+      "properties": { "curve": { "$ref": "#/$defs/profileCurve" }, "subcategory": { "type": "string" }, "visibleAt": { "type": "array", "items": { "enum": ["coarse", "medium", "fine"] } } }
+    },
+    "opening": {
+      "type": "object",
+      "properties": { "xMin": { "$ref": "#/$defs/scalar" }, "xMax": { "$ref": "#/$defs/scalar" }, "zMin": { "$ref": "#/$defs/scalar" }, "zMax": { "$ref": "#/$defs/scalar" } }
+    },
+    "family": {
+      "type": "object",
+      "description": "Loadable family. Family coordinates: origin at the insertion point, X along the host (width), Y toward the facing/exterior side, Z up.",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" },
+        "category": { "type": "string" }, "revitCategory": { "type": "string" }, "description": { "type": "string" }, "manufacturer": { "type": "string" },
+        "hostKind": { "type": "string" }, "definitionIncluded": { "type": "boolean" },
+        "parameters": { "type": "array", "items": { "$ref": "#/$defs/familyParameter" } },
+        "types": { "type": "array", "items": { "$ref": "#/$defs/familyType" } },
+        "referencePlanes": { "type": "array", "items": { "$ref": "#/$defs/referencePlane" } },
+        "dimensions": { "type": "array", "items": { "$ref": "#/$defs/familyDimension" } },
+        "geometry": { "type": "array", "items": { "$ref": "#/$defs/familyGeometry" } },
+        "planLines": { "type": "array", "items": { "$ref": "#/$defs/familyLine" } },
+        "opening": { "$ref": "#/$defs/opening" }
+      }
+    },
+    "wall": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "curve": { "$ref": "#/$defs/curve" },
+        "locationLine": { "enum": ["wallCenterline", "coreCenterline", "finishFaceExterior", "finishFaceInterior", "coreFaceExterior", "coreFaceInterior"] },
+        "baseOffset": { "type": "number" }, "topLevelId": { "type": "string" }, "topOffset": { "type": "number" }, "unconnectedHeight": { "type": "number" },
+        "flipped": { "type": "boolean", "description": "True when the exterior side is to the right of the curve direction." },
+        "structural": { "type": "boolean" }, "roomBounding": { "type": "boolean" }, "joinAtStart": { "type": "boolean" }, "joinAtEnd": { "type": "boolean" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "slopeArrow": {
+      "type": "object",
+      "properties": { "tail": { "$ref": "#/$defs/point2" }, "head": { "$ref": "#/$defs/point2" }, "tailOffset": { "type": "number" }, "slope": { "type": "number" } }
+    },
+    "slab": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "boundary": { "$ref": "#/$defs/loops" }, "offset": { "type": "number" }, "slopeArrow": { "$ref": "#/$defs/slopeArrow" },
+        "structural": { "type": "boolean" }, "roomBounding": { "type": "boolean" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "roof": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "kind": { "type": "string", "description": "footprint (native) or another kind imported from mesh." },
+        "footprint": { "$ref": "#/$defs/loops" }, "baseOffset": { "type": "number" }, "overhang": { "type": "number" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "insert": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "category": { "enum": ["doors", "windows"] },
+        "typeId": { "type": "string" }, "hostId": { "type": "string" }, "levelId": { "type": "string" },
+        "location": { "$ref": "#/$defs/point2" }, "sillHeight": { "type": "number" }, "transform": { "$ref": "#/$defs/transform" },
+        "facingFlipped": { "type": "boolean" }, "handFlipped": { "type": "boolean" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "room": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "name": { "type": "string" }, "number": { "type": "string" },
+        "levelId": { "type": "string" }, "point": { "$ref": "#/$defs/point2" }, "upperLimitLevelId": { "type": "string" },
+        "limitOffset": { "type": "number" }, "baseOffset": { "type": "number" }, "department": { "type": "string" },
+        "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }
+      }
+    },
+    "column": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "category": { "enum": ["columns", "structuralColumns"] },
+        "typeId": { "type": "string" }, "levelId": { "type": "string" }, "location": { "$ref": "#/$defs/point2" }, "rotation": { "type": "number" },
+        "transform": { "$ref": "#/$defs/transform" }, "baseOffset": { "type": "number" }, "topLevelId": { "type": "string" },
+        "topOffset": { "type": "number" }, "unconnectedHeight": { "type": "number" }, "slanted": { "type": "boolean" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "beam": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "curve": { "$ref": "#/$defs/curve" }, "startOffset": { "type": "number" }, "endOffset": { "type": "number" },
+        "zJustification": { "enum": ["top", "center", "bottom"] },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "stair": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "shape": { "type": "string", "description": "straight | lShaped | uShaped | other (imported from mesh)" },
+        "origin": { "$ref": "#/$defs/point2" }, "direction": { "type": "number" }, "width": { "type": "number" },
+        "baseOffset": { "type": "number" }, "topLevelId": { "type": "string" }, "topOffset": { "type": "number" }, "unconnectedHeight": { "type": "number" },
+        "riserCount": { "type": "integer" }, "turnsLeft": { "type": "boolean" }, "firstRunRisers": { "type": "integer" },
+        "riserHeight": { "type": "number" }, "treadDepth": { "type": "number" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "railing": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "typeId": { "type": "string" }, "levelId": { "type": "string" },
+        "hostId": { "type": "string" }, "path": { "type": "array", "items": { "$ref": "#/$defs/curve" } }, "baseOffset": { "type": "number" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "component": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "category": { "type": "string" }, "revitCategory": { "type": "string" },
+        "typeId": { "type": "string" }, "levelId": { "type": "string" }, "transform": { "$ref": "#/$defs/transform" },
+        "location": { "$ref": "#/$defs/point2" }, "rotation": { "type": "number" }, "mirrored": { "type": "boolean" }, "hostId": { "type": "string" },
+        "mark": { "type": "string" }, "comments": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }, "mesh": { "$ref": "#/$defs/mesh" }
+      }
+    },
+    "meshElement": {
+      "type": "object",
+      "properties": {
+        "id": { "$ref": "#/$defs/id" }, "uniqueId": { "$ref": "#/$defs/uniqueId" }, "category": { "type": "string" }, "revitCategory": { "type": "string" },
+        "name": { "type": "string" }, "levelId": { "type": "string" },
+        "positions": { "type": "array", "items": { "type": "number" } }, "indices": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
+        "materialId": { "type": "string" }, "reason": { "type": "string" }, "parameters": { "$ref": "#/$defs/values" }
+      }
+    }
+  }
+}

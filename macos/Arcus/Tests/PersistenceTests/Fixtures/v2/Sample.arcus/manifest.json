@@ -1,0 +1,14 @@
+{
+  "checksums" : {
+    "model.sqlite" : "1937f377006c479a087c4383d4a369f09d023395297b1fb78a517664f30a66d3"
+  },
+  "created" : "2025-09-16T05:20:00.000Z",
+  "documentID" : "22222222-3333-4444-8555-666666666666",
+  "elementCount" : 18,
+  "format" : "com.local.arcus.project",
+  "minimumReaderVersion" : 2,
+  "modified" : "2026-09-25T15:17:21.157Z",
+  "schemaVersion" : 2,
+  "writerAppVersion" : "0.9.5",
+  "writerBuild" : "95"
+}

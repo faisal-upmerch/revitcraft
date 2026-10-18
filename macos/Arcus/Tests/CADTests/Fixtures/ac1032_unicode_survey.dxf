@@ -1,0 +1,300 @@
+999
+Arcus CAD test fixture (CC0): AutoCAD 2018 unicode and survey coordinates
+  0
+SECTION
+  2
+HEADER
+  9
+$ACADVER
+  1
+AC1032
+  9
+$INSUNITS
+ 70
+6
+  9
+$DWGCODEPAGE
+  3
+ANSI_1252
+  9
+$EXTMIN
+ 10
+512300.0
+ 20
+4234500.0
+ 30
+0.0
+  9
+$EXTMAX
+ 10
+512400.0
+ 20
+4234600.0
+ 30
+0.0
+  0
+ENDSEC
+  0
+SECTION
+  2
+TABLES
+  0
+TABLE
+  2
+LAYER
+ 70
+4
+  0
+LAYER
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+0
+ 70
+0
+ 62
+7
+  6
+Continuous
+  0
+LAYER
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Ébauche
+ 70
+0
+ 62
+1
+  6
+Continuous
+  0
+LAYER
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+Straße
+ 70
+0
+ 62
+2
+  6
+Continuous
+  0
+LAYER
+100
+AcDbSymbolTableRecord
+100
+AcDbLayerTableRecord
+  2
+図面-文字
+ 70
+0
+ 62
+3
+  6
+Continuous
+  0
+ENDTAB
+  0
+TABLE
+  2
+STYLE
+ 70
+2
+  0
+STYLE
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+Standard
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+2.5
+  3
+txt
+  4
+bigfont.shx
+  0
+STYLE
+100
+AcDbSymbolTableRecord
+100
+AcDbTextStyleTableRecord
+  2
+Arial
+ 70
+0
+ 40
+0.0
+ 41
+1.0
+ 50
+0.0
+ 71
+0
+ 42
+2.5
+  3
+arial.ttf
+  4
+
+  0
+ENDTAB
+  0
+ENDSEC
+  0
+SECTION
+  2
+ENTITIES
+  0
+LINE
+  5
+A1
+  8
+Straße
+100
+AcDbLine
+ 10
+512345.678
+ 20
+4234567.891
+ 30
+0.0
+ 11
+512355.678
+ 21
+4234567.891
+ 31
+0.0
+  0
+LWPOLYLINE
+  5
+A2
+  8
+Ébauche
+100
+AcDbPolyline
+ 90
+4
+ 70
+1
+ 10
+512300.0
+ 20
+4234500.0
+ 10
+512400.0
+ 20
+4234500.0
+ 10
+512400.0
+ 20
+4234600.0
+ 10
+512300.0
+ 20
+4234600.0
+  0
+TEXT
+  5
+A3
+  8
+図面-文字
+100
+AcDbText
+ 10
+512310.0
+ 20
+4234590.0
+ 30
+0.0
+ 40
+2.0
+  1
+Café Größe ±5 平面図
+  7
+Arial
+100
+AcDbText
+  0
+TEXT
+  5
+A4
+  8
+図面-文字
+100
+AcDbText
+ 10
+512310.0
+ 20
+4234580.0
+ 30
+0.0
+ 40
+2.0
+  1
+Angle 45%%d %%c100 %%p2
+100
+AcDbText
+  0
+MTEXT
+  5
+A5
+  8
+図面-文字
+100
+AcDbMText
+ 10
+512310.0
+ 20
+4234570.0
+ 30
+0.0
+ 40
+1.5
+ 41
+40.0
+ 71
+1
+ 72
+5
+  3
+{\fArial|b1|i0|c0|p34;Grundriss}\PZimmer \U+00C5\U+03A9 \S1/2; \H0.7x;klein\P
+  1
+Line\~three {\C1;red} \\ back
+  0
+POINT
+  5
+A6
+  8
+0
+100
+AcDbPoint
+ 10
+512350.0
+ 20
+4234550.0
+ 30
+101.25
+  0
+ENDSEC
+  0
+EOF

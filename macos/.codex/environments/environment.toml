@@ -1,0 +1,33 @@
+# Local Codex environment for Arcus. Everything runs on this Mac with the Apple toolchain only:
+# no network access, package downloads, Homebrew, Python or Docker are needed.
+version = 1
+name = "Arcus"
+
+[setup]
+# Checks Xcode/Swift/macOS prerequisites; installs nothing.
+script = "script/bootstrap.sh"
+
+[[actions]]
+name = "Build & Run"
+icon = "run"
+command = "script/build_and_run.sh"
+
+[[actions]]
+name = "Verify (tests + build + launch)"
+icon = "test"
+command = "script/build_and_run.sh --verify"
+
+[[actions]]
+name = "Unit tests"
+icon = "test"
+command = "swift test"
+
+[[actions]]
+name = "QA workflow + screenshots"
+icon = "tool"
+command = "script/qa_capture.sh all build/qa"
+
+[[actions]]
+name = "Benchmarks"
+icon = "tool"
+command = "swift run -c release arcus-bench --out build/bench.json"

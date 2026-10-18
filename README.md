@@ -1,5 +1,9 @@
 # RevitCraft
 
+> **macOS:** the Mac app lives in [`macos/`](macos/). It is built on the Arcus codebase (Swift, AppKit/SwiftUI, Metal)
+> and adopts RevitCraft's Revit behaviour. Build it with `macos/script/build_and_run.sh`. The Rust app in `crates/`
+> (Windows) is frozen as the behaviour reference.
+
 A BIM (building information modelling) desktop app in Rust, built with **egui** and **wgpu**.
 It runs natively on Windows today and is kept portable to macOS (Metal) and Linux from one codebase.
 
