@@ -30,8 +30,9 @@ public enum PointFileReader {
 
     /// Points of a text point file: lines of `x y z [intensity] [r g b]` separated by spaces, commas, semicolons or tabs.
     /// A PTS count line and other non-numeric lines are skipped. ASCII PLY files are read from their header. At most
-    /// `maxPoints` are kept, thinned evenly.
-    public static func read(_ text: String, units: Units = .auto, maxPoints: Int = 500_000) throws -> PointSet {
+    /// `maxPoints` are kept, thinned evenly. `fixedScale` (meters per file unit) wins over `units` (reloads keep the
+    /// scale used when the link was made).
+    public static func read(_ text: String, units: Units = .auto, scale fixedScale: Double? = nil, maxPoints: Int = 500_000) throws -> PointSet {
         var raw: [(Vec3, (UInt8, UInt8, UInt8))] = []
         var hasColor = false
         if text.hasPrefix("ply") {
@@ -58,7 +59,7 @@ public enum PointFileReader {
         }
         guard raw.count >= 2 else { throw InsertReadError("No points were found. Each line should hold x y z (optionally followed by r g b).") }
         let span = raw.reduce(0.0) { max($0, abs($1.0.x), abs($1.0.y), abs($1.0.z)) }
-        let scale = units.scale ?? (span > 5000 ? 0.001 : 1)
+        let scale = fixedScale ?? units.scale ?? (span > 5000 ? 0.001 : 1)
         let step = max(1, (raw.count + max(1, maxPoints) - 1) / max(1, maxPoints))
         let kept = stride(from: 0, to: raw.count, by: step).map { (raw[$0].0 * scale, raw[$0].1) }
         return PointSet(points: kept, sourceCount: raw.count, hasColor: hasColor, unitScale: scale)

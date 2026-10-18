@@ -69,6 +69,7 @@ final class ArcusDocument: NSDocument, TransactionObserver {
         }
         addWindowController(DocumentWindowController(document: self))
         startJournal()
+        F67Links(state: state).reloadOnOpen() // F67: linked models, point clouds, topography and markups follow their files
     }
 
     // MARK: Reading

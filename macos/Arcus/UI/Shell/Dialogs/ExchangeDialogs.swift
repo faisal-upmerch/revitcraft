@@ -411,6 +411,7 @@ struct ManageLinksDialog: View {
                 Spacer()
                 Button("Remove", role: .destructive) { if let s = selected { state.session.delete([s]); selected = nil } }.disabled(selected == nil)
             }
+            F67ManageLinksSection(state: state) // F67: linked models, IFC, point clouds, topography, DWF markups
         }
         .frame(minWidth: 680, idealWidth: 680)
     }

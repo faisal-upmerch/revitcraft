@@ -18,6 +18,7 @@ public enum ProjectStandards {
         public var overwritten: [String] = []
         /// Items that already existed and were kept (New Only).
         public var kept: [String] = []
+        public init() {}
         public var summary: String {
             var s = ["\(added.count) added, \(overwritten.count) overwritten."]
             if !kept.isEmpty { s.append("\(kept.count) already in this project and kept: \(kept.prefix(8).joined(separator: ", "))\(kept.count > 8 ? "…" : "").") }

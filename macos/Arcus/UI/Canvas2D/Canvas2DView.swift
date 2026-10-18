@@ -250,6 +250,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             ctx.restoreGState()
         }
         UnderlayRenderer.draw(for: viewID, model: state.model, in: ctx, viewToDevice: viewToDevice)
+        UnderlayRenderer.drawMarkupPictures(for: viewID, model: state.model, in: ctx, viewToDevice: viewToDevice) // F67
         // Metal draws the display list and previews in its own layer above; overlays draw in the overlay layer.
         guard metalView == nil else { return }
         let ppm = zoom * scaleDenominator
