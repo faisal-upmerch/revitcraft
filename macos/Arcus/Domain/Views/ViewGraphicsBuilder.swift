@@ -33,6 +33,7 @@ public struct ViewGraphicsBuilder: Sendable {
         case .drafting, .legend: items = []
         case .threeD: items = ThreeDGraphics(builder: self).build()
         }
+        items = f810Graphics(items) // F810: Show Hidden Lines, matchlines, walkthrough paths
         items += AnnotationGraphics(builder: self).build()
         if data.kind != .threeD, data.visualStyle == .wireframe { items = Self.wireframe(items) } // BL-VG: 2D visual style
         if resolver.temp.revealConstraints { items += constraintItems() } // BL-VG: Reveal Constraints
@@ -41,10 +42,11 @@ public struct ViewGraphicsBuilder: Sendable {
         let crop = data.cropActive ? (data.cropRegion ?? extents) : nil
         if let crop, data.cropActive {
             items = clip(items, to: crop, annotationCrop: data.annotationCropActive ? crop.expanded(by: paper(data.annotationCropOffset)) : nil)
+            items = f810ClipToCropShape(items) // F810: sketched callout boundary
         }
         if data.cropVisible, let region = data.cropRegion ?? (extents.isEmpty ? nil : extents) {
             items.append(GItem(elementID: nil, category: .views, layer: .overlay,
-                               primitives: [.polyline(region.corners, closed: true, GStroke(weight: 2, color: RGBColor(0.2, 0.2, 0.2)))],
+                               primitives: [.polyline(f810CropOutline(region), closed: true, GStroke(weight: 2, color: RGBColor(0.2, 0.2, 0.2)))], // F810: sketched outline
                                selectable: false))
         }
         items.sort { $0.layer < $1.layer }

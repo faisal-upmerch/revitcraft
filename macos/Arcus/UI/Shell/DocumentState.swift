@@ -27,6 +27,7 @@ enum DialogKind: Identifiable, Equatable {
     case sheetTitle(ElementID) // BL-BROWSER: sheet number and name
     case filters(ElementID?), viewTemplates(ElementID?, ViewTemplatesMode, select: ElementID? = nil), objectStyles, warnings, selectByID, additionalSettings(AdditionalSettingsTab), userInterface // BL-VG
     case f34(F34Dialog) // F34: Structural Settings, Rebar Cover Settings
+    case f810(F810Dialog) // F810: Title Block, Guide Grid, Rendering, Render Gallery
     var id: String { String(describing: self) }
 }
 
@@ -51,6 +52,8 @@ final class DocumentState {
     @ObservationIgnored weak var window: NSWindow?
 
     var openViews: [ElementID] = []
+    /// F810: View ▸ Windows ▸ Tile Views shows the open views side by side (Tab Views returns to tabs).
+    var tileViews = false
     var activeViewID: ElementID? { didSet { if activeViewID != oldValue { viewChanged(from: oldValue) } } }
     var viewHistory: [ElementID] = []
     var toolRevision = 0

@@ -136,6 +136,7 @@ public final class SelectTool: BaseTool, InteractiveTool {
     func moveVector(_ p: Vec2, from s: Vec2) -> Vec2 {
         let v = p - s
         let sel = ctx.session.selection.ids.compactMap { ctx.model[$0] }
+        if let g = f810GuideGridMove(v, sel) { return g } // F810: viewports snap to the sheet's guide grid
         guard !sel.isEmpty, sel.allSatisfy({ $0.wall != nil }) else { return v }
         let dirs = sel.compactMap { $0.wall?.location.asSegment?.direction }
         guard dirs.count == sel.count, let d = dirs.first, dirs.allSatisfy({ abs($0.cross(d)) < 1e-6 }) else { return v }

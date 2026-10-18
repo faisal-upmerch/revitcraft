@@ -245,6 +245,9 @@ public struct ViewData: Hashable, Codable, Sendable {
     public var discipline: Discipline
     /// Crop region in view coordinates (plan: model XY; vertical views: (along, up) in the view plane).
     public var cropRegion: Rect2?
+    /// F810: sketched crop boundary (View ▸ Callout ▸ Sketch), in view coordinates; the view clips to it inside
+    /// `cropRegion` (its bounds). nil = rectangular crop. Optional: older files decode as nil.
+    public var cropShape: [Vec2]?
     public var cropActive: Bool
     public var cropVisible: Bool
     public var annotationCropActive: Bool
@@ -257,6 +260,8 @@ public struct ViewData: Hashable, Codable, Sendable {
     public var designOptions: [String: ElementID]
     public var templateID: ElementID?
     public var visibility: VisibilityGraphics
+    /// F810: Show Hidden Lines pairs: lines of `hidden` behind `obscuring` draw dashed. Optional: older files decode as nil.
+    public var hiddenLines: [HiddenLinePair]?
     /// Vertical views: the cut/elevation plane origin (on the plane), horizontal view direction (into the view), extents.
     public var planeOrigin: Vec3?
     public var viewDirection: Vec2?
@@ -264,6 +269,8 @@ public struct ViewData: Hashable, Codable, Sendable {
     public var farClip: Double
     /// Camera for 3D views.
     public var camera: Camera3D?
+    /// F810: walkthrough path and frames; the camera is the current frame's. Optional: older files decode as nil.
+    public var walkthrough: WalkthroughData?
     public var sectionBox: Box3?
     public var sectionBoxActive: Bool
     /// Parent view for callouts and dependent views.

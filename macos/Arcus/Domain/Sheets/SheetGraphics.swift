@@ -102,7 +102,7 @@ public struct SheetGraphicsBuilder: Sendable {
         for e in model.owned(byView: sheet.id) where e.category != .viewports {
             if let item = AnnotationRenderer.item(e, GraphicOverride(), model: model, scale: 1, builder: nil) { items.append(item) }
         }
-        if includeGuides, let spacing = sheet.sheet?.guideGridSpacing, spacing > 0.005 {
+        if includeGuides, let spacing = sheet.sheet?.guideGridSpacing, spacing > 0.005 - 1e-9 { // F810: 5 mm grids draw too
             var prims: [GPrimitive] = []
             let st = GStroke(weight: 1, color: RGBColor(0.35, 0.55, 0.85), pattern: .dot)
             var x = spacing

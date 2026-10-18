@@ -25,7 +25,9 @@ struct ContentAreaView: View {
             let shell = ShellLayout.layout(shellRequest(region, layout, sidebarShown: visibility.leading), metrics: .arcus)
             let tabsWidth = ShellLayout.tabsWidth(contentWidth: shell.contentWidth, controlsWidth: shell.controls.width, metrics: .arcus)
             ZStack(alignment: .topLeading) {
-                if let v = state.activeViewID, state.model[v] != nil {
+                if state.tileViews, state.openViews.count > 1 { // F810: Tile Views
+                    TiledCanvasView(state: state, leadingInset: shell.leadingInset, trailingInset: shell.trailingInset, topInset: shell.topInset, bottomInset: shell.bottomInset)
+                } else if let v = state.activeViewID, state.model[v] != nil {
                     CanvasHost(state: state, viewID: v, leadingInset: shell.leadingInset, trailingInset: shell.trailingInset,
                                topInset: shell.topInset, bottomInset: shell.bottomInset).id(v)
                         .accessibilityElement(children: .contain)
@@ -113,6 +115,8 @@ struct CanvasHost: NSViewRepresentable {
     var trailingInset: Double = 0
     var topInset: Double = 0
     var bottomInset: Double = 0
+    /// F810: Tile Views activates the tile's view on a click.
+    var onActivate: (() -> Void)? = nil
 
     func makeNSView(context: Context) -> CanvasContainerView {
         let container = CanvasContainerView()
@@ -126,12 +130,15 @@ struct CanvasHost: NSViewRepresentable {
             v.topAnchor.constraint(equalTo: container.topAnchor), v.bottomAnchor.constraint(equalTo: container.bottomAnchor),
         ])
         container.desired = NSEdgeInsets(top: topInset, left: leadingInset, bottom: bottomInset, right: trailingInset)
-        DispatchQueue.main.async { v.window?.makeFirstResponder(v) }
+        container.f810ObserveCanvasTheme() // F810: Canvas Theme
+        container.f810SetActivation(onActivate) // F810: Tile Views
+        if onActivate == nil || state.activeViewID == viewID { DispatchQueue.main.async { v.window?.makeFirstResponder(v) } }
         return container
     }
 
     func updateNSView(_ nsView: CanvasContainerView, context: Context) {
         nsView.desired = NSEdgeInsets(top: topInset, left: leadingInset, bottom: bottomInset, right: trailingInset)
+        nsView.f810SetActivation(onActivate) // F810
     }
 
     func canvas() -> NSView {
@@ -150,7 +157,14 @@ struct CanvasHost: NSViewRepresentable {
 /// itself contributes (the title bar's height, or nothing in full screen). // W4-WIRE
 final class CanvasContainerView: NSView {
     var desired = NSEdgeInsets() { didSet { applyInsets() } }
-    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); applyInsets() }
+    /// F810: Tile Views activation (WindowArrangement.swift).
+    var f810Activate: (() -> Void)?
+    var f810Monitor: Any?
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow(); applyInsets()
+        if window == nil, let m = f810Monitor { NSEvent.removeMonitor(m); f810Monitor = nil } // F810
+        else if window != nil, f810Monitor == nil, let a = f810Activate { f810SetActivation(a) }
+    }
     override func layout() { super.layout(); applyInsets() }
     private func applyInsets() {
         let total = safeAreaInsets, extra = additionalSafeAreaInsets
@@ -369,6 +383,7 @@ struct NavigationBarView: View {
     var body: some View {
         if visible {
             VStack(spacing: 2) {
+                navButton(.navigationWheel) // F810: 2D / Full Navigation Wheel
                 navButton(.zoomIn)
                 navButton(.zoomOut)
                 Menu {

@@ -48,6 +48,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F810 categories:
+    case cutProfiles, matchlines, renderings
 
 
     // F11 categories:
@@ -86,6 +87,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
         case .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, .beamSystems: return .model // F34
         case .structuralSettings: return .internal_ // F34
+        case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
+        case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
+        case .renderings: return .internal_ // F810: Render Gallery images
         }
     }
 
@@ -203,6 +207,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Couplers"
         case .beamSystems: "Structural Beam Systems"
         case .structuralSettings: "Structural Settings"
+        case .cutProfiles: "Cut Profiles" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Renderings"
         }
     }
 
@@ -301,6 +308,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Coupler"
         case .beamSystems: "Structural Beam System"
         case .structuralSettings: "Structural Settings"
+        case .cutProfiles: "Cut Profile" // F810
+        case .matchlines: "Matchline"
+        case .renderings: "Rendering"
         }
     }
 
