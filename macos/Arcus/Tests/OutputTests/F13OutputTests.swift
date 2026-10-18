@@ -1,4 +1,6 @@
 import Foundation
+import CoreGraphics
+import ImageIO
 import Testing
 import ArcusGeometry
 import ArcusDomain
@@ -42,6 +44,35 @@ struct F13OutputTests {
         // Without fonts the text is left out, with a warning.
         let (_, w2) = DWFxExporter.write([page], fonts: (nil, nil))
         #expect(!w2.isEmpty)
+    }
+
+    @Test func scheduleImagesTravelIntoDWFxAndPDF() async throws {
+        var m = f.model
+        let ctx = CGContext(data: nil, width: 4, height: 2, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(CGColor(red: 1, green: 0, blue: 0, alpha: 1)); ctx.fill(CGRect(x: 0, y: 0, width: 4, height: 2))
+        let png = NSMutableData()
+        let dst = CGImageDestinationCreateWithData(png, "public.png" as CFString, 1, nil)!
+        CGImageDestinationAddImage(dst, ctx.makeImage()!, nil); CGImageDestinationFinalize(dst)
+        let tx = TransactionContext(model: m, name: "Image")
+        tx.update(f.doorSchedule) { e in
+            guard var d = e.schedule else { return }
+            ScheduleFormattingEdits.insertImage(ScheduleImage(png: png as Data, pixelWidth: 4, pixelHeight: 2), at: .title, &d)
+            e.schedule = d
+        }
+        m = try tx.commit().model
+        let t = ScheduleEngine.compute(m[f.doorSchedule]!, m)
+        let boxes = ScheduleLayout.images(t, topLeft: Vec2(0, 0.5))
+        #expect(boxes.count == 1 && Fx3.approx(boxes[0].box.width / boxes[0].box.height, 2))
+        let (data, _) = DWFxExporter.write([DWFxExporter.schedulePage(m[f.doorSchedule]!, model: m), DWFxExporter.sheetPage(m[f.sheetSchedule]!, model: m)], fonts: (nil, nil))
+        let entries = try #require(ZipArchive.entries(data))
+        #expect(entries.filter { $0.name.hasSuffix(".png") }.count == 2)
+        #expect(entries.contains { $0.name.hasSuffix(".fpage") && String(decoding: $0.data, as: UTF8.self).contains("<ImageBrush") })
+        let dir = Fixture.tempDir()
+        var job = PDFExportJob(items: [.sheet(f.sheetSchedule)], outputDirectory: dir)
+        job.combinedFileName = "sched.pdf"
+        let r = try await PDFExporter.export(m, job: job)
+        #expect(r.pageCount == 1)
+        try? FileManager.default.removeItem(at: dir)
     }
 
     @Test func stlHasTheModelsTriangles() {
@@ -100,4 +131,5 @@ struct F13OutputTests {
 
 enum Fx3 {
     static func isGray(_ c: RGBColor) -> Bool { abs(c.r - c.g) < 1e-9 && abs(c.g - c.b) < 1e-9 }
+    static func approx(_ a: Double, _ b: Double, _ tol: Double = 1e-6) -> Bool { abs(a - b) <= tol }
 }

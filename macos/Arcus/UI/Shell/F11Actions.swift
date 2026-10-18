@@ -20,6 +20,7 @@ struct F11Actions {
     func setActiveOption(_ option: ElementID?) {
         let m = state.model
         state.session.activeDesignOptionID = option.flatMap { m[$0]?.designOption != nil ? $0 : nil }
+        state.session.selection.editingOption = state.session.activeDesignOptionID
         guard let o = state.session.activeDesignOptionID, let opt = m[o], let set = opt.designOption?.setName else {
             state.show("Editing the main model.")
             return

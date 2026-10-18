@@ -14,6 +14,8 @@ public struct DWFxPage: Sendable {
     public var graphics: ViewGraphics
     /// Display-list coordinates → paper meters (origin at the lower-left corner).
     public var toPaper: Transform2
+    /// Pictures on the page (schedule title and header images), with their paper boxes.
+    public var images: [(box: Rect2, image: ScheduleImage)] = []
     public init(name: String, paper: Vec2, graphics: ViewGraphics, toPaper: Transform2) {
         self.name = name; self.paper = paper; self.graphics = graphics; self.toPaper = toPaper
     }
@@ -29,7 +31,12 @@ public enum DWFxExporter {
     public static func sheetPage(_ sheet: Element, model: BIMModel, viewGraphics: (@Sendable (Element) -> ViewGraphics?)? = nil) -> DWFxPage {
         let b = SheetGraphicsBuilder(model: model, sheet: sheet, includeGuides: false, viewGraphics: viewGraphics)
         let name = sheet.sheet.map { "\($0.number) - \(sheet.name)" } ?? sheet.name
-        return DWFxPage(name: name, paper: b.paperSize, graphics: b.build(), toPaper: .identity)
+        var page = DWFxPage(name: name, paper: b.paperSize, graphics: b.build(), toPaper: .identity)
+        for (l, g) in b.layouts() where g == nil {
+            guard let s = model[l.viewID], s.schedule != nil else { continue }
+            page.images += ScheduleLayout.images(ScheduleEngine.compute(s, model), topLeft: Vec2(l.box.min.x, l.box.max.y), rows: model[l.viewportID]?.viewport?.scheduleRows)
+        }
+        return page
     }
 
     /// A view on a page sized to its content at its scale, plus a 10 mm margin (RevitCraft prints views this way).
@@ -50,7 +57,9 @@ public enum DWFxExporter {
         let prims = ScheduleLayout.primitives(t, topLeft: Vec2(m, size.y - m))
         let g = ViewGraphics(viewID: schedule.id, scale: 1, items: [GItem(elementID: schedule.id, category: .schedules, layer: .annotation, primitives: prims)],
                              extents: Rect2(min: .zero, max: size), crop: nil, modelRevision: model.revision)
-        return DWFxPage(name: schedule.name, paper: size, graphics: g, toPaper: .identity)
+        var page = DWFxPage(name: schedule.name, paper: size, graphics: g, toPaper: .identity)
+        page.images = ScheduleLayout.images(t, topLeft: Vec2(m, size.y - m))
+        return page
     }
 
     /// Arial regular and bold from the system fonts (nil when missing).
@@ -62,6 +71,7 @@ public enum DWFxExporter {
     /// The package and any warnings (text left out without fonts).
     public static func write(_ pages: [DWFxPage], fonts: (regular: Data?, bold: Data?)) -> (data: Data, warnings: [String]) {
         var files: [(name: String, data: Data)] = []
+        var images: [(name: String, data: Data)] = []
         var warnings: [String] = []
         let boldURI = fonts.bold != nil ? "/Resources/arialbd.ttf" : "/Resources/arial.ttf"
         var doc = #"<FixedDocument xmlns="http://schemas.microsoft.com/xps/2005/06">"#
@@ -95,6 +105,13 @@ public enum DWFxExporter {
                     }
                 }
             }
+            for (box, img) in page.images {
+                let file = "/Resources/image\(images.count + 1).png"
+                images.append((String(file.dropFirst()), img.png))
+                let x0 = box.min.x * px, y0 = h - box.max.y * px, x1 = box.max.x * px, y1 = h - box.min.y * px
+                body += #"<Path Data="M \#(n(x0)),\#(n(y0)) L \#(n(x1)),\#(n(y0)) \#(n(x1)),\#(n(y1)) \#(n(x0)),\#(n(y1)) Z"><Path.Fill><ImageBrush ImageSource="\#(file)" Viewbox="0,0,\#(img.pixelWidth),\#(img.pixelHeight)" ViewboxUnits="Absolute" Viewport="\#(n(x0)),\#(n(y0)),\#(n(x1 - x0)),\#(n(y1 - y0))" ViewportUnits="Absolute" TileMode="None" /></Path.Fill></Path>"#
+                resources.append(file)
+            }
             body += "</Canvas></FixedPage>"
             files.append(("Documents/1/Pages/\(name).fpage", Data(body.utf8)))
             if !resources.isEmpty {
@@ -116,6 +133,7 @@ public enum DWFxExporter {
             ("Documents/1/FixedDocument.fdoc", Data(doc.utf8)),
         ]
         out += files
+        out += images
         if let r = fonts.regular { out.append(("Resources/arial.ttf", r)) }
         if let b = fonts.bold { out.append(("Resources/arialbd.ttf", b)) }
         return (ZipArchive.write(out), warnings)

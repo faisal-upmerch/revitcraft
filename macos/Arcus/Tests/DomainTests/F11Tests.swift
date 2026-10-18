@@ -150,6 +150,9 @@ struct F11Tests {
         session.activeDesignOptionID = nil
         session.perform("Wall") { tx in _ = Fx.wall(tx, ids, Vec2(0, 6), Vec2(5, 6)) }
         #expect(session.model.elements(.walls).max { $0.id < $1.id }!.designOptionID == nil)
+        // While an option is edited, elements of the set's other options can't be picked.
+        session.selection.editingOption = second
+        #expect(!session.selection.allows(session.model[w]!) && session.selection.allows(fresh))
     }
 
     // MARK: Saved selections and starting view
