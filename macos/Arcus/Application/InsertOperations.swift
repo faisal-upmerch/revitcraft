@@ -119,10 +119,11 @@ public enum InsertOperations {
     /// The sheet a page most likely belongs to: one whose number or name the page name contains (or the reverse).
     public static func matchingSheet(for pageName: String, in model: BIMModel) -> ElementID? {
         let n = pageName.lowercased()
-        return model.sheets.first { s in
-            let num = (s.sheet?.number ?? "").lowercased(), name = s.name.lowercased()
-            return (!num.isEmpty && n.contains(num)) || (!name.isEmpty && (n.contains(name) || name.contains(n)))
-        }?.id
+        let sheets = model.sheets
+        // Sheet numbers first (longest first, so A101 doesn't take A1011's page), then names.
+        if let s = sheets.filter({ !($0.sheet?.number ?? "").isEmpty && n.contains(($0.sheet?.number ?? "").lowercased()) })
+            .max(by: { ($0.sheet?.number.count ?? 0) < ($1.sheet?.number.count ?? 0) }) { return s.id }
+        return sheets.first { s in let name = s.name.lowercased(); return !name.isEmpty && (n.contains(name) || name.contains(n)) }?.id
     }
 
     // MARK: Load / unload
@@ -237,7 +238,7 @@ public enum InsertOperations {
     }
 
     /// The planar face of a model element under a plan or elevation pick, as (center, outward normal).
-    /// Plans: walls give the face on the picked side (at 1.5 m above the base, or mid-height), floors, roofs and
+    /// Plans: walls give the face on the picked side (centred at the view's cut height), floors, roofs and
     /// other horizontal elements their top. Elevations and sections: the wall face towards the viewer at the pick.
     public static func decalFace(host e: Element, at p: Vec2, view: ViewData?, model: BIMModel) -> (Vec3, Vec3)? {
         if let f = WallGeometry.frame(e, model), case .line(let seg) = f.location {
@@ -259,7 +260,7 @@ public enum InsertOperations {
             let side = (p - seg.start).dot(left) >= 0 ? 1.0 : -1.0
             let on = seg.closestPoint(to: p)
             let c = on + left * (side > 0 ? f.leftOffset : f.rightOffset)
-            let z = f.baseZ + min(1.5, (f.topZ - f.baseZ) / 2)
+            let z = min(f.topZ, f.baseZ + (view?.viewRange.cutOffset ?? 1.2))
             return (Vec3(c, z: z), Vec3(left * side, z: 0))
         }
         let b = ElementMeshes.bounds(e, model)

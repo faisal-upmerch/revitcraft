@@ -36,7 +36,7 @@ enum LinkedGraphics {
                 // On a floor or roof: seen from above when it lies below the cut plane.
                 guard (zs.max() ?? 0) <= g.cutZ + 1e-6, d.normal.z > 0 || g.ceiling else { continue }
                 items.append(rectItem(e, c.map(\.xy), st))
-            } else if (zs.min() ?? 0) <= g.cutZ, (zs.max() ?? 0) >= g.bottomZ {
+            } else if (zs.min() ?? 0) <= g.topZ, (zs.max() ?? 0) >= g.bottomZ {
                 // On a wall: a line along the face, drawn just in front of it.
                 let lift = d.normal.normalized.xy * b.paper(0.0006)
                 let a = c[0].xy + lift, z = c[1].xy + lift
