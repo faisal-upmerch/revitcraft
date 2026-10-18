@@ -53,6 +53,10 @@ public enum ConstraintSolver {
         // Locked / EQ permanent dimensions act as constraints too.
         for d in model.elements(.dimensions) {
             guard let dd = d.dimension, dd.references.count >= 2 else { continue }
+            if dd.references.count == 2, let v = GlobalParameters.labelledValue(d, model) { // F11: a dimension labelled with a global parameter
+                out.append((d.id, ConstraintData(kind: .lockedDistance, references: dd.references, value: v, dimensionID: d.id)))
+                continue
+            }
             if dd.locked, dd.references.count == 2 {
                 let value = DimensionQueries.measure(d, model).first ?? 0
                 let stored = d.params[ParameterID("dimension.lockedValue")]?.doubleValue ?? value

@@ -29,9 +29,15 @@ enum ScheduleTab: Int, CaseIterable {
 
 @MainActor
 enum ScheduleCommands {
-    static let all: Set<CommandID> = [.scheduleProperties, .scheduleInsertColumn, .scheduleDeleteColumn, .scheduleHideColumn, .scheduleUnhideAllColumns,
+    static let all: Set<CommandID> = Set<CommandID>([.scheduleProperties, .scheduleInsertColumn, .scheduleDeleteColumn, .scheduleHideColumn, .scheduleUnhideAllColumns,
                                       .scheduleResizeColumn, .scheduleInsertRow, .scheduleDeleteRow, .scheduleMergeHeaders, .scheduleGroupHeaders,
-                                      .scheduleUngroupHeaders, .scheduleAppearance, .scheduleFormatUnit, .scheduleCalculatedField, .highlightInModel]
+                                      .scheduleUngroupHeaders, .scheduleAppearance, .scheduleFormatUnit, .scheduleCalculatedField, .highlightInModel])
+        .union(f12)
+    /// F12: the RevitCraft schedule tools Arcus lacked (ScheduleCommands+F12.swift).
+    static let f12: Set<CommandID> = [.scheduleCombineParameters, .scheduleInsertHeaderRow, .scheduleInsertRowAbove, .scheduleInsertRowBelow, .scheduleResizeRow,
+                                      .scheduleInsertImage, .scheduleClearCell, .scheduleFreezeHeader, .scheduleShading, .scheduleBorders, .scheduleResetAppearance,
+                                      .scheduleFont, .scheduleAlignLeft, .scheduleAlignCenter, .scheduleAlignRight, .scheduleAlignTop, .scheduleAlignMiddle,
+                                      .scheduleAlignBottom, .scheduleSplitAndPlace]
 
     /// The active schedule view, when the active view is a schedule.
     static func activeTable(_ state: DocumentState) -> ScheduleTableView? {
@@ -45,6 +51,7 @@ enum ScheduleCommands {
         guard let sid = state.activeViewID, let def = state.model[sid]?.schedule else { return "Open a schedule first." }
         let table = activeTable(state)
         let hasCell = table?.active != nil
+        if f12.contains(id) || id == .scheduleDeleteRow || id == .scheduleMergeHeaders { if let r = f12DisabledReason(id, state, def, table) { return r == "" ? nil : r } } // F12
         switch id {
         case .scheduleDeleteColumn, .scheduleHideColumn, .scheduleResizeColumn, .scheduleGroupHeaders, .scheduleMergeHeaders, .scheduleFormatUnit:
             if !hasCell { return "Click a cell in the column first." }
@@ -67,6 +74,7 @@ enum ScheduleCommands {
         guard let sid = state.activeViewID, state.model[sid]?.schedule != nil else { return }
         let table = activeTable(state)
         let fields = table?.selectedFieldIDs ?? []
+        if f12Perform(id, state, sid, table) { return } // F12
         switch id {
         case .scheduleProperties: state.presented = .schedulePropertiesTab(sid, tab: ScheduleTab.fields.rawValue, fieldID: nil)
         case .scheduleInsertColumn, .scheduleCalculatedField: state.presented = .schedulePropertiesTab(sid, tab: ScheduleTab.fields.rawValue, fieldID: nil)
@@ -145,6 +153,11 @@ enum ScheduleCommands {
             menu.addItem(b.item(CommandCatalog.info(cmd).title, CommandCatalog.info(cmd).symbol, cmd))
         }
         menu.addItem(.separator())
+        for cmd in [CommandID.scheduleInsertRowAbove, .scheduleInsertRowBelow, .scheduleClearCell, .scheduleInsertImage, nil, // F12
+                    .scheduleShading, .scheduleBorders, .scheduleFont, .scheduleResetAppearance, nil] {
+            guard let cmd else { menu.addItem(.separator()); continue }
+            menu.addItem(b.item(CommandCatalog.info(cmd).title, CommandCatalog.info(cmd).symbol, cmd))
+        }
         for cmd in [CommandID.scheduleGroupHeaders, .scheduleUngroupHeaders, .scheduleFormatUnit, nil, .scheduleDeleteRow, .exportScheduleCSV] {
             guard let cmd else { menu.addItem(.separator()); continue }
             menu.addItem(b.item(CommandCatalog.info(cmd).title, CommandCatalog.info(cmd).symbol, cmd))

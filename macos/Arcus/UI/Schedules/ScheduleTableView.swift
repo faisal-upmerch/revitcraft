@@ -20,6 +20,10 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
     private let summary = NSTextField(labelWithString: "")
     private let groupStrip = ScheduleHeaderGroupStrip()
     private var groupStripHeight: NSLayoutConstraint?
+    /// F12: the title band and header rows, their height, and whether the last click picked a column heading.
+    let titleStrip = ScheduleTitleStrip()
+    private var titleStripHeight: NSLayoutConstraint?
+    private(set) var headingSelected = false
     private(set) var tableModel: ScheduleTable?
     private var changeToken: UUID?
     private var generation = 0
@@ -74,7 +78,8 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(scrolled), name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         groupStrip.owner = self
-        let stack = NSStackView(views: [bar, groupStrip, scroll])
+        titleStrip.owner = self // F12
+        let stack = NSStackView(views: [bar, titleStrip, groupStrip, scroll])
         stack.orientation = .vertical
         stack.spacing = 0
         stack.alignment = .leading
@@ -82,12 +87,15 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         addSubview(stack)
         let stripHeight = groupStrip.heightAnchor.constraint(equalToConstant: 0)
         groupStripHeight = stripHeight
+        let titleHeight = titleStrip.heightAnchor.constraint(equalToConstant: 0) // F12
+        titleStripHeight = titleHeight
         NSLayoutConstraint.activate([
             stack.leadingAnchor.constraint(equalTo: safeAreaLayoutGuide.leadingAnchor), stack.trailingAnchor.constraint(equalTo: safeAreaLayoutGuide.trailingAnchor), // W4-WIRE: clear of the floating shell
             stack.topAnchor.constraint(equalTo: safeAreaLayoutGuide.topAnchor), stack.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor),
             bar.leadingAnchor.constraint(equalTo: stack.leadingAnchor), bar.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
             groupStrip.leadingAnchor.constraint(equalTo: stack.leadingAnchor), groupStrip.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
             stripHeight,
+            titleStrip.leadingAnchor.constraint(equalTo: stack.leadingAnchor), titleStrip.trailingAnchor.constraint(equalTo: stack.trailingAnchor), titleHeight, // F12
             scroll.leadingAnchor.constraint(equalTo: stack.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: stack.trailingAnchor),
         ])
         changeToken = state.session.onChange { [weak self] _ in self?.recompute() }
@@ -97,7 +105,22 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
 
     @objc private func openProperties() { state.presented = .scheduleProperties(scheduleID) }
     @objc private func exportCSV() { ExportActions(state: state).exportScheduleCSV() }
-    @objc private func scrolled() { groupStrip.offset = scroll.contentView.bounds.origin.x; groupStrip.needsDisplay = true }
+    @objc private func scrolled() {
+        groupStrip.offset = scroll.contentView.bounds.origin.x; groupStrip.needsDisplay = true
+        titleStrip.offset = groupStrip.offset; titleStrip.needsDisplay = true // F12
+        layoutStrips()
+    }
+
+    /// F12: Freeze Header keeps the title, header rows and header groups in view; otherwise they scroll away with the
+    /// rows (the column headings themselves always stay, as AppKit table headers do).
+    private func layoutStrips() {
+        guard let t = tableModel else { return }
+        let title = ScheduleTitleStrip.height(t), groups: CGFloat = t.showHeaders && !t.headerSpans.isEmpty ? 20 : 0
+        let scrolledBy = t.formatting.freezeHeader ? 0 : max(0, scroll.contentView.bounds.origin.y)
+        let t1 = max(0, title - scrolledBy), g1 = max(0, groups - max(0, scrolledBy - title))
+        if titleStripHeight?.constant != t1 { titleStripHeight?.constant = t1 }
+        if groupStripHeight?.constant != g1 { groupStripHeight?.constant = g1 }
+    }
 
     var schedule: Element? { state.model[scheduleID] }
 
@@ -147,6 +170,14 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         groupStrip.widths = table.tableColumns.map(\.width)
         groupStripHeight?.constant = groupStrip.spans.isEmpty ? 0 : 20
         groupStrip.needsDisplay = true
+        titleStrip.table = t; titleStrip.widths = groupStrip.widths; titleStrip.needsDisplay = true // F12
+        titleStrip.selection = titleStrip.selection.filter { k in if case .headerRow(let r, _) = k { return r < t.formatting.headerRows.count }; return t.showTitle || k != .title }
+        for col in table.tableColumns { // F12: heading fonts
+            let st = t.formatting.style(.heading(col.identifier.rawValue))
+            col.headerCell.font = ScheduleTitleStrip.font(st.font, bold: t.appearance.boldHeaders, size: 11)
+            col.headerCell.alignment = (st.horizontal ?? .center) == .left ? .left : (st.horizontal == .right ? .right : .center)
+        }
+        layoutStrips()
         // Keep the active cell on the same elements and field after re-sorting.
         if let a = active {
             let row = activeKey.isEmpty ? a.row : (t.rows.firstIndex { $0.elementIDs == activeKey } ?? a.row)
@@ -208,12 +239,14 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         let size = max(9, min(18, CGFloat(t.appearance.bodyTextHeight / 0.0022 * 11)))
         tf.font = r.kind == .data ? .monospacedDigitSystemFont(ofSize: size, weight: .regular) : .monospacedDigitSystemFont(ofSize: size, weight: .semibold)
         tf.textColor = aff.editable ? .labelColor : (r.kind == .data ? .secondaryLabelColor : .labelColor)
+        let bodyStyle = t.formatting.style(.body(t.columns[ci].id)) // F12: the column's Font and Shading
+        if let f = bodyStyle.font { tf.font = ScheduleTitleStrip.font(f, bold: r.kind != .data, size: size); tf.textColor = f.color.nsColor }
         let isActive = active.map { $0.row == row && $0.column == ci } ?? false
         tf.isActiveCell = isActive
         tf.showsChevron = isActive && aff.dropDown
         tf.inRange = !isActive && selectedColumns.contains(ci) && selectedRows.contains(row)
         tf.isFlashing = flash.map { $0.row == row && $0.column == ci } ?? false
-        tf.fill = cell?.background?.nsColor
+        tf.fill = cell?.background?.nsColor ?? bodyStyle.shading?.nsColor
         tf.tag = row * 1000 + ci
         tf.toolTip = aff.hint
         tf.setAccessibilityLabel("\(t.columns[ci].heading): \(text)\(aff.editable ? "" : ", read only")")
@@ -251,6 +284,8 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         let oldRows = selectedRows.union(IndexSet(integer: active?.row ?? r))
         if extend { if anchor == nil { anchor = active } } else { anchor = nil }
         active = (r, c)
+        headingSelected = false // F12
+        if !titleStrip.selection.isEmpty { titleStrip.selection = []; titleStrip.needsDisplay = true }
         activeKey = t.rows[r].kind == .data ? t.rows[r].elementIDs : []
         table.selectRowIndexes(selectedRows, byExtendingSelection: false)
         table.scrollRowToVisible(r)
@@ -474,6 +509,56 @@ final class ScheduleTableView: NSView, NSTableViewDataSource, NSTableViewDelegat
         setActive(row: last, column: c)
         anchor = (first, c)
         setActive(row: last, column: c, extend: true)
+        headingSelected = true // F12: styles apply to the heading as well as the column's cells
+    }
+
+    // MARK: F12 header cells
+
+    /// The cells the schedule tools act on: title/header-row/group cells picked in the strips, else the selected
+    /// columns' body cells (and their headings when a heading was clicked).
+    var selectedCellKeys: [ScheduleCellKey] {
+        if !titleStrip.selection.isEmpty { return titleStrip.selection }
+        let fields = selectedFieldIDs
+        return fields.map { .body($0) } + (headingSelected ? fields.map { .heading($0) } : [])
+    }
+
+    /// A title, header-row or group cell was picked: the body selection clears.
+    func headerSelectionChanged() {
+        let old = selectedRows
+        active = nil; anchor = nil; headingSelected = false
+        table.deselectAll(nil)
+        reload(rows: old)
+        groupStrip.needsDisplay = true
+        ScheduleUIState.shared.revision += 1
+    }
+
+    /// Picks a header group (single click in the group strip).
+    func selectGroup(_ id: String) {
+        titleStrip.selection = [.group(id)]
+        titleStrip.needsDisplay = true
+        headerSelectionChanged()
+    }
+
+    /// Double-click: type the cell's text (the title renames the schedule).
+    func editHeaderCell(_ k: ScheduleCellKey) {
+        guard let s = schedule, let def = s.schedule else { return }
+        let sid = scheduleID, state = self.state
+        switch k {
+        case .title:
+            state.requestText(prompt: "Schedule name", initial: s.name) { text in
+                guard let t = text?.trimmingCharacters(in: .whitespacesAndNewlines), !t.isEmpty else { return }
+                state.session.setParameter(ParameterID("name"), value: .text(t), on: [sid], name: "Rename Schedule")
+            }
+        case .headerRow(let r, let c):
+            let current = r < def.formatting.headerRows.count ? def.formatting.headerRows[r].text(def.formatting.headerRows[r].cellStart(c)) : ""
+            state.requestText(prompt: "Header cell text", initial: current) { text in
+                guard let text else { return }
+                state.session.editSchedule(sid, "Edit Header Cell") { ScheduleFormattingEdits.setText(text, row: r, column: c, &$0) }
+            }
+        case .group(let g):
+            ScheduleCommands.renameHeaderGroup(self, groupID: g, current: def.headerGroups.first { $0.id == g }?.title ?? "")
+        default: break
+        }
     }
 
     // MARK: Commands
@@ -595,6 +680,7 @@ final class ScheduleHeaderGroupStrip: NSView {
         let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: NSColor.labelColor]
         for sp in spans where sp.columns.upperBound < xs.count {
             let r = NSRect(x: xs[sp.columns.lowerBound] - offset, y: 0, width: xs[sp.columns.upperBound] - xs[sp.columns.lowerBound], height: bounds.height)
+            if owner?.titleStrip.selection.contains(.group(sp.groupID)) == true { NSColor.controlAccentColor.withAlphaComponent(0.18).setFill(); r.fill() } // F12
             NSColor.separatorColor.setStroke()
             NSBezierPath(rect: r.insetBy(dx: 0.5, dy: 0.5)).stroke()
             let s = sp.title as NSString
@@ -604,11 +690,11 @@ final class ScheduleHeaderGroupStrip: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
-        // Double-click a group heading to rename it.
-        guard event.clickCount == 2, let owner else { return }
+        // Click a group heading to pick it (F12 tools); double-click to rename it.
+        guard let owner else { return }
         let x = convert(event.locationInWindow, from: nil).x + offset
         let xs = widths.reduce(into: [CGFloat(0)]) { $0.append($0.last! + $1) }
         guard let sp = spans.first(where: { $0.columns.upperBound < xs.count && x >= xs[$0.columns.lowerBound] && x < xs[$0.columns.upperBound] }) else { return }
-        ScheduleCommands.renameHeaderGroup(owner, groupID: sp.groupID, current: sp.title)
+        if event.clickCount == 2 { ScheduleCommands.renameHeaderGroup(owner, groupID: sp.groupID, current: sp.title) } else { owner.selectGroup(sp.groupID) }
     }
 }

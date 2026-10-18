@@ -148,6 +148,7 @@ public enum ScheduleEditing {
         case .percentage: return readOnly("“\(f.heading)” is calculated from another field.")
         case .material: return readOnly("Material quantities are measured from the model.")
         case .roomParameter: return readOnly("Room values are edited on the room itself.")
+        case .combined: return readOnly("“\(f.heading)” combines several parameters; edit them in their own columns.") // F12
         case .parameter(let p):
             let type = ScheduleEngine.fieldType(f, def, model)
             if p == typeNameID { return typeSwapTarget(elements, heading: f.heading, model: model) }
@@ -172,6 +173,7 @@ public enum ScheduleEditing {
             case .formula, .percentage: return (false, false, "“\(f.heading)” is a calculated value.")
             case .material: return (false, false, "Material quantities are measured from the model.")
             case .roomParameter: return (false, false, "Room values are edited on the room itself.")
+            case .combined: return (false, false, "“\(f.heading)” combines several parameters.") // F12
             case .parameter: return (false, false, "“\(f.heading)” is read-only.")
             }
         }

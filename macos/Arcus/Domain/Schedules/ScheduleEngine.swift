@@ -35,6 +35,7 @@ public struct ScheduleTable: Sendable {
     public var showHeaders = true
     public var appearance = ScheduleAppearance()
     public var headerGroups: [ScheduleHeaderGroup] = []
+    var formattingStorage: ScheduleFormatting? // F12: read through `formatting`
     public init(title: String, columns: [ScheduleField], rows: [ScheduleRow], elementCount: Int) {
         self.title = title; self.columns = columns; self.rows = rows; self.elementCount = elementCount
     }
@@ -46,6 +47,7 @@ public struct ScheduleTable: Sendable {
 public enum ScheduleEngine {
     public static func compute(_ schedule: Element, _ model: BIMModel) -> ScheduleTable {
         guard let def = schedule.schedule else { return ScheduleTable(title: schedule.name, columns: [], rows: [], elementCount: 0) }
+        if def.kind == .keynoteLegend { return KeynoteLegend.table(schedule, def, model) } // F12
         let visibleFields = def.fields.filter { !$0.hidden }
         let sources = sourceRows(def, model)
         // Evaluate every field (hidden fields too, for filters/sorting/formulas).
@@ -180,6 +182,7 @@ public enum ScheduleEngine {
         var table = ScheduleTable(title: schedule.name, columns: visibleFields, rows: rows, elementCount: records.reduce(0) { $0 + $1.ids.count })
         table.showTitle = def.showTitle; table.showHeaders = def.showHeaders // BL-SCHED
         table.appearance = def.appearance; table.headerGroups = def.headerGroups
+        table.formatting = def.formatting // F12
         return table
     }
 
@@ -251,6 +254,8 @@ public enum ScheduleEngine {
                 ?? (e.insert != nil ? RoomQueries.roomsAround(insert: e, model).to.flatMap { Parameters.value(p, of: $0, model) } : nil)
         case .formula, .percentage:
             return nil
+        case .combined(let parts): // F12
+            return .text(ScheduleFormattingEdits.combinedText(parts, of: e, model))
         }
     }
 
@@ -262,6 +267,7 @@ public enum ScheduleEngine {
             let t = fieldType(other, def, model)
             inputs[other.heading] = FamilyEvaluator.formulaValue(v, type: t)
         }
+        for (name, v) in GlobalParameters.formulaInputs(model) where inputs[name] == nil { inputs[name] = v } // F11: global parameters in formulas
         guard let formula = try? Formula(src, knownNames: Set(inputs.keys)),
               let r = try? formula.evaluate(units: model.units, { inputs[$0] }) else { return nil }
         return FamilyEvaluator.paramValue(r, type: type)
@@ -281,6 +287,7 @@ public enum ScheduleEngine {
         case .material(let w): return w == "Area" ? .area : (w == "Volume" ? .volume : .text)
         case .formula(_, let t): return t
         case .percentage: return .percentage
+        case .combined: return .text // F12
         }
     }
 

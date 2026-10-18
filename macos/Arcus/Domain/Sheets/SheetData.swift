@@ -59,6 +59,8 @@ public struct ViewportData: Hashable, Codable, Sendable {
     public var titleOffset: Vec2
     /// Title line length override (paper meters); nil = fit to title.
     public var titleLineLength: Double?
+    /// Split & Place: the rows of a schedule this viewport shows (nil = all). Optional: older files decode as nil. // F12
+    public var scheduleRows: ScheduleRowRange?
     public init(viewID: ElementID, center: Vec2, detailNumber: String) {
         self.viewID = viewID; self.center = center; showTitle = true; self.detailNumber = detailNumber
         titleOffset = Vec2(0, -0.012); titleLineLength = nil
