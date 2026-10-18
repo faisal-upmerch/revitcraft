@@ -1,4 +1,5 @@
 import CoreGraphics
+import ImageIO
 import Foundation
 import ArcusGeometry
 import ArcusDomain
@@ -358,10 +359,20 @@ struct PageSetWriter {
 
     // MARK: Sheets
 
+    /// F13: the job's Print Setup options applied to a display list.
+    var printOptions: PrintOptions {
+        var o = PrintOptions.none
+        o.hideReferencePlanes = job.hideReferencePlanes; o.hideScopeBoxes = job.hideScopeBoxes
+        o.hideUnreferencedViewTags = job.hideUnreferencedViewTags; o.colors = job.colors
+        return o
+    }
+
     func drawSheet(_ sheet: Element, page: Int, in ctx: CGContext) {
         let k = PageSetWriter.k
-        let builder = SheetGraphicsBuilder(model: model, sheet: sheet, includeGuides: !job.hideCropBoundaries, viewGraphics: cache.provider)
-        var g = builder.build()
+        let o = printOptions, m = model, provider = cache.provider
+        let filtered: @Sendable (Element) -> ViewGraphics? = { v in provider(v).map { PrintFiltering.apply($0, o, model: m) } } // F13
+        let builder = SheetGraphicsBuilder(model: model, sheet: sheet, includeGuides: !job.hideCropBoundaries, viewGraphics: filtered)
+        var g = PrintFiltering.apply(builder.build(), o, model: model)
         let layouts = builder.layouts()
         if !job.hideCropBoundaries {
             let st = GStroke(weight: 1, color: RGBColor(0.2, 0.2, 0.2), pattern: .dash)
@@ -372,6 +383,11 @@ struct PageSetWriter {
         }
         let toPage = CGAffineTransform(scaleX: CGFloat(k), y: CGFloat(k))
         GraphicsRenderer.draw(g, in: ctx, viewToDevice: toPage, pointsPerPaperMeter: k, options: .pdf(showOverlays: !job.hideCropBoundaries))
+        for (l, graphics) in layouts where graphics == nil { // F12: schedule title/header images
+            guard let s = model[l.viewID], s.schedule != nil else { continue }
+            PageSetWriter.drawScheduleImages(ScheduleEngine.compute(s, model), topLeft: Vec2(l.box.min.x, l.box.max.y),
+                                             rows: model[l.viewportID]?.viewport?.scheduleRows, in: ctx)
+        }
         for (l, graphics) in layouts {
             if viewPages[l.viewID] == page {
                 ctx.addDestination(PageSetWriter.destinationName(l.viewID), at: CGPoint(x: l.box.min.x * k, y: l.box.max.y * k))
@@ -408,9 +424,10 @@ struct PageSetWriter {
             }
             GraphicsRenderer.draw(g, in: ctx, viewToDevice: CGAffineTransform(scaleX: CGFloat(k), y: CGFloat(k)), pointsPerPaperMeter: k,
                                   options: options, clip: printable)
+            PageSetWriter.drawScheduleImages(table, topLeft: Vec2(PDFExporter.viewMargin, paperH - PDFExporter.viewMargin), rows: nil, in: ctx) // F12
             return
         }
-        let g = cache.graphics(v)
+        let g = PrintFiltering.apply(cache.graphics(v), printOptions, model: model) // F13
         guard g.items.contains(where: { $0.layer != .overlay }) else {
             warnings.append("View “\(v.name)” is empty.")
             return
@@ -444,6 +461,17 @@ struct PageSetWriter {
                 .intersection(printable)
             guard !r.isNull, r.width > 0, r.height > 0 else { continue }
             ctx.setDestination(PageSetWriter.destinationName(target), for: r)
+        }
+    }
+}
+
+extension PageSetWriter {
+    /// F12: pictures inserted in schedule title and header cells (the display list has no images; PDF draws them here).
+    static func drawScheduleImages(_ t: ScheduleTable, topLeft: Vec2, rows: ScheduleRowRange?, in ctx: CGContext) {
+        let k = PageSetWriter.k
+        for (box, img) in ScheduleLayout.images(t, topLeft: topLeft, rows: rows) {
+            guard let src = CGImageSourceCreateWithData(img.png as CFData, nil), let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { continue }
+            ctx.draw(cg, in: CGRect(x: box.min.x * k, y: box.min.y * k, width: box.width * k, height: box.height * k))
         }
     }
 }

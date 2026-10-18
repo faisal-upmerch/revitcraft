@@ -144,7 +144,7 @@ public enum QuantityEngine {
             let bb = parts.reduce(Box3.empty) { $0.union($1.mesh.bounds) }
             if !bb.isEmpty { q.width = bb.size.x; q.height = bb.size.z }
         case .modelLine(let l):
-            q.length = l.curve.length
+            q.length = l.drawnLength // F1: splines and ellipses
         case .topography:
             q.area = TopographyGeometry.surfaceArea(e)
             let zs = e.topography?.points.map(\.z) ?? []

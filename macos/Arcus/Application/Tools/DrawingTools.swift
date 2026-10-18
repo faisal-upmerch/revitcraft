@@ -20,6 +20,8 @@ public final class LineTool: BaseTool, InteractiveTool {
     var nextGridName: String
     /// Grids only: create grids on picked lines instead of drawing them (WP6a).
     public var pickLines = false
+    /// F1: the spline or ellipse being drawn (Spline, Ellipse, Partial Ellipse draw modes); nil in Line mode.
+    public internal(set) var freeformDraft: FreeformDraft?
 
     public init(ctx: ToolContext, kind: Kind, commandID: CommandID) {
         self.kind = kind
@@ -49,12 +51,13 @@ public final class LineTool: BaseTool, InteractiveTool {
     public var prompt: String {
         if kind == .grid && pickLines { return "Click a line, wall face or CAD line to place grid \(nextGridName) on it." }
         if kind == .grid { return start == nil ? "Click to start grid \(nextGridName)." : "Click to end grid \(nextGridName), or type a length." }
+        if let d = freeformDraft { return d.prompt } // F1
         return start == nil ? "Click to start the \(title.lowercased())." : "Click the end point or type a length. Esc ends the chain."
     }
     public var numericLabel: String? { start != nil ? "Length" : nil }
     public var snapFrom: Vec2? { start }
     public var options: [ToolOption] {
-        var o: [ToolOption] = []
+        var o: [ToolOption] = freeformModeOptions // F1: Line, Spline, Ellipse, Partial Ellipse
         if kind == .detail || kind == .model {
             // W2-ANNOT: standard styles first, with their patterns for the Options Bar previews.
             let styles = LineStyles.sorted(ctx.model)
@@ -79,12 +82,14 @@ public final class LineTool: BaseTool, InteractiveTool {
         case "width": if let d = value.doubleValue, d > 0 { insulationWidth = d }
         case "name": if let s = value.textValue, !s.isEmpty { nextGridName = s }
         case "mode" where kind == .grid: pickLines = value.textValue == "Pick Lines"; start = nil; preview = ToolPreview()
+        case "mode" where usesFreeformModes: setFreeformMode(value.textValue) // F1
         default: break
         }
     }
 
     public func pointerMoved(_ i: ToolInput) {
         if pickLines && kind == .grid { pickLinesMoved(i); return }
+        if freeformDraft != nil { freeformMoved(i); return } // F1
         current = i.point
         preview = ToolPreview()
         if let s = start {
@@ -107,6 +112,7 @@ public final class LineTool: BaseTool, InteractiveTool {
 
     public func pointerDown(_ i: ToolInput) {
         if pickLines && kind == .grid { pickLinesDown(i); return }
+        if freeformDraft != nil { freeformDown(i); return } // F1
         guard let s = start else { start = i.point; return }
         if arcMode {
             if arcMid == nil { arcMid = i.point; return }
@@ -129,14 +135,14 @@ public final class LineTool: BaseTool, InteractiveTool {
         return true
     }
 
-    func commit(_ c: Curve2) {
+    func commit(_ c: Curve2, freeform: FreeformCurve? = nil) { // F1: freeform = a spline or ellipse with `c` its chord
         guard c.length > Tolerance.shortCurve else { return }
         let view = ctx.viewID
         let level = ctx.levelID
         switch kind {
         case .detail:
             ctx.session.perform("Create Detail Line") { tx in
-                tx.create(.detailLines, data: .modelLine(ModelLineData(curve: c, styleID: styleID)), ownerViewID: view)
+                tx.create(.detailLines, data: .modelLine(ModelLineData(curve: c, styleID: styleID, freeform: freeform)), ownerViewID: view)
             }
         case .model, .roomSeparation, .areaBoundary, .propertyLine:
             let cat: Category = kind == .model ? .genericModels : kind == .roomSeparation ? .roomSeparationLines : kind == .areaBoundary ? .areaBoundaryLines : .propertyLines
@@ -145,7 +151,7 @@ public final class LineTool: BaseTool, InteractiveTool {
             let areaScheme = kind == .areaBoundary ? ctx.viewData?.areaSchemeID ?? AreaPlans.sortedSchemes(ctx.model).first?.id : nil
             ctx.session.perform("Create \(title)") { tx in
                 // Model lines are level-hosted lines without an owner view.
-                tx.create(cat == .genericModels ? .detailLines : cat, data: .modelLine(ModelLineData(curve: c, styleID: styleID)), levelID: level) { e in
+                tx.create(cat == .genericModels ? .detailLines : cat, data: .modelLine(ModelLineData(curve: c, styleID: styleID, freeform: freeform)), levelID: level) { e in
                     if let areaScheme { e.params[AreaPlans.schemeParameter] = .ref(areaScheme) }
                 }
             }
@@ -177,6 +183,7 @@ public final class LineTool: BaseTool, InteractiveTool {
     }
 
     public func escape() -> EscapeResult {
+        if freeformDraft.map({ !$0.points.isEmpty }) == true { freeformDraft?.reset(); preview = ToolPreview(); return .stayInTool } // F1
         if start != nil { start = nil; arcMid = nil; preview = ToolPreview(); return .stayInTool }
         return .exitTool
     }

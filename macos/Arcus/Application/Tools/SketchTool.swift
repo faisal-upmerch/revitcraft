@@ -20,7 +20,9 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public enum DrawMode: String, CaseIterable {
         case line = "Line", rectangle = "Rectangle", inscribedPolygon = "Inscribed Polygon", circumscribedPolygon = "Circumscribed Polygon"
         case circle = "Circle", arc = "Start-End-Radius Arc", centerArc = "Center-ends Arc", tangentArc = "Tangent End Arc"
-        case filletArc = "Fillet Arc", pickLines = "Pick Lines", pickWalls = "Pick Walls"
+        case filletArc = "Fillet Arc"
+        case spline = "Spline", ellipse = "Ellipse", partialEllipse = "Partial Ellipse" // F1: in RevitCraft's order, before the picks
+        case pickLines = "Pick Lines", pickWalls = "Pick Walls"
     }
 
     public let target: Target
@@ -41,6 +43,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public var sides = 6
     /// Fillet Arc: indices of the sketch lines picked so far.
     var filletPicks: [Int] = []
+    /// F1: the spline or ellipse being drawn (Spline, Ellipse, Partial Ellipse draw modes).
+    var freeformDraft: FreeformDraft?
     /// Lines named by the last Finish error (drawn in the alert colour until the sketch changes).
     public internal(set) var errorCurves: Set<Int> = []
     public var slopeArrow: SlopeArrow?
@@ -308,7 +312,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
     }
 
     public func escape() -> EscapeResult {
-        if start != nil || arcEnd != nil || !filletPicks.isEmpty { start = nil; arcEnd = nil; filletPicks = []; rebuild(); return .stayInTool }
+        if start != nil || arcEnd != nil || !filletPicks.isEmpty || hasFreeformDraft { start = nil; arcEnd = nil; filletPicks = []; freeformDraft = nil; rebuild(); return .stayInTool } // F1: free-form drafts
         return .stayInTool // sketch mode requires explicit Finish or Cancel
     }
 
@@ -327,6 +331,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
     // MARK: Finish
 
     public func finish() -> Bool {
+        commitPendingSpline() // F1: a spline in progress becomes boundary lines
         let view = ctx.viewID
         let level = ctx.levelID
         switch target {

@@ -6,6 +6,7 @@ public enum ShaftCuts {
     /// Absolute bottom and top of a shaft.
     public static func range(_ shaft: Element, _ model: BIMModel) -> (bottom: Double, top: Double)? {
         guard let s = shaft.opening?.shaft else { return nil }
+        if s.hosted != nil { return HostedOpenings.range(shaft, model) } // F1: a hosted opening spans its host
         let base = model.elevation(ofLevel: shaft.levelID) + s.baseOffset
         let top = model.topElevation(base: base, topLevelID: s.topLevelID, topOffset: s.topOffset, unconnectedHeight: s.unconnectedHeight)
         return (min(base, top), max(base, top))
@@ -44,6 +45,7 @@ public enum ShaftCuts {
         let all = model.elements(.shaftOpenings)
         guard !all.isEmpty, e.slab != nil || e.roof != nil, let host = hostExtent(e, model) else { return [] }
         return all.filter { sh in
+            if sh.opening?.shaft?.hosted != nil { return sh.hostID == e.id && profile(sh) != nil } // F1: cuts its host only
             guard sh.designOptionID == nil || sh.designOptionID == e.designOptionID else { return false }
             guard let (z0, z1) = range(sh, model), min(host.z1, z1) - max(host.z0, z0) > 0.001 else { return false }
             guard let p = profile(sh) else { return false }
@@ -58,7 +60,8 @@ public enum ShaftCuts {
 
     /// Plan polygons that shafts remove from `e` (used as extra holes by roofs).
     public static func externalCuts(for e: Element, _ model: BIMModel) -> [Polygon2] {
-        shafts(cutting: e, model).compactMap { profile($0)?.outer }
+        // F1: By Face openings in roofs are cut square to the roof face by the roof mesh (HostedOpenings), not vertically.
+        shafts(cutting: e, model).filter { e.roof == nil || $0.opening?.shaft?.hosted != .byFace }.compactMap { profile($0)?.outer }
     }
 
     /// The pieces of a slab's profile left after shafts cut it; nil when no shaft cuts it.

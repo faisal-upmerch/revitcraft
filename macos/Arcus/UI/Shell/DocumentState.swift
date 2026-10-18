@@ -27,6 +27,8 @@ enum DialogKind: Identifiable, Equatable {
     case sheetTitle(ElementID) // BL-BROWSER: sheet number and name
     case filters(ElementID?), viewTemplates(ElementID?, ViewTemplatesMode, select: ElementID? = nil), objectStyles, warnings, selectByID, additionalSettings(AdditionalSettingsTab), userInterface // BL-VG
     case f34(F34Dialog) // F34: Structural Settings, Rebar Cover Settings
+    case f67(F67Dialog) // F67: Insert tab dialogs
+    case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
     case f810(F810Dialog) // F810: Title Block, Guide Grid, Rendering, Render Gallery
     var id: String { String(describing: self) }
 }
@@ -145,6 +147,7 @@ final class DocumentState {
         session.onChange { [weak self] change in self?.modelChanged(change) }
         openInitialView()
         LevelRenamePrompt.install(on: self) // WP6a: offer to rename a level's views
+        SaveReminder.install(on: self) // F11: "Project Not Saved Recently"
     }
 
     var model: BIMModel { session.model }
@@ -176,6 +179,7 @@ final class DocumentState {
 
     func openInitialView() {
         let m = model
+        if let start = StartingView.view(m) { open(start.id); return } // F11: Manage ▸ Starting View
         if let plan = m.views.first(where: { $0.view?.kind == .floorPlan && m[$0.levelID]?.level?.elevation == m.levels.first?.level?.elevation })
             ?? m.views.first(where: { $0.view?.kind == .floorPlan }) ?? m.views.first {
             open(plan.id)

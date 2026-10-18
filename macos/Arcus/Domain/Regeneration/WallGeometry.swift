@@ -391,7 +391,8 @@ public enum WallGeometry {
             let cands = joinCandidates(e, model)
             let sj = endJoin(e, atEnd: false, model, candidates: cands)
             let ej = endJoin(e, atEnd: true, model, candidates: cands)
-            return straightSolid(f, seg: seg, start: sj, end: ej, openings: ops, top: topProfile, slant: w.slantAngle)
+            return straightSolid(f, seg: seg, start: sj, end: ej, openings: ops, top: topProfile, slant: w.slantAngle,
+                                 reveals: WallReveals.cuts(e, f, model)) // F1: Wall: Reveal grooves
         case .arc:
             return arcSolid(f, openings: ops)
         }
@@ -427,7 +428,7 @@ public enum WallGeometry {
     /// (right face → joint center line → left face). End vertices are remapped onto the join corners so that
     /// mitered, tee and multi-way joins meet without gaps.
     static func straightSolid(_ f: WallFrame, seg: Segment2, start sj: WallEndJoin, end ej: WallEndJoin,
-                              openings: [WallOpening], top: Polygon2, slant: Double) -> Mesh {
+                              openings: [WallOpening], top: Polygon2, slant: Double, reveals: [WallRevealCut] = []) -> Mesh {
         let L = f.length
         let profiles = elevationProfiles(outline: top, openings: openings)
         let dir = seg.direction, nrm = seg.normal
@@ -456,12 +457,24 @@ public enum WallGeometry {
 
         var mesh = Mesh()
         let slantTan = tan(slant)
-        for (t0, t1) in halves {
+        // F1: reveals split the thickness further at their groove bottoms; a slice's profile loses the grooves that
+        // reach it, and the faces a groove exposes between slices are added.
+        let slices = reveals.isEmpty ? halves.map { (t0: $0.0, t1: $0.1, cuts: [WallRevealCut]()) }
+            : WallReveals.slices(right: right, left: left, breaks: mid.map { [$0] } ?? [], cuts: reveals)
+        for (k, slice) in slices.enumerated() {
+            let (t0, t1) = (slice.t0, slice.t1)
             // Extrude profile in plane (s, z) from t0 to t1. The frame's local +Z is dir × up = −normal,
             // so a negative depth moves toward +t.
             let frame = simd_frame(sOrigin: seg.start, dir: dir, nrm: nrm, t: t0)
             var part = Mesh()
-            for profile in profiles { part.append(MeshBuilder.extrude(profile, frame: frame, depth: -(t1 - t0))) }
+            for profile in WallReveals.profiles(profiles, minus: slice.cuts) { part.append(MeshBuilder.extrude(profile, frame: frame, depth: -(t1 - t0))) }
+            if !reveals.isEmpty { // F1
+                if k > 0 {
+                    part = removeFaces(part, onPlaneT: t0, seg: seg, nrm: nrm)
+                    for (p, up) in WallReveals.exposedFaces(profiles, lower: slices[k - 1].cuts, upper: slice.cuts) { part.append(WallReveals.face(p, t: t0, seg: seg, positive: up)) }
+                }
+                if k < slices.count - 1 { part = removeFaces(part, onPlaneT: t1, seg: seg, nrm: nrm) }
+            }
             // Remap vertices at the ends and apply slant.
             for i in part.positions.indices {
                 let p = part.positions[i]
@@ -475,7 +488,7 @@ public enum WallGeometry {
                 part.positions[i] = Vec3(wp.x, wp.y, p.z)
             }
             // Remove the internal faces at the half boundary.
-            if mid != nil { part = removeFaces(part, onPlaneT: mid!, seg: seg, nrm: nrm) }
+            if mid != nil, reveals.isEmpty { part = removeFaces(part, onPlaneT: mid!, seg: seg, nrm: nrm) }
             mesh.append(part)
         }
         recomputeFlatNormals(&mesh)

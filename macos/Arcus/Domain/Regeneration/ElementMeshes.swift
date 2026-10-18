@@ -38,6 +38,10 @@ public enum ElementMeshes {
             return [MeshPart(mesh: r.mesh, materialID: nil)]
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34
             return Reinforcement.meshParts(e, model)
+        case .modelText: // F1
+            return ModelTextGeometry.meshParts(e, model)
+        case .linkedModel, .pointCloud, .decal: // F67
+            return LinkedGeometry.meshParts(e, model)
         default:
             return []
         }
@@ -58,6 +62,8 @@ public enum ElementMeshes {
         switch e.data {
         case .wall, .insert, .component, .column, .beam, .slab, .roof, .stair, .railing, .topography, .referenceGeometry, .ramp: true
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: true // F34
+        case .modelText: true // F1
+        case .linkedModel, .pointCloud, .decal: true // F67
         default: false
         }
     }
@@ -81,6 +87,8 @@ public enum ElementMeshes {
         case .entourage: RGBColor(0.62, 0.66, 0.74)
         case .lightingFixtures: RGBColor(0.93, 0.92, 0.86)
         case .site: RGBColor(0.70, 0.70, 0.68)
+        case .pointClouds: RGBColor(0.36, 0.46, 0.62) // F67
+        case .coordinationModels: RGBColor(0.72, 0.74, 0.80, 0.9)
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }
@@ -104,7 +112,7 @@ public enum ElementMeshes {
             }
             return Box3(min: Vec3(r.point, z: z), max: Vec3(r.point, z: z))
         case .modelLine(let l):
-            let r = l.curve.bounds
+            let r = l.drawnBounds // F1
             let z = model.elevation(ofLevel: e.levelID)
             return Box3(min: Vec3(r.min, z: z), max: Vec3(r.max, z: z))
         case .link(let l):
@@ -205,6 +213,8 @@ public enum DependencyGraph {
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
+        case .decal(let d): // F67: the decal type's image
+            s.insert(d.decalTypeID)
         case .slab, .roof: // WP3: shafts cutting this element
             for sh in ShaftCuts.shafts(cutting: e, model) { s.insert(sh.id); if let l = sh.levelID { s.insert(l) }; if let t = sh.opening?.shaft?.topLevelID { s.insert(t) } }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34: host, bar types, cover
@@ -245,6 +255,8 @@ public enum DependencyGraph {
                     for r in m.hosted(by: id) { out.insert(r.id) }
                 case .topography: // BL-SITE: sub-divisions follow their host
                     for r in m.hosted(by: id) { out.insert(r.id) }
+                case .wallReveal: // F1: the host wall's solid has the groove
+                    if let h = e.hostID { out.insert(h) }
                 case .opening: // WP3
                     if let h = e.hostID { out.insert(h) }
                     for x in ShaftCuts.cutElements(by: e, m) { out.insert(x.id) }

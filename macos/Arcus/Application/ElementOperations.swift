@@ -8,7 +8,7 @@ public enum ElementOperations {
     public static func dependentsToCarry(_ ids: Set<ElementID>, _ model: BIMModel, viewID: ElementID?) -> Set<ElementID> {
         var out = ids
         for id in ids {
-            for h in model.hosted(by: id) where h.insert != nil || h.railing != nil || h.opening != nil { out.insert(h.id) }
+            for h in model.hosted(by: id) where h.insert != nil || h.railing != nil || h.opening != nil || h.decal != nil { out.insert(h.id) } // F67: decals
             for t in model.tags(of: id) where t.ownerViewID == viewID || viewID == nil { out.insert(t.id) }
         }
         return out
@@ -169,7 +169,7 @@ public enum ElementOperations {
         let curve: Curve2?
         switch e.data {
         case .wall(let w): curve = w.location
-        case .modelLine(let l): curve = l.curve
+        case .modelLine(let l): curve = l.freeform == nil ? l.curve : nil // F1: splines and ellipses aren't split
         case .beam(let b): curve = b.curve
         default: curve = nil
         }
@@ -231,7 +231,7 @@ public enum ElementOperations {
     public static func curveOf(_ e: Element) -> Curve2? {
         switch e.data {
         case .wall(let w): w.location
-        case .modelLine(let l): l.curve
+        case .modelLine(let l): l.freeform == nil ? l.curve : nil // F1: splines and ellipses are not trimmed, split or offset
         case .beam(let b): b.curve
         case .grid(let g): g.curve
         case .referencePlane(let r): .line(r.line)

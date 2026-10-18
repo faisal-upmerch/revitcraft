@@ -36,10 +36,12 @@ public enum RoomGeometry {
         for piece in BoundaryCleanup.unionBoundary(of: polys) { segs.append(piece.segment) }
         let lineCategory: Category = areaScheme == nil ? .roomSeparationLines : .areaBoundaryLines
         for l in model.elements(lineCategory) where l.levelID == level {
-            guard let c = l.modelLine?.curve else { continue }
+            guard let ml = l.modelLine else { continue }
             if areaScheme != nil, l.params[ParameterID("areaScheme")]?.refValue != areaScheme { continue }
-            let pts = c.tessellate(chordTolerance: 0.005)
-            for i in 0..<(pts.count - 1) { segs.append(Segment2(pts[i], pts[i + 1])) }
+            for c in ml.curves { // F1: a spline or ellipse bounds by its segments
+                let pts = c.tessellate(chordTolerance: 0.005)
+                for i in 0..<(pts.count - 1) { segs.append(Segment2(pts[i], pts[i + 1])) }
+            }
         }
         return segs
     }

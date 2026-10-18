@@ -237,6 +237,7 @@ public final class SpecialTagTool: BaseTool, InteractiveTool {
         self.kind = kind
         super.init(ctx: ctx)
         if kind == .viewReference { targetViewID = referenceViews.first?.id }
+        if kind.isKeynote { keynoteDisplay = Keynoting.display(ctx.model); userKey = Keynoting.pickable(ctx.model).first?.key ?? userKey } // F12
     }
 
     /// Categories each kind picks.
@@ -276,8 +277,9 @@ public final class SpecialTagTool: BaseTool, InteractiveTool {
         var o: [ToolOption] = []
         if kind.isKeynote { o.append(ToolOption(id: "display", label: "Display", kind: .choice(KeynoteDisplay.allCases.map(\.rawValue)), value: .text(keynoteDisplay.rawValue))) }
         if kind == .keynoteUser {
-            let keys = KeynoteTable.standard.filter { $0.parent != nil }.map { "\($0.key) \($0.text)" }
-            let current = KeynoteTable.standard.first { $0.key == userKey }.map { "\($0.key) \($0.text)" } ?? userKey
+            let table = Keynoting.pickable(ctx.model) // F12: the project's keynote table
+            let keys = table.map { "\($0.key) \($0.text)" }
+            let current = table.first { $0.key == userKey }.map { "\($0.key) \($0.text)" } ?? userKey
             o.append(ToolOption(id: "key", label: "Key", kind: .choice(keys), value: .text(current)))
         }
         if [.material, .keynoteElement, .keynoteMaterial, .keynoteUser].contains(kind) {
@@ -291,7 +293,7 @@ public final class SpecialTagTool: BaseTool, InteractiveTool {
     public func setOption(_ id: String, _ value: ParamValue) {
         switch id {
         case "display": if let d = KeynoteDisplay(rawValue: value.textValue ?? "") { keynoteDisplay = d }
-        case "key": if let t = value.textValue, let k = t.split(separator: " ").first { userKey = String(k) }
+        case "key": if let t = value.textValue, let k = Keynoting.pickable(ctx.model).first(where: { "\($0.key) \($0.text)" == t })?.key ?? t.split(separator: " ").first.map(String.init) { userKey = k } // F12
         case "leader": leader = value.boolValue ?? true
         case "view": targetViewID = referenceViews.first { $0.name == value.textValue }?.id
         default: break

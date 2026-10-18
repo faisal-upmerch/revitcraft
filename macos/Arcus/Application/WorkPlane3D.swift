@@ -152,6 +152,7 @@ public enum WorkPlane3D {
         }
         i.hit = hits.first
         i.hitCandidates = hits
+        if s.pickedID != nil { i.surfacePoint = s.pickedPoint } // F1: Wall: Reveal picks a face height in 3D
         return i
     }
 

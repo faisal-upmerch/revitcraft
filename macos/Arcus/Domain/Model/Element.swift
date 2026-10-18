@@ -137,6 +137,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
     // RevitCraft port feature batches: each adds its kinds right after its marker.
     // F1 element kinds:
+    case modelText, wallReveal
 
 
     // F2 element kinds:
@@ -149,6 +150,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
 
     // F67 element kinds:
+    case linkedModel, pointCloud, decal, decalType, markup // F67
 
 
     // F810 element kinds:
@@ -225,6 +227,10 @@ public enum ElementData: Hashable, Codable, Sendable {
 
     // RevitCraft port feature batches: each adds its cases right after its marker.
     // F1 element data:
+    /// Model Text: 3D text extruded from glyph outlines (RevitCraft `ModelText`).
+    case modelText(ModelTextData)
+    /// Wall: Reveal: a groove cut into a wall face (the element's host), horizontal or vertical.
+    case wallReveal(WallRevealData)
 
 
     // F2 element data:
@@ -239,6 +245,13 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
     // F67 element data:
+    /// F67: a linked Arcus project, IFC model or coordination model (read-only display geometry).
+    case linkedModel(LinkedModelData)
+    case pointCloud(PointCloudData)
+    case decal(DecalData)
+    case decalType(DecalTypeData)
+    /// F67: a DWFx markup page on a sheet.
+    case markup(MarkupData)
 
 
     // F810 element data:
@@ -304,6 +317,8 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .opening: .opening
         // RevitCraft port feature batches: each adds its cases right after its marker.
         // F1 element data kinds:
+        case .modelText: .modelText
+        case .wallReveal: .wallReveal
 
 
         // F2 element data kinds:
@@ -324,6 +339,11 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
         // F67 element data kinds:
+        case .linkedModel: .linkedModel
+        case .pointCloud: .pointCloud
+        case .decal: .decal
+        case .decalType: .decalType
+        case .markup: .markup
 
 
         // F810 element data kinds:

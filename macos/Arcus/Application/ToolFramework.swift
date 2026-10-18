@@ -15,6 +15,8 @@ public struct ToolInput: Sendable {
     /// Topmost selectable element under the cursor and all candidates (for Tab cycling).
     public var hit: ElementID?
     public var hitCandidates: [ElementID] = []
+    /// F1: in 3D views, the model point under the pointer on the picked element's surface (nil elsewhere).
+    public var surfacePoint: Vec3? = nil
     public init(point: Vec2, rawPoint: Vec2, snap: SnapResult? = nil) { self.point = point; self.rawPoint = rawPoint; self.snap = snap }
 }
 

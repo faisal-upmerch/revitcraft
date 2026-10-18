@@ -799,8 +799,14 @@ enum BuiltInCatalog {
             return typed + annotDetailParams(e) + [comments] // W2-ANNOT
         case .referenceGeometry:
             return [ifcGUID, comments]
+        case .modelText: // F1
+            return ModelTextParameters.instance + identity + phasing + ifc
+        case .wallReveal: // F1
+            return WallRevealParameters.instance + identity + phasing
         case .opening: // WP3
             return openingInstanceParams(e)
+        case .linkedModel, .pointCloud, .markup, .decal: // F67
+            return F67Parameters.instance(for: e)
         default:
             return []
         }
@@ -856,7 +862,7 @@ enum BuiltInCatalog {
             .filledRegion(FilledRegionData(boundary: Sketch(loops: []))),
             .link(LinkData(format: .dxf, isLinked: false, sourcePath: "", sourceName: "", contentKey: "")),
             .material(MaterialData(materialClass: .generic, color: .white)),
-        ] + wp6aProbes
+        ] + wp6aProbes + F67Parameters.probes // F67
             + [.topography(TopographyData(points: [], solid: ToposolidData())), .topography(TopographyData(points: [], boundary: [], solid: ToposolidData()))] // BL-SITE
         for data in probes {
             let e = Element(id: ElementID(0), category: .genericModels, data: data)
@@ -872,6 +878,7 @@ enum BuiltInCatalog {
         for e in wp3InstanceProbes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // F34
+        for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
         return d
     }()
 
@@ -896,6 +903,7 @@ enum BuiltInCatalog {
         for td in wp3TypeProbes { for p in type(for: td) where o[p.id] == nil { o[p.id] = i; i += 1 } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // W2-ANNOT
         for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
+        for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         return o
     }()
 }

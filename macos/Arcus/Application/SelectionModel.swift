@@ -31,8 +31,12 @@ public final class SelectionModel {
     public var single: ElementID? { ids.count == 1 ? ids[0] : nil }
     public func contains(_ id: ElementID) -> Bool { ids.contains(id) }
 
+    /// The design option being edited: elements of other options can't be picked (RevitCraft canvas.rs). // F11
+    public var editingOption: ElementID?
+
     public func allows(_ e: Element) -> Bool {
         if let f = filter, !f.contains(e.category) { return false }
+        if let a = editingOption, let o = e.designOptionID, o != a { return false } // F11
         if !selectPinned && e.pinned { return false }
         if !selectLinks && e.category == .importedCAD { return false }
         return true

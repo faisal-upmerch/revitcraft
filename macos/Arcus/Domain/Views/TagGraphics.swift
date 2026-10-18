@@ -125,8 +125,8 @@ extension AnnotationRenderer {
     public static func keynoteLabel(_ t: TagData, _ kind: TagKind, target: Element?, model: BIMModel) -> String {
         let key = keynoteKey(t, kind, target: target, model: model)
         guard !key.isEmpty else { return "?" }
-        let text = KeynoteTable.text(for: key) ?? ""
-        switch t.keynoteDisplay ?? .key {
+        let text = Keynoting.text(for: key, model) ?? "" // F12: the project's keynote table and display
+        switch t.keynoteDisplay ?? Keynoting.display(model) {
         case .key: return key
         case .keyAndText: return text.isEmpty ? key : "\(key) \(text)"
         case .text: return text.isEmpty ? key : text

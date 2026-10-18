@@ -219,7 +219,7 @@ struct PlanGrid: Sendable {
     static func bounds(of e: Element) -> Rect2? {
         switch e.data {
         case .wall(let w): return w.location.bounds
-        case .modelLine(let l) where e.category != .propertyLines: return l.curve.bounds
+        case .modelLine(let l) where e.category != .propertyLines: return l.drawnBounds // F1: splines and ellipses
         default: return nil
         }
     }

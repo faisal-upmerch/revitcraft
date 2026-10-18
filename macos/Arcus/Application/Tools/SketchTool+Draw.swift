@@ -63,7 +63,7 @@ extension SketchTool {
             default: return "Click to set the fillet radius, or type it."
             }
         case .pickLines: return "Click a line, wall face, grid or reference plane to add a boundary line on it."
-        default: return ""
+        default: return freeformPrompt ?? "" // F1
         }
     }
 
@@ -194,7 +194,7 @@ extension SketchTool {
         case .pickLines:
             if let s = pickedLine(at: c) { show([.line(s)]); preview.cursor = .pick }
         default:
-            return false
+            return previewFreeform(at: c) // F1: Spline, Ellipse, Partial Ellipse
         }
         return true
     }
@@ -232,7 +232,7 @@ extension SketchTool {
             guard let s = pickedLine(at: p) else { message("Click a line, wall face, grid or reference plane."); return true }
             add(.line(s))
         default:
-            return false
+            return clickFreeform(at: p) // F1: Spline, Ellipse, Partial Ellipse
         }
         return true
     }

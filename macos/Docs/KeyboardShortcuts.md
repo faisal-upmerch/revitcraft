@@ -183,8 +183,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 |---|---|---|---|
 | Modify | `⎋⎋` | `MD` | Return to selection mode. |
 | Select All | `⌘A` |  | Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension. |
-| Select All Instances: Visible in View |  |  | Select every instance of the selected type visible in the view. |
-| Select All Instances: In Entire Project |  | `SA` | Select every instance of the selected type in the project. |
+| Select All Instances: Visible in View |  | `SA` | Select every instance of the selected type visible in the view. |
+| Select All Instances: In Entire Project |  |  | Select every instance of the selected type in the project. |
 | Select by Category… |  |  | Select all visible elements of chosen categories. |
 | Filter Selection… |  |  | Keep only chosen categories in the selection. |
 | Move |  | `MV` | Move selected elements by picking two points or typing a distance. |
@@ -203,13 +203,13 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Unpin |  | `UP` | Allow selected elements to move. |
 | Delete | `⌫` | `DE` | Delete the selection and dependent elements. |
 | Match Type Properties |  | `MA` | Apply the type of a source element to other elements. |
-| Paint |  |  | Apply a material to an element's surfaces (stored as an element material override). |
+| Paint |  | `PT` | Apply a material to an element's surfaces (stored as an element material override). |
 | Remove Paint |  |  | Remove painted material overrides. |
 | Allow Join |  |  | Allow the selected walls to join at their ends. |
 | Disallow Join |  |  | Stop the selected walls joining at their ends. |
 | Create Group |  | `GP` | Group the selected elements. |
-| Ungroup |  |  | Dissolve the selected group. |
-| Edit Group |  |  | Edit the members of a group; changes apply to every instance of the group type. |
+| Ungroup |  | `UG` | Dissolve the selected group. |
+| Edit Group |  | `EG` | Edit the members of a group; changes apply to every instance of the group type. |
 | Finish Group |  |  | Finish editing the group. |
 | Flip Facing |  |  | Flip the facing of doors and windows. |
 | Flip Hand |  |  | Flip the hand (hinge side) of doors and windows. |
@@ -239,7 +239,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Add Point |  |  | Add shape-editing points to a floor or flat roof at an elevation offset. |
 | Reset Shape |  |  | Remove shape editing from the selected floors and roofs. |
 | Attach Walls |  |  | Attach the walls below the selected roof or floor to its underside. |
-| Join Geometry |  |  | Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings. |
+| Join Geometry |  | `JG` | Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings. |
 | Unjoin Geometry |  |  | Remove geometry joins between the selected elements. |
 | Cut Geometry |  |  | Cut one floor, ceiling or roof with another element: pick the element to cut first, then the cutting element. |
 | Uncut Geometry |  |  | Remove cuts between the selected elements. |
@@ -259,6 +259,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Snap Close (Next Pick) |  | `SZ` | Snap only to endpoints for the next pick, to close a chain on its start point. |
 | Turn Override Off |  | `SS` | Cancel a snap override typed for the next pick; the normal snaps apply again. |
 | Repeat Last Command |  | `RC` | Run the last creation or modify command again. Return in Modify does the same. |
+| Select Joined Elements |  |  | Adds the elements joined to the selection. |
 
 ### Architecture
 
@@ -321,6 +322,13 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Toposolid from Import… |  |  | Create a toposolid from the contour lines and points on chosen layers of a linked or imported DXF/DWG. |
 | Generate Toposolid |  |  | Replace the selected legacy toposurface with a toposolid; its sub-regions become sub-divisions. |
 | Sub-Divide |  |  | Sketch an area of a toposolid as a thin layered solid (paving, lawn, planting beds) that follows its surface. |
+| Model Text |  |  | Places three-dimensional text in the model. |
+| Wall: Reveal |  |  | Cuts a reveal into a wall face: click the face in a 3D, elevation or section view. |
+| By Face |  |  | Cuts an opening perpendicular to the selected face of a roof, floor or ceiling. |
+| Vertical Opening |  |  | Cuts a vertical opening through a roof, floor or ceiling. |
+| Dormer Opening |  |  | Cuts a roof where a dormer meets it: pick the roof, then the dormer's walls and edges. |
+| Place Model Group |  |  | Places an instance of a model group. |
+| Highlight Boundaries |  |  | Highlights the room-bounding elements of the level. |
 
 ### Structure
 
@@ -329,10 +337,22 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Structural Column |  | `CL` | Place structural columns. |
 | Beam |  | `BM` | Draw beams between points or supports. |
 | Isolated Foundation |  |  | Add a pad footing under each selected structural column. |
-| Wall Foundation |  |  | Add a strip footing under each selected wall. |
+| Wall Foundation |  | `FT` | Add a strip footing under each selected wall. |
 | Foundation Slab |  |  | Sketch a structural foundation slab. |
 | Structural Wall |  |  | Draw load-bearing walls (Structural is on). |
-| Structural Floor |  |  | Sketch a structural floor (Structural is on). |
+| Structural Floor |  | `SB` | Sketch a structural floor (Structural is on). |
+| Truss |  |  | Places a flat truss of chords and diagonal members between two points. |
+| Brace |  | `BR` | Adds diagonal braces from the current level up to the level above. |
+| Beam System |  | `BS` | Sketches a bay and fills it with parallel beams at a fixed spacing. |
+| Rebar |  | `RB` | Places a set of straight bars in a floor or slab at its bottom cover: click the bar's start and end. |
+| Area |  |  | Reinforces a sketched area of a floor or slab with top and bottom bar layers both ways. |
+| Path |  |  | Places bars along a sketched path in a floor or slab, each running into it at the path's spacing. |
+| Fabric Area |  |  | Lays welded wire fabric sheets over a sketched area of a floor or slab, lapped at their edges. |
+| Fabric Sheet |  |  | Places a single welded wire fabric sheet in a floor or slab. |
+| Cover |  |  | Rebar Cover Settings: the concrete cover to the bars. |
+| Rebar Coupler |  |  | Places couplers on the ends of a rebar set's bars, or between two sets that meet end to end. |
+| Place on Bar End |  |  | Places couplers on the end of the bars you pick. |
+| Place between Two Bars |  |  | Places couplers where two rebar sets meet end to end. |
 
 ### Insert
 
@@ -357,6 +377,20 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Link Image… |  |  | Place a PNG, JPEG or TIFF image. |
 | Component Library… |  | `LB` | Browse the built-in library of furniture, casework, fixtures, lighting, equipment, planting, entourage and parking, and place any item; a family is loaded when first placed. |
 | Site & Parking Library… |  |  | Open the component library on planting, entourage, site furniture and parking content. |
+| Link Model… |  |  | Links another Arcus project (.arcus) as a read-only model, internal origin to internal origin. It shows in plans at this view's cut plane, in sections, elevations and 3D, and is re-read when this project opens. |
+| Link IFC… |  |  | Links an IFC model as a read-only model, internal origin to internal origin. It is re-read when this project opens. |
+| Link Topography… |  |  | Links surveyed points (XYZ, PTS, CSV or TXT: x y z per line) as a toposolid through them. The toposolid follows the file when the project opens. |
+| DWF Markup… |  |  | Links the markups of a DWFx file (lines, text and pictures) onto the matching sheets. |
+| Place Decal |  |  | Places an image on a face of the model: a wall, floor, roof or other planar face. The image shows in the Realistic visual style. |
+| Decal Types… |  |  | Creates and edits decal types: the image and how it renders. |
+| Point Cloud… |  |  | Links a point cloud (XYZ, PTS, CSV, TXT or ASCII PLY: x y z [r g b] per line) into the project. Dense clouds are thinned evenly. |
+| Coordination Model… |  |  | Links a coordination model (OBJ) for reference in 3D views. It is re-read when this project opens. |
+| Import gbXML… |  |  | Imports the spaces of a gbXML file as rooms, each bounded by room separation lines along its outline. |
+| Import PDF… |  |  | Imports a page of a PDF file into the current view or sheet; it is stored in the project. |
+| Import Image… |  |  | Places a raster image (PNG, JPEG, TIFF or BMP) in the current view or sheet; it is stored in the project. |
+| Load as Group… |  |  | Loads the model of another Arcus project as a model group, placed at the internal origin. |
+| Insert Views from File… |  |  | Copies drafting views, legends and schedules (with their 2D content) from another project file. |
+| Insert 2D Elements from File… |  |  | Copies the 2D elements of a drafting view or legend in another project into the current view. |
 
 ### Annotate
 
@@ -405,6 +439,14 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Stair Path |  |  | Draw the walk line of a stair with its direction arrow and UP label. |
 | Add Leader |  |  | Add a leader to the selected text notes, toward the nearest free side. |
 | Remove Leader |  |  | Remove the last leader of the selected text notes. |
+| Beam |  |  | Places a beam system symbol on a beam: a span arrow with its type. |
+| Area |  |  | Places an area reinforcement symbol and tag on an area reinforcement. |
+| Path |  |  | Places a path reinforcement symbol and tag on a path reinforcement. |
+| Rebar |  |  | Places a rebar symbol across a rebar set with its quantity, size and spacing. |
+| Fabric |  |  | Places a fabric reinforcement symbol on a fabric area or sheet. |
+| Aligned Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set across the set, with its tag. |
+| Linear Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set horizontally or vertically, with its tag. |
+| Keynoting Settings |  |  | Chooses the keynote table and how keynote tags read. |
 
 ### View
 
@@ -514,6 +556,26 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Hide by Filter… |  |  | Open Visibility/Graphics on its Filters to hide elements by a filter in this view. |
 | Override Graphics by Category… |  |  | Open Visibility/Graphics to override the graphics of a whole category in this view. |
 | Override Graphics by Filter… |  |  | Open Visibility/Graphics on its Filters to override graphics by a filter in this view. |
+| Combine Parameters |  |  | Combines several parameters into one column. |
+| Insert Row |  |  | Inserts a row in the header. |
+| Insert Row Above Selected |  |  | Inserts a header row above the selected row. |
+| Insert Row Below Selected |  |  | Inserts a header row below the selected row. |
+| Resize Row |  |  | Sets the height of the selected row. |
+| Insert Image |  |  | Inserts an image in a header cell. |
+| Clear Cell |  |  | Clears the text of a header cell. |
+| Freeze Header |  |  | Keeps the title and headers in view while scrolling. |
+| Shading |  |  | Sets the background colour of cells. |
+| Borders |  |  | Sets the borders of cells. |
+| Reset |  |  | Resets the appearance of cells. |
+| Font |  |  | Sets the font of cells. |
+| Align Left |  |  | Aligns the selected column: left. |
+| Align Center |  |  | Aligns the selected column: center. |
+| Align Right |  |  | Aligns the selected column: right. |
+| Align Top |  |  | Aligns the selected cells' text to the top. |
+| Align Middle |  |  | Aligns the selected cells' text to the middle. |
+| Align Bottom |  |  | Aligns the selected cells' text to the bottom. |
+| Split & Place |  |  | Splits the schedule and places the parts on a sheet. |
+| Keynote Legend |  |  | Creates a legend listing the keynotes used in the project. |
 
 ### Manage
 
@@ -547,6 +609,21 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Temporary Dimensions… |  |  | Measure temporary dimensions of walls from their centerlines or faces. |
 | Load Standard Types |  |  | Add the standard wall, floor, roof, ceiling, door, window and column types for the project's units that the project doesn't have yet. |
 | Site Settings… |  |  | Contour interval, primary contours and contour display for toposurfaces. |
+| Structural Settings |  |  | Symbolic cutbacks, brace symbols, load cases and load combinations. |
+| Transfer Project Standards… |  |  | Copies types, materials, styles, view templates and parameters from another project file. |
+| Global Parameters |  |  | Creates project-wide values that drive dimensions and element parameters. |
+| Specify Coordinates at Point |  |  | Click a point and enter its shared coordinates (North/South, East/West, Elevation) and the angle to true north. |
+| Report Shared Coordinates |  |  | Click points to read their shared coordinates. |
+| Relocate Project |  |  | Moves the project against the shared coordinates: click a start and an end point. |
+| Rotate True North |  |  | Sets the angle between project north and true north. |
+| Rotate Project North |  |  | Turns the whole project (model and views) 90° or 180° about its origin; true north stays where it is. |
+| Mirror Project |  |  | Mirrors the whole project about its north-south or east-west axis. |
+| Add to Set |  |  | Moves the selected main model elements into design options of a set. |
+| Pick to Edit |  |  | Click an element to edit the design option it belongs to. |
+| Starting View |  |  | Specifies the view that opens when the project opens. |
+| Save Selection |  |  | Saves the current selection so it can be loaded later. |
+| Load Selection |  |  | Loads a saved selection. |
+| Edit Selection |  |  | Renames or deletes saved selections. |
 
 ### File
 
@@ -571,6 +648,13 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Close | `⌘W` |  | Close the project window. |
 | Save Recovery Copy… |  |  | Write every readable element into a new project file. |
 | Save as Template… |  |  | Save this project's types, families, views, sheets and settings, without model elements, as a template for new projects. |
+| Export DWF/DWFx… |  |  | Exports views and sheets to a DWFx file (for markup and review). |
+| Export STL… |  |  | Exports the model as an STL file (millimetres). |
+| Export gbXML… |  |  | Saves the rooms and spaces as a gbXML file. |
+| Export Room/Area Report… |  |  | Saves an HTML report of the rooms with their areas and shapes. |
+| Export Family Types… |  |  | Exports the family's types to a type catalog (.txt). |
+| Print Preview |  |  | Shows how the current view or sheet will print. |
+| Print Setup… |  |  | Specifies the paper, zoom, colors and options used to print. |
 
 ### Arcus
 

@@ -9,6 +9,8 @@ public enum ElementTransform {
         case .view, .sheet, .schedule, .type, .family, .material, .phase, .designOption, .revision, .projectInfo,
              .viewTemplate, .filter, .lineStyle, .fillPattern, .areaScheme, .constraint, .level, .colorScheme:
             return false
+        case .decalType: // F67
+            return false
         default:
             return true
         }
@@ -82,6 +84,7 @@ public enum ElementTransform {
             e.data = .room(r)
         case .modelLine(var l):
             l.curve = t.apply(l.curve)
+            l.freeform = l.freeform?.transformed(t) // F1
             e.data = .modelLine(l)
         case .grid(var g):
             g.curve = t.apply(g.curve)
@@ -151,19 +154,37 @@ public enum ElementTransform {
         case .colorFillLegend(var l):
             l.position = t.apply(l.position)
             e.data = .colorFillLegend(l)
+        case .modelText(var m): // F1: the text turns with the transform; a mirror keeps it readable (it reads the other way)
+            m.position = t.apply(m.position)
+            m.rotation = t.applyVector(Vec2.fromAngle(m.rotation)).angle + (mirror ? .pi : 0)
+            if mirror { m.alignment = m.alignment == .left ? .right : m.alignment == .right ? .left : .center }
+            e.data = .modelText(m)
+        case .wallReveal: // F1: positioned relative to its host wall
+            break
         case .opening(let o): // WP3: shafts move with their sketch; wall openings are positioned relative to their host
             if case .shaft(var sh) = o { sh.boundary = sh.boundary.transformed(t); e.data = .opening(.shaft(sh)) }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler, .beamSystem, .structuralSymbol: // F34
             return ReinforcementTransform.apply(t, to: &e)
+        case .linkedModel(var l): // F67: links move and rotate as a whole
+            l.placement = t * l.placement
+            e.data = .linkedModel(l)
+        case .pointCloud(var p):
+            p.placement = t * p.placement
+            e.data = .pointCloud(p)
+        case .decal(var d):
+            let t3 = Transform3(t)
+            d.center = t3.apply(d.center); d.normal = t3.applyVector(d.normal).normalized; d.up = t3.applyVector(d.up).normalized
+            e.data = .decal(d)
+        case .markup(var m):
+            m.offset = t.apply(m.offset)
+            e.data = .markup(m)
         case .matchline(var m): // F810
             m.start = t.apply(m.start); m.end = t.apply(m.end)
             e.data = .matchline(m)
-            return true
         case .cutProfile(var c): // F810: moves with its wall
             c.region = c.region.map(t.apply)
             if mirror { c.region.reverse() }
             e.data = .cutProfile(c)
-            return true
         default:
             return false
         }

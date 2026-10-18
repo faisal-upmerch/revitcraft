@@ -155,6 +155,7 @@ public enum RoofGeometry {
         guard let s = surface(e, model) else { return [] }
         let t = thickness(e, model)
         let holes = (openings(e) + ShaftCuts.externalCuts(for: e, model)).map { Profile2(outer: $0) }
+        let faceCuts = HostedOpenings.faceCuts(e, model) // F1: By Face openings
         var mesh = Mesh()
         for face in s.faces {
             guard let top = planeZ(face) else { continue }
@@ -162,7 +163,7 @@ public enum RoofGeometry {
             let xy = Polygon2(face.map(\.xy))
             guard !xy.isDegenerate else { continue }
             let pieces = holes.isEmpty ? [Profile2(outer: xy)] : PolygonBoolean.difference([Profile2(outer: xy)], holes)
-            for piece in pieces { mesh.append(MeshBuilder.slab(piece, bottom: bottom, top: top)) }
+            for piece in pieces { mesh.append(HostedOpenings.roofPiece(piece, bottom: bottom, top: top, faceCuts: faceCuts)) } // F1
         }
         var parts = [MeshPart(mesh: mesh, materialID: SlabGeometry.surfaceMaterial(e, model))]
         if e.roof?.fascia == true || e.roof?.gutter == true, let (poly, slopes) = footprint(e) {

@@ -24,6 +24,7 @@ struct PlanGraphics {
 
         if let u = data.underlayLevelID, u != levelID { items += underlay(u) }
         items += links()
+        items += LinkedGraphics.planItems(self) // F67: linked models, point clouds, decals
         items += walls(byCategory[.walls] ?? [])
         items += wp3Items(byCategory) // WP3: curtain walls, wall openings, shafts
         if builder.isCancelled() { return items }
@@ -38,6 +39,7 @@ struct PlanGraphics {
             items += ramps(byCategory[.ramps] ?? [])
             items += components([Category.furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .parking,
                                  .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site].flatMap { byCategory[$0] ?? [] }) // W2-LIB
+            items += modelTexts(byCategory[.genericModels] ?? []) // F1
         } else {
             items += ceilingFixtures([Category.lightingFixtures, .mechanicalEquipment].flatMap { byCategory[$0] ?? [] }) // W2-LIB: lights in ceiling plans
         }
@@ -327,7 +329,7 @@ struct PlanGraphics {
 
     func components(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
-        for (e, o) in list {
+        for (e, o) in list where e.modelText == nil { // F1: Model Text draws its own glyphs
             let base = model.baseElevation(of: e)
             guard base <= cutZ + Tolerance.length, base >= depthZ - 0.5 else { continue }
             if e.levelID != levelID, base < bottomZ - 0.01 { continue }
@@ -469,7 +471,7 @@ struct PlanGraphics {
             guard let o = builder.resolver.resolve(l), let ml = l.modelLine else { continue }
             var st = builder.stroke(.detailLines, cut: false, o)
             if let ls = model[ml.styleID]?.lineStyle { st = GStroke(weight: ls.weight, color: ls.color, pattern: ls.pattern, halftone: st.halftone) }
-            items.append(GItem(elementID: l.id, category: .detailLines, layer: .model, primitives: [curvePrim(ml.curve, st)]))
+            items.append(GItem(elementID: l.id, category: .detailLines, layer: .model, primitives: [ml.freeform.map { .polyline($0.points, closed: false, st) } ?? curvePrim(ml.curve, st)])) // F1
         }
         var lineCats: [Category] = [.roomSeparationLines, .propertyLines]
         if data.kind == .areaPlan { lineCats.append(.areaBoundaryLines) }
@@ -478,7 +480,7 @@ struct PlanGraphics {
                 if c == .areaBoundaryLines, let a = data.areaSchemeID, l.params[AreaPlans.schemeParameter]?.refValue != a { continue }
                 guard let o = builder.resolver.resolve(l), let ml = l.modelLine else { continue }
                 let st = builder.stroke(c, cut: false, o)
-                items.append(GItem(elementID: l.id, category: c, layer: .model, primitives: [curvePrim(ml.curve, st)]))
+                items.append(GItem(elementID: l.id, category: c, layer: .model, primitives: [ml.freeform.map { .polyline($0.points, closed: false, st) } ?? curvePrim(ml.curve, st)])) // F1
             }
         }
         return items

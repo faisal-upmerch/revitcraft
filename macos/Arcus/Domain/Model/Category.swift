@@ -33,6 +33,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
     // RevitCraft port feature batches (Docs/RevitCraftPort.md §5): each adds its cases right after its marker.
     // F1 categories:
+    case reveals
 
 
     // F2 categories:
@@ -45,6 +46,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F67 categories:
+    case linkedModels, coordinationModels, pointClouds, decals, decalTypes, dwfMarkups // F67
 
 
     // F810 categories:
@@ -87,6 +89,10 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
         case .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, .beamSystems: return .model // F34
         case .structuralSettings: return .internal_ // F34
+        case .reveals: return .model // F1
+        case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
+        case .dwfMarkups: return .annotation // F67
+        case .decalTypes: return .internal_ // F67
         case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
         case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
         case .renderings: return .internal_ // F810: Render Gallery images
@@ -207,6 +213,13 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Couplers"
         case .beamSystems: "Structural Beam Systems"
         case .structuralSettings: "Structural Settings"
+        case .reveals: "Reveals" // F1
+        case .linkedModels: "Linked Models" // F67
+        case .coordinationModels: "Coordination Models"
+        case .pointClouds: "Point Clouds"
+        case .decals: "Decals"
+        case .decalTypes: "Decal Types"
+        case .dwfMarkups: "DWF Markups"
         case .cutProfiles: "Cut Profiles" // F810
         case .matchlines: "Matchline"
         case .renderings: "Renderings"
@@ -308,6 +321,13 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .rebarCouplers: "Structural Rebar Coupler"
         case .beamSystems: "Structural Beam System"
         case .structuralSettings: "Structural Settings"
+        case .reveals: "Reveal" // F1
+        case .linkedModels: "Linked Model" // F67
+        case .coordinationModels: "Coordination Model"
+        case .pointClouds: "Point Cloud"
+        case .decals: "Decal"
+        case .decalTypes: "Decal Type"
+        case .dwfMarkups: "DWF Markup"
         case .cutProfiles: "Cut Profile" // F810
         case .matchlines: "Matchline"
         case .renderings: "Rendering"
