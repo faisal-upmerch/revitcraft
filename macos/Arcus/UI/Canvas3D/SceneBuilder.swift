@@ -52,7 +52,7 @@ nonisolated public enum SceneBuilder {
             if let t = o.transparency { c.a = max(0.05, min(1, 1 - t)) }
             if o.halftone == true { c = c.mixed(with: RGBColor(1, 1, 1, c.a), amount: 0.5) }
             bounds.include(p.mesh.bounds)
-            let finish = model[p.materialID]?.material.map { SurfaceFinish.typical(for: $0.materialClass) } ?? .matte
+            let finish = p.roughness.map { SurfaceFinish(roughness: $0) } ?? model[p.materialID]?.material.map { SurfaceFinish.typical(for: $0.materialClass) } ?? .matte // F67
             out.append(ScenePart(mesh: p.mesh, color: c, finish: finish))
         }
         guard !out.isEmpty, !bounds.isEmpty else { return nil }

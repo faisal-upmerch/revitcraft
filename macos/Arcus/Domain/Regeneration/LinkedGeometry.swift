@@ -107,10 +107,18 @@ public enum LinkedGeometry {
                 buckets[k] = entry
             }
         }
+        let finishRoughness: Double = switch type.finish {
+        case .matte: 0.85
+        case .semiGloss: 0.5
+        case .gloss: 0.25
+        case .highGloss: 0.1
+        }
+        let roughness = max(0.02, finishRoughness * (1 - 0.6 * min(1, max(0, type.reflectivity))))
         for k in buckets.keys.sorted() {
             var p = MeshPart(mesh: buckets[k]!.0, materialID: nil)
             p.color = buckets[k]!.1
             p.styles = .realisticOnly
+            p.roughness = roughness
             parts.append(p)
         }
         return parts

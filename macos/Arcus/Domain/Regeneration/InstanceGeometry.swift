@@ -26,6 +26,8 @@ public struct MeshPart: Sendable {
     public var color: RGBColor? = nil
     /// F67: visual styles that show this part in 3D views (decal images show only in Realistic).
     public var styles: MeshPartStyles = .all
+    /// F67: surface roughness for the Realistic style (0 = mirror, 1 = matte) replacing the material's (decal finishes).
+    public var roughness: Double? = nil
     public init(mesh: Mesh, materialID: ElementID?, subcategory: FamilySubcategory = .general, views: FamilyViewSet = .all, frontAxis: Vec2? = nil) {
         self.mesh = mesh; self.materialID = materialID; self.subcategory = subcategory; self.views = views; self.frontAxis = frontAxis
     }
