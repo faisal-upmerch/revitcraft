@@ -424,3 +424,28 @@ extension F1Tests {
         #expect(done, "a click ends the highlight")
     }
 }
+
+// MARK: - Persistence
+
+extension F1Tests {
+    @Test func f1DataRoundTripsAndOlderDataDecodes() throws {
+        let samples: [ElementData] = [
+            .modelText(ModelTextData(text: "Sign", position: Vec2(1, 2), upright: true)),
+            .wallReveal(WallRevealData(orientation: .vertical, offset: 2, side: .interior)),
+            .modelLine(ModelLineData(curve: .line(Segment2(.zero, Vec2(4, 0))), freeform: FreeformCurve(kind: .spline, points: [.zero, Vec2(2, 1), Vec2(4, 0)]))),
+            .opening(.shaft(ShaftOpeningData(boundary: Sketch(rect: Rect2(min: .zero, max: Vec2(1, 1))), hosted: .byFace))),
+        ]
+        for d in samples {
+            let back = try JSONDecoder().decode(ElementData.self, from: JSONEncoder().encode(d))
+            #expect(back == d)
+        }
+        // Files from before F1: shafts without `hosted`, model lines without `freeform`.
+        let shaft = ShaftOpeningData(boundary: Sketch(rect: Rect2(min: .zero, max: Vec2(1, 1))))
+        var json = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(shaft)) as? [String: Any])
+        json["hosted"] = nil
+        let old = try JSONDecoder().decode(ShaftOpeningData.self, from: JSONSerialization.data(withJSONObject: json))
+        #expect(old.hosted == nil && old == shaft)
+        let line = try JSONDecoder().decode(ModelLineData.self, from: JSONEncoder().encode(ModelLineData(curve: .line(Segment2(.zero, .unitX)))))
+        #expect(line.freeform == nil)
+    }
+}
