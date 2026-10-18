@@ -52,7 +52,7 @@ public enum ToolLifecycle {
         switch CommandCatalog.info(id).group {
         case .build, .structure, .annotate, .modify: return true
         case .view: return [.section, .elevation, .callout, .cameraView, .scopeBox].contains(id)
-        case .insert, .document, .manage, .file, .app: return false
+        case .insert, .manage, .file, .app: return false
         }
     }
 

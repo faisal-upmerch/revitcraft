@@ -52,6 +52,7 @@ struct RibbonItem: Hashable {
         case .joinSolids where split: return "Join" // BL-VG
         case .cutGeometry where split: return "Cut" // BL-VG
         case .additionalSettings where split: return "Additional Settings" // BL-VG
+        case .finishEditGroup: return "Finish"
         case .typeProperties: return size == .large ? "Type\nProperties" : "Type Properties"
         case .roomSeparator: return "Room Separator"
         case .areaBoundary: return "Area Boundary"

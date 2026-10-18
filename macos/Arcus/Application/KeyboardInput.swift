@@ -219,7 +219,7 @@ public struct AliasTable: Sendable, Equatable {
 /// ```xml
 /// <?xml version="1.0" encoding="UTF-8"?>
 /// <Shortcuts application="Arcus" formatVersion="1">
-///   <ShortcutItem CommandId="wall" CommandName="Wall" Shortcuts="WA" Paths="Build"/>
+///   <ShortcutItem CommandId="wall" CommandName="Wall" Shortcuts="WA" Paths="Architecture"/>
 ///   <ShortcutItem CommandId="zoomExtents" CommandName="Zoom to Fit" Shortcuts="ZE#ZF#ZX" Paths="View"/>
 /// </Shortcuts>
 /// ```

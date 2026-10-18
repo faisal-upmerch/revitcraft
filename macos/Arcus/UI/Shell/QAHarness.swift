@@ -220,7 +220,7 @@ enum QAHarness {
             d.pointerDown(input(Vec2(0, 4), hit: west.id))
             d.pointerDown(input(Vec2(12, 4), hit: east.id))
             d.pointerDown(input(Vec2(6, -3)))
-            s.session.perform("Tag All Not Tagged") { tx in
+            s.session.perform("Tag All") { tx in
                 let types = Dictionary(uniqueKeysWithValues: Category.taggable.compactMap { c in TagTool.defaultTagType(for: c, tx.model).map { (c, $0) } })
                 TagAll.run(TagAllOptions(tagTypes: types), view: l1.id, visible: router.visibleElementIDs(l1.id), scale: l1.view?.scale ?? 100, in: tx)
             }
@@ -379,7 +379,7 @@ enum QAHarness {
             if let w = NSApp.windows.first(where: { $0.contentViewController is NSHostingController<OnboardingView> }) { await shot(w, "onboarding-\(suffix)"); w.close() }
             AppDelegate.shared?.showHub(tab: .recent)
             await pause(700)
-            if let w = NSApp.windows.first(where: { $0.title == "Arcus" && $0.contentViewController is NSHostingController<ProjectHubView> }) { await shot(w, "hub-\(suffix)") }
+            if let w = NSApp.windows.first(where: { $0.title == "Home" && $0.contentViewController is NSHostingController<ProjectHubView> }) { await shot(w, "hub-\(suffix)") }
             _ = await auditAppWindowCaptures(suffix: suffix) // W4-AUDIT: Settings (all sections) and the hub's New tab
             await step("Open Courtyard House (\(suffix))") {
                 let t0 = CFAbsoluteTimeGetCurrent()

@@ -145,7 +145,7 @@ extension ContextMenuBuilder {
         }
         if e.link != nil {
             extras.append(item("Reload Link", "arrow.clockwise.circle", .reloadLink))
-            extras.append(item("Convert to Arcus Lines…", "arrow.triangle.2.circlepath", .convertLinkToDrafting))
+            extras.append(item("Explode…", "arrow.triangle.2.circlepath", .convertLinkToDrafting))
         }
         extras.append(item("Move", "arrow.up.and.down.and.arrow.left.and.right", .move))
         extras.append(item("Copy", "plus.square.on.square", .copy))

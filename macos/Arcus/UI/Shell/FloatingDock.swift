@@ -89,7 +89,19 @@ struct FloatingDocksView: View {
             .frame(width: p.frame.width, height: p.frame.height)
             .offset(x: p.frame.x, y: p.frame.y)
             .accessibilityElement(children: .contain)
-            .accessibilityLabel(p.edge == .leading ? "Sidebar" : "Inspector")
+            .accessibilityLabel(dockLabel(p.edge))
+    }
+
+    /// Names the dock after the palettes it holds (BIM Familiar stacks Properties above the Project Browser on the left).
+    private func dockLabel(_ edge: DockEdge) -> String {
+        guard edge == .leading else { return "Properties" }
+        let properties = state.workspace == .bimFamiliar && state.showProperties && !PanelWindows.isDetached(.properties)
+        let browser = state.showNavigator && !PanelWindows.isDetached(.navigator)
+        switch (properties, browser) {
+        case (true, true): return "Properties and Project Browser"
+        case (true, false): return "Properties"
+        default: return "Project Browser"
+        }
     }
 }
 

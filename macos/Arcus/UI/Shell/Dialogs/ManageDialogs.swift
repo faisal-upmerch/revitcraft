@@ -269,7 +269,7 @@ struct LocationDialog: View {
     @State private var info = ProjectInfoData()
     @State private var northDegrees = 0.0
     var body: some View {
-        DialogFrame(title: "Location & Coordinates", subtitle: "Project north is up in plan views. True north and the survey point set shared coordinates for IFC and spot coordinates.", state: state) {
+        DialogFrame(title: "Location", subtitle: "Project north is up in plan views. True north and the survey point set shared coordinates for IFC and spot coordinates.", state: state) {
             var i = info
             i.trueNorthAngle = Angle.radians(northDegrees)
             guard let pid = state.model.projectInfoElement?.id else { return }

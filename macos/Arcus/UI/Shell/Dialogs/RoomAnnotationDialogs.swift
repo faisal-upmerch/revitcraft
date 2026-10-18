@@ -4,9 +4,9 @@ import ArcusGeometry
 import ArcusDomain
 import ArcusApplication
 
-// MARK: - Tag All Not Tagged
+// MARK: - Tag All
 
-/// Tag All Not Tagged: categories with their tag types, scope (view or selection), leader and orientation.
+/// Tag All: categories with their tag types, scope (view or selection), leader and orientation.
 struct TagAllDialog: View {
     let state: DocumentState
     let viewID: ElementID
@@ -25,7 +25,7 @@ struct TagAllDialog: View {
         let selection = Set(state.session.selection.ids)
         let cats = Category.taggable.filter { untagged[$0]?.isEmpty == false }
         let leaderLength = (try? Parameters.parse(leaderText, type: .length, model: m))?.doubleValue
-        DialogFrame(title: "Tag All Not Tagged", subtitle: "Tags every visible element of the chosen categories that has no tag in “\(m[viewID]?.name ?? "")”.",
+        DialogFrame(title: "Tag All", subtitle: "Tags every visible element of the chosen categories that has no tag in “\(m[viewID]?.name ?? "")”.",
                     okDisabled: chosen.isEmpty || (leader && (leaderLength ?? 0) <= 0), state: state) {
             apply(visible: visible, selection: selection, leaderLength: leaderLength ?? 0.012)
         } content: {
@@ -83,7 +83,7 @@ struct TagAllDialog: View {
                                     leaderLength: leaderLength, orientation: orientation)
         let scale = m[viewID]?.view?.scale ?? 1
         var count = 0
-        state.session.perform("Tag All Not Tagged") { tx in count = TagAll.run(options, view: viewID, visible: visible, scale: scale, in: tx) }
+        state.session.perform("Tag All") { tx in count = TagAll.run(options, view: viewID, visible: visible, scale: scale, in: tx) }
         state.presented = nil
         if let e = state.session.lastError { state.show(e.message, error: true); return }
         state.show(count == 0 ? "Nothing to tag: the chosen elements are already tagged." : "Tagged \(count) element\(count == 1 ? "" : "s").")

@@ -140,7 +140,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
         if let w = hubWindow { w.makeKeyAndOrderFront(nil); return }
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 560), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
         w.titlebarAppearsTransparent = true
-        w.title = "Arcus"
+        w.title = "Home"
         w.isReleasedWhenClosed = false
         w.contentViewController = NSHostingController(rootView: ProjectHubView(initialTab: tab))
         w.center()
@@ -202,6 +202,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
         guard let raw = (sender as? NSMenuItem)?.representedObject as? String, let id = CommandID(rawValue: raw) else { return }
         MainActor.assumeIsolated {
             switch id {
+            case .home: showHub(tab: .recent)
             case .newProject: showHub(tab: .new)
             case .openProject: NSDocumentController.shared.openDocument(nil)
             case .about: showAbout()
@@ -216,6 +217,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard item.action == #selector(performArcusCommand(_:)), let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return true }
-        return [.newProject, .openProject, .about, .preferences, .onboarding].contains(id)
+        return [.home, .newProject, .openProject, .about, .preferences, .onboarding].contains(id)
     }
 }

@@ -74,7 +74,7 @@ and group. It is not another application's format.
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
 <Shortcuts application="Arcus" formatVersion="1">
-  <ShortcutItem CommandId="wall" CommandName="Wall" Shortcuts="WA" Paths="Build"/>
+  <ShortcutItem CommandId="wall" CommandName="Wall" Shortcuts="WA" Paths="Architecture"/>
   <ShortcutItem CommandId="zoomExtents" CommandName="Zoom to Fit" Shortcuts="ZE#ZF#ZX" Paths="View"/>
 </Shortcuts>
 ```
@@ -183,15 +183,15 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 |---|---|---|---|
 | Modify | `⎋⎋` | `MD` | Return to selection mode. |
 | Select All | `⌘A` |  | Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension. |
-| Select All Instances in View |  |  | Select every instance of the selected type visible in the view. |
-| Select All Instances in Project |  | `SA` | Select every instance of the selected type in the project. |
+| Select All Instances: Visible in View |  |  | Select every instance of the selected type visible in the view. |
+| Select All Instances: In Entire Project |  | `SA` | Select every instance of the selected type in the project. |
 | Select by Category… |  |  | Select all visible elements of chosen categories. |
 | Filter Selection… |  |  | Keep only chosen categories in the selection. |
 | Move |  | `MV` | Move selected elements by picking two points or typing a distance. |
 | Copy |  | `CO` `CC` | Copy selected elements by picking two points. |
 | Rotate |  | `RO` | Rotate selected elements about a center. |
-| Mirror – Pick Axis |  | `MM` | Mirror selected elements about a picked line. |
-| Mirror – Draw Axis |  | `DM` | Mirror selected elements about a drawn line. |
+| Mirror - Pick Axis |  | `MM` | Mirror selected elements about a picked line. |
+| Mirror - Draw Axis |  | `DM` | Mirror selected elements about a drawn line. |
 | Array |  | `AR` | Create a linear array of the selection. |
 | Align |  | `AL` | Align elements to a reference; optionally lock the alignment. |
 | Offset |  | `OF` | Offset walls or lines by a distance. |
@@ -205,8 +205,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Match Type Properties |  | `MA` | Apply the type of a source element to other elements. |
 | Paint |  |  | Apply a material to an element's surfaces (stored as an element material override). |
 | Remove Paint |  |  | Remove painted material overrides. |
-| Allow Wall Joins |  |  | Allow the selected walls to join at their ends. |
-| Disallow Wall Joins |  |  | Stop the selected walls joining at their ends. |
+| Allow Join |  |  | Allow the selected walls to join at their ends. |
+| Disallow Join |  |  | Stop the selected walls joining at their ends. |
 | Create Group |  | `GP` | Group the selected elements. |
 | Ungroup |  |  | Dissolve the selected group. |
 | Edit Group |  |  | Edit the members of a group; changes apply to every instance of the group type. |
@@ -241,6 +241,9 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Attach Walls |  |  | Attach the walls below the selected roof or floor to its underside. |
 | Join Geometry |  |  | Join overlapping walls, floors, roofs and ceilings so the overlap is cut from one of them and counted once. Walls cut floors, roofs and ceilings; roofs cut floors; floors cut ceilings. |
 | Unjoin Geometry |  |  | Remove geometry joins between the selected elements. |
+| Cut Geometry |  |  | Cut one floor, ceiling or roof with another element: pick the element to cut first, then the cutting element. |
+| Uncut Geometry |  |  | Remove cuts between the selected elements. |
+| Switch Join Order |  |  | Make the element that was cut by a join cut the other one instead. |
 | Create Similar |  | `CS` | Start placing a new element of the selected element's type. |
 | Measure Between Two References |  | `ME` | Measure the distance between picked points; nothing is added to the model. |
 | Measure Along an Element |  |  | Measure the length of a wall or line, or the perimeter of a floor, roof or region. |
@@ -248,6 +251,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Array Number… |  |  | Change the number of members of the selected array group; the copies are regenerated. |
 | Scale |  | `RE` | Resize lines, walls, regions and images about a base point, graphically or by a factor. |
 | Edit Surface |  |  | Add, delete or re-level the points of the selected toposurface. |
+| Simplify Surface… |  |  | Remove survey points that barely change the selected toposolid or toposurface. |
+| Excavate |  |  | Lower or raise the selected toposolid to the underside of the selected floors and building pads, and record the cut and fill. |
 | Snap to Work Plane Grid (Next Pick) |  | `SW` | Snap only to grid intersections for the next pick (Arcus has no separate work plane grid in 2D views). |
 | Snap to Points (Next Pick) |  | `SX` | Snap only to points (element end and centre points) for the next pick. |
 | Snap to Remote Objects (Next Pick) |  | `SR` | Snap to objects farther from the pointer than usual for the next pick. |
@@ -255,7 +260,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Turn Override Off |  | `SS` | Cancel a snap override typed for the next pick; the normal snaps apply again. |
 | Repeat Last Command |  | `RC` | Run the last creation or modify command again. Return in Modify does the same. |
 
-### Build
+### Architecture
 
 | Command | Shortcut | Typed alias | What it does |
 |---|---|---|---|
@@ -266,7 +271,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Door |  | `DR` | Place a door in a wall. |
 | Window |  | `WN` | Place a window in a wall. |
 | Component |  | `CM` | Place furniture, casework, fixtures and generic models. |
-| Column |  |  | Place architectural columns. |
+| Column: Architectural |  |  | Place architectural columns. |
 | Floor |  | `FL` | Sketch a floor boundary. |
 | Floor – Pick Walls |  |  | Create a floor from the walls enclosing a picked area. |
 | Ceiling |  |  | Sketch a ceiling or pick a room to fill. |
@@ -285,19 +290,14 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Level |  | `LL` | Add a level (in an elevation or section) with plan views. |
 | Reference Plane |  | `RP` | Draw a reference plane. |
 | Property Line |  |  | Sketch site property lines. |
-| Toposolid |  |  | Sketch the boundary of a layered site solid (Line, Rectangle, Pick Lines); shape it with Edit Surface. Also from a point file or a CAD import. |
-| Sub-Divide |  |  | Sketch an area of a selected toposolid as a thin layered solid that follows its surface. |
-| Simplify Surface… |  |  | Remove survey points that change a toposolid or toposurface by less than an accuracy. |
-| Excavate |  |  | Lower a selected toposolid to the underside of the selected floors and pads; records cut and fill. |
-| Generate Toposolid |  |  | Replace a legacy toposurface (and its sub-regions) with a toposolid (and sub-divisions). |
-| Toposurface (Legacy) |  |  | Create terrain from picked points and elevations. |
-| Building Pad (Legacy) |  |  | Sketch a building pad. |
+| Toposurface |  |  | Create terrain from picked points and elevations. |
+| Building Pad |  |  | Sketch a building pad. |
 | Wall – Curtain Wall |  |  | Draw curtain walls: glazed panels on a grid with mullions. |
 | Curtain Grid |  | `CG` | Add grid lines to a curtain wall, or remove grid lines you added. |
 | Mullion |  | `MU` | Add mullions to curtain grid lines, or remove them. |
 | Curtain Panel |  |  | Swap curtain wall panels to the panel type chosen in the type selector. |
 | Wall Opening |  |  | Cut a rectangular opening in a wall from an elevation or section. |
-| Shaft Opening |  |  | Sketch a shaft that cuts every floor, ceiling and roof between its base and top. |
+| Shaft |  |  | Sketch a shaft that cuts every floor, ceiling and roof between its base and top. |
 | Ramp |  |  | Draw a ramp run from its bottom to its top; clicks between turn at landings. Railings are added on both sides. |
 | Roof by Extrusion |  |  | Sketch an open roof profile in an elevation or section and extrude it perpendicular to the work plane. |
 | Grid – Pick Lines |  |  | Create grid lines on picked lines, walls or CAD lines. |
@@ -316,6 +316,11 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Wall: Sweep |  |  | Add a horizontal sweep (base course, string course, cornice) to the selected walls; set its height, size and side in Properties. |
 | Floor: Slab Edge |  |  | Add a thickened slab edge under the selected floors; set its width and depth in Properties. |
 | Roof: Soffit |  |  | Add a flat soffit under the eaves of the selected roofs; set its depth in Properties. |
+| Toposolid |  |  | Sketch the boundary of a layered site solid; shape it afterwards with Edit Surface. |
+| Toposolid from Point File… |  |  | Create a toposolid from a CSV, TXT or XYZ file of x, y, z survey points. |
+| Toposolid from Import… |  |  | Create a toposolid from the contour lines and points on chosen layers of a linked or imported DXF/DWG. |
+| Generate Toposolid |  |  | Replace the selected legacy toposurface with a toposolid; its sub-regions become sub-divisions. |
+| Sub-Divide |  |  | Sketch an area of a toposolid as a thin layered solid (paving, lawn, planting beds) that follows its surface. |
 
 ### Structure
 
@@ -323,6 +328,11 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 |---|---|---|---|
 | Structural Column |  | `CL` | Place structural columns. |
 | Beam |  | `BM` | Draw beams between points or supports. |
+| Isolated Foundation |  |  | Add a pad footing under each selected structural column. |
+| Wall Foundation |  |  | Add a strip footing under each selected wall. |
+| Foundation Slab |  |  | Sketch a structural foundation slab. |
+| Structural Wall |  |  | Draw load-bearing walls (Structural is on). |
+| Structural Floor |  |  | Sketch a structural floor (Structural is on). |
 
 ### Insert
 
@@ -335,14 +345,16 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Import DWG… |  |  | Import a DWG drawing snapshot (requires the licensed DWG SDK). |
 | Link DXF… |  |  | Link a DXF drawing. |
 | Import DXF… |  |  | Import a DXF drawing snapshot. |
+| Link CAD… |  |  | Link a CAD drawing (DXF, or DWG through the DWG converter or SDK); choose the format in the file dialog. |
+| Import CAD… |  |  | Import a snapshot of a CAD drawing (DXF, or DWG through the DWG converter or SDK); choose the format in the file dialog. |
 | Manage Links |  |  | Reload, relocate, unload or remove links. |
 | Reload Link |  |  | Reload the selected link from its source. |
 | Unload Link |  |  | Unload the selected link. |
-| Convert to Arcus Lines… |  |  | Convert CAD geometry to Arcus detail or model lines. |
+| Explode… |  |  | Convert CAD geometry to detail or model lines. |
 | Import IFC… |  |  | Import an IFC model; unsupported items stay as reference geometry. |
 | Import Revit Model… |  |  | Import a .arcusx export from the Arcus Bridge add-in as native, editable elements and families, or inspect a .rvt/.rfa file. |
-| PDF Underlay… |  |  | Place a PDF page as a scaled underlay. |
-| Image… |  |  | Place a PNG, JPEG or TIFF image. |
+| Link PDF… |  |  | Place a PDF page as a scaled underlay. |
+| Link Image… |  |  | Place a PNG, JPEG or TIFF image. |
 | Component Library… |  | `LB` | Browse the built-in library of furniture, casework, fixtures, lighting, equipment, planting, entourage and parking, and place any item; a family is loaded when first placed. |
 | Site & Parking Library… |  |  | Open the component library on planting, entourage, site furniture and parking content. |
 
@@ -366,8 +378,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Insulation |  |  | Draw batt insulation. |
 | Text |  | `TX` | Place a text note with optional leaders. |
 | Tag by Category |  | `TG` | Tag elements by clicking them. |
-| Tag All Not Tagged |  |  | Tag every untagged element of chosen categories in the view. |
-| Room Tag |  | `RT` | Tag rooms. |
+| Tag All |  |  | Tag every untagged element of chosen categories in the view. |
+| Tag Room |  | `RT` | Tag rooms. |
 | Symbol |  |  | Place annotation symbols. |
 | Revision Cloud |  |  | Sketch a revision cloud assigned to a revision. |
 | North Arrow |  |  | Place a north arrow symbol. |
@@ -381,7 +393,7 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Find/Replace |  |  | Find and replace text in text notes and in the values tags show, with a preview of every change. |
 | Multi-Category Tag |  |  | Tag elements of any category with one tag showing their mark. |
 | Material Tag |  |  | Tag the material of the element or wall layer under the pointer. |
-| Area Tag |  |  | Tag areas with their name and area. |
+| Tag Area |  |  | Tag areas with their name and area. |
 | View Reference |  |  | Place a reference to another view: its detail and sheet number. Double-click it to open the view. |
 | Element Keynote |  |  | Keynote an element with its type's Keynote. |
 | Material Keynote |  |  | Keynote the material under the pointer with the material's Keynote. |
@@ -393,15 +405,6 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Stair Path |  |  | Draw the walk line of a stair with its direction arrow and UP label. |
 | Add Leader |  |  | Add a leader to the selected text notes, toward the nearest free side. |
 | Remove Leader |  |  | Remove the last leader of the selected text notes. |
-
-### Document
-
-| Command | Shortcut | Typed alias | What it does |
-|---|---|---|---|
-| Sheet |  |  | Create a sheet from a title block. |
-| Place View on Sheet |  |  | Place a view or schedule on the active sheet. |
-| Activate View |  |  | Edit the selected viewport's view in place on the sheet; other viewports dim. |
-| Deactivate View |  |  | Return to editing the sheet after working in a viewport. |
 
 ### View
 
@@ -420,6 +423,8 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Material Takeoff |  |  | Schedule material quantities. |
 | Sheet List |  |  | Create a sheet list. |
 | Revision Schedule |  |  | Create a revision schedule. |
+| Sheet |  |  | Create a sheet from a title block. |
+| Place View |  |  | Place a view or schedule on the active sheet. |
 | Duplicate View |  |  | Duplicate the view without annotations. |
 | Duplicate with Detailing |  |  | Duplicate the view with its annotations. |
 | Duplicate as Dependent |  |  | Duplicate with a separate crop that follows the parent's settings. |
@@ -431,16 +436,16 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Show Crop Region |  |  | Toggle crop region visibility. |
 | Section Box |  |  | Toggle the 3D section box. |
 | Thin Lines |  | `TL` | Show all lines at one pixel on screen (printing unaffected). |
-| Hide Element (Temporary) |  | `HH` | Temporarily hide selected elements. |
-| Isolate Element (Temporary) |  | `HI` | Temporarily show only the selection. |
-| Hide Category (Temporary) |  | `HC` | Temporarily hide the selection's categories. |
-| Isolate Category (Temporary) |  | `IC` | Temporarily show only the selection's categories. |
+| Hide Element |  | `HH` | Temporarily hide selected elements. |
+| Isolate Element |  | `HI` | Temporarily show only the selection. |
+| Hide Category |  | `HC` | Temporarily hide the selection's categories. |
+| Isolate Category |  | `IC` | Temporarily show only the selection's categories. |
 | Reset Temporary Hide/Isolate |  | `HR` | Restore the view after temporary hide/isolate. |
 | Reveal Hidden Elements |  | `RH` | Show elements hidden in the view; unhide them from here. |
 | Hide in View |  | `EH` | Permanently hide selected elements in this view. |
 | Unhide in View |  | `EU` | Unhide selected elements in this view. |
 | Zoom to Fit | `⌘0` | `ZE` `ZF` `ZX` | Zoom to show the whole view. |
-| Zoom Region |  | `ZR` `ZZ` | Drag a rectangle to zoom into. |
+| Zoom in Region |  | `ZR` `ZZ` | Drag a rectangle to zoom into. |
 | Zoom In | `⌘+` |  | Zoom in. |
 | Zoom Out | `⌘−` |  | Zoom out. |
 | Zoom Out (2x) |  | `ZO` `ZV` | Halve the magnification around the centre of the view. |
@@ -458,8 +463,32 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Shaded |  | `SD` | Shaded visual style. |
 | Consistent Colors |  |  | Unlit material colors. |
 | Transparent |  |  | Transparent visual style. |
+| Schedule Properties |  |  | Fields, filter, sorting/grouping, formatting and appearance of the active schedule. |
+| Insert Column |  |  | Add fields to the schedule (opens Schedule Properties, Fields). |
+| Delete Column |  |  | Remove the fields of the selected columns from the schedule. |
+| Hide Column |  |  | Hide the selected columns (they still filter and sort). |
+| Unhide All |  |  | Show every hidden column. |
+| Resize Column… |  |  | Set the width of the selected columns on paper. |
+| Insert Data Row |  |  | Add a row where rows are records created here (sheet lists: a new sheet). |
+| Delete Row |  |  | Delete the elements of the selected rows from the model. |
+| Merge Unmerge |  |  | Merge the selected column headers under one heading, or unmerge them. |
+| Group |  |  | Group the selected column headers under a new heading. |
+| Ungroup |  |  | Remove the heading group of the selected columns. |
+| Appearance |  |  | Grid lines, outline, text sizes and header shading of the schedule. |
+| Format Unit |  |  | Heading, alignment, decimals and totals of the selected column. |
+| Calculated |  |  | Add a calculated value (formula) field. |
+| Highlight in Model |  |  | Select the elements of the selected schedule rows in a model view and zoom to them (also Option-double-click a row). |
+| Filters… |  |  | Create and edit rule-based view filters: several categories, rules joined by AND or OR, and nested rule sets. |
+| Manage View Templates… |  |  | Create, rename, duplicate and edit view templates and choose which settings each controls. |
+| Create Template from Current View… |  |  | Save the current view's scale, detail level, visual style, view range, phase filter and V/G overrides as a view template. |
+| Apply Template Properties to Current View… |  |  | Copy a view template's settings into the current view once, without assigning the template. |
+| Temporary View Properties |  |  | Apply a view template to this view until you restore it; nothing is saved. |
+| Reveal Constraints |  |  | Show locked dimensions, alignments and EQ constraints in this view. |
+| User Interface… |  |  | Show or hide the Properties palette, Project Browser, status bar and navigation bar. |
 | Selection Box |  | `BX` | Open a 3D view with its section box fitted around the selected elements. |
 | Override Graphics in View… |  | `EOD` | Change line colour, weight and pattern, fills, halftone and transparency of the selected elements in this view only. |
+| Activate View |  |  | Edit the selected viewport's view in place on the sheet; other viewports dim. |
+| Deactivate View |  |  | Return to editing the sheet after working in a viewport. |
 | Camera |  |  | Place a camera in a plan (eye, then target) to create a perspective 3D view. |
 | Scope Box |  |  | Draw a scope box that limits where levels, grids and reference planes appear and can crop plan views. |
 | Show Project Base Point |  |  | Show or hide the project base point in this view. |
@@ -500,12 +529,22 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Phases |  |  | Project phases and phase filters. |
 | Design Options |  |  | Option sets and options. |
 | Sheet Issues/Revisions |  |  | Revision sequence, dates and issue status. |
-| Location & Coordinates |  |  | Site location, true north, project base point and survey point. |
+| Location |  |  | Site location, true north, project base point and survey point. |
 | Edit Family |  |  | Open the selected family in the Family Editor. |
 | New Family… |  |  | Create a family from a category template. |
 | Purge Unused |  |  | Remove unused types, families and materials. |
 | Model Health |  |  | Warnings and model checks with navigation to elements. |
 | Diagnostics |  |  | Version, performance timings and a redacted local log. |
+| Object Styles… |  |  | Line weights, colours, patterns and materials of every category and subcategory, for all views. |
+| Warnings… |  |  | Review warnings: expand to the elements, show or delete them, and export a report. |
+| Select by ID… |  |  | Select elements by their ids. |
+| IDs of Selection |  |  | Show the ids of the selected elements, ready to copy. |
+| Additional Settings… |  |  | Line weights, line patterns, fill patterns, arrowheads and temporary dimensions. |
+| Line Weights… |  |  | Pen widths of the line weights at each view scale. |
+| Line Patterns… |  |  | The dash patterns lines can use. |
+| Fill Patterns… |  |  | Drafting and model fill patterns used by materials, regions and overrides. |
+| Arrowheads… |  |  | Dimension terminators and annotation arrowheads. |
+| Temporary Dimensions… |  |  | Measure temporary dimensions of walls from their centerlines or faces. |
 | Load Standard Types |  |  | Add the standard wall, floor, roof, ceiling, door, window and column types for the project's units that the project doesn't have yet. |
 | Site Settings… |  |  | Contour interval, primary contours and contour display for toposurfaces. |
 
@@ -518,7 +557,11 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Export DXF… |  |  | Export the current view's 2D linework to DXF. |
 | Export Schedule CSV… |  |  | Export the active schedule to CSV. |
 | Import Schedule CSV… |  |  | Update writable schedule columns from a CSV file. |
+| Export Image… |  |  | Save the active view or sheet as a PNG or JPEG image, rendered on this Mac. |
+| New Title Block… |  |  | Open the Family Editor on a new title block family. |
+| New Annotation Symbol… |  |  | Open the Family Editor on a new generic annotation family. |
 | Print… | `⌘P` |  | Print sheets or views. |
+| Home |  |  | Show the Home screen: start a project, open one, or pick a recent project. |
 | New Project… | `⌘N` |  | Create a project from a template. |
 | Open… | `⌘O` |  | Open an Arcus project. |
 | Save | `⌘S` |  | Save the project. |
@@ -551,3 +594,6 @@ sheet (on the canvas or on the sheet's row) to place them: the viewport follows 
 | Paste Aligned to Same Place |  |  | Paste at the original location. |
 | Paste Aligned to Selected Levels… |  |  | Paste to the same plan position on chosen levels. |
 | Paste Aligned to Current View |  |  | Paste view-specific items into the current view at the same place. |
+| Status Bar |  |  | Show or hide the status bar under the canvas. |
+| Navigation Bar |  |  | Show or hide the navigation bar on views. |
+

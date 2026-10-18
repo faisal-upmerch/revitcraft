@@ -372,9 +372,9 @@ public final class TagTool: BaseTool, InteractiveTool {
     public let commandID: CommandID
     public var title: String {
         switch commandID {
-        case .roomTag: "Room Tag"
+        case .roomTag: "Tag Room"
         case .multiCategoryTag: "Multi-Category Tag"
-        case .areaTag: "Area Tag"
+        case .areaTag: "Tag Area"
         default: "Tag by Category"
         }
     }
@@ -464,9 +464,9 @@ public final class TagTool: BaseTool, InteractiveTool {
     public func escape() -> EscapeResult { .exitTool }
 }
 
-// MARK: - Tag All Not Tagged
+// MARK: - Tag All
 
-/// Settings of a Tag All Not Tagged run.
+/// Settings of a Tag All run.
 public struct TagAllOptions: Sendable, Hashable {
     /// Categories to tag, each with the tag type to use.
     public var tagTypes: [Category: ElementID]

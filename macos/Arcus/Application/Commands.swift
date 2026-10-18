@@ -32,7 +32,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case importRevit
     case exportIFC, exportPDF, exportDXF, exportScheduleCSV, importScheduleCSV, print
     // File
-    case newProject, openProject, save, saveAs, duplicateDocument, revert, closeDocument, exportRecoveryCopy
+    case home, newProject, openProject, save, saveAs, duplicateDocument, revert, closeDocument, exportRecoveryCopy
     // App
     case commandSearch, preferences, workspaceBIMFamiliar, workspaceMacSpacious, resetWorkspace, toggleNavigator, toggleProperties
     case keyboardShortcuts, onboarding, about, undo, redo, cut, copyClipboard, paste, pasteAlignedSameLevel, pasteAlignedSelectedLevels, pasteAlignedCurrentView
@@ -63,8 +63,8 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
-    case modify = "Modify", build = "Build", structure = "Structure", insert = "Insert", annotate = "Annotate"
-    case document = "Document", view = "View", manage = "Manage", file = "File", app = "Arcus"
+    case modify = "Modify", build = "Architecture", structure = "Structure", insert = "Insert", annotate = "Annotate"
+    case view = "View", manage = "Manage", file = "File", app = "Arcus"
 }
 
 /// Static description of a command.
@@ -91,15 +91,15 @@ public enum CommandCatalog {
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),
         CommandInfo(.selectAll, "Select All", .modify, "checklist", shortcut: "⌘A", help: "Select the model elements visible in the view (in drafting views and sheets: their detail elements). View markers and datums are left out. An Arcus extension."), // BL-KEYS
-        CommandInfo(.selectAllInstancesInView, "Select All Instances in View", .modify, "square.stack.3d.up", help: "Select every instance of the selected type visible in the view."), // BL-KEYS: SA moved to In Project
-        CommandInfo(.selectAllInstancesInProject, "Select All Instances in Project", .modify, "square.stack.3d.up.fill", aliases: ["SA"], help: "Select every instance of the selected type in the project."), // BL-KEYS
+        CommandInfo(.selectAllInstancesInView, "Select All Instances: Visible in View", .modify, "square.stack.3d.up", help: "Select every instance of the selected type visible in the view."), // BL-KEYS: SA moved to In Project
+        CommandInfo(.selectAllInstancesInProject, "Select All Instances: In Entire Project", .modify, "square.stack.3d.up.fill", aliases: ["SA"], help: "Select every instance of the selected type in the project."), // BL-KEYS
         CommandInfo(.selectByCategory, "Select by Category…", .modify, "line.3.horizontal.decrease.circle", help: "Select all visible elements of chosen categories."),
         CommandInfo(.filterSelection, "Filter Selection…", .modify, "line.3.horizontal.decrease", help: "Keep only chosen categories in the selection."),
         CommandInfo(.move, "Move", .modify, "arrow.up.and.down.and.arrow.left.and.right", aliases: ["MV"], help: "Move selected elements by picking two points or typing a distance."),
         CommandInfo(.copy, "Copy", .modify, "plus.square.on.square", aliases: ["CO", "CC"], help: "Copy selected elements by picking two points."),
         CommandInfo(.rotate, "Rotate", .modify, "rotate.right", aliases: ["RO"], help: "Rotate selected elements about a center."),
-        CommandInfo(.mirrorPickAxis, "Mirror – Pick Axis", .modify, "arrow.left.and.right.righttriangle.left.righttriangle.right", aliases: ["MM"], help: "Mirror selected elements about a picked line."),
-        CommandInfo(.mirrorDrawAxis, "Mirror – Draw Axis", .modify, "arrow.left.and.right.righttriangle.left.righttriangle.right.fill", aliases: ["DM"], help: "Mirror selected elements about a drawn line."),
+        CommandInfo(.mirrorPickAxis, "Mirror - Pick Axis", .modify, "arrow.left.and.right.righttriangle.left.righttriangle.right", aliases: ["MM"], help: "Mirror selected elements about a picked line."),
+        CommandInfo(.mirrorDrawAxis, "Mirror - Draw Axis", .modify, "arrow.left.and.right.righttriangle.left.righttriangle.right.fill", aliases: ["DM"], help: "Mirror selected elements about a drawn line."),
         CommandInfo(.array, "Array", .modify, "square.grid.3x1.below.line.grid.1x2", aliases: ["AR"], help: "Create a linear array of the selection."),
         CommandInfo(.align, "Align", .modify, "align.horizontal.left", aliases: ["AL"], help: "Align elements to a reference; optionally lock the alignment."),
         CommandInfo(.offset, "Offset", .modify, "arrow.right.to.line", aliases: ["OF"], help: "Offset walls or lines by a distance."),
@@ -113,8 +113,8 @@ public enum CommandCatalog {
         CommandInfo(.matchType, "Match Type Properties", .modify, "paintbrush.pointed", aliases: ["MA"], help: "Apply the type of a source element to other elements."),
         CommandInfo(.paint, "Paint", .modify, "paintbrush", help: "Apply a material to an element's surfaces (stored as an element material override)."),
         CommandInfo(.removePaint, "Remove Paint", .modify, "paintbrush.fill", help: "Remove painted material overrides."),
-        CommandInfo(.joinGeometry, "Allow Wall Joins", .modify, "link", help: "Allow the selected walls to join at their ends."),
-        CommandInfo(.unjoinGeometry, "Disallow Wall Joins", .modify, "link.badge.plus", help: "Stop the selected walls joining at their ends."),
+        CommandInfo(.joinGeometry, "Allow Join", .modify, "link", help: "Allow the selected walls to join at their ends."),
+        CommandInfo(.unjoinGeometry, "Disallow Join", .modify, "link.badge.plus", help: "Stop the selected walls joining at their ends."),
         CommandInfo(.createGroup, "Create Group", .modify, "square.on.square.dashed", aliases: ["GP"], help: "Group the selected elements."),
         CommandInfo(.ungroup, "Ungroup", .modify, "square.on.square.intersection.dashed", help: "Dissolve the selected group."),
         CommandInfo(.editGroup, "Edit Group", .modify, "pencil.and.outline", help: "Edit the members of a group; changes apply to every instance of the group type."),
@@ -138,7 +138,7 @@ public enum CommandCatalog {
         CommandInfo(.door, "Door", .build, "door.left.hand.open", aliases: ["DR"], help: "Place a door in a wall."),
         CommandInfo(.window, "Window", .build, "window.casement", aliases: ["WN"], help: "Place a window in a wall."),
         CommandInfo(.component, "Component", .build, "chair.lounge", aliases: ["CM"], help: "Place furniture, casework, fixtures and generic models."),
-        CommandInfo(.column, "Column", .build, "square.grid.3x3.middle.filled", help: "Place architectural columns."),
+        CommandInfo(.column, "Column: Architectural", .build, "square.grid.3x3.middle.filled", help: "Place architectural columns."),
         CommandInfo(.structuralColumn, "Structural Column", .structure, "square.grid.3x3.square", aliases: ["CL"], help: "Place structural columns."),
         CommandInfo(.beam, "Beam", .structure, "line.diagonal", aliases: ["BM"], help: "Draw beams between points or supports."),
         CommandInfo(.floor, "Floor", .build, "square.3.layers.3d.bottom.filled", aliases: ["FL"], help: "Sketch a floor boundary."),
@@ -178,8 +178,8 @@ public enum CommandCatalog {
         CommandInfo(.insulation, "Insulation", .annotate, "scribble", help: "Draw batt insulation."),
         CommandInfo(.textNote, "Text", .annotate, "textformat", aliases: ["TX"], help: "Place a text note with optional leaders."),
         CommandInfo(.tagByCategory, "Tag by Category", .annotate, "tag", aliases: ["TG"], help: "Tag elements by clicking them."),
-        CommandInfo(.tagAll, "Tag All Not Tagged", .annotate, "tag.fill", help: "Tag every untagged element of chosen categories in the view."),
-        CommandInfo(.roomTag, "Room Tag", .annotate, "tag.square", aliases: ["RT"], help: "Tag rooms."),
+        CommandInfo(.tagAll, "Tag All", .annotate, "tag.fill", help: "Tag every untagged element of chosen categories in the view."),
+        CommandInfo(.roomTag, "Tag Room", .annotate, "tag.square", aliases: ["RT"], help: "Tag rooms."),
         CommandInfo(.symbol, "Symbol", .annotate, "star.square", help: "Place annotation symbols."),
         CommandInfo(.revisionCloud, "Revision Cloud", .annotate, "cloud", help: "Sketch a revision cloud assigned to a revision."),
         CommandInfo(.northArrow, "North Arrow", .annotate, "location.north.line", help: "Place a north arrow symbol."),
@@ -197,8 +197,8 @@ public enum CommandCatalog {
         CommandInfo(.materialTakeoff, "Material Takeoff", .view, "tablecells.badge.ellipsis", help: "Schedule material quantities."),
         CommandInfo(.sheetList, "Sheet List", .view, "list.number", help: "Create a sheet list."),
         CommandInfo(.revisionSchedule, "Revision Schedule", .view, "clock.arrow.circlepath", help: "Create a revision schedule."),
-        CommandInfo(.newSheet, "Sheet", .document, "doc.richtext", help: "Create a sheet from a title block."),
-        CommandInfo(.placeView, "Place View on Sheet", .document, "rectangle.on.rectangle.angled", help: "Place a view or schedule on the active sheet."),
+        CommandInfo(.newSheet, "Sheet", .view, "doc.richtext", help: "Create a sheet from a title block."),
+        CommandInfo(.placeView, "Place View", .view, "rectangle.on.rectangle.angled", help: "Place a view or schedule on the active sheet."),
         CommandInfo(.duplicateView, "Duplicate View", .view, "doc.on.doc", help: "Duplicate the view without annotations."),
         CommandInfo(.duplicateViewWithDetailing, "Duplicate with Detailing", .view, "doc.on.doc.fill", help: "Duplicate the view with its annotations."),
         CommandInfo(.duplicateDependent, "Duplicate as Dependent", .view, "doc.badge.gearshape", help: "Duplicate with a separate crop that follows the parent's settings."),
@@ -210,16 +210,16 @@ public enum CommandCatalog {
         CommandInfo(.toggleCropVisible, "Show Crop Region", .view, "crop.rotate", help: "Toggle crop region visibility."),
         CommandInfo(.sectionBox, "Section Box", .view, "cube.transparent", help: "Toggle the 3D section box."),
         CommandInfo(.thinLines, "Thin Lines", .view, "line.3.horizontal", aliases: ["TL"], help: "Show all lines at one pixel on screen (printing unaffected)."),
-        CommandInfo(.temporaryHide, "Hide Element (Temporary)", .view, "eye.slash", aliases: ["HH"], help: "Temporarily hide selected elements."),
-        CommandInfo(.temporaryIsolate, "Isolate Element (Temporary)", .view, "scope", aliases: ["HI"], help: "Temporarily show only the selection."),
-        CommandInfo(.temporaryHideCategory, "Hide Category (Temporary)", .view, "eye.slash.circle", aliases: ["HC"], help: "Temporarily hide the selection's categories."),
-        CommandInfo(.temporaryIsolateCategory, "Isolate Category (Temporary)", .view, "scope", aliases: ["IC"], help: "Temporarily show only the selection's categories."),
+        CommandInfo(.temporaryHide, "Hide Element", .view, "eye.slash", aliases: ["HH"], help: "Temporarily hide selected elements."),
+        CommandInfo(.temporaryIsolate, "Isolate Element", .view, "scope", aliases: ["HI"], help: "Temporarily show only the selection."),
+        CommandInfo(.temporaryHideCategory, "Hide Category", .view, "eye.slash.circle", aliases: ["HC"], help: "Temporarily hide the selection's categories."),
+        CommandInfo(.temporaryIsolateCategory, "Isolate Category", .view, "scope", aliases: ["IC"], help: "Temporarily show only the selection's categories."),
         CommandInfo(.resetTemporary, "Reset Temporary Hide/Isolate", .view, "arrow.uturn.backward.circle", aliases: ["HR"], help: "Restore the view after temporary hide/isolate."),
         CommandInfo(.revealHidden, "Reveal Hidden Elements", .view, "lightbulb", aliases: ["RH"], help: "Show elements hidden in the view; unhide them from here."),
         CommandInfo(.hideInView, "Hide in View", .view, "eye.slash.fill", aliases: ["EH"], help: "Permanently hide selected elements in this view."),
         CommandInfo(.unhideInView, "Unhide in View", .view, "eye.fill", aliases: ["EU"], help: "Unhide selected elements in this view."),
         CommandInfo(.zoomExtents, "Zoom to Fit", .view, "arrow.up.left.and.arrow.down.right", shortcut: "⌘0", aliases: ["ZE", "ZF", "ZX"], help: "Zoom to show the whole view."), // BL-KEYS: ZA is Zoom All to Fit
-        CommandInfo(.zoomRegion, "Zoom Region", .view, "rectangle.and.hand.point.up.left", aliases: ["ZR", "ZZ"], help: "Drag a rectangle to zoom into."),
+        CommandInfo(.zoomRegion, "Zoom in Region", .view, "rectangle.and.hand.point.up.left", aliases: ["ZR", "ZZ"], help: "Drag a rectangle to zoom into."),
         CommandInfo(.zoomIn, "Zoom In", .view, "plus.magnifyingglass", shortcut: "⌘+", help: "Zoom in."),
         CommandInfo(.zoomOut, "Zoom Out", .view, "minus.magnifyingglass", shortcut: "⌘−", help: "Zoom out."),
         CommandInfo(.zoomOutTwice, "Zoom Out (2x)", .view, "minus.magnifyingglass", aliases: ["ZO", "ZV"], help: "Halve the magnification around the centre of the view."),
@@ -258,7 +258,7 @@ public enum CommandCatalog {
         CommandInfo(.phases, "Phases", .manage, "calendar", help: "Project phases and phase filters."),
         CommandInfo(.designOptions, "Design Options", .manage, "square.stack", help: "Option sets and options."),
         CommandInfo(.revisions, "Sheet Issues/Revisions", .manage, "clock.arrow.circlepath", help: "Revision sequence, dates and issue status."),
-        CommandInfo(.locationSettings, "Location & Coordinates", .manage, "location.circle", help: "Site location, true north, project base point and survey point."),
+        CommandInfo(.locationSettings, "Location", .manage, "location.circle", help: "Site location, true north, project base point and survey point."),
         CommandInfo(.familyEditor, "Edit Family", .manage, "cube.box", help: "Open the selected family in the Family Editor."),
         CommandInfo(.newFamily, "New Family…", .manage, "cube.box.fill", help: "Create a family from a category template."),
         CommandInfo(.loadFamily, "Load Family…", .insert, "square.and.arrow.down", help: "Load .arcusfamily files into the project."),
@@ -276,11 +276,11 @@ public enum CommandCatalog {
         CommandInfo(.manageLinks, "Manage Links", .insert, "link.circle", help: "Reload, relocate, unload or remove links."),
         CommandInfo(.reloadLink, "Reload Link", .insert, "arrow.clockwise.circle", help: "Reload the selected link from its source."),
         CommandInfo(.unloadLink, "Unload Link", .insert, "eject", help: "Unload the selected link."),
-        CommandInfo(.convertLinkToDrafting, "Convert to Arcus Lines…", .insert, "arrow.triangle.2.circlepath", help: "Convert CAD geometry to Arcus detail or model lines."),
+        CommandInfo(.convertLinkToDrafting, "Explode…", .insert, "arrow.triangle.2.circlepath", help: "Convert CAD geometry to detail or model lines.", keywords: ["convert", "explode", "cad", "lines"]),
         CommandInfo(.importIFC, "Import IFC…", .insert, "cube.transparent", help: "Import an IFC model; unsupported items stay as reference geometry."),
         CommandInfo(.importRevit, "Import Revit Model…", .insert, "building.2", help: "Import a .arcusx export from the Arcus Bridge add-in as native, editable elements and families, or inspect a .rvt/.rfa file."),
-        CommandInfo(.linkPDF, "PDF Underlay…", .insert, "doc.richtext", help: "Place a PDF page as a scaled underlay."),
-        CommandInfo(.linkImage, "Image…", .insert, "photo", help: "Place a PNG, JPEG or TIFF image."),
+        CommandInfo(.linkPDF, "Link PDF…", .insert, "doc.richtext", help: "Place a PDF page as a scaled underlay."),
+        CommandInfo(.linkImage, "Link Image…", .insert, "photo", help: "Place a PNG, JPEG or TIFF image."),
         CommandInfo(.exportIFC, "Export IFC…", .file, "square.and.arrow.up", help: "Export the architectural model to IFC2x3 or IFC4."),
         CommandInfo(.exportPDF, "Export PDF…", .file, "doc.badge.arrow.up", shortcut: "⌥⌘P", help: "Export sheets and views to vector PDF."),
         CommandInfo(.exportDXF, "Export DXF…", .file, "arrow.up.doc", help: "Export the current view's 2D linework to DXF."),
@@ -289,22 +289,23 @@ public enum CommandCatalog {
         CommandInfo(.exportImage, "Export Image…", .file, "photo", help: "Save the active view or sheet as a PNG or JPEG image, rendered on this Mac.", keywords: ["png", "jpeg", "jpg", "image", "picture"]), // BL-SCHED
         CommandInfo(.newTitleBlock, "New Title Block…", .file, "doc.text", help: "Open the Family Editor on a new title block family.", keywords: ["title block", "family"]), // BL-SCHED
         CommandInfo(.newAnnotationSymbol, "New Annotation Symbol…", .file, "seal", help: "Open the Family Editor on a new generic annotation family.", keywords: ["symbol", "annotation", "family"]), // BL-SCHED
-        CommandInfo(.scheduleProperties, "Schedule Properties", .document, "slider.horizontal.3", help: "Fields, filter, sorting/grouping, formatting and appearance of the active schedule."), // BL-SCHED
-        CommandInfo(.scheduleInsertColumn, "Insert Column", .document, "rectangle.badge.plus", help: "Add fields to the schedule (opens Schedule Properties, Fields)."), // BL-SCHED
-        CommandInfo(.scheduleDeleteColumn, "Delete Column", .document, "rectangle.badge.minus", help: "Remove the fields of the selected columns from the schedule."), // BL-SCHED
-        CommandInfo(.scheduleHideColumn, "Hide Column", .document, "eye.slash", help: "Hide the selected columns (they still filter and sort)."), // BL-SCHED
-        CommandInfo(.scheduleUnhideAllColumns, "Unhide All", .document, "eye", help: "Show every hidden column."), // BL-SCHED
-        CommandInfo(.scheduleResizeColumn, "Resize Column…", .document, "arrow.left.and.right", help: "Set the width of the selected columns on paper."), // BL-SCHED
-        CommandInfo(.scheduleInsertRow, "Insert Data Row", .document, "plus.square", help: "Add a row where rows are records created here (sheet lists: a new sheet)."), // BL-SCHED
-        CommandInfo(.scheduleDeleteRow, "Delete Row", .document, "minus.square", help: "Delete the elements of the selected rows from the model."), // BL-SCHED
-        CommandInfo(.scheduleMergeHeaders, "Merge Unmerge", .document, "rectangle.split.2x1", help: "Merge the selected column headers under one heading, or unmerge them."), // BL-SCHED
-        CommandInfo(.scheduleGroupHeaders, "Group", .document, "rectangle.3.group", help: "Group the selected column headers under a new heading."), // BL-SCHED
-        CommandInfo(.scheduleUngroupHeaders, "Ungroup", .document, "rectangle.3.group.bubble", help: "Remove the heading group of the selected columns."), // BL-SCHED
-        CommandInfo(.scheduleAppearance, "Appearance", .document, "paintpalette", help: "Grid lines, outline, text sizes and header shading of the schedule."), // BL-SCHED
-        CommandInfo(.scheduleFormatUnit, "Format Unit", .document, "ruler", help: "Heading, alignment, decimals and totals of the selected column."), // BL-SCHED
-        CommandInfo(.scheduleCalculatedField, "Calculated", .document, "function", help: "Add a calculated value (formula) field."), // BL-SCHED
-        CommandInfo(.highlightInModel, "Highlight in Model", .document, "scope", help: "Select the elements of the selected schedule rows in a model view and zoom to them (also Option-double-click a row)."), // BL-SCHED
+        CommandInfo(.scheduleProperties, "Schedule Properties", .view, "slider.horizontal.3", help: "Fields, filter, sorting/grouping, formatting and appearance of the active schedule."), // BL-SCHED
+        CommandInfo(.scheduleInsertColumn, "Insert Column", .view, "rectangle.badge.plus", help: "Add fields to the schedule (opens Schedule Properties, Fields)."), // BL-SCHED
+        CommandInfo(.scheduleDeleteColumn, "Delete Column", .view, "rectangle.badge.minus", help: "Remove the fields of the selected columns from the schedule."), // BL-SCHED
+        CommandInfo(.scheduleHideColumn, "Hide Column", .view, "eye.slash", help: "Hide the selected columns (they still filter and sort)."), // BL-SCHED
+        CommandInfo(.scheduleUnhideAllColumns, "Unhide All", .view, "eye", help: "Show every hidden column."), // BL-SCHED
+        CommandInfo(.scheduleResizeColumn, "Resize Column…", .view, "arrow.left.and.right", help: "Set the width of the selected columns on paper."), // BL-SCHED
+        CommandInfo(.scheduleInsertRow, "Insert Data Row", .view, "plus.square", help: "Add a row where rows are records created here (sheet lists: a new sheet)."), // BL-SCHED
+        CommandInfo(.scheduleDeleteRow, "Delete Row", .view, "minus.square", help: "Delete the elements of the selected rows from the model."), // BL-SCHED
+        CommandInfo(.scheduleMergeHeaders, "Merge Unmerge", .view, "rectangle.split.2x1", help: "Merge the selected column headers under one heading, or unmerge them."), // BL-SCHED
+        CommandInfo(.scheduleGroupHeaders, "Group", .view, "rectangle.3.group", help: "Group the selected column headers under a new heading."), // BL-SCHED
+        CommandInfo(.scheduleUngroupHeaders, "Ungroup", .view, "rectangle.3.group.bubble", help: "Remove the heading group of the selected columns."), // BL-SCHED
+        CommandInfo(.scheduleAppearance, "Appearance", .view, "paintpalette", help: "Grid lines, outline, text sizes and header shading of the schedule."), // BL-SCHED
+        CommandInfo(.scheduleFormatUnit, "Format Unit", .view, "ruler", help: "Heading, alignment, decimals and totals of the selected column."), // BL-SCHED
+        CommandInfo(.scheduleCalculatedField, "Calculated", .view, "function", help: "Add a calculated value (formula) field."), // BL-SCHED
+        CommandInfo(.highlightInModel, "Highlight in Model", .view, "scope", help: "Select the elements of the selected schedule rows in a model view and zoom to them (also Option-double-click a row)."), // BL-SCHED
         CommandInfo(.print, "Print…", .file, "printer", shortcut: "⌘P", help: "Print sheets or views."),
+        CommandInfo(.home, "Home", .file, "house", help: "Show the Home screen: start a project, open one, or pick a recent project.", keywords: ["start", "recent", "hub"]),
         CommandInfo(.newProject, "New Project…", .file, "doc.badge.plus", shortcut: "⌘N", help: "Create a project from a template."),
         CommandInfo(.openProject, "Open…", .file, "folder", shortcut: "⌘O", help: "Open an Arcus project."),
         CommandInfo(.save, "Save", .file, "square.and.arrow.down", shortcut: "⌘S", help: "Save the project."),
@@ -338,7 +339,7 @@ public enum CommandCatalog {
         CommandInfo(.mullion, "Mullion", .build, "square.split.2x1", aliases: ["MU"], help: "Add mullions to curtain grid lines, or remove them.", keywords: ["curtain wall", "transom"]),
         CommandInfo(.curtainPanel, "Curtain Panel", .build, "square.grid.2x2", help: "Swap curtain wall panels to the panel type chosen in the type selector.", keywords: ["curtain wall", "glazing", "spandrel"]),
         CommandInfo(.wallOpening, "Wall Opening", .build, "rectangle.dashed", help: "Cut a rectangular opening in a wall from an elevation or section.", keywords: ["hole", "opening"]),
-        CommandInfo(.shaftOpening, "Shaft Opening", .build, "square.stack.3d.down.dottedline", help: "Sketch a shaft that cuts every floor, ceiling and roof between its base and top.", keywords: ["hole", "opening", "lift", "riser"]),
+        CommandInfo(.shaftOpening, "Shaft", .build, "square.stack.3d.down.dottedline", help: "Sketch a shaft that cuts every floor, ceiling and roof between its base and top.", keywords: ["hole", "opening", "lift", "riser"]),
         CommandInfo(.ramp, "Ramp", .build, "figure.roll", help: "Draw a ramp run from its bottom to its top; clicks between turn at landings. Railings are added on both sides.", keywords: ["accessible", "incline", "slope"]),
         CommandInfo(.roofExtrusion, "Roof by Extrusion", .build, "triangle", help: "Sketch an open roof profile in an elevation or section and extrude it perpendicular to the work plane.", keywords: ["gable", "barrel", "profile"]),
         CommandInfo(.editStair, "Edit Stair", .modify, "pencil.and.ruler", help: "Edit a placed stair: drag its start, direction, run width or landing, or change its shape and riser counts."),
@@ -384,8 +385,8 @@ public enum CommandCatalog {
         CommandInfo(.scale, "Scale", .modify, "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left", aliases: ["RE"], help: "Resize lines, walls, regions and images about a base point, graphically or by a factor."),
         CommandInfo(.selectionBox, "Selection Box", .view, "cube.transparent", aliases: ["BX"], help: "Open a 3D view with its section box fitted around the selected elements.", keywords: ["section box", "crop 3d"]),
         CommandInfo(.overrideGraphicsElement, "Override Graphics in View…", .view, "paintbrush", aliases: ["EOD"], help: "Change line colour, weight and pattern, fills, halftone and transparency of the selected elements in this view only.", keywords: ["override", "by element", "graphics"]), // BL-KEYS
-        CommandInfo(.activateViewport, "Activate View", .document, "rectangle.inset.filled.and.cursorarrow", help: "Edit the selected viewport's view in place on the sheet; other viewports dim."),
-        CommandInfo(.deactivateViewport, "Deactivate View", .document, "rectangle.dashed", help: "Return to editing the sheet after working in a viewport."),
+        CommandInfo(.activateViewport, "Activate View", .view, "rectangle.inset.filled.and.cursorarrow", help: "Edit the selected viewport's view in place on the sheet; other viewports dim."),
+        CommandInfo(.deactivateViewport, "Deactivate View", .view, "rectangle.dashed", help: "Return to editing the sheet after working in a viewport."),
         CommandInfo(.cameraView, "Camera", .view, "camera", help: "Place a camera in a plan (eye, then target) to create a perspective 3D view.", keywords: ["perspective", "3d view"]),
         CommandInfo(.scopeBox, "Scope Box", .view, "square.dashed", help: "Draw a scope box that limits where levels, grids and reference planes appear and can crop plan views.", keywords: ["datum extents"]),
         CommandInfo(.gridPickLines, "Grid – Pick Lines", .build, "cursorarrow.rays", help: "Create grid lines on picked lines, walls or CAD lines."),
@@ -455,7 +456,7 @@ public enum CommandCatalog {
         CommandInfo(.findReplace, "Find/Replace", .annotate, "text.magnifyingglass", help: "Find and replace text in text notes and in the values tags show, with a preview of every change.", keywords: ["search", "replace", "text"]),
         CommandInfo(.multiCategoryTag, "Multi-Category Tag", .annotate, "tag.circle", help: "Tag elements of any category with one tag showing their mark."),
         CommandInfo(.materialTag, "Material Tag", .annotate, "square.3.layers.3d", help: "Tag the material of the element or wall layer under the pointer.", keywords: ["material"]),
-        CommandInfo(.areaTag, "Area Tag", .annotate, "tag.square", help: "Tag areas with their name and area.", keywords: ["area"]),
+        CommandInfo(.areaTag, "Tag Area", .annotate, "tag.square", help: "Tag areas with their name and area.", keywords: ["area"]),
         CommandInfo(.viewReference, "View Reference", .annotate, "arrow.up.right.square", help: "Place a reference to another view: its detail and sheet number. Double-click it to open the view.", keywords: ["matchline", "reference"]),
         CommandInfo(.keynoteElement, "Element Keynote", .annotate, "key", help: "Keynote an element with its type's Keynote.", keywords: ["keynote"]),
         CommandInfo(.keynoteMaterial, "Material Keynote", .annotate, "key.horizontal", help: "Keynote the material under the pointer with the material's Keynote.", keywords: ["keynote"]),

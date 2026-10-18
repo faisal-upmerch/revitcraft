@@ -105,7 +105,7 @@ public final class WallOpeningTool: BaseTool, InteractiveTool {
     }
 }
 
-// MARK: - Shaft Opening
+// MARK: - Shaft
 
 /// Sketches a shaft boundary (lines, rectangles, circles) in a plan; Finish creates a shaft that cuts every floor,
 /// ceiling and roof between its base (this level plus Base Offset) and its top.
@@ -113,7 +113,7 @@ public final class WallOpeningTool: BaseTool, InteractiveTool {
 public final class ShaftOpeningTool: BaseTool, InteractiveTool {
     public enum Mode: String, CaseIterable { case line = "Line", rectangle = "Rectangle", circle = "Circle" }
     public let commandID = CommandID.shaftOpening
-    public let title = "Shaft Opening"
+    public let title = "Shaft"
     public var isSketchMode: Bool { true }
     public var mode: Mode = .rectangle
     public var topLevelID: ElementID?
@@ -257,7 +257,7 @@ public final class ShaftOpeningTool: BaseTool, InteractiveTool {
         let base = ctx.model.elevation(ofLevel: level) + baseOffset
         let top = ctx.model.topElevation(base: base, topLevelID: topLevelID, topOffset: topOffset, unconnectedHeight: unconnectedHeight)
         guard top > base + 0.01 else { message("The shaft's top must be above its base."); return false }
-        ctx.session.perform("Create Shaft Opening") { tx in
+        ctx.session.perform("Create Shaft") { tx in
             tx.create(.shaftOpenings, data: .opening(.shaft(data)), levelID: level)
         }
         if let e = ctx.session.lastError { message(e.message); return false }

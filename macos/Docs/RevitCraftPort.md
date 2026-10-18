@@ -155,7 +155,7 @@ I checked the Swift code under `macos/Arcus` directly, because `Docs/RevitParity
 ## 5. Milestones
 
 **Behaviour first**
-1. **N1 Names:** the §1 renames, menu-bar groups, Home, Inspector labels, the Tag All caption.
+1. **N1 Names:** ✅ done (2026-10-18). Command titles now use RevitCraft's names (Tag All, Tag Room/Area, Allow/Disallow Join, Hide/Isolate Element, Place View, Column: Architectural, Shaft, Link PDF/Image, Location, Explode, Mirror - Pick/Draw Axis, Select All Instances: Visible in View / In Entire Project, Zoom in Region; the ribbon caption for Finish Group is Finish). The menu bar follows the tabs (Architecture, Structure, Insert, Annotate, Manage; the View menu gains Create and Sheet Composition submenus), and command groups merged Document into View. File ▸ Home reopens the Home window (titled Home), and the docks are labelled by the palettes they hold. Command IDs are unchanged, so saved shortcuts and documents still load. Moved to N2 because they change structure: the Allow/Disallow Join toggle in the Geometry panel, the Location / Coordinates / Position split, and the Column split. Not adopted: "Load Autodesk Family", because Arcus's library is its own content and not Autodesk's.
 2. **N2 Ribbon structure:** Select panel on every tab, empty Analyze tab, panel order and splits as in RevitCraft (Wall dropdown, draw modes into the Draw panel), Output panel moved into a File menu.
 3. **I1 Canvas look:** cursors, selection colours and the cut-wall fill rule, 3D tint and edges, window rectangle, grip styling.
 4. **I2 Snapping feedback:** tooltip shown at once, tracking line colour and full-view span, glyphs, adaptive angle increment.

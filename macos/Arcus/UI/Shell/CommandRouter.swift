@@ -269,7 +269,7 @@ struct CommandRouter {
             session.perform("Remove Paint") { tx in for e in sel { tx.update(e) { $0.params[.paintMaterial] = nil } } }
         case .joinGeometry, .unjoinGeometry:
             let allow = id == .joinGeometry
-            session.perform(allow ? "Allow Wall Joins" : "Disallow Wall Joins") { tx in
+            session.perform(allow ? "Allow Join" : "Disallow Join") { tx in
                 for e in sel { tx.update(e) { $0.wall?.allowJoinAtStart = allow; $0.wall?.allowJoinAtEnd = allow } }
             }
         case .createGroup: createGroup(sel)
@@ -281,7 +281,7 @@ struct CommandRouter {
         case .editGroup:
             session.editingGroupID = sel.first
             if let g = sel.first.flatMap({ model[$0]?.group }) { session.selection.select(g.members) }
-            state.show("Editing group. Change its members, then choose Finish Group; other instances of the group type update.")
+            state.show("Editing group. Change its members, then choose Finish; other instances of the group type update.")
         case .finishEditGroup: finishGroupEdit()
         case .flipFacing, .flipHand:
             session.perform(id == .flipFacing ? "Flip Facing" : "Flip Hand") { tx in
@@ -401,6 +401,7 @@ struct CommandRouter {
         case .importScheduleCSV:
             if let s = state.activeViewID { chooseFile([.commaSeparatedText, .tabSeparatedText, .plainText]) { url in state.presented = .csvImport(s, url) } }
         case .print: ExportActions(state: state).printSheets()
+        case .home: AppDelegate.shared?.showHub(tab: .recent)
         case .newProject: AppDelegate.shared?.showHub(tab: .new)
         case .openProject: NSDocumentController.shared.openDocument(nil)
         case .save: state.document?.save(nil)
@@ -547,7 +548,7 @@ struct CommandRouter {
         state.show(others.isEmpty ? "Group edit finished." : "Group edit finished; \(others.count) other instance(s) updated.")
     }
 
-    /// Tag All Not Tagged: the dialog chooses categories, tag types, selection scope, leader and orientation.
+    /// Tag All: the dialog chooses categories, tag types, selection scope, leader and orientation.
     func tagAll() {
         guard let v = state.activeViewID, state.graphics.graphics(v) != nil else { return }
         state.presented = .tagAll(v)

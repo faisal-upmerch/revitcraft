@@ -14,22 +14,23 @@ enum MainMenuBuilder {
         main.addItem(submenu("Edit", editItems()))
         main.addItem(submenu("View", viewItems()))
         CameraMenus.addNavigationItems(to: main.items.last?.submenu) // W2-CAM
-        main.addItem(submenu("Build", commands([.wall, .wallRectangle, .wallArc, .wallPickLines, nil, .door, .window, .component, .componentLibrary, .column, nil,
-                                               .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
-                                               .stairStraight, .stairL, .stairU, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .placeAreasAutomatically, .colorSchemes, nil,
-                                               .modelLine, .level, .grid, .referencePlane, nil, .toposurface, .buildingPad, .propertyLine, nil,
-                                               .structuralColumn, .beam])))
+        // The menu bar follows the ribbon tabs: Architecture, Structure, Insert, Annotate, (View above), Manage.
+        main.addItem(submenu("Architecture", commands([.wall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, nil, .door, .window, .component, .column, nil,
+                                                      .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
+                                                      .stairStraight, .stairL, .stairU, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .placeAreasAutomatically, .colorSchemes, nil,
+                                                      .modelLine, .shaftOpening, .wallOpening, nil, .level, .grid, .referencePlane, nil, .toposurface, .buildingPad, .propertyLine])))
+        main.addItem(submenu("Structure", commands([.structuralColumn, .beam, .structuralWall, .structuralFloor, nil,
+                                                    .foundationIsolated, .foundationWall, .foundationSlab])))
+        main.addItem(submenu("Insert", commands([.linkCAD, .linkPDF, .linkImage, .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
+                                                 .importCAD, .importIFC, .importRevit, nil,
+                                                 .loadFamily, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
         main.addItem(submenu("Annotate", commands([.alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension, nil,
                                                    .spotElevation, .spotCoordinate, .spotSlope, nil, .detailLine, .filledRegion, .maskingRegion, .detailComponent, .insulation, nil,
                                                    .textNote, .tagByCategory, .tagAll, .roomTag, .colorFillLegend, .symbol, .northArrow, nil, .revisionCloud])))
         main.items.last?.submenu.map { m in for i in annotMenuAdditions() { m.addItem(i) } } // W2-ANNOT
-        main.addItem(submenu("Document", commands([.newSheet, .placeView, nil, .schedule, .materialTakeoff, .sheetList, .revisionSchedule, nil,
-                                                   .floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, .section, .elevation, .callout, .draftingView, .legend, .threeDView, nil,
-                                                   .duplicateView, .duplicateViewWithDetailing, .duplicateDependent, .renameView, nil, .revisions])))
         main.addItem(submenu("Manage", commands([.projectInfo, .projectUnits, .projectParameters, .materials, .objectStyles, .lineStyles, .additionalSettings, .snapSettings, .locationSettings, nil, // BL-VG
-                                                 .phases, .designOptions, nil, .familyEditor, .newFamily, .loadFamily, .reloadFamily, .typeCatalog, .loadStandardTypes, nil,
-                                                 .linkCAD, .linkPDF, .linkImage, .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
-                                                 .warnings, .selectByID, .idsOfSelection, .modelHealth, .purgeUnused, .diagnostics, nil, .keyboardShortcuts]))) // BL-SCHED: Link CAD replaces Link DWG/DXF; BL-VG: warnings, select by ID
+                                                 .phases, .designOptions, nil, .familyEditor, .newFamily, .loadStandardTypes, nil,
+                                                 .warnings, .selectByID, .idsOfSelection, .modelHealth, .purgeUnused, .diagnostics, nil, .keyboardShortcuts]))) // BL-VG: warnings, select by ID
         let window = submenu("Window", [
             NSMenuItem(title: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"),
             NSMenuItem(title: "Zoom", action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""),
@@ -124,7 +125,7 @@ enum MainMenuBuilder {
         let importMenu = submenu("Import", commands([.importCAD, .importIFC, .importRevit, .importScheduleCSV])) // BL-SCHED
         let pageSetup = NSMenuItem(title: "Page Setup…", action: #selector(NSDocument.runPageLayout(_:)), keyEquivalent: "p")
         pageSetup.keyEquivalentModifierMask = [.command, .shift]
-        return [newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
+        return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
                 importMenu, export, .separator(), pageSetup, command(.print)]
     }
 
@@ -157,7 +158,11 @@ enum MainMenuBuilder {
         let sidebar = NSMenuItem(title: "Show/Hide Sidebar", action: #selector(AppDelegate.toggleDocumentSidebar(_:)), keyEquivalent: "s") // W4-SHELL
         sidebar.keyEquivalentModifierMask = [.command, .option]
         sidebar.target = AppDelegate.shared
-        return commands([.zoomExtents, .zoomIn, .zoomOut, .zoomOutTwice, .zoomRegion, .zoomSheetSize, nil, .previousPanZoom, .nextPanZoom, nil, .thinLines, .visibilityGraphics, .viewRange, .cropView, .toggleCropVisible, .sectionBox, .saveOrientation]) +
+        let create = submenu("Create", commands([.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, nil, .section, .elevation, .callout, .draftingView, .legend, .threeDView, nil,
+                                                 .schedule, .materialTakeoff, .sheetList, .revisionSchedule, nil,
+                                                 .duplicateView, .duplicateViewWithDetailing, .duplicateDependent, .renameView]))
+        let sheets = submenu("Sheet Composition", commands([.newSheet, .placeView, nil, .revisions]))
+        return [create, sheets, .separator()] + commands([.zoomExtents, .zoomIn, .zoomOut, .zoomOutTwice, .zoomRegion, .zoomSheetSize, nil, .previousPanZoom, .nextPanZoom, nil, .thinLines, .visibilityGraphics, .viewRange, .cropView, .toggleCropVisible, .sectionBox, .saveOrientation]) +
             [detail, styles, .separator(), temp] + commands([.revealHidden, .hideInView, .unhideInView, nil, .toggleNavigator, .toggleProperties]) + [sidebar, .separator(), fullScreen] // W4-SHELL
     }
 }

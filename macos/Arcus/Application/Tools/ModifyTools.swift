@@ -194,7 +194,7 @@ public final class RotateTool: BaseTool, InteractiveTool {
 public final class MirrorTool: BaseTool, InteractiveTool {
     public let pickAxis: Bool
     public var commandID: CommandID { pickAxis ? .mirrorPickAxis : .mirrorDrawAxis }
-    public var title: String { pickAxis ? "Mirror – Pick Axis" : "Mirror – Draw Axis" }
+    public var title: String { pickAxis ? "Mirror - Pick Axis" : "Mirror - Draw Axis" }
     let ids: [ElementID]
     var start: Vec2?
     public var copy = true
