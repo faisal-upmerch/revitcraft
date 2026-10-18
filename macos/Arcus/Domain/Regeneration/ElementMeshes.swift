@@ -36,6 +36,8 @@ public enum ElementMeshes {
             return [MeshPart(mesh: TopographyGeometry.mesh(e), materialID: e.topography?.materialID)] // W2-DWG: sub-region material
         case .referenceGeometry(let r):
             return [MeshPart(mesh: r.mesh, materialID: nil)]
+        case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34
+            return Reinforcement.meshParts(e, model)
         case .linkedModel, .pointCloud, .decal: // F67
             return LinkedGeometry.meshParts(e, model)
         default:
@@ -57,6 +59,7 @@ public enum ElementMeshes {
     public static func hasModelGeometry(_ e: Element) -> Bool {
         switch e.data {
         case .wall, .insert, .component, .column, .beam, .slab, .roof, .stair, .railing, .topography, .referenceGeometry, .ramp: true
+        case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: true // F34
         case .linkedModel, .pointCloud, .decal: true // F67
         default: false
         }
@@ -211,6 +214,8 @@ public enum DependencyGraph {
             s.insert(d.decalTypeID)
         case .slab, .roof: // WP3: shafts cutting this element
             for sh in ShaftCuts.shafts(cutting: e, model) { s.insert(sh.id); if let l = sh.levelID { s.insert(l) }; if let t = sh.opening?.shaft?.topLevelID { s.insert(t) } }
+        case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34: host, bar types, cover
+            s.formUnion(Reinforcement.inputs(of: e, model))
         default:
             break
         }
@@ -253,6 +258,7 @@ public enum DependencyGraph {
                 default: break
                 }
                 for t in m.tags(of: id) { out.insert(t.id) }
+                out.formUnion(Reinforcement.affected(by: e, m)) // F34
                 out.formUnion(SolidJoins.partners(of: id, m))
                 if e.typeData?.instanceCategory == .curtainPanels { for w in CurtainWallGeometry.walls(usingPanelType: id, m) { out.insert(w.id) } } // WP3
             }

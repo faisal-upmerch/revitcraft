@@ -93,6 +93,7 @@ struct VerticalGraphics {
                                primitives: segs.map { .polyline([$0.start, $0.end], closed: false, st) }, hitPolygons: [.rectangle(hull)]))
         }
         items += colorFills(fr)
+        items += f34Items(fr) // F34: wall-hosted reinforcement
         items += wallOpeningItems(fr) // WP3: selectable wall openings
         items += LinkedGraphics.verticalItems(self, fr) // F67: point clouds and decals
         // Datums.

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import ArcusDomain
 import ArcusApplication
 
@@ -65,12 +66,14 @@ struct DialogHost: View {
             case .selectByID: SelectByIDDialog(state: state) // BL-VG
             case .additionalSettings(let tab): AdditionalSettingsDialog(state: state, tab: tab) // BL-VG
             case .userInterface: UserInterfaceDialog(state: state) // BL-VG
+            case .f34(let d): F34DialogHost(state: state, dialog: d) // F34
             case .f67(let d): F67DialogHost(state: state, dialog: d) // F67
             }
         }
         .frame(minWidth: 420)
         .presentationSizing(.fitted)
         .onExitCommand { state.presented = nil } // W4-AUDIT: Escape closes dialogs that have only a Done button (Cancel buttons keep their own .cancelAction)
+        .background(DialogEscapeCloser(dialogID: dialog.id) { if state.presented?.id == $0 { state.presented = nil } })
         .background(SheetEscapeCloser { state.presented = nil }) // Escape regardless of which control has focus
     }
 }
@@ -132,4 +135,46 @@ struct FormRow<Content: View>: View {
             content
         }
     }
+}
+
+/// Escape closes the dialog even when nothing in it has focus (`onExitCommand` needs a focused view, and Done-only
+/// dialogs have no `.cancelAction` button): after AppKit has handled the key, a dialog still open is closed. An
+/// Escape that ends a text edit only ends the edit, as in other BIM tools.
+private struct DialogEscapeCloser: NSViewRepresentable {
+    let dialogID: String
+    let close: (String) -> Void
+
+    final class Monitor: NSView {
+        var dialogID = ""
+        var close: (String) -> Void = { _ in }
+        private var token: Any?
+        override var acceptsFirstResponder: Bool { true }
+        override func keyDown(with e: NSEvent) { if e.keyCode == 53 { close(dialogID) } else { super.keyDown(with: e) } }
+        override func cancelOperation(_ sender: Any?) { close(dialogID) }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            if let token { NSEvent.removeMonitor(token); self.token = nil }
+            guard window != nil else { return }
+            // With nothing focused (toggles, pickers and lists only), take the keyboard so Escape reaches us.
+            DispatchQueue.main.async { [weak self] in
+                MainActor.assumeIsolated {
+                    guard let self, let w = self.window, w.firstResponder === w || w.firstResponder == nil else { return }
+                    w.makeFirstResponder(self)
+                }
+            }
+            token = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] e in
+                MainActor.assumeIsolated {
+                    guard let self, let w = self.window, e.keyCode == 53, e.window === w else { return }
+                    let editing = w.firstResponder is NSTextView
+                    let id = self.dialogID
+                    DispatchQueue.main.async { if !editing { MainActor.assumeIsolated { self.close(id) } } }
+                }
+                return e
+            }
+        }
+        isolated deinit { if let token { NSEvent.removeMonitor(token) } }
+    }
+
+    func makeNSView(context: Context) -> Monitor { let m = Monitor(); m.dialogID = dialogID; m.close = close; return m }
+    func updateNSView(_ m: Monitor, context: Context) { m.dialogID = dialogID; m.close = close }
 }

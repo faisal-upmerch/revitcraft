@@ -400,6 +400,8 @@ final class IFCFileBuilder {
                 ent = product(e, "IfcBuildingElementProxy", placement: placement, shape: shp, tail: is4 ? [.e("NOTDEFINED")] : [.null],
                               name: name, objectType: props["ObjectType"] ?? recorded)
             }
+        case .reinforcingBar, .reinforcingMesh: // F34
+            ent = reinforcementProduct(e, kind: pe.kind, placement: placement, shape: shp)
         default: // proxy
             ent = product(e, "IfcBuildingElementProxy", placement: placement, shape: shp, tail: is4 ? [.e("NOTDEFINED")] : [.null])
         }

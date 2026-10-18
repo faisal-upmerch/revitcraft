@@ -155,6 +155,8 @@ public enum ElementTransform {
             e.data = .colorFillLegend(l)
         case .opening(let o): // WP3: shafts move with their sketch; wall openings are positioned relative to their host
             if case .shaft(var sh) = o { sh.boundary = sh.boundary.transformed(t); e.data = .opening(.shaft(sh)) }
+        case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler, .beamSystem, .structuralSymbol: // F34
+            return ReinforcementTransform.apply(t, to: &e)
         case .linkedModel(var l): // F67: links move and rotate as a whole
             l.placement = t * l.placement
             e.data = .linkedModel(l)

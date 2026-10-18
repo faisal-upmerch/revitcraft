@@ -39,7 +39,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F34 categories:
-
+    case structuralRebar, areaReinforcement, pathReinforcement, fabricAreas, fabricReinforcement, rebarCouplers, beamSystems, structuralSettings
 
     // F5 categories:
 
@@ -85,6 +85,8 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .scopeBoxes, .projectBasePoint, .surveyPoint: return .datum // WP6a
         case .cameras: return .annotation // WP6a
         case .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site: return .model // W2-LIB
+        case .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, .beamSystems: return .model // F34
+        case .structuralSettings: return .internal_ // F34
         case .linkedModels, .coordinationModels, .pointClouds, .decals: return .model // F67
         case .dwfMarkups: return .annotation // F67
         case .decalTypes: return .internal_ // F67
@@ -102,6 +104,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .structuralColumns, .structuralFraming, .furniture, .casework, .genericModels, .plumbingFixtures,
         .specialtyEquipment, .topography, .parking, .sheets, .views, .revisions, .ramps,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
+        .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, // F34
     ]
     /// Categories whose instances can be tagged.
     public static let taggable: [Category] = [
@@ -196,6 +199,14 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site"
+        case .structuralRebar: "Structural Rebar" // F34
+        case .areaReinforcement: "Structural Area Reinforcement"
+        case .pathReinforcement: "Structural Path Reinforcement"
+        case .fabricAreas: "Structural Fabric Areas"
+        case .fabricReinforcement: "Structural Fabric Reinforcement"
+        case .rebarCouplers: "Structural Rebar Couplers"
+        case .beamSystems: "Structural Beam Systems"
+        case .structuralSettings: "Structural Settings"
         case .linkedModels: "Linked Models" // F67
         case .coordinationModels: "Coordination Models"
         case .pointClouds: "Point Clouds"
@@ -292,6 +303,14 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .planting: "Planting"
         case .entourage: "Entourage"
         case .site: "Site Component"
+        case .structuralRebar: "Structural Rebar" // F34
+        case .areaReinforcement: "Structural Area Reinforcement"
+        case .pathReinforcement: "Structural Path Reinforcement"
+        case .fabricAreas: "Structural Fabric Area"
+        case .fabricReinforcement: "Structural Fabric Reinforcement"
+        case .rebarCouplers: "Structural Rebar Coupler"
+        case .beamSystems: "Structural Beam System"
+        case .structuralSettings: "Structural Settings"
         case .linkedModels: "Linked Model" // F67
         case .coordinationModels: "Coordination Model"
         case .pointClouds: "Point Cloud"

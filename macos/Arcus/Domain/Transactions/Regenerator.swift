@@ -8,6 +8,7 @@ public struct Regenerator: Sendable {
     public func regenerate(_ tx: TransactionContext) throws(TransactionError) {
         propagateHosts(tx)
         normalizeCurtainWalls(tx) // WP3
+        try StructuralFraming.regenerateBeamSystems(tx) // F34
         repairDanglingReferences(tx)
         try ConstraintSolver.solve(tx)
         try validate(tx)

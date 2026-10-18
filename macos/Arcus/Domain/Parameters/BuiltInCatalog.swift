@@ -696,7 +696,7 @@ enum BuiltInCatalog {
     static let quantityUnbounded = q("q.unboundedHeight", "Unbounded Height", .length) { $0.height }
     static let quantityCount = q("q.count", "Count", .integer, .other) { _ in 1 }
 
-    static func instance(for e: Element) -> [P] { baseInstance(for: e) + HostedProfileParameters.extra(for: e) } // W2-DWG
+    static func instance(for e: Element) -> [P] { baseInstance(for: e) + HostedProfileParameters.extra(for: e) + ReinforcementParameters.extra(for: e) } // W2-DWG, F34
 
     static func baseInstance(for e: Element) -> [P] {
         let identity = [mark, comments]
@@ -827,6 +827,7 @@ enum BuiltInCatalog {
             return td.familyID == nil ? [columnWidth, columnDepth, columnDiameter, materialParam] + identity : identity
         case .structuralFraming:
             return td.familyID == nil ? [beamWidth, beamDepth, materialParam] + identity : identity
+        case .structuralRebar, .fabricReinforcement: return ReinforcementParameters.typeParameters(td) + [materialParam] + identity // F34
         default: return identity
         }
     }
@@ -872,6 +873,7 @@ enum BuiltInCatalog {
         for td in wp3TypeProbes { for p in type(for: td) where d[p.id] == nil { d[p.id] = p } } // WP3
         for e in wp3InstanceProbes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // W2-ANNOT
+        for e in ReinforcementParameters.probes { for p in instance(for: e) where d[p.id] == nil { d[p.id] = p } } // F34
         return d
     }()
 
@@ -895,6 +897,7 @@ enum BuiltInCatalog {
         for e in wp3InstanceProbes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // WP3
         for td in wp3TypeProbes { for p in type(for: td) where o[p.id] == nil { o[p.id] = i; i += 1 } } // WP3
         for e in annotProbeElements { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // W2-ANNOT
+        for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
         return o
     }()
 }

@@ -66,6 +66,8 @@ reads geometry in file coordinates and does not undo a map conversion.
 | Rooms (enclosed) | `IfcSpace` (Name = number, LongName = name, INTERNAL) | `IfcSpace` SPACE | Storey, at the room base | Room boundary extruded to room height: 2X3 `SweptSolid` (with voids), IFC4 `Tessellation` |
 | Columns, structural columns | `IfcColumn` | `IfcColumn` COLUMN | Column location and rotation | Brep / Tessellation |
 | Structural framing | `IfcBeam` | `IfcBeam` BEAM | Storey | Brep / Tessellation |
+| Rebar sets, area and path reinforcement | `IfcReinforcingBar` (NominalDiameter, CrossSectionArea, BarLength = the longest bar; BarRole MAIN, EDGE for path) | `IfcReinforcingBar` (PredefinedType MAIN / EDGE) | Storey of the host | Brep / Tessellation of every bar (octagonal rods) |
+| Fabric areas and sheets | `IfcReinforcingMesh` (wire diameters, areas and spacings; sheets also MeshLength/Width) | `IfcReinforcingMesh` NOTDEFINED | Storey of the host | Brep / Tessellation of every wire |
 | Stairs | `IfcStair` (STRAIGHT_RUN / QUARTER_TURN / HALF_TURN) | same | Storey | Brep / Tessellation |
 | Railings | `IfcRailing` (HANDRAIL if the type name contains "Handrail", else GUARDRAIL) | same | Storey | Brep / Tessellation |
 | Furniture, casework | `IfcFurnishingElement` | `IfcFurniture` | Component location and rotation (mirroring is baked into the mesh) | Brep / Tessellation |
