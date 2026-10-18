@@ -240,6 +240,7 @@ struct F2Tests {
         // Its railings repeat too.
         let rail = try #require(m.hosted(by: stair.id).first { $0.railing != nil })
         #expect(MultistoryStairs.railingPaths(rail, m)?.count == 2)
+        #expect(plan(m, ids, level: 1).items.contains { $0.elementID == rail.id }, "and show on the upper storey's plan")
         // Multistory Top Level in Properties: None makes it single again; a level below the top is refused.
         try ctx.session.performThrowing("None") { tx in try Parameters.set(ParameterID("stair.multistoryTop"), to: .ref(nil), on: stair.id, in: tx) }
         #expect(MultistoryStairs.storeys(of: ctx.model[stair.id]!, ctx.model) == nil)

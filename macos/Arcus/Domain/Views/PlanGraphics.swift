@@ -314,10 +314,10 @@ struct PlanGraphics {
     func railings(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
         for (e, o) in list {
-            let path = RailingGeometry.path(e, model)
-            guard path.count >= 2 else { continue }
+            // F2: a multistory stair's railing shows on each storey's plan.
+            let paths = MultistoryStairs.railingPaths(e, model) ?? [RailingGeometry.path(e, model)]
+            guard let path = paths.first(where: { p in let z0 = p.map(\.z).min() ?? 0; return p.count >= 2 && z0 <= cutZ + 1.2 && z0 >= depthZ - 0.1 }) else { continue }
             let z0 = path.map(\.z).min() ?? 0
-            guard z0 <= cutZ + 1.2, z0 >= depthZ - 0.1 else { continue }
             let st = builder.stroke(.railings, cut: z0 < cutZ, o)
             let pts = path.map(\.xy)
             let hit = PolylineOffset.offset(pts, by: 0.05) + PolylineOffset.offset(pts, by: -0.05).reversed()
