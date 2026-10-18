@@ -87,6 +87,20 @@ public enum ProjectPosition {
                 continue
             }
             tx.update(e.id) { ElementTransform.apply(t, to: &$0) }
+            // Grids' per-view 2D ends (points) and bubble elbows (offsets) turn with their view.
+            if let extents = e.grid?.viewExtents {
+                tx.update(e.id) { el in
+                    el.grid?.viewExtents = extents.map { x in
+                        let k = m[x.viewID]?.view?.kind
+                        let f: Transform2? = k?.isPlan == true ? t : (k?.isVerticalCut == true && mirror ? flipAlong : nil)
+                        guard let f else { return x }
+                        var y = x
+                        y.start = x.start.map(f.apply); y.end = x.end.map(f.apply)
+                        y.elbowStart = x.elbowStart.map(f.applyVector); y.elbowEnd = x.elbowEnd.map(f.applyVector)
+                        return y
+                    }
+                }
+            }
         }
         tx.updateManageInfo { info in
             info.projectBasePoint = Vec3(t.apply(info.projectBasePoint.xy), z: info.projectBasePoint.z)
