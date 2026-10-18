@@ -93,6 +93,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
 
     // F1415 commands:
+    case feExtrusion, feBlend, feRevolve, feSweep, feSweptBlend, feVoidExtrusion, feVoidBlend, feVoidRevolve, feVoidSweep, feModelLine, feComponent, feModelText, feOpening, feControl, feReferenceLine, feReferencePlane, feDimension, feSymbolicLine, feFamilyTypes, feFamilyCategory, feLoadIntoProject, feLoadAndClose, feFinishSketch, feCancelSketch, feDefault3D, feControlSingleVertical, feControlDoubleVertical, feControlSingleHorizontal, feControlDoubleHorizontal, feFilledRegion, feMaskingRegion, feText, feWorkPlaneSet, feWorkPlaneShow, feLoadNestedFamily, fePurgeUnused, feFlexTest, feSaveFamilyAs // F1415
 
 }
 

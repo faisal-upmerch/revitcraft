@@ -73,6 +73,7 @@ final class FamilyEditorWindowController: NSWindowController, NSWindowDelegate {
         w.toolbar = tb
         updateTitle()
         model.onRename = { [weak self] _ in self?.updateTitle() }
+        model.onClose = { [weak self] in self?.close() } // F1415: Load into Project and Close
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -86,15 +87,24 @@ final class FamilyEditorWindowController: NSWindowController, NSWindowDelegate {
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undo }
 }
 
-/// Tools sketched on the family canvas (Create tab of the ribbon).
+/// Tools sketched on the family canvas (the ribbon's Create and Annotate tabs).
 enum FamilyCanvasTool: Equatable {
     /// A reference plane drawn vertically (true) or horizontally in the current view.
     case referencePlane(vertical: Bool)
     case dimension
     case symbolicLine
     case annotationLine
-    case extrusion(void: Bool)
     case label
+    /// F1415: sketch mode: the model's `sketch` (forms, regions, openings) is drawn on the canvas.
+    case sketch
+    /// F1415: the revolve's axis line, picked while sketching a revolve.
+    case axisLine
+    /// F1415: Model Line or Reference Line, drawn as a chain on the view's work plane.
+    case modelLine(reference: Bool)
+    /// F1415: Control, placed in plan.
+    case control(FamilyControlKind)
+    /// F1415: Model Text with its text, placed by a click.
+    case modelText(String)
 
     var title: String {
         switch self {
@@ -102,8 +112,12 @@ enum FamilyCanvasTool: Equatable {
         case .dimension: "Dimension"
         case .symbolicLine: "Symbolic Line"
         case .annotationLine: "Annotation Line"
-        case .extrusion(let void): void ? "Void Extrusion" : "Extrusion"
         case .label: "Label"
+        case .sketch: "Sketch"
+        case .axisLine: "Axis Line"
+        case .modelLine(let r): r ? "Reference Line" : "Model Line"
+        case .control(let k): "Control: \(k.rawValue)"
+        case .modelText: "Model Text"
         }
     }
     var prompt: String {
@@ -111,8 +125,12 @@ enum FamilyCanvasTool: Equatable {
         case .referencePlane: "Click to place the reference plane. Esc cancels."
         case .dimension: "Click the first reference plane, then a parallel one."
         case .symbolicLine, .annotationLine: "Click the start point, then the end point."
-        case .extrusion: "Drag the rectangle of the extrusion in this view."
         case .label: "Click where the label goes."
+        case .sketch: "Sketch on the canvas; Finish Edit Mode (✓ or Return) when done."
+        case .axisLine: "Click where the revolve's vertical axis goes."
+        case .modelLine: "Click the start, then each next point; Esc ends the chain."
+        case .control: "Click in plan where the flip control goes."
+        case .modelText: "Click to place the model text."
         }
     }
 }
@@ -139,7 +157,7 @@ final class FamilyEditorModel {
     let undo = UndoManager()
 
     // W4-FAMED: view state shared by the browser, ribbon, canvas and inspector.
-    var view: FamilyPreviewMode = .plan { didSet { drawingRevision += 1 } }
+    var view: FamilyPreviewMode = .plan { didSet { drawingRevision += 1; if !openViews.contains(view) { openViews.append(view) } } } // F1415: view tabs
     var detail: DetailLevel = .fine { didSet { drawingRevision += 1 } }
     var applyVisibility = true { didSet { drawingRevision += 1 } }
     /// Bumped whenever the canvas drawing must be rebuilt (evaluation, view, detail level, visibility).
@@ -150,8 +168,28 @@ final class FamilyEditorModel {
     var fitRequest = 0
     /// Cursor position readout from the canvas.
     var cursorText = ""
-    enum Sheet: String, Identifiable { case familyTypes, categoryAndParameters; var id: String { rawValue } }
+    enum Sheet: String, Identifiable { case familyTypes, categoryAndParameters, workPlane; var id: String { rawValue } }
     var sheet: Sheet?
+
+    // F1415: view tabs, 3D orbit, sketch mode, the work plane and control placement.
+    /// The family's open views (the view tabs over the canvas).
+    var openViews: [FamilyPreviewMode] = [.plan]
+    /// Direction the Default 3D view looks from (orbit).
+    var orbit = FamilyOrbit() { didSet { drawingRevision += 1 } }
+    /// True while the 3D view is being orbited: the canvas draws plain edges until the drag ends.
+    var orbiting = false { didSet { drawingRevision += 1 } }
+    /// The sketch in progress (sketch mode), or nil.
+    var sketch: FamilyEditing.Sketch?
+    /// Draw panel choice while sketching.
+    var sketchDraw: FamilySketchDraw = .line
+    /// Depth of new extrusions and blends.
+    var extrusionDepth = 0.25
+    /// Work Plane ▸ Set: the named reference plane new sketches, lines and text start from (nil = the view's own plane).
+    var workPlane: String? { didSet { drawingRevision += 1 } }
+    /// Work Plane ▸ Show.
+    var showWorkPlane = false { didSet { drawingRevision += 1 } }
+    /// Closes the window (Load into Project and Close).
+    @ObservationIgnored var onClose: (() -> Void)?
 
     init(family: FamilyDefinition, state: DocumentState, familyID: ElementID?) {
         self.family = family
@@ -357,20 +395,6 @@ final class FamilyEditorModel {
         let l = FamilyLine(shape: .arc(center: FamilyPoint("0", "0"), radius: "0.1", startDegrees: "0", sweepDegrees: "90"))
         edit("Add Arc") { $0.planLines.append(l) }
         selection = .line(l.id)
-    }
-
-    /// An extrusion from a rectangle dragged in the current view: plan gives the footprint, an elevation the width and height.
-    func addExtrusion(rect: Rect2, void: Bool) {
-        guard rect.width > 0.001, rect.height > 0.001 else { return }
-        let s: FamilySolid
-        switch view {
-        case .plan: s = FamilyEditing.newExtrusion(family, rect: rect, zMin: 0, zMax: max(0.2, min(rect.width, rect.height)), void: void)
-        case .front: s = FamilyEditing.newExtrusion(family, rect: Rect2(min: Vec2(rect.min.x, -0.1), max: Vec2(rect.max.x, 0.1)), zMin: rect.min.y, zMax: rect.max.y, void: void)
-        case .right: s = FamilyEditing.newExtrusion(family, rect: Rect2(min: Vec2(-0.1, rect.min.x), max: Vec2(0.1, rect.max.x)), zMin: rect.min.y, zMax: rect.max.y, void: void)
-        case .threeD: message = "Sketch extrusions in plan or elevation views."; return
-        }
-        edit(void ? "Add Void Extrusion" : "Add Extrusion") { $0.solids.append(s) }
-        selection = .solid(s.id)
     }
 
     func addLabel(at p: Vec2) {
@@ -584,23 +608,11 @@ final class FamilyEditorModel {
         } catch { message = "Save failed: \(error.localizedDescription)" }
     }
 
-    /// Loads (or reloads) the family into the project, asking how to treat existing type values on reload.
-    func loadIntoProject() {
-        flex()
-        if let r = flexResults, !r.isEmpty {
-            message = "Fix the flex-test problems before loading into the project."
-            return
-        }
-        let existing = familyID.flatMap { state.model[$0]?.family != nil ? $0 : nil } ?? state.model.family(named: family.name)?.id
-        var mode = FamilyReloadMode.keepProjectValues
-        if existing != nil {
-            guard let m = FamilyLoader.askReloadMode(family.name) else { return }
-            mode = m
-        }
-        FamilyLoader(state: state).load(family, replacing: existing, mode: mode)
-        // W4-FAMED: a new family attaches to the project family it created, so a later rename reloads it instead of adding a second family.
-        if familyID == nil { familyID = existing ?? state.model.family(named: family.name)?.id; onRename?(family.name) }
-        message = existing == nil ? "Loaded “\(family.name)” into the project." : "Reloaded “\(family.name)” in the project."
+    /// Attaches the window to the project family a first Load into Project created (F1415: `loadIntoProject` lives in
+    /// FamilyEditor+F1415.swift with Load into Project and Close).
+    func attach(_ id: ElementID?) {
+        familyID = id
+        onRename?(family.name)
     }
 }
 

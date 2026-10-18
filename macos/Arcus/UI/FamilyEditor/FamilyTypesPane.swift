@@ -15,6 +15,8 @@ struct FamilyTypesDialog: View {
     @State private var newParamInstance = false
     @State private var newParamGroup: ParameterGroup = .dimensions
     @State private var tableSelection: String?
+    /// F1415: the family as it was when the dialog opened; Cancel restores it (RevitCraft's Family Types is modal).
+    @State private var opened: (family: FamilyDefinition, type: String)?
 
     var sorted: [FamilyParameter] { model.family.parameters.sorted { ($0.group, $0.name) < ($1.group, $1.name) } }
 
@@ -103,9 +105,19 @@ struct FamilyTypesDialog: View {
                 if let m = model.message { Text(m).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
                 Spacer()
                 Button("Flex Test") { model.flex() }
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
+                Button("Cancel") { // F1415
+                    if let o = opened, o.family != model.family {
+                        model.edit("Cancel Family Types") { $0 = o.family }
+                        model.currentType = model.family.type(named: o.type) != nil ? o.type : (model.family.types.first?.name ?? "")
+                    }
+                    dismiss()
+                }
+                .keyboardShortcut(.cancelAction)
+                .help("Discard the changes made since Family Types opened.")
+                Button("OK") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
+        .onAppear { if opened == nil { opened = (model.family, model.currentType) } }
         .padding(16)
         .frame(minWidth: 820, idealWidth: 940, minHeight: 480, idealHeight: 560)
     }

@@ -6,6 +6,9 @@ import ArcusDomain
 // W4-FAMED: the family canvas. Plan, elevation and 3D views of the family drawn with CoreGraphics, navigated like the
 // project's 2D views (wheel zooms about the cursor, trackpad scroll and middle-drag pan, pinch zooms, double-click fits),
 // with selection, plane dragging and the Create tools sketched directly on it.
+// F1415: Back and Left elevations (mirrored horizontal axis), orbit in the Default 3D view, sketch mode (loops, paths and
+// rectangles whose points lock to the planes they snap to), model and reference lines, controls, model text, masking
+// regions and the work plane.
 
 struct FamilyCanvas: NSViewRepresentable {
     let model: FamilyEditorModel
@@ -18,10 +21,12 @@ struct FamilyCanvas: NSViewRepresentable {
     func updateNSView(_ v: FamilyCanvasView, context: Context) {
         if v.revision != model.drawingRevision {
             v.revision = model.drawingRevision
-            v.drawing = FamilyPreviewDrawing.make(model.evaluated, model.family, mode: model.view, detail: model.detail, applyVisibility: model.applyVisibility, formatLength: model.length)
+            v.drawing = FamilyPreviewDrawing.make(model.evaluated, model.family, mode: model.view, detail: model.detail, applyVisibility: model.applyVisibility,
+                                                  orbit: model.orbit, fast: model.orbiting, formatLength: model.length)
         }
         v.selection = model.selection
-        if v.tool != model.tool { v.tool = model.tool; v.pending = nil; v.pendingPlane = nil }
+        v.sketch = model.sketch // F1415
+        if v.tool != model.tool { v.tool = model.tool; v.pending = nil; v.pendingPlane = nil; v.chainStart = nil; v.pendingCorner = nil }
         if v.viewMode != model.view { v.viewMode = model.view; v.fitted = false }
         if v.fitSeen != model.fitRequest { v.fitSeen = model.fitRequest; v.fitted = false }
         if !v.fitted { v.zoomToFit() }
@@ -45,7 +50,11 @@ final class FamilyCanvasView: NSView {
     /// First plane or point of a two-click tool.
     var pending: Vec2?
     var pendingPlane: String?
-    private enum Drag { case none, pan(CGPoint), plane(String, Double), rubber(Vec2, Vec2), maybeSelect }
+    /// F1415: the sketch being drawn, the last point of a model-line chain and a rectangle's first corner (sketch coordinates).
+    var sketch: FamilyEditing.Sketch?
+    var chainStart: FamilyEditing.SketchVertex?
+    var pendingCorner: FamilyEditing.SketchVertex?
+    private enum Drag { case none, pan(CGPoint), plane(String, Double), rubber(FamilyEditing.SketchVertex, FamilyEditing.SketchVertex), maybeSelect, orbit(CGPoint, moved: Bool) }
     private var drag: Drag = .none
     private var tracking: NSTrackingArea?
 
@@ -92,10 +101,18 @@ final class FamilyCanvasView: NSView {
 
     private func planeLines() -> [FamilyEditing.PlaneLine] { drawing.planes.map { .init(name: $0.name, vertical: $0.vertical, value: $0.value) } }
 
+    /// F1415: the view's sketch frame (plan in 3D, where nothing is sketched).
+    private var viewFrame: FamilyEditing.ViewFrame { viewMode.frame ?? .plan }
+    /// A view point snapped to the planes (locking to them) or the millimetre, in sketch coordinates.
+    private func vertex(_ p: Vec2) -> FamilyEditing.SketchVertex { FamilyEditing.snapVertex(p, frame: viewFrame, planes: planeLines(), tolerance: tolerance) }
+    /// A sketch-coordinate point on screen.
+    private func screen(_ v: FamilyEditing.SketchVertex, in f: FamilyEditing.ViewFrame? = nil) -> CGPoint { screen((f ?? viewFrame).view(v.point)) }
+
     private func hitTest(_ p: Vec2) -> FamilyEditing.Item? {
         if let n = FamilyEditing.hitPlane(planeLines(), at: p, tolerance: tolerance) { return .plane(n) }
         if let d = hitDimension(p) { return .dimension(d) }
         for l in drawing.labels where l.item != nil && l.position.distance(to: p) < tolerance * 3 { return l.item }
+        for c in drawing.controls where c.item != nil && c.position.distance(to: p) < tolerance * 3 { return c.item } // F1415
         return FamilyEditing.hitOutline(drawing.outlines, at: p, tolerance: tolerance)
     }
 
@@ -116,9 +133,15 @@ final class FamilyCanvasView: NSView {
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         let raw = modelPoint(event)
-        if event.clickCount == 2 && tool == nil { zoomToFit(); return }
+        if event.clickCount == 2 && tool == nil && viewMode != .threeD { zoomToFit(); return }
         if event.modifierFlags.contains(.option) { drag = .pan(convert(event.locationInWindow, from: nil)); return }
         guard let model else { return }
+        if viewMode == .threeD && tool == nil {
+            // F1415: click selects, drag orbits (Default 3D view).
+            model.select(hitTest(raw))
+            drag = .orbit(convert(event.locationInWindow, from: nil), moved: false)
+            return
+        }
         switch tool {
         case nil:
             let hit = hitTest(raw)
@@ -126,7 +149,7 @@ final class FamilyCanvasView: NSView {
             if case .plane(let n)? = hit, let pl = drawing.planes.first(where: { $0.name == n }) { drag = .plane(n, pl.vertical ? raw.x : raw.y) } else { drag = .maybeSelect }
         case .referencePlane(let vertical)?:
             let p = snap(raw)
-            model.addPlane(vertical: vertical, at: vertical ? p.x : p.y)
+            model.addPlane(vertical: vertical, at: vertical ? p.x * viewMode.uSign : p.y) // F1415: Back/Left run −X/−Y
         case .dimension?:
             guard let n = FamilyEditing.hitPlane(planeLines(), at: raw, tolerance: tolerance) else { model.message = "Click a reference plane."; return }
             if let a = pendingPlane {
@@ -135,10 +158,22 @@ final class FamilyCanvasView: NSView {
         case .symbolicLine?, .annotationLine?:
             let p = snap(raw)
             if let a = pending { model.addLine(from: a, to: p, annotation: tool == .annotationLine); pending = nil } else { pending = p }
-        case .extrusion?:
-            drag = .rubber(snap(raw), snap(raw))
         case .label?:
             model.addLabel(at: snap(raw))
+        case .sketch?:
+            guard viewMode != .threeD else { return }
+            let v = vertex(raw)
+            if model.sketchDraw == .rectangle, sketch?.drawsPath == false { drag = .rubber(v, v) } else { model.addSketchVertex(v) }
+        case .axisLine?:
+            model.setSketchAxis(vertex(raw))
+        case .modelLine(let reference)?:
+            let v = vertex(raw)
+            if let a = chainStart { model.addModelLine(from: a, to: v, reference: reference) }
+            chainStart = v // the next line starts where this one ended
+        case .control(let kind)?:
+            model.placeControl(at: vertex(raw), kind: kind)
+        case .modelText(let text)?:
+            model.placeModelText(text, at: vertex(raw))
         }
         needsDisplay = true
     }
@@ -154,7 +189,17 @@ final class FamilyCanvasView: NSView {
             guard let pl = drawing.planes.first(where: { $0.name == n }) else { return }
             drag = .plane(n, pl.vertical ? p.x : p.y)
         case .rubber(let a, _):
-            drag = .rubber(a, snap(modelPoint(event)))
+            drag = .rubber(a, vertex(modelPoint(event)))
+        case .orbit(let last, let moved):
+            guard let model else { return }
+            let dx = Double(sp.x - last.x), dy = Double(sp.y - last.y)
+            guard moved || abs(dx) + abs(dy) > 3 else { return }
+            var o = model.orbit
+            o.yaw -= dx * 0.4
+            o.pitch = max(-89, min(89, o.pitch + dy * 0.4))
+            model.orbiting = true
+            model.orbit = o
+            drag = .orbit(sp, moved: true)
         default: return
         }
         needsDisplay = true
@@ -165,16 +210,25 @@ final class FamilyCanvasView: NSView {
         switch drag {
         case .plane(let n, let v):
             guard let pl = drawing.planes.first(where: { $0.name == n }), abs(v - pl.value) > 1e-6 else { return }
-            model?.movePlane(n, to: v)
+            model?.movePlane(n, to: pl.vertical ? v * viewMode.uSign : v)
         case .rubber(let a, let b):
-            if case .extrusion(let void)? = tool { model?.addExtrusion(rect: Rect2(points: [a, b]), void: void) }
+            // F1415: a dragged rectangle, or a rectangle by two clicks.
+            if abs(a.u - b.u) > tolerance && abs(a.v - b.v) > tolerance { model?.addSketchRectangle(a, b); pendingCorner = nil }
+            else if let c = pendingCorner { model?.addSketchRectangle(c, a); pendingCorner = nil }
+            else { pendingCorner = a }
+        case .orbit(_, let moved):
+            if moved { model?.orbiting = false }
         default: break
         }
     }
 
-    override func otherMouseDown(with event: NSEvent) { drag = .pan(convert(event.locationInWindow, from: nil)) }
+    override func otherMouseDown(with event: NSEvent) {
+        let sp = convert(event.locationInWindow, from: nil)
+        // F1415: as in project 3D views, Shift + middle drag orbits; middle drag pans.
+        drag = viewMode == .threeD && event.modifierFlags.contains(.shift) ? .orbit(sp, moved: false) : .pan(sp)
+    }
     override func otherMouseDragged(with event: NSEvent) { mouseDragged(with: event) }
-    override func otherMouseUp(with event: NSEvent) { drag = .none }
+    override func otherMouseUp(with event: NSEvent) { mouseUp(with: event) }
     override func rightMouseDown(with event: NSEvent) {
         guard let model else { return }
         let hit = hitTest(modelPoint(event))
@@ -212,9 +266,17 @@ final class FamilyCanvasView: NSView {
     override func keyDown(with event: NSEvent) {
         guard let model else { super.keyDown(with: event); return }
         switch event.keyCode {
-        case 51, 117: model.deleteSelection()
+        case 51, 117:
+            if model.sketch != nil { model.undoSketchVertex() } else { model.deleteSelection() }
+        case 36, 76 where model.sketch != nil: model.finishSketch() // F1415: Return finishes the sketch
         case 53:
-            if model.tool != nil { model.tool = nil; pending = nil; pendingPlane = nil } else { model.select(nil) }
+            if model.sketch != nil {
+                // F1415: in sketch mode Esc ends the chain; Cancel Edit Mode leaves it (a blank sketch is left at once).
+                if pendingCorner != nil || model.tool == .axisLine { pendingCorner = nil; model.tool = .sketch }
+                else if model.sketch?.vertices.isEmpty == true { model.cancelSketch() }
+            } else if case .modelLine? = model.tool, chainStart != nil {
+                chainStart = nil
+            } else if model.tool != nil { model.tool = nil; pending = nil; pendingPlane = nil } else { model.select(nil) }
             needsDisplay = true
         default:
             if event.charactersIgnoringModifiers == "f" && !event.modifierFlags.contains(.command) { zoomToFit() } else { super.keyDown(with: event) }
@@ -258,7 +320,9 @@ final class FamilyCanvasView: NSView {
             let path = CGMutablePath()
             path.addLines(between: f.polygon.points.map(screen)); path.closeSubpath()
             ctx.addPath(path)
-            ctx.setFillColor((isSelected(f.item) ? selectColor.withAlphaComponent(0.22) : isHover(f.item) ? hoverColor.withAlphaComponent(0.18) : NSColor(white: isDark ? 0.75 : 0.5, alpha: 0.22)).cgColor)
+            // F1415: a masking region hides what is under it.
+            let base = f.masking ? Tokens.canvas : NSColor(white: isDark ? 0.75 : 0.5, alpha: 0.22)
+            ctx.setFillColor((isSelected(f.item) ? selectColor.withAlphaComponent(0.22) : isHover(f.item) ? hoverColor.withAlphaComponent(0.18) : base).cgColor)
             ctx.fillPath()
         }
         for st in drawing.strokes {
@@ -273,6 +337,7 @@ final class FamilyCanvasView: NSView {
             case .swing: ctx.setStrokeColor((sel ? selectColor : hov ? hoverColor : NSColor.secondaryLabelColor).cgColor); ctx.setLineWidth(sel ? 2 : 0.8)
             case .void: ctx.setStrokeColor((sel ? selectColor : NSColor.systemOrange).cgColor); ctx.setLineWidth(sel ? 2 : 1); ctx.setLineDash(phase: 0, lengths: [4, 2])
             case .hiddenByVisibility: ctx.setStrokeColor((sel ? selectColor : NSColor.secondaryLabelColor.withAlphaComponent(0.5)).cgColor); ctx.setLineWidth(0.8); ctx.setLineDash(phase: 0, lengths: [2, 2])
+            case .reference: ctx.setStrokeColor((sel ? selectColor : hov ? hoverColor : planeColor).cgColor); ctx.setLineWidth(sel ? 2 : 1.1) // F1415: reference lines are green
             }
             ctx.strokePath()
             ctx.setLineDash(phase: 0, lengths: [])
@@ -288,7 +353,14 @@ final class FamilyCanvasView: NSView {
             text(l.text, at: CGPoint(x: box.minX + 5, y: box.minY + 2), size: 10, color: sel ? selectColor : ink)
         }
 
+        for c in drawing.controls { // F1415: flip controls, thin arrows
+            let col = isSelected(c.item) ? selectColor : isHover(c.item) ? hoverColor : NSColor.systemBlue
+            drawControl(ctx, at: screen(c.position), kind: c.kind, color: col)
+        }
+
         drawDimensions(ctx)
+        drawWorkPlane(ctx)
+        drawSketch(ctx)
         drawToolFeedback(ctx)
     }
 
@@ -410,14 +482,124 @@ final class FamilyCanvasView: NSView {
         case .symbolicLine, .annotationLine:
             if let a = pending { ctx.move(to: screen(a)); ctx.addLine(to: screen(c)); ctx.strokePath() }
             crosshair(ctx, at: screen(c))
-        case .extrusion:
-            if case .rubber(let a, let b) = drag {
-                let r = CGRect(origin: screen(a), size: .zero).union(CGRect(origin: screen(b), size: .zero))
-                ctx.setFillColor(Tokens.selection.withAlphaComponent(0.12).cgColor); ctx.fill(r); ctx.stroke(r)
-            } else { crosshair(ctx, at: screen(c)) }
-        case .label, .dimension:
+        case .label, .dimension, .control, .modelText:
             crosshair(ctx, at: screen(c))
+        case .sketch, .axisLine:
+            crosshair(ctx, at: screen(vertex(cursor)))
+        case .modelLine(let reference):
+            let v = vertex(cursor)
+            if let a = chainStart {
+                ctx.setStrokeColor((reference ? NSColor(calibratedRed: 0.1, green: 0.55, blue: 0.2, alpha: 1) : NSColor.labelColor).cgColor)
+                ctx.move(to: screen(a)); ctx.addLine(to: screen(v)); ctx.strokePath()
+            }
+            crosshair(ctx, at: screen(v))
         }
+    }
+
+    // MARK: F1415 drawing
+
+    /// A flip control: a thin arrow, or two opposed arrows side by side for double controls (RevitCraft `paint_control`).
+    private func drawControl(_ ctx: CGContext, at p: CGPoint, kind: FamilyControlKind, color: NSColor) {
+        ctx.setStrokeColor(color.cgColor)
+        ctx.setLineWidth(1.2)
+        let len: CGFloat = 9, head: CGFloat = 4
+        // Screen y runs down: "up" in plan is −y.
+        let dir = kind.isHorizontal ? CGPoint(x: 1, y: 0) : CGPoint(x: 0, y: -1)
+        let side = CGPoint(x: -dir.y, y: dir.x)
+        func arrow(_ base: CGPoint, _ d: CGPoint) {
+            let tail = CGPoint(x: base.x - d.x * len, y: base.y - d.y * len), tip = CGPoint(x: base.x + d.x * len, y: base.y + d.y * len)
+            ctx.move(to: tail); ctx.addLine(to: tip)
+            ctx.move(to: tip); ctx.addLine(to: CGPoint(x: tip.x - d.x * head + d.y * head, y: tip.y - d.y * head - d.x * head))
+            ctx.move(to: tip); ctx.addLine(to: CGPoint(x: tip.x - d.x * head - d.y * head, y: tip.y - d.y * head + d.x * head))
+        }
+        if kind.isDouble {
+            arrow(CGPoint(x: p.x + side.x * 3, y: p.y + side.y * 3), dir)
+            arrow(CGPoint(x: p.x - side.x * 3, y: p.y - side.y * 3), CGPoint(x: -dir.x, y: -dir.y))
+        } else {
+            arrow(p, dir)
+        }
+        ctx.strokePath()
+    }
+
+    /// Work Plane ▸ Show: the work plane tinted when it faces the view, or its edge drawn heavy when seen edge-on.
+    private func drawWorkPlane(_ ctx: CGContext) {
+        guard let model, model.showWorkPlane, viewMode != .threeD else { return }
+        let tint = Tokens.selection
+        if let n = model.workPlane, let pl = drawing.planes.first(where: { $0.name == n }) {
+            ctx.setStrokeColor(tint.withAlphaComponent(0.35).cgColor)
+            ctx.setLineWidth(6)
+            if pl.vertical { let x = screen(Vec2(pl.value, 0)).x; ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: bounds.height)) }
+            else { let y = screen(Vec2(0, pl.value)).y; ctx.move(to: CGPoint(x: 0, y: y)); ctx.addLine(to: CGPoint(x: bounds.width, y: y)) }
+            ctx.strokePath()
+            text("Work Plane: \(n)", at: CGPoint(x: 8, y: bounds.height - 34), size: 10, color: tint)
+            return
+        }
+        ctx.setFillColor(tint.withAlphaComponent(0.05).cgColor)
+        ctx.fill(bounds)
+        let name = model.workPlane ?? viewFrame.plane.label
+        text("Work Plane: \(name)", at: CGPoint(x: 8, y: bounds.height - 34), size: 10, color: tint)
+    }
+
+    /// Sketch mode: the loop or path being drawn (magenta), the stages already finished (halftone), a revolve's axis and a
+    /// sweep's profile plane.
+    private func drawSketch(_ ctx: CGContext) {
+        guard let s = sketch, let model, viewMode != .threeD else { return }
+        let ink = NSColor.systemPink
+        let half = ink.withAlphaComponent(0.35)
+        ctx.setLineWidth(1.4)
+        if s.form == .blend, s.stage == 1, viewMode == .plan, s.base.count >= 3 {
+            let pts = s.base.map { screen(Vec2(model.value(of: $0.x), model.value(of: $0.y))) }
+            ctx.setStrokeColor(half.cgColor); ctx.addLines(between: pts); ctx.closePath(); ctx.strokePath()
+        }
+        if s.form == .sweep || s.form == .sweptBlend, s.stage > 0 {
+            let path = s.path.map { Vec2(model.value(of: $0.x), model.value(of: $0.y)) }
+            if viewMode == .plan {
+                ctx.setStrokeColor(half.cgColor); ctx.setLineWidth(2); ctx.addLines(between: path.map(screen)); ctx.strokePath(); ctx.setLineWidth(1.4)
+            } else if let st = FamilyEditing.profileStation(path, form: s.form, atEnd: s.stage == 2) {
+                // The profile plane seen edge-on, at the path's height.
+                let u = st.point.dot(viewFrame.uAxisPlan) * viewFrame.uSign, z0 = model.value(of: s.pathZ)
+                ctx.setStrokeColor(half.cgColor); ctx.setLineDash(phase: 0, lengths: [6, 3])
+                let x = screen(Vec2(u, 0)).x, y = screen(Vec2(0, z0)).y
+                ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: bounds.height))
+                ctx.move(to: CGPoint(x: 0, y: y)); ctx.addLine(to: CGPoint(x: bounds.width, y: y))
+                ctx.strokePath(); ctx.setLineDash(phase: 0, lengths: [])
+                text("Profile plane", at: CGPoint(x: x + 4, y: y - 14), size: 9, color: half)
+            }
+        }
+        if s.form == .revolve, viewMode.frame?.plane == s.frame.plane {
+            let x = screen(Vec2(s.axisU * viewFrame.uSign, 0)).x
+            ctx.setStrokeColor(ink.cgColor); ctx.setLineDash(phase: 0, lengths: [10, 3, 2, 3])
+            ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: bounds.height)); ctx.strokePath()
+            ctx.setLineDash(phase: 0, lengths: [])
+            text("Axis", at: CGPoint(x: x + 4, y: 22), size: 9, color: ink)
+        }
+        guard s.frame == viewFrame else {
+            if !s.vertices.isEmpty { text("The sketch is in \(FamilyPreviewMode.view(for: s.frame).viewTitle).", at: CGPoint(x: 8, y: 40), size: 11, color: ink) }
+            return
+        }
+        let pts = s.vertices.map { screen($0) }
+        ctx.setStrokeColor(ink.cgColor)
+        if pts.count >= 2 { ctx.addLines(between: pts); ctx.strokePath() }
+        if !s.drawsPath, pts.count >= 3 {
+            ctx.setLineDash(phase: 0, lengths: [3, 3]); ctx.move(to: pts[pts.count - 1]); ctx.addLine(to: pts[0]); ctx.strokePath(); ctx.setLineDash(phase: 0, lengths: [])
+        }
+        for p in pts { ctx.fillEllipse(in: CGRect(x: p.x - 2.5, y: p.y - 2.5, width: 5, height: 5)) }
+        ctx.setFillColor(ink.cgColor)
+        // Rubber bands.
+        if let cursor, tool == .sketch {
+            let c = vertex(cursor)
+            if case .rubber(let a, let b) = drag { rect(ctx, screen(a), screen(b), ink) }
+            else if let a = pendingCorner { rect(ctx, screen(a), screen(c), ink) }
+            else if model.sketchDraw == .line || s.drawsPath, let last = pts.last {
+                ctx.setStrokeColor(ink.withAlphaComponent(0.7).cgColor); ctx.move(to: last); ctx.addLine(to: screen(c)); ctx.strokePath()
+            }
+        }
+    }
+
+    private func rect(_ ctx: CGContext, _ a: CGPoint, _ b: CGPoint, _ color: NSColor) {
+        let r = CGRect(origin: a, size: .zero).union(CGRect(origin: b, size: .zero))
+        ctx.setFillColor(color.withAlphaComponent(0.08).cgColor); ctx.fill(r)
+        ctx.setStrokeColor(color.cgColor); ctx.stroke(r)
     }
 
     private func crosshair(_ ctx: CGContext, at p: CGPoint) {
