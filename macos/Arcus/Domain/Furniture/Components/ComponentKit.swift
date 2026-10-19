@@ -552,7 +552,7 @@ public enum ComponentKit {
     public static func validate(_ d: ComponentDefinition) -> [String] {
         var out: [String] = []
         if d.types.isEmpty { out.append("\(d.name): no types") }
-        if d.types.count > 6 { out.append("\(d.name): \(d.types.count) types (1–4 standard sizes expected)") }
+        if d.types.count > 8 { out.append("\(d.name): \(d.types.count) types (1–4 standard sizes expected, slides up to 8)") }
         if Set(d.types.map(\.name)).count != d.types.count { out.append("\(d.name): duplicate type names") }
         if d.family.solids.isEmpty { out.append("\(d.name): no geometry") }
         if d.tags.isEmpty { out.append("\(d.name): no search tags") }
