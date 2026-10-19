@@ -91,9 +91,9 @@ struct ViewCommands {
 
     func toggleCategory(_ c: Category) {
         guard let v = state.editingViewID, let vd = model[v]?.view else { return }
-        let on = !vd.visibility.isCategoryVisible(c)
+        let on = !vd.visibility.isCategoryVisible(c, in: vd.kind)
         state.session.perform(on ? "Show \(c.displayName)" : "Hide \(c.displayName)") { tx in
-            tx.update(v) { e in e.view?.visibility.setCategoryVisible(c, on) }
+            tx.update(v) { e in e.view?.visibility.setCategoryVisible(c, on, in: vd.kind) }
         }
         if let t = vd.templateID, model[t]?.viewTemplate?.visibility != nil {
             state.show("The view template “\(model[t]?.name ?? "")” controls visibility in this view; change it there.", error: true)

@@ -14,6 +14,12 @@ struct S3D2Tests {
     static func query(_ cam: ScreenProjection3D, at p: Vec2) -> Snap3DQuery { Snap3DQuery(pointer: p, camera: cam) }
     static func screen(_ cam: ScreenProjection3D, _ p: Vec3) throws -> Vec2 { try #require(cam.project(p)) }
     static let view3D = Element(id: ElementID(UInt64.max - 77), category: .views, name: "{3D}", data: .view(ViewData(kind: .threeD)))
+    /// A 3D view whose V/G turns reference planes on (3D views hide them by default, as in Revit).
+    static let view3DPlanes: Element = {
+        var d = ViewData(kind: .threeD)
+        d.visibility.setCategoryVisible(.referencePlanes, true, in: .threeD)
+        return Element(id: ElementID(UInt64.max - 78), category: .views, name: "{3D} planes", data: .view(d))
+    }()
 
     /// A template with a grid (0,0)–(10,0), a reference plane x = 12 and a model line on Level 2.
     func datumModel() throws -> (m: BIMModel, ids: ProjectTemplates.Ids, grid: ElementID, plane: ElementID, line: ElementID) {
@@ -34,7 +40,7 @@ struct S3D2Tests {
 
     @Test func gridsLevelsReferencePlanesAndModelLinesAreDrawnInThreeD() throws {
         let (m, ids, grid, plane, line) = try datumModel()
-        let items = Lines3D.items(model: m, view: Self.view3D, resolver: VisibilityResolver(model: m, view: Self.view3D))
+        let items = Lines3D.items(model: m, view: Self.view3DPlanes, resolver: VisibilityResolver(model: m, view: Self.view3DPlanes))
         let g = try #require(items.first { $0.id == grid })
         let gz = Set(g.mesh.positions.map(\.z))
         #expect(gz == [-1, 7], "the grid's vertical extent: \(gz)")
@@ -49,15 +55,31 @@ struct S3D2Tests {
 
         // Hidden in the view: not drawn (and so not snapped).
         var hidden = ViewData(kind: .threeD)
+        hidden.visibility.setCategoryVisible(.referencePlanes, true, in: .threeD)
         hidden.visibility.hiddenCategories = [.grids, .levels]
         let v = Element(id: Self.view3D.id, category: .views, data: .view(hidden))
         let shown = Lines3D.items(model: m, view: v, resolver: VisibilityResolver(model: m, view: v)).map(\.id)
         #expect(!shown.contains(grid) && !shown.contains(ids.levels[0]) && shown.contains(plane))
     }
 
+    @Test func threeDViewsHideReferencePlanesUntilVisibilityGraphicsTurnsThemOn() throws {
+        let (m, ids, grid, plane, _) = try datumModel()
+        let shown = Lines3D.items(model: m, view: Self.view3D, resolver: VisibilityResolver(model: m, view: Self.view3D)).map(\.id)
+        #expect(shown.contains(grid) && shown.contains(ids.levels[0]) && !shown.contains(plane), "grids and levels show; reference planes don't")
+        #expect(!Lines3D.traces(on: .level(0), model: m, visible: { VisibilityResolver(model: m, view: Self.view3D).resolve($0) != nil })
+            .contains { $0.category == .referencePlanes }, "and don't snap where they cross the work plane")
+        var vg = VisibilityGraphics()
+        #expect(!vg.isCategoryVisible(.referencePlanes, in: .threeD) && vg.isCategoryVisible(.referencePlanes, in: .floorPlan))
+        vg.setCategoryVisible(.referencePlanes, true, in: .threeD)
+        #expect(vg.isCategoryVisible(.referencePlanes, in: .threeD) && vg.shownOptInCategories == [.referencePlanes])
+        #expect(Lines3D.items(model: m, view: Self.view3DPlanes, resolver: VisibilityResolver(model: m, view: Self.view3DPlanes)).contains { $0.id == plane })
+        vg.setCategoryVisible(.referencePlanes, false, in: .threeD)
+        #expect(!vg.isCategoryVisible(.referencePlanes, in: .threeD) && vg.shownOptInCategories == nil)
+    }
+
     @Test func datumLinesSnapInThreeDWithTheirNames() throws {
         let (m, _, grid, plane, _) = try datumModel()
-        let index = Snap3DIndex(model: m, view: Self.view3D)
+        let index = Snap3DIndex(model: m, view: Self.view3DPlanes)
         let cam = ScreenProjection3D.looking(from: Vec3(-8, -16, 12), at: Vec3(6, 0, 3), perspective: true, size: Vec2(1200, 900))
         let top = Vec3(10, 0, 7)
         let c = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, top) + Vec2(2, 1))))
@@ -69,6 +91,7 @@ struct S3D2Tests {
         let mid = Vec3(12, 0, b.min.z + 0.37 * (b.max.z - b.min.z))
         // (Levels hidden: their outlines cross the centre line on screen, an apparent intersection.)
         var noLevels = ViewData(kind: .threeD)
+        noLevels.visibility.setCategoryVisible(.referencePlanes, true, in: .threeD)
         noLevels.visibility.hiddenCategories = [.levels]
         let plain = Snap3DIndex(model: m, view: Element(id: Self.view3D.id, category: .views, data: .view(noLevels)))
         let r = try #require(plain.snap(Self.query(cam, at: try Self.screen(cam, mid))))
@@ -297,7 +320,7 @@ struct S3D2Tests {
         for p in [Vec2(2, 1), Vec2(8, 1)] { let i = ToolInput(point: p, rawPoint: p); tool.pointerMoved(i); tool.pointerDown(i) }
         let made = try #require(ctx.model.elements(.referencePlanes).first { $0.referencePlane?.plane3D != nil })
         #expect(WorkPlanes.frame(.referencePlane(made.id), ctx.model)?.isHorizontal == true, "usable as a work plane")
-        let lines = Lines3D.items(model: ctx.model, view: Self.view3D, resolver: VisibilityResolver(model: ctx.model, view: Self.view3D))
+        let lines = Lines3D.items(model: ctx.model, view: Self.view3DPlanes, resolver: VisibilityResolver(model: ctx.model, view: Self.view3DPlanes))
         #expect(lines.first { $0.id == made.id }?.mesh.positions.allSatisfy { abs($0.z - 1) < 1e-9 } == true, "drawn flat at 1 m in 3D")
     }
 

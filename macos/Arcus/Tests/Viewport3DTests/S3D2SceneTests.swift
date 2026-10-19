@@ -17,7 +17,11 @@ struct S3D2SceneTests {
         let grid = tx.create(.grids, name: "A", data: .grid(GridData(curve: .line(Segment2(Vec2(0, 0), Vec2(10, 0))))))
         let plane = tx.create(.referencePlanes, name: "", data: .referencePlane(ReferencePlaneData(line: Segment2(Vec2(5, -4), Vec2(5, 4)))))
         m = try tx.commit().model
-        let view = Element(id: ElementID(UInt64.max - 5), category: .views, name: "{3D}", data: .view(ViewData(kind: .threeD)))
+        let plain = Element(id: ElementID(UInt64.max - 5), category: .views, name: "{3D}", data: .view(ViewData(kind: .threeD)))
+        #expect(!Set(SceneBuilder.build(model: m, view: plain).elements.map(\.id)).contains(plane), "3D views hide reference planes by default")
+        var shown = ViewData(kind: .threeD)
+        shown.visibility.setCategoryVisible(.referencePlanes, true, in: .threeD)
+        let view = Element(id: plain.id, category: .views, name: "{3D}", data: .view(shown))
         let scene = SceneBuilder.build(model: m, view: view)
         let ids = Set(scene.elements.map(\.id))
         #expect(ids.isSuperset(of: [level, grid, plane]))
@@ -25,7 +29,7 @@ struct S3D2SceneTests {
         #expect(g.isLinesOnly && g.parts[0].mesh.normals.count == g.parts[0].mesh.positions.count, "uploadable edge-only geometry")
         #expect(abs(g.bounds.min.z) < 1e-9 && abs(g.bounds.max.z - 3.5) < 1e-9, "from the lowest to the highest level")
 
-        var hidden = ViewData(kind: .threeD)
+        var hidden = shown
         hidden.visibility.hiddenElements = [grid]
         hidden.visibility.hiddenCategories = [.referencePlanes]
         let v2 = Element(id: view.id, category: .views, data: .view(hidden))

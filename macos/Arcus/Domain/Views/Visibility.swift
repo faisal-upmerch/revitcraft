@@ -100,6 +100,7 @@ public struct VisibilityResolver: Sendable {
         if let iso = temp.isolatedCategories, !iso.contains(e.category), e.category.isModel || e.category.isAnnotation { return nil }
         if temp.hiddenElements.contains(e.id) || temp.hiddenCategories.contains(e.category) { return nil }
         if vg.hiddenElements.contains(e.id) || vg.hiddenCategories.contains(e.category) { return nil }
+        if data.kind == .threeD, e.category == .referencePlanes, vg.shownOptInCategories?.contains(.referencePlanes) != true { return nil } // 3D views hide reference planes until V/G turns them on
         if !optionVisible(e) { return nil }
         if data.discipline == .structural, e.category.isModel,
            ![.structuralColumns, .structuralFraming, .floors, .walls, .levels, .grids, .stairs].contains(e.category), !Category.f34Structural.contains(e.category) { // F34

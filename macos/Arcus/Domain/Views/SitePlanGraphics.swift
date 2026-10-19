@@ -5,26 +5,31 @@ extension VisibilityResolver {
     /// Categories that stay hidden unless the view turns them on (the project base point and survey point).
     public static let optInCategories: Set<Category> = [.projectBasePoint, .surveyPoint]
 
+    /// The opt-in categories of a view of `kind`: 3D views also keep reference planes hidden until turned on, as in Revit.
+    public static func optInCategories(for kind: ViewKind?) -> Set<Category> {
+        kind == .threeD ? optInCategories.union([.referencePlanes]) : optInCategories
+    }
+
     /// Whether a category without its own elements (cameras, base point, survey point) is shown in this view.
     public func categoryShown(_ c: Category) -> Bool {
         if temp.revealHidden { return true }
         if vg.hiddenCategories.contains(c) || temp.hiddenCategories.contains(c) { return false }
         if let iso = temp.isolatedCategories, !iso.contains(c) { return false }
-        if VisibilityResolver.optInCategories.contains(c) { return vg.shownOptInCategories?.contains(c) == true }
+        if VisibilityResolver.optInCategories(for: data.kind).contains(c) { return vg.shownOptInCategories?.contains(c) == true }
         return true
     }
 }
 
 extension VisibilityGraphics {
-    /// Whether the view shows a category, honouring opt-in categories (hidden until turned on).
-    public func isCategoryVisible(_ c: Category) -> Bool {
-        if VisibilityResolver.optInCategories.contains(c) { return shownOptInCategories?.contains(c) == true && !hiddenCategories.contains(c) }
+    /// Whether a view of `kind` shows a category, honouring opt-in categories (hidden until turned on).
+    public func isCategoryVisible(_ c: Category, in kind: ViewKind? = nil) -> Bool {
+        if VisibilityResolver.optInCategories(for: kind).contains(c) { return shownOptInCategories?.contains(c) == true && !hiddenCategories.contains(c) }
         return !hiddenCategories.contains(c)
     }
 
     /// Shows or hides a category, using the opt-in set for categories that are hidden by default.
-    public mutating func setCategoryVisible(_ c: Category, _ visible: Bool) {
-        if VisibilityResolver.optInCategories.contains(c) {
+    public mutating func setCategoryVisible(_ c: Category, _ visible: Bool, in kind: ViewKind? = nil) {
+        if VisibilityResolver.optInCategories(for: kind).contains(c) {
             var s = shownOptInCategories ?? []
             if visible { s.insert(c); hiddenCategories.remove(c) } else { s.remove(c) }
             shownOptInCategories = s.isEmpty ? nil : s

@@ -166,6 +166,11 @@ public final class LineTool: BaseTool, InteractiveTool {
             ctx.session.perform("Create Reference Plane") { tx in
                 tx.create(.referencePlanes, name: "", data: .referencePlane(rp))
             }
+            // As in Revit: 3D views hide reference planes unless Visibility/Graphics turns them on.
+            if ctx.session.lastError == nil, let v = ctx.view, v.view?.kind == .threeD,
+               !VisibilityResolver(model: ctx.model, view: v).categoryShown(.referencePlanes) {
+                message("None of the created elements are visible in \(v.name). Turn on Reference Planes in Visibility/Graphics (VV).")
+            }
         case .grid:
             guard ctx.isPlan else { message("Draw grids in a plan view."); return }
             let name = nextGridName

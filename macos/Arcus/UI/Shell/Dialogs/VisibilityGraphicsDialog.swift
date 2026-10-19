@@ -46,6 +46,8 @@ struct VisibilityGraphicsDialog: View {
 
     var model: BIMModel { state.model }
     var element: Element? { model[target.id] }
+    /// The kind of view edited (a template's: the views it applies to); 3D views hide reference planes by default.
+    var viewKind: ViewKind? { element?.view?.kind ?? element?.viewTemplate?.appliesTo }
     /// The template that controls V/G of the edited view (nothing to edit here then).
     var controllingTemplate: Element? {
         guard case .view = target, let e = element else { return nil }
@@ -211,7 +213,7 @@ struct VisibilityGraphicsDialog: View {
     func visibleBinding(_ r: VGRow) -> Binding<Bool> {
         switch r.kind {
         case .category(let c):
-            return Binding(get: { vg.isCategoryVisible(c) }, set: { vg.setCategoryVisible(c, $0) })
+            return Binding(get: { vg.isCategoryVisible(c, in: viewKind) }, set: { vg.setCategoryVisible(c, $0, in: viewKind) })
         case .subcategory(let c, let s):
             let k = Subcategories.key(c, s)
             return Binding(get: { !(vg.hiddenSubcategories?.contains(k) ?? false) }, set: { on in
@@ -248,8 +250,8 @@ struct VisibilityGraphicsDialog: View {
         }
     }
 
-    func setAll(_ on: Bool) { for r in rows { if case .category(let c) = r.kind { vg.setCategoryVisible(c, on) } } }
-    func invert() { for r in rows { if case .category(let c) = r.kind { vg.setCategoryVisible(c, !vg.isCategoryVisible(c)) } } }
+    func setAll(_ on: Bool) { for r in rows { if case .category(let c) = r.kind { vg.setCategoryVisible(c, on, in: viewKind) } } }
+    func invert() { for r in rows { if case .category(let c) = r.kind { vg.setCategoryVisible(c, !vg.isCategoryVisible(c, in: viewKind), in: viewKind) } } }
 
     // MARK: Imported
 
