@@ -17,6 +17,8 @@
 # Tools/LibreDWG/build_libredwg.sh). Both are rebuilt only when their inputs change. If one can't be built the app still
 # builds, with a warning, and DWG falls back to a converter the user installed.
 #
+# MCP: Contents/Helpers also gets arcus-mcp, the local MCP server Claude Desktop / Claude Code start (Docs/MCP.md).
+#
 # Requires Xcode 26+ command line tools (swift, codesign, iconutil, plutil). No Homebrew, Python or network.
 set -euo pipefail
 
@@ -143,6 +145,11 @@ if [[ -x "$STAGE/$APP_NAME.app/Contents/Helpers/dwg2dxf" ]]; then
   cp "$LIBREDWG_OUT"/COPYING "$LIBREDWG_OUT"/SOURCE.txt "$LIBREDWG_OUT"/libredwg-*.tar.xz "$TP/LibreDWG/"
   cp "$LIBREDWG_OUT"/libredwg-*.tar.xz.sig "$TP/LibreDWG/" 2>/dev/null || true
 fi
+# MCP: the Arcus MCP server (Docs/MCP.md) that Claude Desktop / Claude Code start: Help ▸ Design with Claude points at it.
+echo "==> Building arcus-mcp (Design with Claude)"
+swift build -c "$CONFIG" --product arcus-mcp >> "$LOG" 2>&1 || { echo "✗ arcus-mcp did not build (see build/last-build.log)" >&2; exit 1; }
+mkdir -p "$STAGE/$APP_NAME.app/Contents/Helpers"
+cp "$BIN_DIR/arcus-mcp" "$STAGE/$APP_NAME.app/Contents/Helpers/"
 SIGN_IDENTITY="${ARCUS_SIGN_IDENTITY:-}"
 if [[ -z "$SIGN_IDENTITY" ]]; then
   SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development: /{print $2; exit}')"
@@ -178,6 +185,7 @@ for h in "$APP/Contents/Helpers/"*; do
   if otool -L "$h" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/Library/)' >/dev/null; then echo "✗ $(basename "$h") links non-system libraries" >&2; exit 1; fi
 done
 if [[ -x "$APP/Contents/Helpers/arcus-dwg" ]]; then "$APP/Contents/Helpers/arcus-dwg" version >/dev/null || { echo "✗ arcus-dwg does not run" >&2; exit 1; }; fi
+"$APP/Contents/Helpers/arcus-mcp" --version >/dev/null || { echo "✗ arcus-mcp does not run" >&2; exit 1; } # MCP
 if [[ -x "$APP/Contents/Helpers/dwg2dxf" ]]; then
   [[ -f "$APP/Contents/Resources/ThirdParty/LibreDWG/COPYING" ]] && ls "$APP/Contents/Resources/ThirdParty/LibreDWG/"libredwg-*.tar.xz >/dev/null \
     || { echo "✗ dwg2dxf is bundled without its GPL source tarball and COPYING" >&2; exit 1; }

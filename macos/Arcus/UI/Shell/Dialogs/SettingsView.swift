@@ -41,6 +41,7 @@ struct SettingsView: View {
             CanvasSettingsSections() // BL-CANVAS: Colors, temporary dimensions, tooltips, double-click
             Section("Notifications") { SaveReminderSettingsSection() } // F11
             Section("DWG") { DWGEngineSettingsSection(); DWGConverterSettingsSection() } // W2-DWG; DWG: bundled engines and the last file read
+            Section("Claude (MCP)") { MCPSettingsSection() } // MCP: Docs/MCP.md
             Section("Privacy") {
                 Text("Arcus makes no network connections, collects no analytics and requires no special permissions. Diagnostics stay on this Mac unless you export them.").font(.caption).foregroundStyle(.secondary)
             }
@@ -51,3 +52,20 @@ struct SettingsView: View {
     }
 }
 
+
+/// MCP: Design with Claude: live editing and the setup sheet. Off by default.
+struct MCPSettingsSection: View {
+    @State private var claude = ClaudeIntegration.shared
+    var body: some View {
+        Toggle("Allow Claude to edit open documents", isOn: Binding(get: { claude.liveEnabled }, set: { claude.setLive($0) }))
+        Text("Claude's Arcus tools then work in the front document: every change is one Undo step. Only your Mac account can connect; nothing goes over the network.")
+            .font(.caption).foregroundStyle(.secondary)
+        HStack {
+            ClaudeStatusBadge(status: claude.status, compact: true)
+            if let e = claude.listenError, claude.liveEnabled { Text("Not listening: \(e)").font(.caption).foregroundStyle(.secondary) }
+            Spacer()
+            Button("Design with Claude…") { ClaudeSetupWindow.show() }
+        }
+        .onAppear { claude.refresh() }
+    }
+}
