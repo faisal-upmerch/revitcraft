@@ -130,10 +130,40 @@ extension RibbonContent {
     }
 
     // FM5 panels: Openings (Bay, Bay Divide, Door, Drawer, Flap) on Create, after Parts.
-    static var fm5CreatePanels: [RibbonPanel] { [] }
+    static var fm5CreatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Openings", items: [.large(.furnitureBay), .small(.furnitureBaySeparator), .small(.furnitureBayDivide), .small(.furnitureBayTag),
+                                                .large(.furnitureDoor), .large(.furnitureDrawer), .large(.furnitureFlap)], tint: furniture)]
+    }
 
     // FM5 panels: Hardware on Create ▸ Model, after Component.
-    static var fm5ModelItems: [RibbonItem] { [] }
+    static var fm5ModelItems: [RibbonItem] { [.large(.furnitureHardware)] }
+
+    // FM5 panels: the contextual Modify | Doors, Drawers, Flaps and Bays panel.
+    static func fm5SelectionItems(_ sel: [Element], _ m: BIMModel) -> (title: String?, items: [RibbonItem]) {
+        let fronts = sel.filter { $0.furnitureFront != nil }, bays = sel.filter { $0.furnitureBay != nil }
+        if !fronts.isEmpty {
+            var items: [RibbonItem] = []
+            if fronts.contains(where: { $0.furnitureFront?.kind == .door }) { items.append(.large(.furnitureFlipHinge)) }
+            items += [.large(.furniturePickNewHost), .small(.furnitureSelectHardware)]
+            let kinds = Set(fronts.compactMap { $0.furnitureFront?.kind })
+            return (kinds.count == 1 ? "Modify \(kinds.first!.rawValue)" : "Modify Front", items)
+        }
+        if !bays.isEmpty {
+            var items: [RibbonItem] = [.large(.furnitureBayDivide)]
+            if bays.contains(where: { $0.furnitureBay?.division != nil }) { items.append(.small(.furnitureRemoveDivide)) }
+            items.append(.small(.furnitureBayTag))
+            return ("Modify Bay", items)
+        }
+        return (nil, [])
+    }
+
+    /// FM5: the contextual tab's name for selected fronts, as Revit names it by category: Doors, Drawers, Flaps.
+    static func fm5SelectionTitle(_ sel: [Element]) -> String? {
+        guard !sel.isEmpty, sel.allSatisfy({ $0.furnitureFront != nil }) else { return nil }
+        let kinds = Set(sel.compactMap { $0.furnitureFront?.kind })
+        guard kinds.count == 1, let k = kinds.first else { return "Doors and Drawers" }
+        return k.rawValue + "s"
+    }
 
     // FM6 panels: Joint and Joint Rules on Fabricate.
     static var fm6FabricatePanels: [RibbonPanel] { [] }

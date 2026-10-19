@@ -440,5 +440,27 @@ public enum FurnitureOpeningsRegeneration {
         guard !m.elements(.furnitureBays).isEmpty || !m.elements(.furnitureFronts).isEmpty || !m.elements(.furnitureHardware).isEmpty else { return }
         FurnitureBays.regenerate(tx)
         FurnitureFronts.regenerate(tx, Set(touched))
+        fitPlanCrops(tx)
+    }
+
+    /// Plans whose crop follows the piece (FurnitureViews.autoCrop, fitted to the planes when they move) grow to take in
+    /// the door swings.
+    static func fitPlanCrops(_ tx: TransactionContext) {
+        var swings = Rect2.empty
+        for f in tx.model.elements(.furnitureFronts) {
+            for c in FurnitureSwings.plan(f, tx.model) {
+                switch c {
+                case .line(let s): swings = swings.union(Rect2(points: [s.start, s.end]))
+                case .arc(let a): swings = swings.union(Rect2(center: a.center, halfSize: Vec2(a.radius, a.radius)))
+                }
+            }
+        }
+        guard !swings.isEmpty else { return }
+        let need = swings.expanded(by: 0.05)
+        for v in tx.model.views where v.params[FurnitureViews.autoCrop]?.boolValue == true && v.view?.kind.isPlan == true {
+            guard let d = v.view, d.cropActive, let current = d.cropRegion, !current.isEmpty else { continue }
+            let crop = current.union(need)
+            if crop != current { tx.propagate(v.id) { $0.view?.cropRegion = crop } }
+        }
     }
 }
