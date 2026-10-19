@@ -177,7 +177,7 @@ public enum FurniturePartSolids {
         let tv = FurniturePartTypes.values(of: e, m)
         let t = tv.thickness
         let (fo, fi) = faceOffsets(p, thickness: t)
-        let w = (pv(e, p.base, "base"), pv(e, p.top, "top"))
+        let w = (attachedValue(e, m, "base", p.base), attachedValue(e, m, "top", p.top)) // FM8: attached ends follow their shelf
         guard p.top - p.base > Tolerance.length, p.length > Tolerance.length, t > Tolerance.length else { return out }
         let name = e.mark.isEmpty ? "Panel" : e.mark
         let su = pv(e, p.start.x, "start.u"), sv = pv(e, p.start.y, "start.v"), eu = pv(e, p.end.x, "end.u"), ev = pv(e, p.end.y, "end.v")
@@ -316,7 +316,7 @@ public enum FurniturePartSolids {
         var out = PartSolids()
         let tv = FurniturePartTypes.values(of: e, m)
         guard l.height > Tolerance.length else { return out }
-        let x = pv(e, l.location.x, "x"), y = pv(e, l.location.y, "y"), z0 = pv(e, l.base, "base"), z1 = pv(e, l.top, "top")
+        let x = pv(e, l.location.x, "x"), y = pv(e, l.location.y, "y"), z0 = pv(e, l.base, "base"), z1 = attachedValue(e, m, "top", l.top) // FM8
         let w = tv.width, d = tv.depth
         // A square, untapered leg square to the piece is a box on the planes; every other shape is a local family.
         if tv.legShape == .square, tv.taper <= Tolerance.length, abs(Angle.normalize(l.rotation).truncatingRemainder(dividingBy: .pi / 2)) < 1e-9 {

@@ -58,7 +58,8 @@ extension RibbonContent {
     static let furnitureWorkPlaneItems: [RibbonItem] = [.large(.workPlaneSet), .small(.workPlaneShow), .small(.workPlaneViewer)]
 
     /// Load into Project, Load into Project and Close, Flex (on Create and Modify, as in the Family Editor).
-    static let familyEditorPanel = RibbonPanel(title: "Family Editor", items: [.large(.furnitureLoadIntoProject), .large(.furnitureLoadAndClose), .small(.furnitureFlex)], tint: furniture)
+    static let familyEditorPanel = RibbonPanel(title: "Family Editor", items: [.large(.furnitureLoadIntoProject), .large(.furnitureLoadAndClose), .small(.furnitureFlex),
+                                                                             .small(.saveAsFurnitureTemplate)], tint: furniture) // FM8: Save as Furniture Template
 
     // MARK: Insert
 
@@ -210,5 +211,5 @@ extension RibbonContent {
     }
 
     // FM9 panels: Load Furniture on Insert ▸ Load from Library.
-    static var fm9InsertItems: [RibbonItem] { [] }
+    static var fm9InsertItems: [RibbonItem] { [.large(.loadFurniture)] } // FM8: the Load Furniture command (FM9 fills the library)
 }

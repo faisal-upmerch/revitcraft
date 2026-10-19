@@ -34,6 +34,7 @@ struct NewScheduleDialog: View {
             fs[1].total = .total; fs[2].total = .total
             return fs
         }
+        if category == .furniture || category == .casework { return FurnitureScheduleFields.defaults() } // FM8: Width, Depth, Height, Material, Cost
         var fs = [ScheduleTemplates.field("familyAndType", "Family and Type", width: 0.05), ScheduleTemplates.field("level", "Level", width: 0.03)]
         switch category {
         case .walls: fs += [ScheduleTemplates.field("q.length", "Length", total: .total, align: .right), ScheduleTemplates.field("q.area", "Area", total: .total, align: .right)]

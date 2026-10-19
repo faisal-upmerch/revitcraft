@@ -43,7 +43,7 @@ public enum FurnitureFrontSolids {
             frame(name, leaf, g, tv, style, ctx, detail: frontDetail, into: &out)
         }
         if g.kind == .drawer, let box = FurnitureFronts.drawerBox(e, m) {
-            for var s in drawerBoxSolids(base, box, ctx) {
+            for var s in drawerBoxSolids(base, box, opening: g.opening, ctx) { // FM8: on the bay's planes
                 s.visibleAt = boxDetail
                 out.solids.append(s)
                 out.materials[s.id] = s.name.hasSuffix("Bottom") ? (tv.bottomMaterial ?? tv.boxMaterial) : tv.boxMaterial
@@ -100,15 +100,20 @@ public enum FurnitureFrontSolids {
     }
 
     /// The drawer box: two sides, a front and a back between them, and the bottom.
-    static func drawerBoxSolids(_ name: String, _ b: DrawerBox, _ ctx: PartSolidContext) -> [FamilySolid] {
-        func box(_ n: String, _ x0: Double, _ x1: Double, _ y0: Double, _ y1: Double, _ z0: Double, _ z1: Double) -> FamilySolid {
-            FurniturePartSolids.box("\(name) \(n)", plane: .xy, u: (PartValue(x0), PartValue(x1)), v: (PartValue(y0), PartValue(y1)), w: (PartValue(z0), PartValue(z1)), ctx)
+    /// FM8: each face follows the bay's plane at its clearance from it (width and height follow the bay; the depth is
+    /// the slide's stock length, from the bay's front), so a compiled cabinet's boxes flex with their drawers.
+    static func drawerBoxSolids(_ name: String, _ b: DrawerBox, opening o: BayOpening, _ ctx: PartSolidContext) -> [FamilySolid] {
+        func box(_ n: String, _ x: (PartValue, PartValue), _ y: (PartValue, PartValue), _ z: (PartValue, PartValue)) -> FamilySolid {
+            FurniturePartSolids.box("\(name) \(n)", plane: .xy, u: x, v: y, w: z, ctx)
         }
-        let x0 = b.x0, x1 = b.x0 + b.width, y0 = b.y0, y1 = b.y0 + b.depth, z0 = b.z0, z1 = b.z0 + b.height
+        let x0 = o.value("x0").shifted(b.x0 - o.x0), x1 = o.value("x1").shifted(b.x0 + b.width - o.x1)
+        let y0 = o.value("y0").shifted(b.y0 - o.y0), y1 = y0.shifted(b.depth)
+        let z0 = o.value("z0").shifted(b.z0 - o.z0), z1 = o.value("z1").shifted(b.z0 + b.height - o.z1)
         let up = 0.5 * inch
-        return [box("Box Left Side", x0, x0 + b.side, y0, y1, z0, z1), box("Box Right Side", x1 - b.side, x1, y0, y1, z0, z1),
-                box("Box Front", x0 + b.side, x1 - b.side, y0, y0 + b.back, z0, z1), box("Box Back", x0 + b.side, x1 - b.side, y1 - b.back, y1, z0, z1),
-                box("Box Bottom", x0 + b.side, x1 - b.side, y0 + b.back, y1 - b.back, z0 + up, z0 + up + b.bottom)]
+        let inner = (x0.shifted(b.side), x1.shifted(-b.side))
+        return [box("Box Left Side", (x0, x0.shifted(b.side)), (y0, y1), (z0, z1)), box("Box Right Side", (x1.shifted(-b.side), x1), (y0, y1), (z0, z1)),
+                box("Box Front", inner, (y0, y0.shifted(b.back)), (z0, z1)), box("Box Back", inner, (y1.shifted(-b.back), y1), (z0, z1)),
+                box("Box Bottom", inner, (y0.shifted(b.back), y1.shifted(-b.back)), (z0.shifted(up), z0.shifted(up + b.bottom)))]
     }
 
     // MARK: Display

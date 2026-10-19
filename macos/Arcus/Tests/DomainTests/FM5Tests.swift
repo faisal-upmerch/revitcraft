@@ -421,7 +421,8 @@ struct FM5Tests {
         let doorMark = try #require(m[ids["leftDoor"]?.first]?.mark)
         #expect(f.solids.contains { $0.name == doorMark })
         #expect(f.nestedFamilies.contains { $0.name == FurnitureHardware.concealedHinge } && f.nestedFamilies.contains { $0.name == FurnitureHardware.undermountSlide })
-        #expect(f.nestedInstances.filter { $0.familyName == FurnitureHardware.concealedHinge }.count == 4)
+        // FM8: a set of 2, 3, 4 and 5 hinges per door, shown by the door's height.
+        #expect(f.nestedInstances.filter { $0.familyName == FurnitureHardware.concealedHinge }.count == 2 * (2 + 3 + 4 + 5))
         #expect(f.planLines.contains { $0.subcategory == .swing } && f.modelLines.contains { $0.subcategory == .elevationSwing })
         // Fronts at Medium and Fine; the drawer boxes at Fine only.
         #expect(f.solids.filter { $0.name == doorMark }.allSatisfy { $0.visibleAt == [.medium, .fine] })

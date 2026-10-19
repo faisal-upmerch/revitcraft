@@ -50,9 +50,14 @@ extension FurnitureCompiler {
             return name
         }
 
+        var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
         for front in fronts {
-            let ps = FurnitureFrontSolids.solids(front, m, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
+            var ps = FurnitureFrontSolids.solids(front, m, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
             let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(m.type(of: front)?.name ?? "")"
+            if let (length, start) = slideLengthFormula(front, m, f), let box = FurnitureFronts.drawerBox(front, m) { // FM8
+                slideLengths[front.id] = length
+                flexDrawerBox(&ps.solids, mark: front.mark.isEmpty ? (front.furnitureFront?.kind.rawValue ?? "Front") : front.mark, length: length, start: start, back: box.back)
+            }
             for var s in ps.solids {
                 s.visibleAt = s.visibleAt.intersection([.medium, .fine])
                 guard !s.visibleAt.isEmpty else { continue }
@@ -77,6 +82,7 @@ extension FurnitureCompiler {
         }
 
         // Hardware: nested families, owned instances on the front's planes, the others where they are.
+        var hinges: [HingeRecord] = [], handles: [HingeRecord] = [] // FM8: hinge sets by door height, centred handles (FurnitureCompiler+FM8)
         let placements: [String: HardwarePlacement] = Dictionary(fronts.flatMap { fr in FurnitureFronts.hardware(fr, m).map { ("\(fr.id.raw)|\($0.slot)", $0) } },
                                                                  uniquingKeysWith: { a, _ in a })
         for h in hardware {
@@ -111,8 +117,13 @@ extension FurnitureCompiler {
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = m[owner], let o = m[front.hostID]?.furnitureBay?.opening,
                nested.parameter(named: "Opening Width") != nil {
                 inst.bindings["Opening Width"] = "(\(expression(o.value("x1"), f))) - (\(expression(o.value("x0"), f)))"
+                if let length = slideLengths[owner], nested.parameter(named: "Slide Length") != nil { inst.bindings["Slide Length"] = length } // FM8
             }
             inst.visibleAt = [.medium, .fine]
+            if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue { // FM8
+                if slot.hasPrefix("hinge.") { hinges.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
+                if slot.hasPrefix("handle.") { handles.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
+            }
             f.nestedInstances.append(inst)
         }
 
@@ -120,6 +131,8 @@ extension FurnitureCompiler {
             f.referencePlanes.append(FamilyReferencePlane(name: p.name, axis: p.axis, offset: eqFormulas[p.name] ?? PartSolidContext.number(p.at), strength: .weak))
         }
         addHelperPlanes(ctx, eqPlanes: eqPlanes, m, to: &f)
+        anchorHandles(handles, m, to: &f) // FM8 (before the hinge sets change the instance indices)
+        expandHingeSets(hinges, m, to: &f) // FM8
     }
 
     /// A coordinate as a length expression of the family's parameters ("(Height) - 0.01905 m", or "0.12 m").

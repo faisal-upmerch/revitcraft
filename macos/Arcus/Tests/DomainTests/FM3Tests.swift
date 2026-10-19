@@ -213,7 +213,7 @@ struct FM3Tests {
         #expect(f.referencePlanes.first { $0.name == "Right" }?.offset == "Width / 2")
         #expect(f.dimensions.contains { $0.labelParameter == "Width" } && f.dimensions.contains(where: \.isEquality))
         #expect(f.parameters.map(\.name) == ["Width", "Depth", "Height", "Material"])
-        #expect(f.planLines.count == 1)
+        #expect(f.planLines.filter { $0.visibleAt != [.coarse] }.count == 1) // FM8: plus the Coarse outline on Left/Right/Front/Back
         #expect(FamilyEvaluator.flexTest(f, units: .imperial).isEmpty, "\(FamilyEvaluator.flexTest(f, units: .imperial))")
         #expect(FurnitureParameters.flex(m).isEmpty)
         let ev = FamilyEvaluator.evaluate(f, typeName: f.types[0].name, units: .imperial)

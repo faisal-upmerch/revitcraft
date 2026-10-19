@@ -36,6 +36,7 @@ enum DialogKind: Identifiable, Equatable {
     case fm3(FM3Dialog) // FM3: Family Types, Family Category and Parameters, Flex, Load into Project (FurnitureDialogs.swift)
     case fm6(FM6Dialog) // FM6: Joint Rules (FurnitureJointRulesDialog.swift)
     case fm7(FM7Dialog) // FM7: Stock Sheets, Hardware Catalog, CNC Export, Check Parts (FurnitureFabricationDialogs.swift)
+    case fm8(FM8Dialog) // FM8: Load Furniture, Save as Furniture Template (Dialogs/FM8Dialogs.swift)
     var id: String { String(describing: self) }
 }
 

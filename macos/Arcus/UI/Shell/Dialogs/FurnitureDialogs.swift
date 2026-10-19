@@ -396,7 +396,11 @@ struct FurnitureLoadDialog: View {
             }
         }
         .frame(width: 420)
-        .onAppear { if chosen.isEmpty, let first = projects.first { chosen = [first.fm3ID] } }
+        .onAppear {
+            // FM8: a piece opened by Edit Family starts with its own project checked.
+            let tied = FurnitureEditFamily.project(of: state).flatMap { t in projects.first { $0 === t } }
+            if chosen.isEmpty, let first = tied ?? projects.first { chosen = [first.fm3ID] }
+        }
     }
 
     func load(_ projects: [DocumentState]) {
