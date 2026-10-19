@@ -465,6 +465,9 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
     public var controls: [FamilyControl]
     /// F1415: 3D text.
     public var modelTexts: [FamilyModelText]
+    /// FM3: the Furniture document this family was compiled from (`FurnitureSource`, compressed), so Edit Family can
+    /// reopen it in Furniture mode. nil for every other family.
+    public var furnitureSource: Data?
 
     public init(name: String, template: FamilyTemplate) {
         self.name = name; self.template = template; parameters = []; types = []; referencePlanes = []; dimensions = []
@@ -472,6 +475,7 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
         taggedCategories = []; formatVersion = FamilyDefinition.currentFormatVersion; description = ""; manufacturer = ""
         nestedFamilies = []; nestedInstances = []; isShared = false
         modelLines = []; controls = []; modelTexts = [] // F1415
+        furnitureSource = nil // FM3
     }
     /// 2 adds sweeps, blends, revolves, nested families, EQ/locked dimensions and per-view visibility.
     /// 3 (F1415) adds elevation sketches, swept blends, model and reference lines, controls and model text.
@@ -495,6 +499,7 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
         case name, template, parameters, types, referencePlanes, dimensions, solids, planLines, annotationLines, fills, labels, opening
         case profileLoop, taggedCategories, formatVersion, description, manufacturer, nestedFamilies, nestedInstances, isShared
         case modelLines, controls, modelTexts // F1415
+        case furnitureSource // FM3
     }
     /// Tolerant decoding: format 1 families have no nested content; list fields missing from hand-written files default to empty.
     public init(from decoder: any Decoder) throws {
@@ -522,6 +527,7 @@ public struct FamilyDefinition: Hashable, Codable, Sendable {
         modelLines = try c.decodeIfPresent([FamilyModelLine].self, forKey: .modelLines) ?? [] // F1415
         controls = try c.decodeIfPresent([FamilyControl].self, forKey: .controls) ?? []
         modelTexts = try c.decodeIfPresent([FamilyModelText].self, forKey: .modelTexts) ?? []
+        furnitureSource = try c.decodeIfPresent(Data.self, forKey: .furnitureSource) // FM3
     }
 }
 

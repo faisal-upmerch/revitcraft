@@ -202,6 +202,8 @@ public struct MaterialData: Hashable, Codable, Sendable {
     public var cost: Double
     public var keynote: String
     public var mark: String
+    /// FM3: what `cost` is priced per (sheet, ft², board foot, linear foot, each). nil = unspecified (older files).
+    public var costUnit: MaterialCostUnit?
     public init(materialClass: MaterialClass, color: RGBColor, transparency: Double = 0, description: String = "") {
         self.materialClass = materialClass; self.color = color; self.transparency = transparency
         self.surfacePatternID = nil; self.surfacePatternColor = .black; self.cutPatternID = nil; self.cutPatternColor = .black
@@ -263,6 +265,10 @@ public struct ProjectInfoData: Hashable, Codable, Sendable {
     public var objectStyles: ObjectStyleSettings? // BL-VG
     /// Global parameters, saved selections, starting view, keynoting and print setup (ManageProjectData.swift). Optional: older files decode as nil. // F11
     public var f11: ManageProjectData?
+    /// FM3: the kind of document (nil = an ordinary project). Optional: older files decode as projects.
+    public var documentKind: DocumentKind?
+    /// FM3: a Furniture document's parameters, types and category (FurnitureDocument.swift). nil in projects.
+    public var furniture: FurnitureSetupData?
 
     public init(projectName: String = "Project Name", units: UnitsSettings = .metric) {
         projectNumber = "0001"; self.projectName = projectName; clientName = "Owner"; address = ""; status = "Project Status"

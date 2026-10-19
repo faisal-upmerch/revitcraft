@@ -138,7 +138,7 @@ public enum ProjectBrowserTree {
                         subtitle: $0.link?.isLoaded == false ? "Unloaded" : ($0.link?.isLinked == true ? "Link" : "Import"))
         }
         out.append(BrowserNode(id: "links", title: "Links", kind: .folder, symbol: "link", children: links))
-        return out
+        return m.isFurniture ? FurnitureBrowserTree.adapt(out, m, filter: filter) : out // FM3: the Furniture document's tree
     }
 
     /// Families ▸ Category ▸ Family ▸ Type (instance counts on the type rows).

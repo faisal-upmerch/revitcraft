@@ -47,7 +47,7 @@ extension QAHarness {
         // N2: every ribbon tab with nothing selected, to check panels, order and fit against RevitCraft's ribbon.
         let kept = s.session.selection.ids
         s.session.selection.clear()
-        for tab in RibbonTab.allCases {
+        for tab in RibbonTab.tabs(for: .project) { // FM3: Furniture tabs are captured in QAHarness+FM3.swift
             s.ribbonTab = tab; s.ribbonShowsContextual = false
             await pause(300)
             await shot(w, "ribbon-\(tab.rawValue.lowercased().replacingOccurrences(of: " & ", with: "-"))-\(suffix)")

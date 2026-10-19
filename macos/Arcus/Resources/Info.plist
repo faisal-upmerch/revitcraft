@@ -43,6 +43,8 @@
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Arcus Project</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>ArcusProjectDocument</string>
 			<key>CFBundleTypeRole</key>
 			<string>Editor</string>
 			<key>LSHandlerRank</key>
@@ -72,6 +74,8 @@
 		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Arcus Family</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>ArcusFamilyDocument</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
 			<key>LSHandlerRank</key>
@@ -83,6 +87,24 @@
 				<string>com.local.arcus.family</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>Arcus Furniture</string>
+			<key>CFBundleTypeIconFile</key>
+			<string>ArcusFurnitureDocument</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<key>LSTypeIsPackage</key>
+			<true/>
+			<key>NSDocumentClass</key>
+			<string>ArcusUI.ArcusDocument</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.local.arcus.furniture</string>
+			</array>
+		</dict>
 	</array>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
@@ -91,6 +113,8 @@
 			<string>com.local.arcus.project</string>
 			<key>UTTypeDescription</key>
 			<string>Arcus Project</string>
+			<key>UTTypeIconFile</key>
+			<string>ArcusProjectDocument</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>com.apple.package</string>
@@ -109,6 +133,8 @@
 			<string>com.local.arcus.family</string>
 			<key>UTTypeDescription</key>
 			<string>Arcus Family</string>
+			<key>UTTypeIconFile</key>
+			<string>ArcusFamilyDocument</string>
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>com.apple.package</string>
@@ -118,6 +144,26 @@
 				<key>public.filename-extension</key>
 				<array>
 					<string>arcusfamily</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.local.arcus.furniture</string>
+			<key>UTTypeDescription</key>
+			<string>Arcus Furniture</string>
+			<key>UTTypeIconFile</key>
+			<string>ArcusFurnitureDocument</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>com.apple.package</string>
+				<string>public.composite-content</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>arcusfurniture</string>
 				</array>
 			</dict>
 		</dict>

@@ -8,6 +8,8 @@ import ArcusServices
 nonisolated extension UTType {
     static let arcusProject = UTType(exportedAs: "com.local.arcus.project", conformingTo: .package)
     static let arcusFamily = UTType(exportedAs: "com.local.arcus.family", conformingTo: .package)
+    /// FM3: a Furniture document (`.arcusfurniture`), the project package opened in Furniture mode.
+    static let arcusFurniture = UTType(exportedAs: "com.local.arcus.furniture", conformingTo: .package)
 }
 
 /// An Arcus project document (`.arcus` package). Saving is atomic via NSDocument safe-save; autosave in place,
@@ -36,6 +38,7 @@ final class ArcusDocument: NSDocument, TransactionObserver {
     convenience init(model: BIMModel, displayName: String? = nil) {
         self.init()
         session.replaceModel(model)
+        fileType = Self.documentType(model).identifier // FM3: Furniture documents save as .arcusfurniture
         if let displayName { self.displayName = displayName }
         state = DocumentState(session: session)
         state.document = self
@@ -43,9 +46,15 @@ final class ArcusDocument: NSDocument, TransactionObserver {
     }
 
     nonisolated override class var autosavesInPlace: Bool { true }
-    nonisolated override class var readableTypes: [String] { [UTType.arcusProject.identifier] }
-    nonisolated override class var writableTypes: [String] { [UTType.arcusProject.identifier] }
-    nonisolated override class func isNativeType(_ type: String) -> Bool { type == UTType.arcusProject.identifier }
+    nonisolated override class var readableTypes: [String] { [UTType.arcusProject.identifier, UTType.arcusFurniture.identifier] } // FM3
+    nonisolated override class var writableTypes: [String] { [UTType.arcusProject.identifier, UTType.arcusFurniture.identifier] }
+    nonisolated override class func isNativeType(_ type: String) -> Bool { readableTypes.contains(type) }
+    /// FM3: a project saves as `.arcus`, a Furniture document as `.arcusfurniture` (Save As offers only its own type).
+    nonisolated override func writableTypes(for saveOperation: NSDocument.SaveOperationType) -> [String] {
+        let furniture = MainActor.assumeIsolated { session.model.isFurniture }
+        return [(furniture ? UTType.arcusFurniture : UTType.arcusProject).identifier]
+    }
+    nonisolated static func documentType(_ model: BIMModel) -> UTType { model.isFurniture ? .arcusFurniture : .arcusProject }
     nonisolated override class var preservesVersions: Bool { true }
 
     /// Mirrors the edited state and file name into the observable state (the sidebar header shows them).
@@ -191,8 +200,8 @@ final class ArcusDocument: NSDocument, TransactionObserver {
             return
         }
         let panel = NSSavePanel()
-        panel.allowedContentTypes = [.arcusProject]
-        panel.nameFieldStringValue = (displayName ?? "Project") + " (Recovered).arcus"
+        panel.allowedContentTypes = [Self.documentType(session.model)] // FM3
+        panel.nameFieldStringValue = (displayName ?? "Project") + " (Recovered)." + (session.model.isFurniture ? ArcusPackage.furnitureFileExtension : ArcusPackage.fileExtension)
         guard let w = windowForSheet else { return }
         panel.beginSheetModal(for: w) { r in
             guard r == .OK, let dest = panel.url else { return }

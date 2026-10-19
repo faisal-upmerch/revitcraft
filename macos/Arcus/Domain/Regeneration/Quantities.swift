@@ -187,6 +187,7 @@ public enum DimensionQueries {
             default: return (g.curve.midpoint, g.curve.tangent(at: 0.5))
             }
         case .referencePlane(let p):
+            if FurniturePlanes.isHorizontal(p) { return FurniturePlanes.position(p).map { (Vec2(0, $0), Vec2(1, 0)) } } // FM3: like a level
             return (p.line.midpoint, p.line.direction)
         case .modelLine(let l):
             switch r.kind {

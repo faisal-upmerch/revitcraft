@@ -25,6 +25,8 @@ public enum ArcusPackage {
     public static let oldestReadableSchema: Int = 1
 
     public static let fileExtension = "arcus"
+    /// FM3: Furniture documents use the same package with their own extension and format.
+    public static let furnitureFileExtension = "arcusfurniture"
     public static let manifestPath = "manifest.json"
     public static let modelPath = "model.sqlite"
     public static let assetsDirectory = "assets"
@@ -95,10 +97,12 @@ public enum ArcusPackage {
         }
         if let png = info.thumbnailPNG { files.append((thumbnailPath, png)) }
 
-        let manifest = PackageManifest(format: PackageManifest.projectFormat, schemaVersion: currentSchemaVersion,
+        let furniture = model.isFurniture // FM3
+        var manifest = PackageManifest(format: furniture ? PackageManifest.furnitureFormat : PackageManifest.projectFormat, schemaVersion: currentSchemaVersion,
                                        minimumReaderVersion: minimumReaderVersionWritten, writerAppVersion: info.appVersion,
                                        writerBuild: info.build, documentID: info.documentID, created: created, modified: now,
                                        elementCount: model.count, checksums: checksums, isTemplate: info.isTemplate ? true : nil)
+        if furniture { manifest.kind = DocumentKind.furniture.rawValue }
         files.append((manifestPath, try manifest.encoded()))
         return files
     }
@@ -205,7 +209,7 @@ public enum ArcusPackage {
         do { manifest = try PackageManifest.decode(data) } catch {
             throw PersistenceError.corrupt(url, "manifest.json is unreadable")
         }
-        guard manifest.format == format else {
+        guard manifest.format == format || (format == PackageManifest.projectFormat && PackageManifest.projectFormats.contains(manifest.format)) else { // FM3: Furniture documents read as projects
             throw format == PackageManifest.familyFormat ? PersistenceError.notAFamily(url) : PersistenceError.notAPackage(url)
         }
         return manifest

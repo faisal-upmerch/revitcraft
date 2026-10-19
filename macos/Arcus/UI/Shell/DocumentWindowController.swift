@@ -246,7 +246,7 @@ struct ProjectHeader: View {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .fill(LinearGradient(colors: [Color(red: 0.33, green: 0.56, blue: 0.93), Color(red: 0.18, green: 0.38, blue: 0.78)],
                                          startPoint: .top, endPoint: .bottom))
-                Image(systemName: "building.columns.fill").font(.system(size: 13, weight: .medium)).foregroundStyle(.white)
+                Image(systemName: state.mode == .furniture ? "chair.lounge.fill" : "building.columns.fill").font(.system(size: 13, weight: .medium)).foregroundStyle(.white) // FM3
             }
             .frame(width: 30, height: 30)
             .shadow(color: .black.opacity(0.12), radius: 1.5, y: 1)

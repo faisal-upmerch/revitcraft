@@ -90,6 +90,7 @@ extension AnnotationRenderer {
     static func segmentText(_ d: DimensionData, value: Double, count: Int, model: BIMModel) -> String {
         if let o = d.textOverride { return o }
         let formatted = d.prefix + Parameters.format(.double(value), type: .length, model: model) + d.suffix
+        if let label = d.labelParameter, count == 1, model.isFurniture { return "\(label) = \(formatted)" } // FM3: labelled, as in families
         guard d.equality && count > 1 else { return formatted }
         switch d.equalityDisplay ?? .text {
         case .value: return formatted

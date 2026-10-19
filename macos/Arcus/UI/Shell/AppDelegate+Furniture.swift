@@ -1,18 +1,30 @@
 import AppKit
 import ArcusDomain
+import ArcusPersistence
 
-// HOME: Home ▸ Furniture ▸ Create calls this. FM3 replaces the body with Furniture documents (Docs/FurnitureMode.md §3);
-// keep the signature.
+// FM3: new Furniture documents (Home ▸ Furniture, File ▸ New ▸ Furniture…).
 
 extension AppDelegate {
-    /// Opens a new untitled Furniture document named `name` in `category` (`.furniture` or `.casework`), started from
-    /// the library piece at `template`, or blank when `template` is nil.
+    /// Opens a new untitled Furniture document named `name` in `category` (Furniture or Casework): the blank template,
+    /// or a copy of the Furniture document at `template` (a library piece or a saved piece). It saves as
+    /// `.arcusfurniture`.
     @MainActor
     func newFurniture(name: String, category: FamilyTemplate, template: URL?) {
-        let alert = NSAlert()
-        alert.messageText = "Furniture mode is coming in this build"
-        alert.informativeText = "“\(name)” (\(category.rawValue)) will open as a Furniture document. Until then, start an Architectural Project or a Family."
-        alert.addButton(withTitle: "OK")
-        alert.runModal()
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let n = trimmed.isEmpty ? "Furniture" : trimmed
+        var model: BIMModel?
+        if let template {
+            do {
+                model = FurnitureTemplates.copy(try ArcusPackage.read(from: template).model, name: n, category: category)
+                if model == nil { NSAlert.furnitureProblem("“\(template.lastPathComponent)” is not a Furniture document.") }
+            } catch {
+                NSAlert.furnitureProblem("Couldn't open “\(template.lastPathComponent)”: \(error.localizedDescription)")
+            }
+        }
+        let doc = ArcusDocument(model: model ?? FurnitureTemplates.blank(category: category, name: n), displayName: n)
+        NSDocumentController.shared.addDocument(doc)
+        doc.makeWindowControllers()
+        doc.showWindows()
+        closeHub()
     }
 }

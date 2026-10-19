@@ -32,6 +32,11 @@ let runs = quick ? 3 : 7
 let stressCount = args.firstIndex(of: "--stress").flatMap { i in i + 1 < args.count ? Int(args[i + 1]) : nil } ?? 20_000
 let outPath = args.firstIndex(of: "--out").flatMap { i in i + 1 < args.count ? args[i + 1] : nil }
 
+// FM3: `--document-icons <dir>` writes the .arcus, .arcusfamily and .arcusfurniture document icons (.icns) and exits.
+if let i = args.firstIndex(of: "--document-icons"), i + 1 < args.count {
+    exit(DocumentIcons.writeAll(to: URL(fileURLWithPath: args[i + 1])).count == DocumentIcons.Kind.allCases.count ? 0 : 1)
+}
+
 // `--commands-markdown` prints the command catalog (shortcuts and typed aliases) as Markdown tables and exits;
 // Docs/KeyboardShortcuts.md is generated from it so the document never drifts from the code.
 if args.contains("--commands-markdown") {

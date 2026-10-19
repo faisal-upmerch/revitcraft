@@ -35,6 +35,7 @@ public enum AnnotationGeometry {
         if r.kind == .point { return r.point.map { ($0, nil) } }
         guard let e = model[r.elementID] else { return r.point.map { ($0, nil) } }
         if case .level(let l) = e.data { return (Vec2(0, l.elevation), Vec2(1, 0)) }
+        if let rp = e.referencePlane, FurniturePlanes.isHorizontal(rp), let z = FurniturePlanes.position(rp) { return (Vec2(0, z), Vec2(1, 0)) } // FM3
         guard let plan = DimensionQueries.resolve(r, model) else { return nil }
         // A plan line parallel to the view plane has no station of its own: it can't be dimensioned across the view.
         if let d = plan.direction, abs(d.dot(f.right)) > 0.999 { return nil }

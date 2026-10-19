@@ -33,6 +33,7 @@ enum DialogKind: Identifiable, Equatable {
     case f11(F11Dialog) // F11: Manage, schedule and export dialogs (Dialogs/F11ManageDialogs.swift)
     case f5(F5Dialog) // F5: Model In-place (Dialogs/F5MassingDialogs.swift)
     case f810(F810Dialog) // F810: Title Block, Guide Grid, Rendering, Render Gallery
+    case fm3(FM3Dialog) // FM3: Family Types, Family Category and Parameters, Flex, Load into Project (FurnitureDialogs.swift)
     var id: String { String(describing: self) }
 }
 
@@ -91,8 +92,10 @@ final class DocumentState {
     }
     @ObservationIgnored var onRibbonLayoutChange: (() -> Void)?
     /// The ribbon tab picked by the user (the tabs live in the floating tab pill, the panels on the strip under it). // W4-WIRE
-    /// Every project opens on Architecture.
+    /// Every project opens on Architecture, every Furniture document on Create (FM3: see `openInitialView`).
     var ribbonTab: RibbonTab = .architecture
+    /// FM3: Architectural project or Furniture document; the ribbon tabs, browser and menus follow it.
+    var mode: DocumentKind { model.projectInfo.kind }
     /// The contextual "Modify | …" tab is showing instead of `ribbonTab`.
     var ribbonShowsContextual = true
     /// Top-row width left for the ribbon tabs beside the controls pill (set by the window shell as it lays out). // W4-WIRE
@@ -182,6 +185,7 @@ final class DocumentState {
 
     func openInitialView() {
         let m = model
+        ribbonTab = RibbonTab.defaultTab(for: m.projectInfo.kind) // FM3
         if let start = StartingView.view(m) { open(start.id); return } // F11: Manage ▸ Starting View
         if let plan = m.views.first(where: { $0.view?.kind == .floorPlan && m[$0.levelID]?.level?.elevation == m.levels.first?.level?.elevation })
             ?? m.views.first(where: { $0.view?.kind == .floorPlan }) ?? m.views.first {
@@ -223,8 +227,9 @@ final class DocumentState {
 
     /// The window subtitle names the active view the way BIM users read it: "Floor Plan: Level 1", "Sheet: A101 – Plans".
     func updateWindowSubtitle() {
-        let text: String
+        var text: String
         if let e = activeView { text = ViewTitles.qualified(e) } else { text = "" } // BL-BROWSER: same titles as the view tabs
+        if let mode = FurnitureShell.modeTitle(model) { text = text.isEmpty ? mode : "\(mode) — \(text)" } // FM3: "Furniture · Casework — Floor Plan: Ref. Level"
         window?.subtitle = text
         if viewSubtitle != text { viewSubtitle = text }
     }
