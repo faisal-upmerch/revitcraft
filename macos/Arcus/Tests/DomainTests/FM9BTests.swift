@@ -26,8 +26,97 @@ struct FM9BTests {
         }
     }
 
+    /// The owner's list for this batch: name and rooms.
+    static let list: [(String, [String])] = [
+        ("Sectional Sofa", ["Living Room"]),
+        ("Loveseat", ["Living Room"]),
+        ("Recliner", ["Living Room"]),
+        ("Accent Chair", ["Living Room"]),
+        ("Lounge Chair", ["Living Room", "Outdoor & Balcony"]),
+        ("Rocking Chair", ["Living Room", "Kids' Room & Nursery"]),
+        ("End Table", ["Living Room"]),
+        ("Entertainment Center", ["Living Room"]),
+        ("Display Cabinet", ["Living Room"]),
+        ("Pouf", ["Living Room"]),
+        ("Bench", ["Living Room"]),
+        ("Room Divider", ["Living Room", "Decorative & Accent"]),
+        ("Nesting Tables", ["Living Room", "Multipurpose & Space-Saving"]),
+        ("Magazine Rack", ["Living Room"]),
+        ("Corner Shelf", ["Living Room", "Bathroom"]),
+        ("Platform Bed", ["Bedroom"]),
+        ("Storage Bed", ["Bedroom", "Multipurpose & Space-Saving"]),
+        ("Bunk Bed", ["Bedroom", "Kids' Room & Nursery"]),
+        ("Daybed", ["Bedroom"]),
+        ("Headboard", ["Bedroom"]),
+        ("Nightstand", ["Bedroom"]),
+        ("Chest of Drawers", ["Bedroom"]),
+        ("Armoire", ["Bedroom"]),
+        ("Vanity Table", ["Bedroom"]),
+        ("Vanity Stool", ["Bedroom"]),
+        ("Full-Length Mirror", ["Bedroom"]),
+        ("Bedroom Bench", ["Bedroom"]),
+        ("Storage Chest", ["Bedroom", "Storage & Utility"]),
+        ("Clothes Rack", ["Bedroom"]),
+        ("Jewelry Cabinet", ["Bedroom"]),
+        ("Blanket Ladder", ["Bedroom"]),
+        ("Bedside Shelf", ["Bedroom"]),
+        ("Dining Bench", ["Dining Room"]),
+        ("Buffet Cabinet", ["Dining Room"]),
+        ("China Cabinet", ["Dining Room"]),
+        ("Bar Cabinet", ["Dining Room"]),
+        ("Bar Cart", ["Dining Room"]),
+        ("Bar Stool", ["Dining Room"]),
+        ("Counter Stool", ["Dining Room"]),
+        ("Kitchen Island", ["Dining Room", "Kitchen"]),
+        ("Breakfast Table", ["Dining Room"]),
+        ("Breakfast Stool", ["Dining Room"]),
+        ("Serving Trolley", ["Dining Room"]),
+        ("Corner Cabinet", ["Dining Room"]),
+        ("Wine Rack", ["Dining Room"]),
+        ("Crockery Cabinet", ["Dining Room"]),
+        ("Kitchen Cart", ["Kitchen"]),
+        ("Kitchen Rack", ["Kitchen"]),
+        ("Open Shelving Unit", ["Kitchen"]),
+        ("Utility Cabinet", ["Kitchen"]),
+        ("Microwave Stand", ["Kitchen"]),
+        ("Baker's Rack", ["Kitchen"]),
+        ("Storage Trolley", ["Kitchen"]),
+        ("Breakfast Bar", ["Kitchen"]),
+        ("Foldable Table", ["Kitchen"]),
+        ("Step Stool", ["Kitchen"]),
+        ("Office Desk", ["Home Office"]),
+        ("Computer Desk", ["Home Office"]),
+        ("Writing Desk", ["Home Office"]),
+        ("Standing Desk", ["Home Office"]),
+        ("Executive Desk", ["Home Office"]),
+        ("Ergonomic Chair", ["Home Office"]),
+        ("Guest Chair", ["Home Office"]),
+        ("Filing Cabinet", ["Home Office"]),
+        ("Bookcase", ["Home Office"]),
+        ("Desk Hutch", ["Home Office"]),
+        ("Printer Stand", ["Home Office"]),
+        ("Monitor Riser", ["Home Office"]),
+        ("Storage Pedestal", ["Home Office"]),
+        ("Office Credenza", ["Home Office"]),
+        ("Meeting Table", ["Home Office"]),
+        ("Wall-Mounted Desk", ["Home Office"]),
+        ("Drawer Unit", ["Home Office"]),
+        ("Vanity Cabinet", ["Bathroom"]),
+        ("Medicine Cabinet", ["Bathroom"]),
+        ("Bathroom Storage Cabinet", ["Bathroom"]),
+        ("Wall Shelf", ["Bathroom"]),
+        ("Towel Rack", ["Bathroom"]),
+        ("Linen Cabinet", ["Bathroom"]),
+        ("Bathroom Stool", ["Bathroom"]),
+        ("Laundry Hamper", ["Bathroom"]),
+        ("Over-Toilet Storage Unit", ["Bathroom"]),
+        ("Bathroom Bench", ["Bathroom"]),
+    ]
+
     @Test func theListIsComplete() {
         #expect(Set(Self.names).count == Self.names.count, "names are unique")
+        #expect(Self.names == Self.list.map(\.0) || Set(Self.names) == Set(Self.list.map(\.0)), "\(Set(Self.list.map(\.0)).symmetricDifference(Self.names))")
+        for (name, rooms) in Self.list { #expect(Self.specs.first { $0.name == name }?.rooms == rooms, "\(name): rooms") }
         #expect(FurnitureLibrary.simpleA.count == Self.specs.count)
         let rooms = Set(Self.specs.flatMap(\.rooms))
         #expect(rooms.isSubset(of: ["Living Room", "Bedroom", "Dining Room", "Kitchen", "Home Office", "Bathroom", "Outdoor & Balcony",
@@ -104,5 +193,19 @@ struct FM9BTests {
                         "\(name): placed \(b.max.x - b.min.x) x \(b.max.z - b.min.z)")
             }
         }
+    }
+}
+
+/// FM9B_DEBUG=<piece name>: prints every part's box (inches) of that piece, to see what reaches past its planes.
+@Suite("FM9B debug") @MainActor
+struct FM9BDebug {
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FM9B_DEBUG"] != nil)) func dumpParts() throws {
+        let name = ProcessInfo.processInfo.environment["FM9B_DEBUG"] ?? ""
+        let m = try #require(FurnitureLibrary.simpleASpecs.first { $0.name == name }).build()
+        for (e, b) in FM9BTests.boxes(m) {
+            let i = 0.0254
+            print("FM9B \(e.mark) \(e.category.rawValue) x \(b.min.x / i)…\(b.max.x / i) y \(b.min.y / i)…\(b.max.y / i) z \(b.min.z / i)…\(b.max.z / i)")
+        }
+        print("FM9B planes \(FurniturePlanes.positionsByName(m).mapValues { $0 / 0.0254 })")
     }
 }

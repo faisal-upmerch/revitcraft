@@ -49,6 +49,7 @@ extension SA {
         var handles = true
         /// A low rail round each shelf's front and back (a lip, or a basket's rim).
         var lips = false
+        var lip = SA.stretcher
     }
 }
 
@@ -69,7 +70,7 @@ extension SA.Piece {
             for z in levels {
                 try b.board(x: x, y: (SA.F, SA.B), top: z, c.shelf)
                 if c.lips {
-                    for y in [SA.F + 0.375, SA.B - 0.375] { try b.railX(x, y: y, top: z + 2, SA.stretcher) }
+                    for y in [SA.F + 0.375, SA.B - 0.375] { try b.railX(x, y: y, top: z + 2, c.lip) }
                 }
             }
             if c.handles {

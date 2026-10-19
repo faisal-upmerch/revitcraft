@@ -21,6 +21,7 @@ extension SA {
         static let mdf = SA.Wood(panel: SA.mdf, shelf: "3/4\" MDF Shelf", top: "3/4\" MDF Top", front: "MDF")
         static let pine = SA.Wood(panel: "3/4\" Solid Pine", shelf: "3/4\" Solid Pine Shelf", top: "1\" Solid Pine Top", front: "Solid Pine")
         static let maple = SA.Wood(panel: "3/4\" Solid Maple", shelf: "3/4\" Solid Maple Shelf", top: "1\" Solid Maple Top", front: "Solid Maple")
+        static let paintedWhite = SA.Wood(panel: "3/4\" Painted MDF", shelf: "3/4\" Painted MDF Shelf", top: "3/4\" Painted MDF Top", front: "Painted MDF - White")
 
         /// The shelf and top types the woods need beyond the standard ones.
         static let extraTypes: [FurniturePartTypes.Spec] = [
@@ -38,6 +39,10 @@ extension SA {
             FurniturePartTypes.sheet(.furnitureShelves, "Top", "1\" Solid Pine Top", t: 1, core: "Solid Pine", edge: nil, texts: [FurniturePartTypes.topEdge: TopEdge.roundOver.rawValue]),
             FurniturePartTypes.sheet(.furniturePanels, "Panel", "3/4\" Solid Maple", t: 0.75, core: "Solid Maple", edge: nil),
             FurniturePartTypes.sheet(.furnitureShelves, "Shelf", "3/4\" Solid Maple Shelf", t: 0.75, core: "Solid Maple", edge: nil),
+            FurniturePartTypes.sheet(.furniturePanels, "Panel", "3/4\" Painted MDF", t: 0.75, core: "Painted MDF - White", edge: nil, grain: .none),
+            FurniturePartTypes.sheet(.furnitureShelves, "Shelf", "3/4\" Painted MDF Shelf", t: 0.75, core: "Painted MDF - White", edge: nil, grain: .none),
+            FurniturePartTypes.sheet(.furnitureShelves, "Top", "3/4\" Painted MDF Top", t: 0.75, core: "Painted MDF - White", edge: nil, grain: .none,
+                                     texts: [FurniturePartTypes.topEdge: TopEdge.square.rawValue]),
         ]
     }
 }
@@ -56,6 +61,8 @@ extension SA {
         /// Doors side by side (EQ), hinged at the outer edges.
         case doors(Int)
         case glassDoors(Int)
+        /// Doors side by side over adjustable shelves (one-column rows: the shelves run between the sides).
+        case doorsWithShelves(Int, shelves: Int)
         case flap(dropDown: Bool)
     }
 }
@@ -200,18 +207,26 @@ extension SA {
             }
         }
 
+        /// Each row's bottom and top faces on the planes (the whole inside for rows split equally).
+        var rowBounds: [(SA.LP, SA.LP)] {
+            let n = c.rows.count
+            guard let lines = c.rowLines, lines.count == n - 1 else { return Array(repeating: (bottomTop, ceiling), count: n) }
+            let shelf = (0..<lines.count).map { SA.p("Shelf Line \($0 + 1)") }
+            return (0..<n).map { r in (r == n - 1 ? bottomTop : shelf[r], r == 0 ? ceiling : shelf[r - 1] - t) }
+        }
+
         func fills() throws {
-            let zs = rowCentres
+            let zs = rowCentres, bounds = rowBounds
             for (r, row) in c.rows.enumerated() {
                 let xs = columnCentres(row.count)
                 for (k, fill) in row.enumerated() {
                     let p = Vec2(xs[k], zs[r])
-                    try fillCell(fill, at: p, column: k, of: row.count)
+                    try fillCell(fill, at: p, column: k, of: row.count, rows: bounds[r])
                 }
             }
         }
 
-        func fillCell(_ fill: SA.Fill, at p: Vec2, column k: Int, of n: Int) throws {
+        func fillCell(_ fill: SA.Fill, at p: Vec2, column k: Int, of n: Int, rows z: (SA.LP, SA.LP)) throws {
             let tx = b.tx
             func bay() throws -> ElementID { try FurnitureBays.createBay(face: .front, at: p, in: tx) }
             switch fill {
@@ -230,6 +245,15 @@ extension SA {
                 try b.doors(in: try bay(), count: count, c.door, material: fronts)
             case .glassDoors(let count):
                 try b.doors(in: try bay(), count: count, SA.glassDoor, material: fronts)
+            case .doorsWithShelves(let count, let shelves):
+                try b.doors(in: try bay(), count: count, c.door, material: fronts)
+                // Adjustable shelves, set back 1", spaced equally; each locked to the nearer of the row's faces.
+                let lo = b.v(z.0), hi = b.v(z.1)
+                for j in 1...max(1, shelves) {
+                    let at = lo + (hi - lo) * Double(j) / Double(shelves + 1) + t * SA.inch / 2
+                    let near = at - lo < hi - at ? z.0 + (at - lo) / SA.inch : z.1 - (hi - at) / SA.inch
+                    try b.board(x: inner, y: (boardY.0 + 1, boardY.1), top: near, c.wood.shelf, adjustable: true)
+                }
             case .flap(let dropDown):
                 _ = try FurnitureFronts.createFront(.flap, in: try bay(), typeID: try b.frontType(.flap, dropDown ? SA.dropDown : SA.liftUp, material: fronts), in: tx)
             }

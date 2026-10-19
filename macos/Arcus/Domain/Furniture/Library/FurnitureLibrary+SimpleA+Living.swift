@@ -13,7 +13,7 @@ extension FurnitureLibrary {
             .sofa("Accent Chair", rooms: room, sizes: [SA.Size(28, 30, 32), SA.Size(30, 32, 34)],
                   SA.SofaSpec(arm: 0, seat: "Height * 0.55", legHeight: 7, cushions: 1, cushion: "4\" Seat Cushion", back: 3)),
             .sofa("Lounge Chair", rooms: ["Living Room", "Outdoor & Balcony"], sizes: [SA.Size(32, 34, 30), SA.Size(36, 36, 32)],
-                  SA.SofaSpec(arm: 3, seat: "Height * 0.5", armHeight: "Height * 0.7", legHeight: 6, leg: SA.tapered, cushions: 1, back: 3)),
+                  SA.SofaSpec(arm: 3, seat: "Height * 0.5", armHeight: "Height * 0.7", legHeight: 6, leg: SA.tapered, cushions: 1, cushion: "4\" Seat Cushion", back: 3)),
             .seat("Rocking Chair", rooms: ["Living Room", "Kids' Room & Nursery"], material: "Solid Maple", sizes: [SA.Size(24, 32, 42), SA.Size(26, 34, 44)],
                   SA.SeatSpec(seat: "Height * 0.4", seatType: "1\" Solid Maple Top", leg: SA.round, legInset: 0.5, legInsetY: 4, apron: SA.apron, back: .slats(5),
                               arms: "Height * 0.6", cushion: "2\" Seat Pad", runners: 1.5)),
@@ -36,38 +36,41 @@ extension FurnitureLibrary {
     }
 
     /// An L-shaped sectional: a three-seat sofa along the back and a two-seat wing along the left, an arm at each open
-    /// end, a corner seat, seat cushions and back cushions on the planes.
+    /// end, a corner seat, seat cushions and back cushions. The main seat's depth and the wing's width are a share of the
+    /// Depth (Main Front, Wing Side planes), so the L keeps its proportions as it flexes.
     static var sectionalSofa: SA.Piece {
-        let wing = 38.0, a = 6.0, bk = 6.0, legH = 4.0
-        let planes = [SA.Plane("Seat", .z, "Height * 0.53"), SA.Plane("Arm", .z, "Height * 0.74"),
-                      SA.Plane("Cushion 1", .x, "-Width / 2 + 38\" + (Width - 44\") / 3"), SA.Plane("Cushion 2", .x, "-Width / 2 + 38\" + (Width - 44\") * 2 / 3"),
-                      SA.Plane("Wing Cushion", .y, "-Depth / 2 + 6\" + (Depth - 44\") / 2")]
+        let a = 6.0, bk = 6.0
+        let planes = [SA.Plane("Seat", .z, "Height * 0.53"), SA.Plane("Arm", .z, "Height * 0.74"), SA.Plane("Legs", .z, "Height * 0.12"),
+                      SA.Plane("Main Front", .y, "Depth / 2 - Depth * 0.44"), SA.Plane("Wing Side", .x, "-Width / 2 + Depth * 0.44"),
+                      SA.Plane("Cushion 1", .x, "-Width / 2 + Depth * 0.44 + (Width - Depth * 0.44 - 6\") / 3"),
+                      SA.Plane("Cushion 2", .x, "-Width / 2 + Depth * 0.44 + (Width - Depth * 0.44 - 6\") * 2 / 3"),
+                      SA.Plane("Wing Cushion", .y, "-Depth / 2 + 6\" + (Depth * 0.56 - 6\") / 2")]
         return SA.Piece("Sectional Sofa", rooms: ["Living Room"], material: "Fabric", sizes: [SA.Size(112, 86, 34), SA.Size(124, 92, 34)], planes: planes, steps: [{ b in
-            let base = SA.Z + legH, seat = SA.p("Seat"), deck = seat - 5, thick = "6\" Upholstered Panel", thin = "3\" Upholstered Panel"
-            let cushion = "5\" Seat Cushion"
+            let base = SA.p("Legs"), seat = SA.p("Seat"), deck = seat - 5, thick = "6\" Upholstered Panel", thin = "3\" Upholstered Panel"
+            let cushion = "5\" Seat Cushion", main = SA.p("Main Front"), wing = SA.p("Wing Side")
             // Legs under the corners of the L.
-            for (x, y) in [(SA.L + 2, SA.F + 2), (SA.L + (wing - 2), SA.F + 2), (SA.L + 2, SA.B - 2), (SA.R - 2, SA.B - 2), (SA.R - 2, SA.B - (wing - 2))] {
+            for (x, y) in [(SA.L + 2, SA.F + 2), (wing - 2, SA.F + 2), (SA.L + 2, SA.B - 2), (SA.R - 2, SA.B - 2), (SA.R - 2, main + 2)] {
                 try b.leg(x, y, z: (SA.Z, base), SA.roundTapered)
             }
             // Backs along the Back and the Left; arms at the right end and the wing's front.
             try b.sideY(SA.B, toward: -1, x: (SA.L, SA.R - a), z: (base, SA.T), thick)
             try b.sideX(SA.L, toward: 1, y: (SA.F + a, SA.B - bk), z: (base, SA.T), thick)
-            try b.sideX(SA.R, toward: -1, y: (SA.B - wing, SA.B), z: (base, SA.p("Arm")), thick)
-            try b.sideY(SA.F, toward: 1, x: (SA.L, SA.L + wing), z: (base, SA.p("Arm")), thick)
+            try b.sideX(SA.R, toward: -1, y: (main, SA.B), z: (base, SA.p("Arm")), thick)
+            try b.sideY(SA.F, toward: 1, x: (SA.L, wing), z: (base, SA.p("Arm")), thick)
             // Front rails and decks.
-            try b.sideY(SA.B - wing, toward: 1, x: (SA.L + wing, SA.R - a), z: (base, deck), thin)
-            try b.sideX(SA.L + wing, toward: -1, y: (SA.F + a, SA.B - wing), z: (base, deck), thin)
-            try b.board(x: (SA.L + wing, SA.R - a), y: (SA.B - (wing - 3), SA.B - bk), top: deck, SA.plyShelf)
-            try b.board(x: (SA.L + bk, SA.L + (wing - 3)), y: (SA.F + a, SA.B - bk), top: deck, SA.plyShelf)
+            try b.sideY(main, toward: 1, x: (wing, SA.R - a), z: (base, deck), thin)
+            try b.sideX(wing, toward: -1, y: (SA.F + a, main), z: (base, deck), thin)
+            try b.board(x: (wing, SA.R - a), y: (main + 3, SA.B - bk), top: deck, try b.type(.furnitureShelves, SA.plyShelf, material: "Fabric"))
+            try b.board(x: (SA.L + bk, wing - 3), y: (SA.F + a, SA.B - bk), top: deck, try b.type(.furnitureShelves, SA.plyShelf, material: "Fabric"))
             // Seat cushions: three along the back, the corner, two along the wing.
-            let gap = 0.0625, depth = SA.B - (bk + 6 + 0.125)
-            let xs = [SA.L + wing, SA.p("Cushion 1"), SA.p("Cushion 2"), SA.R - a]
-            for k in 0..<3 { try b.board(x: (xs[k] + gap, xs[k + 1] - gap), y: (SA.B - wing, depth), top: seat, cushion, role: .top) }
-            try b.board(x: (SA.L + (bk + 6.125), SA.L + wing - gap), y: (SA.B - wing + gap, depth), top: seat, cushion, role: .top)
-            let ys = [SA.F + a, SA.p("Wing Cushion"), SA.B - wing]
-            for k in 0..<2 { try b.board(x: (SA.L + (bk + 6.125), SA.L + wing), y: (ys[k] + gap, ys[k + 1] - gap), top: seat, cushion, role: .top) }
+            let gap = 0.0625, depth = SA.B - (bk + 6 + 0.125), inner = SA.L + (bk + 6.125)
+            let xs = [wing, SA.p("Cushion 1"), SA.p("Cushion 2"), SA.R - a]
+            for k in 0..<3 { try b.board(x: (xs[k] + gap, xs[k + 1] - gap), y: (main, depth), top: seat, cushion, role: .top) }
+            try b.board(x: (inner, wing - gap), y: (main + gap, depth), top: seat, cushion, role: .top)
+            let ys = [SA.F + a, SA.p("Wing Cushion"), main]
+            for k in 0..<2 { try b.board(x: (inner, wing), y: (ys[k] + gap, ys[k + 1] - gap), top: seat, cushion, role: .top) }
             // Back cushions against both backs.
-            let backX = [SA.L + (bk + 6.0625), SA.L + wing, SA.p("Cushion 1"), SA.p("Cushion 2"), SA.R - a]
+            let backX = [SA.L + (bk + 6.0625), wing, SA.p("Cushion 1"), SA.p("Cushion 2"), SA.R - a]
             for k in 0..<4 {
                 try b.sideY(SA.B - (bk + gap), toward: -1, x: (backX[k] + gap, backX[k + 1] - gap), z: (seat + 0.125, SA.T - 1.5), thick)
             }
@@ -102,7 +105,7 @@ extension FurnitureLibrary {
                 let x0 = edges[k] + (k == 0 ? w / 2 : w / 2 + 0.125), x1 = edges[k + 1] - (k == 2 ? w / 2 : w / 2 + 0.125)
                 for x in [x0, x1] {
                     try b.leg(x, SA.CY, z: (SA.Z + 1.5, SA.T), post)
-                    try b.railY((SA.F, SA.B), x: x, top: SA.Z + 1.5, SA.stretcher15)
+                    try b.railY((SA.F, SA.B), x: x, top: SA.Z + 1.5, SA.stretcher)
                 }
                 let inner = (x0 + w / 2, x1 - w / 2)
                 try b.railX(inner, y: SA.CY, top: SA.T, SA.stretcher)

@@ -12,11 +12,11 @@ extension FurnitureLibrary {
             bunkBed,
             daybed,
             headboard,
-            .casePiece("Nightstand", rooms: room, material: "Solid Oak", sizes: [SA.Size(20, 16, 24), SA.Size(24, 18, 26)],
+            .casePiece("Nightstand", rooms: room, .furniture, material: "Solid Oak", sizes: [SA.Size(20, 16, 24), SA.Size(24, 18, 26)],
                        SA.CaseSpec(wood: .oak, topOver: (SA.oakTop, 0.75), base: .legs(6, SA.tapered), rows: [[.drawers(1)], [.open]], rowLines: ["Height - 7.5\""])),
-            .casePiece("Chest of Drawers", rooms: room, material: "Solid Maple", sizes: [SA.Size(34, 18, 44), SA.Size(38, 20, 50)],
+            .casePiece("Chest of Drawers", rooms: room, .furniture, material: "Solid Maple", sizes: [SA.Size(34, 18, 44), SA.Size(38, 20, 50)],
                        SA.CaseSpec(wood: .maple, topOver: (SA.Wood.maple.top, 0.5), base: .plinth(4), rows: [[.drawers(5)]])),
-            .casePiece("Armoire", rooms: room, material: "Solid Walnut", sizes: [SA.Size(40, 22, 72), SA.Size(48, 24, 78)],
+            .casePiece("Armoire", rooms: room, .furniture, material: "Solid Walnut", sizes: [SA.Size(40, 22, 72), SA.Size(48, 24, 78)],
                        SA.CaseSpec(wood: .walnut, topOver: (SA.walnutTop, 0.75), base: .plinth(4), rows: [[.doors(2)], [.drawerColumns(2)]],
                                    rowLines: ["Height * 0.27"], door: SA.shakerDoor)),
             .table("Vanity Table", rooms: room, material: "Solid Oak", sizes: [SA.Size(42, 18, 58), SA.Size(48, 20, 62)],
@@ -30,7 +30,7 @@ extension FurnitureLibrary {
             .chest("Storage Chest", rooms: ["Bedroom", "Storage & Utility"], material: "Solid Pine", sizes: [SA.Size(40, 18, 20), SA.Size(48, 20, 22)],
                    SA.ChestSpec(wood: .pine, feet: (3, SA.block))),
             clothesRack,
-            .casePiece("Jewelry Cabinet", rooms: room, .furniture, material: "Solid Walnut", sizes: [SA.Size(16, 12, 40), SA.Size(18, 14, 44)],
+            .casePiece("Jewelry Cabinet", rooms: room, material: "Solid Walnut", sizes: [SA.Size(16, 16, 40), SA.Size(18, 18, 44)],
                        SA.CaseSpec(wood: .walnut, topOver: ("3/4\" Solid Walnut Shelf", 0.5), base: .legs(5, SA.tapered), rows: [[.door(right: false)], [.drawers(4)]],
                                    rowLines: ["Height * 0.62"], door: SA.glassDoor)),
             blanketLadder,
@@ -105,18 +105,20 @@ extension FurnitureLibrary {
 
     /// A daybed: a twin mattress on slats between a back and two arms, facing the room (Width is its length).
     static var daybed: SA.Piece {
-        SA.Piece("Daybed", rooms: ["Bedroom"], material: "Solid Oak", sizes: [SA.Size(81, 42, 36, "Twin")], planes: [SA.Plane("Arm", .z, "Height * 0.8")], steps: [{ b in
+        SA.Piece("Daybed", rooms: ["Bedroom"], material: "Solid Oak", sizes: [SA.Size(81, 42, 36, "Twin")],
+                 planes: [SA.Plane("Arm", .z, "Height * 0.8"), SA.Plane("Rail", .z, "Height * 0.42")], steps: [{ b in
             let spec = SA.BedSpec(post: "Square 2 1/2\" Post", railTop: 15, slats: 12, mattress: "8\" Mattress", headboard: nil, slatsAlongX: false)
             let p = 2.5
             try b.leg(SA.L + p / 2, SA.B - p / 2, z: (SA.Z, SA.T), spec.post)
             try b.leg(SA.R - p / 2, SA.B - p / 2, z: (SA.Z, SA.T), spec.post)
             try b.leg(SA.L + p / 2, SA.F + p / 2, z: (SA.Z, SA.p("Arm")), spec.post)
             try b.leg(SA.R - p / 2, SA.F + p / 2, z: (SA.Z, SA.p("Arm")), spec.post)
-            try SA.BedLayout(spec, b).frame(at: SA.Z + 15, inset: p, railW: 1.5, posts: true)
+            let rail = SA.p("Rail")
+            try SA.BedLayout(spec, b).frame(at: rail, inset: p, railW: 1.5, posts: true)
             // The back and the arms: panels between the posts above the rails.
-            try b.sideY(SA.B - (p / 2 + 0.375), toward: 1, x: (SA.L + p, SA.R - p), z: (SA.Z + 15, SA.T - 2), SA.oak)
+            try b.sideY(SA.B - (p / 2 + 0.375), toward: 1, x: (SA.L + p, SA.R - p), z: (rail, SA.T - 2), SA.oak)
             for (x, dir) in [(SA.L + (p / 2 - 0.375), 1.0), (SA.R - (p / 2 - 0.375), -1.0)] {
-                try b.sideX(x, toward: dir, y: (SA.F + p, SA.B - p), z: (SA.Z + 15, SA.p("Arm") - 2), SA.oak)
+                try b.sideX(x, toward: dir, y: (SA.F + p, SA.B - p), z: (rail, SA.p("Arm") - 2), SA.oak)
             }
         }])
     }

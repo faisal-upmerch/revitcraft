@@ -43,7 +43,8 @@ extension SA.Piece {
                       planes: [SA.Plane] = [], more: [Step] = []) -> SA.Piece {
         var steps: [Step] = [{ try SA.TableLayout(s, $0).build() }]
         if s.drawer != nil { steps.append { try SA.TableLayout(s, $0).drawer() } }
-        return SA.Piece(name, rooms: rooms, category, material: material, sizes: sizes, planes: planes, steps: steps + more)
+        let top = s.topPlane.map { [SA.Plane("Table Top", .z, $0)] } ?? []
+        return SA.Piece(name, rooms: rooms, category, material: material, sizes: sizes, planes: top + planes, steps: steps + more)
     }
 }
 
@@ -166,13 +167,16 @@ extension SA {
             let iy = s.legInsetY ?? s.legInset
             let x = (SA.L + s.legInset, SA.R - s.legInset), y = (SA.F + iy, SA.B - iy)
             let cx = (x.0 + w / 2, x.1 - w / 2), fy = y.0 + w / 2, by = y.1 - w / 2
-            // Legs: the back ones run up as the back posts; on runners, the legs stand on them.
+            // Legs: the back ones run up as the back posts; on rockers, the legs stand on them.
             let frontTop = s.arms != nil ? SA.p("Arm") - 0.75 : under
-            let foot = SA.Z + (s.runners ?? 0)
+            var foot = SA.Z
+            if let r = s.runners {
+                let rise = try rockers(thickness: r, at: [cx.0, cx.1], legY: b.v(fy), legWidth: w)
+                foot = SA.Z + rise
+            }
             for xx in [cx.0, cx.1] {
                 try b.leg(xx, fy, z: (foot, frontTop), s.leg)
                 try b.leg(xx, by, z: (foot, hasBack ? SA.T : under), s.leg)
-                if let r = s.runners { try b.railY((SA.F, SA.B), x: xx, top: SA.Z + r, SA.stretcher15) }
             }
             // The seat: between the front legs when they run up to the arms, and in front of the back posts.
             let seatX = s.arms != nil ? (x.0 + w, x.1 - w) : (SA.L, SA.R)
@@ -202,7 +206,8 @@ extension SA {
                 try b.railY(ay, x: cx.1, top: z - 0.75, s.stretcherType)
             }
             if s.arms != nil {
-                for xx in [cx.0, cx.1] { try b.railY((y.0, y.1 - w), x: xx, top: SA.p("Arm"), SA.slat) }
+                // Arm rests 2 1/2" wide over the front legs, flush with the Left and Right.
+                for xx in [SA.L + 1.25, SA.R - 1.25] { try b.railY((y.0, y.1 - w), x: xx, top: SA.p("Arm"), SA.slat) }
             }
             // The back, between the posts.
             let bx = (x.0 + w, x.1 - w)
@@ -219,8 +224,26 @@ extension SA {
                 }
             case .panel(let type):
                 let t = try b.panelThickness(type)
-                try b.sideY(SA.B - (iy + w / 2 + t / 2), toward: 1, x: bx, z: (seat + 3, SA.T - 0.5), type)
+                // Flush with the posts' backs when it is thinner than them, else its back face on theirs.
+                let face = t <= w ? SA.B - (iy + w / 2 + t / 2) : SA.B - (iy + t)
+                try b.sideY(face, toward: 1, x: bx, z: (seat + 3, SA.T - 0.5), type)
             }
+        }
+
+        /// Curved rockers under the legs at `xs` (extrusions in the side view, locked to the side they're on, scaled
+        /// between Front and Back, standing on the Bottom). Returns the rockers' top above the floor under the legs.
+        func rockers(thickness r: Double, at xs: [SA.LP], legY: Double, legWidth w: Double) throws -> Double {
+            let f = b.v(SA.F), bk = b.v(SA.B), cy = (f + bk) / 2, half = (bk - f) / 2, sag = 2.5 * SA.inch
+            func z(_ y: Double) -> Double { sag * pow((y - cy) / half, 2) }
+            let ys = (0...16).map { f + (bk - f) * Double($0) / 16 }
+            let profile = ys.map { Vec2($0, z($0)) } + ys.reversed().map { Vec2($0, z($0) + r * SA.inch) }
+            for (k, x) in xs.enumerated() {
+                let xc = b.v(x)
+                let fd = FurnitureFormData(kind: .extrusion, plane: .yz, profile: profile, w0: xc - w * SA.inch / 2, w1: xc + w * SA.inch / 2)
+                let lock = FormLock.framing(b.model, x: k == 0 ? .low : .high, y: .scale, z: .low)
+                try b.form(fd, material: FurniturePartTypes.Values(b.model[try b.type(.furnitureLegs, s.leg)]?.typeData).material.flatMap { b.model[$0]?.name }, lock: lock)
+            }
+            return (z(legY) + r * SA.inch) / SA.inch
         }
     }
 }
@@ -344,7 +367,9 @@ extension SA {
 
 extension SA.Piece {
     static func sofa(_ name: String, rooms: [String], material: String = "Fabric", sizes: [SA.Size], _ s: SA.SofaSpec, more: [Step] = []) -> SA.Piece {
-        var planes = [SA.Plane("Seat", .z, s.seat), SA.Plane("Arm", .z, s.armHeight)]
+        // The legs' tops are a share of the Height, so the base keeps its proportion as the piece flexes.
+        let legShare = ((s.legHeight / max(1, sizes.first?.h ?? 34)) * 1000).rounded() / 1000
+        var planes = [SA.Plane("Seat", .z, s.seat), SA.Plane("Arm", .z, s.armHeight), SA.Plane("Legs", .z, "Height * \(fmt(legShare))")]
         let a = s.arm
         for k in 1..<max(1, s.cushions) {
             planes.append(SA.Plane("Cushion \(k)", .x, "-Width / 2 + \(fmt(a))\" + (Width - \(fmt(2 * a))\") * \(k) / \(s.cushions)"))
@@ -362,11 +387,11 @@ extension SA {
         let b: SA.Builder
         init(_ s: SA.SofaSpec, _ b: SA.Builder) { self.s = s; self.b = b }
 
-        var thick: String { s.cover == "Leather" ? "6\" Leather Panel" : "6\" Upholstered Panel" }
-        var thin: String { s.cover == "Leather" ? "3\" Leather Panel" : "3\" Upholstered Panel" }
-
         func build() throws {
-            let base = SA.Z + s.legHeight, seat = SA.p("Seat"), a = s.arm, bk = s.back
+            // The upholstery in the piece's cover (copies of the Fabric types in another fabric or leather).
+            let thick = try b.type(.furniturePanels, "6\" Upholstered Panel", material: s.cover), thin = try b.type(.furniturePanels, "3\" Upholstered Panel", material: s.cover)
+            let cushion = try b.type(.furnitureShelves, s.cushion, material: s.cover)
+            let base = SA.p("Legs"), seat = SA.p("Seat"), a = s.arm, bk = s.back
             let cT = try b.shelfThickness(s.cushion)
             let deck = seat - cT
             try b.legs(x: (SA.L, SA.R), y: (SA.F, SA.B), inset: 2, z: (SA.Z, base), s.leg)
@@ -378,13 +403,13 @@ extension SA {
             let ix = (SA.L + a, SA.R - a)
             try b.sideY(SA.B, toward: -1, x: ix, z: (base, SA.T), bk >= 6 ? thick : thin)
             try b.sideY(SA.F, toward: 1, x: ix, z: (base, deck), thin)
-            try b.board(x: ix, y: (SA.F + 3, SA.B - bk), top: deck, SA.plyShelf)
+            try b.board(x: ix, y: (SA.F + 3, SA.B - bk), top: deck, try b.type(.furnitureShelves, SA.plyShelf, material: s.cover))
             // Seat and back cushions, split on the Cushion planes, with 1/8" between them.
             let backCushion = s.backCushions ? 6.0 : 0
             let cuts = [ix.0] + (1..<max(1, s.cushions)).map { SA.p("Cushion \($0)") } + [ix.1]
             for k in 0..<(cuts.count - 1) {
                 let x0 = cuts[k] + 0.0625, x1 = cuts[k + 1] - 0.0625
-                try b.board(x: (x0, x1), y: (SA.F, SA.B - (bk + backCushion + 0.125)), top: seat, s.cushion, role: .top)
+                try b.board(x: (x0, x1), y: (SA.F, SA.B - (bk + backCushion + 0.125)), top: seat, cushion, role: .top)
                 if s.backCushions {
                     try b.sideY(SA.B - (bk + 0.0625), toward: -1, x: (x0, x1), z: (seat + 0.125, SA.T - 1.5), thick)
                 }

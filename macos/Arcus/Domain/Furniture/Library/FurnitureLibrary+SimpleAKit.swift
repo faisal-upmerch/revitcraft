@@ -84,9 +84,10 @@ extension SA {
             self.steps = steps
         }
 
-        var libraryPiece: FurnitureLibraryPiece {
+        /// The piece as the library lists it, found by its material and `keywords` too.
+        func libraryPiece(keywords: [String] = []) -> FurnitureLibraryPiece {
             let spec = self
-            return FurnitureLibraryPiece(name, rooms: rooms, category: category, detail: .simple) { spec.model() }
+            return FurnitureLibraryPiece(name, rooms: rooms, category: category, detail: .simple, keywords: keywords + [material.lowercased()]) { spec.model() }
         }
 
         /// The piece's document (a blank one of its name when a step fails: `build()` reports why).
@@ -97,7 +98,7 @@ extension SA {
             var m = FurnitureTemplates.blank(category: category, name: name)
             let setup = TransactionContext(model: m, name: "Types and Planes")
             SA.Builder.ensureTypes(in: setup)
-            let material = setup.model.elements(.materials).first { $0.name == self.material }?.id
+            let material = SA.Builder.material(self.material, in: setup)
             let sizes = self.sizes
             try FurnitureParameters.edit(setup) { s in
                 let base = s.family.types.first?.values ?? [:]
@@ -142,7 +143,7 @@ extension SA {
         /// Part types the simple pieces add to the standard ones (upholstery, mattresses, posts, rods, mirror glass).
         static let extraTypes: [FurniturePartTypes.Spec] = [
             cushion("2\" Seat Pad", 2), cushion("3\" Seat Cushion", 3), cushion("4\" Seat Cushion", 4), cushion("5\" Seat Cushion", 5),
-            cushion("6\" Seat Cushion", 6), cushion("8\" Mattress", 8), cushion("10\" Mattress", 10), cushion("4\" Leather Cushion", 4, "Leather"),
+            cushion("6\" Seat Cushion", 6), cushion("8\" Mattress", 8, "Mattress"), cushion("10\" Mattress", 10, "Mattress"), cushion("4\" Leather Cushion", 4, "Leather"),
             cushion("16\" Pouf", 16),
             FurniturePartTypes.sheet(.furniturePanels, "Panel", "3\" Upholstered Panel", t: 3, core: "Fabric", edge: nil, grain: .none),
             FurniturePartTypes.sheet(.furniturePanels, "Panel", "6\" Upholstered Panel", t: 6, core: "Fabric", edge: nil, grain: .none),
@@ -158,10 +159,14 @@ extension SA {
             FurniturePartTypes.sheet(.furnitureShelves, "Top", "1\" Solid Ash Top", t: 1, core: "Solid Ash", edge: nil, texts: [FurniturePartTypes.topEdge: TopEdge.roundOver.rawValue]),
             FurniturePartTypes.sheet(.furnitureShelves, "Top", "1\" Solid Maple Top", t: 1, core: "Solid Maple", edge: nil, texts: [FurniturePartTypes.topEdge: TopEdge.roundOver.rawValue]),
             FurniturePartTypes.sheet(.furnitureShelves, "Top", "1/2\" Glass Top", t: 0.5, core: "Glass", edge: nil, grain: .none, texts: [FurniturePartTypes.topEdge: TopEdge.square.rawValue]),
+            FurniturePartTypes.sheet(.furnitureShelves, "Top", "1 1/4\" Quartz Top", t: 1.25, core: "Quartz - White", edge: nil, grain: .none,
+                                     texts: [FurniturePartTypes.topEdge: TopEdge.square.rawValue]),
             FurniturePartTypes.leg("Square 2 1/2\" Post", .square, w: 2.5, material: "Solid Oak"),
             FurniturePartTypes.leg("Square 3 1/2\" Post", .square, w: 3.5, material: "Solid Pine"),
             FurniturePartTypes.leg("Square 1\" Steel", .square, w: 1, material: "Steel"),
             FurniturePartTypes.leg("Round 1\" Steel", .round, w: 1, material: "Steel"),
+            FurniturePartTypes.leg("Round 2\" Steel", .round, w: 2, material: "Steel"),
+            FurniturePartTypes.leg("Square 2 1/2\" Steel", .square, w: 2.5, material: "Steel"),
             FurniturePartTypes.leg("Round 1 1/4\"", .round, w: 1.25, material: "Solid Maple"),
             FurniturePartTypes.leg("Square 1 1/4\"", .square, w: 1.25, material: "Solid Oak"),
             FurniturePartTypes.leg("Square 2\" Walnut", .square, w: 2, material: "Solid Walnut"),
@@ -180,21 +185,10 @@ extension SA {
             FurniturePartTypes.sheet(.furnitureShelves, "Top", name, t: t, core: cover, edge: nil, grain: .none, texts: [FurniturePartTypes.topEdge: TopEdge.bullnose.rawValue])
         }
 
-        /// A silvered mirror (opaque glass), for mirrors and mirror doors.
-        static let mirror = FurnitureTemplates.MaterialSpec(name: "Mirror", materialClass: .glass, color: 0xC9D3D8, transparency: 0, cost: 10,
-                                                            unit: .squareFoot, description: "Silvered float glass mirror, 1/4\"")
-
-        /// Creates the extra materials and types where missing (idempotent).
+        /// Creates the extra types where missing (idempotent), and the library palette's materials they use.
         static func ensureTypes(in tx: TransactionContext) {
             FurniturePartTypes.ensureStandard(in: tx)
-            if !tx.model.elements(.materials).contains(where: { $0.name == mirror.name }) {
-                var m = MaterialData(materialClass: mirror.materialClass, color: RGBColor(hex: mirror.color), transparency: mirror.transparency,
-                                     description: mirror.description)
-                MaterialPatternDefaults.apply(to: &m, name: mirror.name, patterns: MaterialPatternDefaults.patternIndex(tx.model))
-                m.cost = mirror.cost
-                m.costUnit = mirror.unit
-                tx.create(.materials, name: mirror.name, data: .material(m))
-            }
+            for name in Set((extraTypes + SA.Wood.extraTypes).flatMap { $0.materials.values }).sorted() { _ = material(name, in: tx) }
             let materials = Dictionary(tx.model.elements(.materials).map { ($0.name, $0.id) }, uniquingKeysWith: { a, _ in a })
             let existing = Set(tx.model.elements(.elementTypes).compactMap { t -> String? in
                 guard let td = t.typeData, td.instanceCategory.isFurniturePart else { return nil }
@@ -207,6 +201,41 @@ extension SA {
                 for (k, v) in spec.materials { params[k] = .ref(materials[v]) }
                 tx.create(.elementTypes, name: spec.name, data: .type(TypeData(instanceCategory: spec.category, familyName: spec.family, params: params)))
             }
+        }
+
+        /// A material by name: the document's, else made from the library palette (LibraryKit.palette) the batches share.
+        @discardableResult
+        static func material(_ name: String, in tx: TransactionContext) -> ElementID? {
+            if let id = tx.model.elements(.materials).first(where: { $0.name == name })?.id { return id }
+            guard let spec = LibraryKit.palette.first(where: { $0.name == name }) else { return nil }
+            var md = MaterialData(materialClass: spec.materialClass, color: RGBColor(hex: spec.color), transparency: spec.transparency, description: spec.description)
+            MaterialPatternDefaults.apply(to: &md, name: spec.name, patterns: MaterialPatternDefaults.patternIndex(tx.model))
+            md.cost = spec.cost
+            md.costUnit = spec.unit
+            return tx.create(.materials, name: spec.name, data: .material(md))
+        }
+
+        /// A part type in another material: a copy of `name` named "<name> (<material>)", as Duplicate in Edit Type
+        /// makes it, once per document (the type itself when it already is that material).
+        func type(_ cat: Category, _ name: String, material: String?) throws -> String {
+            let base = try type(cat, name)
+            guard let material, let mid = Self.material(material, in: tx), model[base]?.typeData?.params[FurniturePartTypes.coreMaterial]?.refValue != mid else { return name }
+            let copy = "\(name) (\(material))"
+            if model.types(for: cat).contains(where: { $0.name == copy }) { return copy }
+            guard var td = model[base]?.typeData else { return name }
+            td.params[FurniturePartTypes.coreMaterial] = .ref(mid)
+            td.params[FurniturePartTypes.faceMaterial] = nil
+            tx.create(.elementTypes, name: copy, data: .type(td))
+            return copy
+        }
+
+        /// A form (cushion, rocker, bowl, void) that follows the planes as `lock` says.
+        @discardableResult
+        func form(_ fd: FurnitureFormData, material: String?, lock: FormLock?) throws -> ElementID {
+            var fd = fd
+            fd.materialID = material.flatMap { Self.material($0, in: tx) }
+            fd.lock = lock
+            return try FurniturePartOperations.createForm(fd, in: tx)
         }
 
         func type(_ cat: Category, _ name: String) throws -> ElementID {
@@ -358,12 +387,14 @@ extension SA {
         /// Edit Type makes it, once per document (the standard type itself when it already is that material).
         func frontType(_ kind: FrontKind, _ name: String, material: String?) throws -> ElementID {
             let base = try frontType(kind, name)
-            guard let material, let mid = model.elements(.materials).first(where: { $0.name == material })?.id,
+            guard let material, let mid = Self.material(material, in: tx),
                   model[base]?.typeData?.params[FurniturePartTypes.coreMaterial]?.refValue != mid else { return base }
             let copy = "\(name) (\(material))"
             if let id = model.types(for: .furnitureFronts).first(where: { $0.typeData?.familyName == kind.rawValue && $0.name == copy })?.id { return id }
             guard var td = model[base]?.typeData else { return base }
             td.params[FurniturePartTypes.coreMaterial] = .ref(mid)
+            // A shaker or louvered front's panel is the same material; a glass panel stays glass.
+            if FurnitureFrontTypes.Values(td).style != .glass { td.params[FurnitureFrontTypes.panelMaterial] = .ref(mid) }
             return tx.create(.elementTypes, name: copy, data: .type(td))
         }
 
