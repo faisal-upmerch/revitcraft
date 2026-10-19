@@ -46,7 +46,7 @@ extension SimpleB {
         try p.step("Seat and Ends") { s in
             let seat = s.h - 2
             try s.board(x: (s.l, s.r), y: (s.f, s.b), top: seat, "1\" Solid Oak Top", role: .top)
-            try s.board(x: (s.l + 1, s.r - 1), y: (s.f + 1, s.b - 1), top: s.h, "2\" Leather Pad")
+            try s.cushion(x: (s.l + 1, s.r - 1), y: (s.f + 1, s.b - 1), z0: seat, height: 2, "Leather", crown: 0.25, radius: 1)
             try s.panelX(s.l + 1, inward: 1, y: (s.f + 1, s.b - 1), z: (0, seat - 1), "3/4\" Solid Oak")
             try s.panelX(s.r - 1, inward: -1, y: (s.f + 1, s.b - 1), z: (0, seat - 1), "3/4\" Solid Oak")
         }

@@ -34,6 +34,13 @@ enum SimpleB {
     static let partialFlex: [String: String] = [
         "Umbrella Stand": "revolved body",
         "Coat Stand": "revolved foot and finial, extruded hooks",
+        "Sun Lounger": "the back's raked struts",
+        "Hammock": "the raked uprights, ropes and the bed's curve",
+        "Hanging Chair": "the revolved basket and base",
+        "Picnic Table": "the A-frame legs",
+        "Folding Chair": "the raked legs",
+        "Swing Bench": "the A-frame legs",
+        "Adirondack Chair": "the raked stringers and back slats",
     ]
 
     static let entry = "Entryway & Hallway", kidsRoom = "Kids' Room & Nursery", outdoorRoom = "Outdoor & Balcony"

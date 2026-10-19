@@ -272,45 +272,100 @@ struct SBStep {
 
     // MARK: Forms
 
-    /// A form in `material`, shown at `detail` levels.
+    /// How a form follows the framing planes: by where it is (`auto`: against a side it follows that side, across the
+    /// middle it stretches; heights follow the Bottom unless it reaches the Top), not at all, or per axis.
+    enum Lock { case auto, none, axes(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?) }
+
+    /// A form in `material`, shown at `detail` levels, locked to the planes by `lock` given its extent (inches).
     @discardableResult
-    func form(_ f: FurnitureFormData, _ material: String, detail: Set<DetailLevel> = [.coarse, .medium, .fine]) throws -> ElementID {
-        var g = f
+    func form(_ data: FurnitureFormData, _ material: String, extent: ((Double, Double), (Double, Double), (Double, Double)), lock: Lock = .auto,
+              detail: Set<DetailLevel> = [.coarse, .medium, .fine]) throws -> ElementID {
+        var g = data
         g.materialID = try self.material(material)
         g.visibleAt = detail
+        switch lock {
+        case .none: g.lock = nil
+        case .axes(let x, let y, let z): g.lock = FormLock.framing(tx.model, x: x, y: y, z: z)
+        case .auto:
+            g.lock = FormLock.framing(tx.model, x: Self.autoMode(extent.0, l, r, vertical: false), y: Self.autoMode(extent.1, f, b, vertical: false),
+                                      z: Self.autoMode(extent.2, 0, h, vertical: true))
+        }
         return try FurniturePartOperations.createForm(g, in: tx)
     }
 
-    /// An extrusion of a loop (inches) on `plane`, from w0 to w1 along its normal.
-    @discardableResult
-    func extrusion(_ pts: [(Double, Double)], plane: FamilySketchPlane = .xy, w: (Double, Double), _ material: String) throws -> ElementID {
-        try form(FurnitureFormData(kind: .extrusion, plane: plane, profile: pts.map { v2($0.0, $0.1) }, w0: m(w.0), w1: m(w.1)), material)
+    /// The `auto` lock along one axis for a form spanning `e` between planes at `lo` and `hi` (inches).
+    static func autoMode(_ e: (Double, Double), _ lo: Double, _ hi: Double, vertical: Bool) -> FormAxisLock.Mode {
+        let span = hi - lo, tol = 0.5
+        guard span > 0 else { return .low }
+        if vertical {
+            guard e.1 >= hi - 1.5 else { return .low }
+            return e.0 <= lo + span * 0.5 ? .stretch : .high
+        }
+        let size = e.1 - e.0
+        let atLow = e.0 <= lo + tol, atHigh = e.1 >= hi - tol
+        if atLow && !atHigh && size < span * 0.4 { return .low }
+        if atHigh && !atLow && size < span * 0.4 { return .high }
+        return .stretch
     }
 
-    /// A revolve of `profile` (distance from the axis, height above z0; inches) about the vertical axis at (x, y).
+    static func range(_ v: [Double]) -> (Double, Double) { (v.min() ?? 0, v.max() ?? 0) }
+
+    /// An extrusion of a loop (inches) on `plane`, from w0 to w1 along its normal.
     @discardableResult
-    func revolve(_ profile: [(Double, Double)], at c: (Double, Double) = (0, 0), z0: Double, _ material: String) throws -> ElementID {
+    func extrusion(_ pts: [(Double, Double)], plane: FamilySketchPlane = .xy, w: (Double, Double), _ material: String, lock: Lock = .auto,
+                   detail: Set<DetailLevel> = [.coarse, .medium, .fine]) throws -> ElementID {
+        let u = Self.range(pts.map(\.0)), v = Self.range(pts.map(\.1)), ww = (min(w.0, w.1), max(w.0, w.1))
+        let ext = plane == .xy ? (u, v, ww) : plane == .xz ? (u, ww, v) : (ww, u, v)
+        return try form(FurnitureFormData(kind: .extrusion, plane: plane, profile: pts.map { v2($0.0, $0.1) }, w0: m(w.0), w1: m(w.1)), material,
+                        extent: ext, lock: lock, detail: detail)
+    }
+
+    /// A blend from a plan loop at z0 to another at z1 (inches).
+    @discardableResult
+    func blend(_ bottom: [(Double, Double)], _ top: [(Double, Double)], z: (Double, Double), _ material: String, lock: Lock = .auto) throws -> ElementID {
+        var f = FurnitureFormData(kind: .blend, profile: bottom.map { v2($0.0, $0.1) }, w0: m(z.0), w1: m(z.1))
+        f.topProfile = top.map { v2($0.0, $0.1) }
+        let all = bottom + top
+        return try form(f, material, extent: (Self.range(all.map(\.0)), Self.range(all.map(\.1)), z), lock: lock)
+    }
+
+    /// A revolve of `profile` (distance from the axis, height above z0; inches) about the vertical axis at (x, y),
+    /// from `angles` (degrees, counterclockwise from +x) when given.
+    @discardableResult
+    func revolve(_ profile: [(Double, Double)], at c: (Double, Double) = (0, 0), z0: Double, _ material: String, angles: (Double, Double)? = nil,
+                 lock: Lock = .auto) throws -> ElementID {
         var f = FurnitureFormData(kind: .revolve, profile: profile.map { v2($0.0, $0.1) }, w0: m(z0), w1: m(z0))
         f.axis = v2(c.0, c.1)
-        return try form(f, material)
+        if let a = angles { f.startAngle = a.0 * .pi / 180; f.endAngle = a.1 * .pi / 180 }
+        let rad = profile.map(\.0).max() ?? 0, top = profile.map(\.1).max() ?? 0
+        return try form(f, material, extent: ((c.0 - rad, c.0 + rad), (c.1 - rad, c.1 + rad), (z0, z0 + top)), lock: lock)
     }
 
     /// A sweep of `profile` (x left of the path, y up; inches) along a plan `path` at z.
     @discardableResult
-    func sweep(_ path: [(Double, Double)], profile: [(Double, Double)], z: Double, _ material: String) throws -> ElementID {
+    func sweep(_ path: [(Double, Double)], profile: [(Double, Double)], z: Double, _ material: String, lock: Lock = .auto) throws -> ElementID {
         var f = FurnitureFormData(kind: .sweep, profile: profile.map { v2($0.0, $0.1) }, w0: m(z), w1: m(z))
         f.path = path.map { v2($0.0, $0.1) }
-        return try form(f, material)
+        let reach = profile.map { abs($0.0) }.max() ?? 0
+        let px = Self.range(path.map(\.0)), py = Self.range(path.map(\.1)), pz = Self.range(profile.map(\.1))
+        return try form(f, material, extent: ((px.0 - reach, px.1 + reach), (py.0 - reach, py.1 + reach), (z + pz.0, z + pz.1)), lock: lock)
     }
 
-    /// A cushion standing on z0 (inches).
+    /// A cushion over a plan rectangle standing on z0, `height` tall (inches): rounded corners, a crowned top, piping.
     @discardableResult
-    func cushion(x: Double, y: Double, w: Double, d: Double, h: Double, z0: Double, _ material: String = "Fabric", crown: Double = 0.5,
-                 radius: Double = 1.5, piping: Bool = true) throws -> ElementID {
-        var f = FurnitureFormData(kind: .cushion, profile: [], w0: m(z0), w1: m(z0 + h))
-        f.cushion = CushionSpec(center: v2(x, y), width: m(w), depth: m(d), height: m(h), crown: m(crown), cornerRadius: m(radius),
-                                topPiping: piping, bottomPiping: piping)
-        return try form(f, material)
+    func cushion(x: (Double, Double), y: (Double, Double), z0: Double, height: Double, _ material: String = "Fabric", crown: Double = 0.5,
+                 radius: Double = 1.5, piping: Bool = true, lock: Lock = .auto) throws -> ElementID {
+        let (x0, x1) = (min(x.0, x.1), max(x.0, x.1)), (y0, y1) = (min(y.0, y.1), max(y.0, y.1))
+        var f = FurnitureFormData(kind: .cushion, profile: [], w0: m(z0), w1: m(z0 + height))
+        f.cushion = CushionSpec(center: v2((x0 + x1) / 2, (y0 + y1) / 2), width: m(x1 - x0), depth: m(y1 - y0), height: m(height), crown: m(crown),
+                                cornerRadius: m(radius), topPiping: piping, bottomPiping: piping, pipingDiameter: m(0.25))
+        return try form(f, material, extent: ((x0, x1), (y0, y1), (z0, z0 + height)), lock: lock)
+    }
+
+    /// A mattress over a plan rectangle with its top at `top` (a cushion with a low crown and piping).
+    @discardableResult
+    func mattress(x: (Double, Double), y: (Double, Double), top: Double, thickness: Double) throws -> ElementID {
+        try cushion(x: x, y: y, z0: top - thickness, height: thickness, "Mattress", crown: 0.4, radius: 2)
     }
 
     /// A circle (inches) as a loop.
@@ -405,6 +460,7 @@ enum SimpleBKit {
         rail("1 1/2\" x 3 1/2\" Cedar Rail", w: 1.5, h: 3.5, material: "Western Red Cedar"),
         rail("3 1/2\" x 1 1/2\" Cedar Rail", w: 3.5, h: 1.5, material: "Western Red Cedar"),
         rail("1\" x 2\" Aluminum Rail", w: 1, h: 2, material: "Aluminum"),
+        rail("3 1/2\" x 5 1/2\" Cedar Beam", w: 3.5, h: 5.5, material: "Western Red Cedar"),
         rail("1\" Round Aluminum Tube", w: 1, h: 1, round: true, material: "Aluminum"),
         rail("3/4\" Round Steel Rod", w: 0.75, h: 0.75, round: true, material: "Steel"),
         rail("1/2\" Round Steel Rod", w: 0.5, h: 0.5, round: true, material: "Steel"),

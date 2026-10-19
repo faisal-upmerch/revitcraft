@@ -81,11 +81,11 @@ extension SBStep {
     }
 
     /// A chair or stool frame: front legs up to the seat, back legs up to `backTop` (Height by default; the seat when
-    /// nil), aprons under the seat, the seat (a board, or slats along x), and `backRails` rails between the back legs
+    /// nil, or when there's no back and `backPosts` isn't set), aprons under the seat, the seat (a board, or slats along x), and `backRails` rails between the back legs
     /// (or vertical slats between a low and a top rail). Returns the leg width.
     @discardableResult
     func chair(seat z: Double, leg: String, seatType: String, apron: String, seatSlats: Int = 0, backTop: Double? = nil, backRails: Int = 2,
-               backRail: String? = nil, backSlats: Int = 0, backSlat: String = "3/4\" x 1 1/2\" Maple Rail", backFrom: Double? = nil, stretcherAt: Double? = nil, stretcher: String? = nil,
+               backRail: String? = nil, backPosts: Bool? = nil, backSlats: Int = 0, backSlat: String = "3/4\" x 1 1/2\" Maple Rail", backFrom: Double? = nil, stretcherAt: Double? = nil, stretcher: String? = nil,
                x: (Double, Double)? = nil, y: (Double, Double)? = nil) throws -> Double {
         let (x0, x1) = x ?? (l, r), (y0, y1) = y ?? (f, b)
         let lw = try thickness(.furnitureLegs, leg)
@@ -94,7 +94,7 @@ extension SBStep {
         let under = z - st
         for px in [x0 + lw / 2, x1 - lw / 2] {
             try self.leg(px, y0 + lw / 2, z: (0, under), leg)
-            try self.leg(px, y1 - lw / 2, z: (0, backRails > 0 || backSlats > 0 ? top : under), leg)
+            try self.leg(px, y1 - lw / 2, z: (0, backPosts ?? (backRails > 0 || backSlats > 0) ? top : under), leg)
         }
         try railRing(x: (x0, x1), y: (y0, y1), legWidth: lw, top: under, apron)
         if let s = stretcherAt, let t = stretcher {
@@ -127,12 +127,11 @@ extension SBStep {
 
     /// A bed: posts in the corners (Height at the head, `foot` at the foot), a headboard and a footboard panel between
     /// them, side rails with their tops at `rail`, slats under the mattress and the mattress (head at the back).
-    func bed(post: String, rail railType: String, rail top: Double, foot: Double, panel: String, mattress: String, slat: String = "1\" x 3\" Bed Slat",
+    func bed(post: String, rail railType: String, rail top: Double, foot: Double, panel: String, mattress mt: Double, slat: String = "1\" x 3\" Bed Slat",
              slatCount: Int = 12, headFrom: Double? = nil) throws {
         let pw = try thickness(.furnitureLegs, post)
         let rw = try thickness(.furnitureRails, railType)
         let pt = try thickness(.furniturePanels, panel)
-        let mt = try thickness(.furnitureShelves, mattress)
         for (py, ztop) in [(f + pw / 2, foot), (b - pw / 2, h)] {
             try leg(l + pw / 2, py, z: (0, ztop), post)
             try leg(r - pw / 2, py, z: (0, ztop), post)
@@ -146,6 +145,6 @@ extension SBStep {
         let deck = top - rh + 2.5
         let ix = (l + pw / 2 + rw / 2, r - pw / 2 - rw / 2)
         try slats(x: ix, y: (f + pw, b - pw), alongX: true, count: slatCount, top: deck, slat)
-        try board(x: ix, y: (f + pw / 2 + pt / 2, b - pw / 2 - pt / 2), top: deck + mt, mattress)
+        try mattress(x: ix, y: (f + pw / 2 + pt / 2, b - pw / 2 - pt / 2), top: deck + mt, thickness: mt)
     }
 }

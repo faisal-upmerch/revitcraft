@@ -57,7 +57,7 @@ extension SimpleB {
             try bars(s, from: (cx.0, s.f + pw), to: (cx.0, s.b - pw), z: z)
             try bars(s, from: (cx.1, s.f + pw), to: (cx.1, s.b - pw), z: z)
             try s.board(x: (s.l + pw, s.r - pw), y: (s.f + pw, s.b - pw), top: 8, "3/4\" Plywood Shelf")
-            try s.board(x: (s.l + pw, s.r - pw), y: (s.f + pw, s.b - pw), top: 13, "5\" Crib Mattress")
+            try s.mattress(x: (s.l + pw + 0.25, s.r - pw - 0.25), y: (s.f + pw + 0.25, s.b - pw - 0.25), top: 13, thickness: 5)
         }
         return try p.finish()
     }
@@ -67,7 +67,7 @@ extension SimpleB {
         let p = try SBBuilder("Toddler Bed", .furniture, [SBSize(30, 56, 28)], material: "Solid Maple")
         try p.step("Frame") { s in
             try s.bed(post: "Square 2\" Maple Post", rail: "1 1/2\" x 5 1/2\" Maple Bed Rail", rail: 9, foot: 20, panel: "3/4\" Solid Maple",
-                      mattress: "5\" Crib Mattress", slat: "1\" x 3\" Bed Slat", slatCount: 9)
+                      mattress: 5, slat: "1\" x 3\" Bed Slat", slatCount: 9)
             // Guard rails at the head, on both sides.
             for x in [s.l + 1, s.r - 1] {
                 try s.rail((x, s.b - 2), (x, s.b - 26), z: 19, "3/4\" x 3\" Maple Rail")
@@ -82,7 +82,7 @@ extension SimpleB {
         let p = try SBBuilder("Kids' Bed", .furniture, [SBSize(42, 80, 38, "Twin"), SBSize(57, 80, 38, "Full")], material: "Solid Pine")
         try p.step("Frame") { s in
             try s.bed(post: "Square 2\" Maple Post", rail: "1 1/2\" x 5 1/2\" Pine Bed Rail", rail: 13, foot: 24, panel: "3/4\" Solid Pine",
-                      mattress: "8\" Mattress")
+                      mattress: 8)
         }
         return try p.finish()
     }
@@ -108,7 +108,7 @@ extension SimpleB {
             try s.rail((s.r - pw, s.b - pw / 2), (s.l + pw, s.b - pw / 2), z: s.h - 1, guardRail)
             let ix = (s.l + pw / 2 + 0.75, s.r - pw / 2 - 0.75)
             try s.slats(x: ix, y: (s.f + pw, s.b - pw), alongX: true, count: 12, top: deck - 3)
-            try s.board(x: ix, y: (s.f + pw, s.b - pw), top: deck + 3, "6\" Mattress")
+            try s.mattress(x: ix, y: (s.f + pw, s.b - pw), top: deck + 3, thickness: 6)
             // A ladder on the left side, in the plane of the side rails.
             let lx = s.l + pw / 2
             for y in [s.f + 10, s.f + 26] { try s.railYZ((y, 0), (y, deck), x: lx, "1 1/2\" x 3 1/2\" Pine Rail") }
@@ -131,7 +131,7 @@ extension SimpleB {
             try s.board(x: (s.l + 0.75, s.r - 0.75), y: (s.f, s.b), top: s.pos("Pad"), "3/4\" Plywood Top", role: .top)
             try s.panelY(s.b, inward: -1, x: (s.l + 0.75, s.r - 0.75), z: (s.pos("Pad"), s.h), "3/4\" Plywood")
             try s.panelY(s.f, inward: 1, x: (s.l + 0.75, s.r - 0.75), z: (s.pos("Pad"), s.pos("Pad") + 1.5), "3/4\" Plywood")
-            try s.board(x: (s.l + 2, s.r - 2), y: (s.f + 2, s.b - 2), top: s.pos("Pad") + 2, "2\" Leather Pad")
+            try s.cushion(x: (s.l + 2, s.r - 2), y: (s.f + 2, s.b - 2), z0: s.pos("Pad"), height: 3, "Leather", crown: 0.75, radius: 1.5)
         }
         try p.step("Kick and Back") { s in
             try s.plinth(under: c!.bottom)
@@ -196,7 +196,7 @@ extension SimpleB {
     static func kidsDesk() throws -> BIMModel {
         let p = try SBBuilder("Kids' Desk", .furniture, [SBSize(32, 20, 22), SBSize(40, 22, 24)], material: "Solid Maple")
         try p.step("Top, Legs and Shelf") { s in
-            let t = try s.table(top: "3/4\" Solid Maple Top", leg: "Square 1 1/2\" Teak", inset: 0.75, apron: "3/4\" x 3\" Maple Rail")
+            let t = try s.table(top: "3/4\" Solid Maple Top", leg: "Square 1 1/4\" Maple", inset: 0.75, apron: "3/4\" x 3\" Maple Rail")
             try s.board(x: (t.legX.0 + t.legWidth, t.legX.1 - t.legWidth), y: (t.legY.1 - 9, t.legY.1), top: 6, "3/4\" Plywood Shelf")
         }
         return try p.finish()
@@ -255,21 +255,19 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// An upholstered glider: padded arms to the floor, a seat cushion on a padded base and a tall back cushion.
+    /// An upholstered glider: padded arms and a tall padded back (cushions), a seat cushion on a padded base, on a
+    /// low wooden glider base.
     static func nurseryGlider() throws -> BIMModel {
         let p = try SBBuilder("Nursery Glider", .furniture, [SBSize(30, 33, 41)], material: "Fabric")
-        try p.step("Arms, Seat and Back") { s in
-            let arm = 24.0
-            try s.panelX(s.l, inward: 1, y: (s.f, s.b), z: (1.5, arm), "6\" Upholstered Panel")
-            try s.panelX(s.r, inward: -1, y: (s.f, s.b), z: (1.5, arm), "6\" Upholstered Panel")
-            try s.panelY(s.b, inward: -1, x: (s.l + 6, s.r - 6), z: (1.5, s.h), "6\" Upholstered Panel")
-            try s.board(x: (s.l + 6, s.r - 6), y: (s.f, s.b - 6), top: 13, "5\" Seat Cushion")
-            try s.board(x: (s.l + 6, s.r - 6), y: (s.f, s.b - 6), top: 18, "5\" Seat Cushion")
-            try s.board(x: (s.l + 6, s.r - 6), y: (s.f, s.b - 6), top: 8, "5\" Seat Cushion")
-            try s.board(x: (s.l + 6, s.r - 6), y: (s.f + 1, s.b - 6), top: 3, "3/4\" Plywood Shelf", role: .bottom)
-            for x in [s.l + 2, s.r - 2] {
-                try s.rail((x, s.f + 2), (x, s.b - 2), z: 1.5, "1 1/2\" x 1 1/2\" Oak Rail")
-            }
+        try p.step("Base, Arms, Seat and Back") { s in
+            for x in [s.l + 2, s.r - 2] { try s.rail((x, s.f + 2), (x, s.b - 2), z: 2, "1 1/2\" x 1 1/2\" Oak Rail") }
+            try s.rail((s.l + 2.75, s.f + 4), (s.r - 2.75, s.f + 4), z: 2, "1 1/2\" x 1 1/2\" Oak Rail")
+            try s.rail((s.r - 2.75, s.b - 4), (s.l + 2.75, s.b - 4), z: 2, "1 1/2\" x 1 1/2\" Oak Rail")
+            try s.cushion(x: (s.l, s.l + 6), y: (s.f, s.b), z0: 2, height: 22, crown: 1, radius: 2.5)
+            try s.cushion(x: (s.r - 6, s.r), y: (s.f, s.b), z0: 2, height: 22, crown: 1, radius: 2.5)
+            try s.cushion(x: (s.l + 6, s.r - 6), y: (s.b - 7, s.b), z0: 2, height: s.h - 2, crown: 1, radius: 2.5)
+            try s.cushion(x: (s.l + 6, s.r - 6), y: (s.f, s.b - 7), z0: 2, height: 11, crown: 0, radius: 1, piping: false)
+            try s.cushion(x: (s.l + 6, s.r - 6), y: (s.f, s.b - 7), z0: 13, height: 5)
         }
         return try p.finish()
     }
