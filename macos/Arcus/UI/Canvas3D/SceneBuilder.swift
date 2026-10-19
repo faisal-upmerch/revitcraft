@@ -27,12 +27,13 @@ nonisolated public enum SceneBuilder {
         let chunks = (count + chunk - 1) / chunk
         let frozen = candidates
         let realistic = data.visualStyle == .realistic // F67
+        let explode = FurnitureExplode.offsets(model, view: view) // FMG2: Explode Parts
         DispatchQueue.concurrentPerform(iterations: chunks) { c in
             if isCancelled() { return }
             let lo = c * chunk, hi = min(count, lo + chunk)
             for i in lo..<hi {
                 let (e, o) = frozen[i]
-                results.set(i, element(e, override: o, model: model, detail: detail, sectionBox: sectionBox, realistic: realistic))
+                results.set(i, element(e, override: o, model: model, detail: detail, sectionBox: sectionBox, realistic: realistic, offset: explode[e.id]))
             }
         }
         if isCancelled() { return .empty }
@@ -42,8 +43,10 @@ nonisolated public enum SceneBuilder {
     }
 
     /// Builds one scene element (nil when it has no geometry or lies outside the section box).
-    nonisolated static func element(_ e: Element, override o: GraphicOverride, model: BIMModel, detail: DetailLevel, sectionBox: Box3?, realistic: Bool = false) -> SceneElement? {
-        let parts = GeometryCache.shared.parts(e, model, detail: detail)
+    nonisolated static func element(_ e: Element, override o: GraphicOverride, model: BIMModel, detail: DetailLevel, sectionBox: Box3?, realistic: Bool = false,
+                                    offset: Vec3? = nil) -> SceneElement? {
+        var parts = GeometryCache.shared.parts(e, model, detail: detail)
+        if let offset { parts = parts.map { var p = $0; p.mesh = p.mesh.transformed(.translation(offset)); return p } } // FMG2: Explode Parts
         var out: [ScenePart] = []
         out.reserveCapacity(parts.count)
         var bounds = Box3.empty

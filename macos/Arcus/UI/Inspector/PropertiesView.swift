@@ -103,7 +103,7 @@ struct PropertiesView: View {
         switch state.paletteSubject {
         case .elements(let ids, _): ids.compactMap { state.model[$0] }
         case .view(let id): state.model[id].map { [$0] } ?? []
-        case .newElement, .nothing: []
+        case .newElement, .nothing, .joint: [] // FMG2: a joint's rows edit through applyOverride
         }
     }
     var editTargets: [ElementID] { targets.map(\.id) }
@@ -115,6 +115,7 @@ struct PropertiesView: View {
             return NewElementProperties.rows(category: cat, typeID: typeID, tool: state.activeTool, levelID: newElementLevel,
                                              model: state.model, defaults: state.palette.creationDefaults[cat])
         }
+        if case .joint(let key) = state.paletteSubject { return FurnitureJointProperties.rows(key, state.model) } // FMG2
         return PaletteLayout.aggregate(targets, state.model)
     }
 
@@ -124,6 +125,7 @@ struct PropertiesView: View {
 
     /// Edits of a pending new element go to the tool or become creation defaults instead of changing the model.
     var applyOverride: ((ParameterID, ParamValue) throws(ParameterError) -> Void)? {
+        if case .joint(let key) = state.paletteSubject { return fmg2JointEdit(key) } // FMG2: editing a rules' joint makes it
         guard case .newElement(let cat, let typeID) = state.paletteSubject else { return nil }
         let state = self.state, level = newElementLevel
         return { id, value throws(ParameterError) in
@@ -186,6 +188,7 @@ struct PropertiesView: View {
     var instanceTitle: String {
         switch state.paletteSubject {
         case .newElement(let cat, _): return "New \(cat.displayName)"
+        case .joint: return "Joint" // FMG2
         case .view(let id):
             guard let v = state.model[id] else { return "" }
             if let s = v.sheet { return "Sheet: \(s.number) – \(v.name)" }

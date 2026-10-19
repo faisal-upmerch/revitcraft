@@ -17,6 +17,9 @@ public struct JointPart: Sendable {
     /// The box came from the part's own single box solid (it can be trimmed); otherwise (shaped legs) it only hosts
     /// machining.
     public var reshapeable: Bool
+    /// FMG2: what the part looks like beyond its box (round rails, shaped sheets), and slats' pieces (one box each).
+    public var shape: JointShape = .box
+    var pieces: [JBox]?
 
     func l(_ a: FamilyAxis) -> Double { lo[a.idx].value }
     func h(_ a: FamilyAxis) -> Double { hi[a.idx].value }
@@ -44,6 +47,8 @@ public struct FurnitureJoint: Sendable {
     public var otherEndAtMax: Bool
     /// An L corner: either part may run through, and a miter is possible.
     public var isCorner: Bool
+    /// FMG2: an L corner of two box parts (shaped, round and slatted parts don't mitre).
+    public var canMiter: Bool = false
     /// The user's joint element (nil for automatic joints).
     public var elementID: ElementID?
     /// The middle of the joint face (marker position).
@@ -63,7 +68,7 @@ public struct FurnitureJoint: Sendable {
     public var configurations: [(type: JointType, through: ElementID)] {
         var out: [(JointType, ElementID)] = []
         for t in JointType.allCases {
-            if t == .miter { if isCorner { out.append((t, a)) }; continue }
+            if t == .miter { if canMiter { out.append((t, a)) }; continue } // FMG2
             out.append((t, a))
             if isCorner { out.append((t, b)) }
         }
@@ -83,7 +88,10 @@ struct PartJointMods: Sendable {
     /// Tongues and tenons (shown at Fine), and the grooves and mortises cut in this part (Fine).
     var fineSolids: [JBox] = []
     var fineVoids: [JBox] = []
-    var isEmpty: Bool { extend.isEmpty && trim.isEmpty && miters.isEmpty && fineSolids.isEmpty && fineVoids.isEmpty }
+    /// FMG2: round tenons (on round rails) and the sockets and round mortises they go in.
+    var fineRounds: [JRound] = []
+    var fineRoundVoids: [JRound] = []
+    var isEmpty: Bool { extend.isEmpty && trim.isEmpty && miters.isEmpty && fineSolids.isEmpty && fineVoids.isEmpty && fineRounds.isEmpty && fineRoundVoids.isEmpty }
     var reshapes: Bool { !extend.isEmpty || !trim.isEmpty || !miters.isEmpty }
 }
 
@@ -124,6 +132,10 @@ public struct JointSolution: Sendable {
     public var partners: [ElementID: Set<ElementID>] = [:]
     /// Adjustable shelves and the parts drilled for their pins.
     var pinContacts: [(shelf: ElementID, side: ElementID, axis: FamilyAxis, shelfEndAtMax: Bool)] = []
+    /// FMG2: slats' pieces after the trims, and their cut envelopes; shaped parts' outlines after the trims.
+    var finalPieces: [ElementID: [JBox]] = [:]
+    var pieceEnvelopes: [ElementID: [JBox]] = [:]
+    var finalOutlines: [ElementID: [PartPoint]] = [:]
 
     public func joint(_ key: JointKey) -> FurnitureJoint? { joints.first { $0.key == key } }
     public func joints(of id: ElementID) -> [FurnitureJoint] { joints.filter { $0.key.a == id || $0.key.b == id } }
@@ -177,7 +189,7 @@ public enum JointSolver {
             }
         case .furnitureShelf(let s): return s.role == .top ? .top : s.role == .bottom ? .bottom : (s.adjustable ? .adjustableShelf : .shelf)
         case .furnitureLeg: return .leg
-        case .furnitureRail(let r): return r.slats == nil ? .rail : nil
+        case .furnitureRail(let r): return r.slats == nil ? .rail : .slat // FMG2: slats join too
         default: return nil
         }
     }
@@ -195,6 +207,10 @@ public enum JointSolver {
             lo = [x.shifted(-hw), y.shifted(-hd), FurniturePartSolids.pv(e, l.base, "base")]
             hi = [x.shifted(hw), y.shifted(hd), FurniturePartSolids.pv(e, l.top, "top")]
             reshapeable = false
+        } else if var s = shapedPart(e, m) { // FMG2: shaped panels and shelves, round rails, slats
+            guard let r = role(e, thin: s.thin) else { return nil }
+            s.role = r
+            return s
         } else {
             return nil
         }
@@ -225,6 +241,7 @@ public enum JointSolver {
         ([.plinth], [.side, .bottom, .shelf, .divider], .plinthCarcass),
         ([.rail], [.leg], .railLeg), ([.rail], [.side, .divider, .back, .plinth], .railPanel), ([.rail], [.top, .shelf, .bottom], .railTop),
         ([.top, .shelf, .bottom], [.leg], .topLeg),
+        ([.slat], [.rail, .leg, .side, .divider, .back, .plinth, .top, .shelf, .bottom], .slatFrame), // FMG2
     ]
 
     /// The pair kind of two parts and which is its first part; nil when they don't join (an adjustable shelf sits on
@@ -299,7 +316,10 @@ public enum JointSolver {
                 let p = list[i], q = list[j]
                 guard FamilyAxis.allCases.allSatisfy({ overlap(p, q, $0) >= -eps }),
                       FamilyAxis.allCases.filter({ overlap(p, q, $0) > eps }).count >= 2 else { continue }
-                guard let cfg = config(p, q) ?? config(q, p) else { continue }
+                guard let cfg = config(p, q) ?? config(q, p), piecesMeet(p, q) else { continue } // FMG2: slats meet by a piece
+                // FMG2: slats join at their ends only (a rail alongside the first slat doesn't trim it).
+                if let la = cfg.b.slatAxis, cfg.a1 != la { continue }
+                if let la = cfg.a.slatAxis, let a2 = cfg.a2, a2 != la { continue }
                 guard let (kind, first) = classify(p, q) else {
                     // Adjustable shelves: pin rows in the parts they end at.
                     let shelf = p.role == .adjustableShelf ? p : q
@@ -314,7 +334,8 @@ public enum JointSolver {
                 let mine = user[key]
                 let rule = rules.rule(kind, category: category)
                 var type = mine?.1.type ?? rule.type
-                if type == .miter && cfg.a2 == nil { type = .butt }
+                let canMiter = cfg.a2 != nil && p.shape.isBox && q.shape.isBox && p.pieces == nil && q.pieces == nil // FMG2: boxes mitre
+                if type == .miter && !canMiter { type = .butt }
                 var params = JointParameters.defaults(type)
                 if type == rule.type { params = rule.parameters.over(params) }
                 if let up = mine?.1.parameters { params = up.over(params) }
@@ -346,8 +367,14 @@ public enum JointSolver {
                 var mk = [0.0, 0.0, 0.0]
                 mk[axis.idx] = nearT.value
                 for c in [c1, c2] { mk[c.idx] = (max(o.l(c), t.l(c)) + min(o.h(c), t.h(c))) / 2 }
+                // FMG2: a shaped part joins where the other meets its outline (the marker sits there).
+                if let r = profileContact(through: t, other: o, axis: axis) {
+                    guard !r.isEmpty else { continue }
+                    let (u, v, _) = FamilySketchPlane.normal(axis).axes
+                    mk[u.idx] = r.center.x; mk[v.idx] = r.center.y
+                }
                 sol.joints.append(FurnitureJoint(key: key, pair: kind, type: type, ruleType: rule.type, parameters: params, throughID: through, otherID: other,
-                                                 axis: axis, otherEndAtMax: oMax, isCorner: cfg.a2 != nil, elementID: mine?.0, marker: Vec3(mk[0], mk[1], mk[2]),
+                                                 axis: axis, otherEndAtMax: oMax, isCorner: cfg.a2 != nil, canMiter: canMiter, elementID: mine?.0, marker: Vec3(mk[0], mk[1], mk[2]),
                                                  a: a.id, b: b.id, a2: cfg.a2, aEndAtMax: cfg.aEndAtMax, bEndAtMax: cfg.bEndAtMax, a1: cfg.a1))
             }
         }
@@ -389,12 +416,40 @@ public enum JointSolver {
             }
             sol.finalBoxes[p.id] = box
             sol.envelopes[p.id] = box
+            // FMG2: slats follow the trims of their part; shaped outlines are clipped or stretched to the final box.
+            if let ps = p.pieces {
+                let fp = ps.map { reshape($0, from: p.lo, p.hi, to: box) }
+                sol.finalPieces[p.id] = fp
+                sol.pieceEnvelopes[p.id] = fp
+            }
+            if case .profile(let n, let outline, _) = p.shape {
+                let (u, v, _) = FamilySketchPlane.normal(n).axes
+                sol.finalOutlines[p.id] = p.reshapeable ? reshape(outline, u: u, v: v, from: p.lo, p.hi, to: box) : outline
+            }
         }
 
-        // Phase 2: housings, tenons and machining, on the final boxes.
+        // Phase 2: housings, tenons and machining, on the final boxes (FMG2: once per slat; housed joints that meet at a
+        // corner run on into each other, so a back grooved on four sides has its corners filled).
+        let housed = housedEnds(sol)
         for j in sol.joints {
             guard let tb = sol.finalBoxes[j.throughID], let ob = sol.finalBoxes[j.otherID] else { continue }
-            joinery(j, through: tb, other: ob, center: center, &sol)
+            let shapes = (through: sol.parts[j.throughID]?.shape ?? .box, other: sol.parts[j.otherID]?.shape ?? .box)
+            let throughs = sol.finalPieces[j.throughID] ?? [tb]
+            let others = sol.finalPieces[j.otherID].map { Array($0.enumerated()) } ?? [(0, ob)]
+            for (k, piece) in others {
+                for tp in throughs where throughs.count == 1 && others.count == 1 || FamilyAxis.allCases.filter({ $0 != j.axis }).allSatisfy({ min(tp.h($0), piece.h($0)) - max(tp.l($0), piece.l($0)) > eps }) {
+                    joinery(j, through: tp, other: piece, piece: sol.finalPieces[j.otherID] != nil ? k : nil, shapes: shapes, housed: housed[j.otherID] ?? [],
+                            center: center, &sol)
+                }
+            }
+        }
+        for (id, envs) in sol.pieceEnvelopes {
+            guard var env = sol.envelopes[id] else { continue }
+            for k in 0..<3 {
+                env.lo[k] = envs.map { $0.lo[k] }.min { $0.value < $1.value } ?? env.lo[k]
+                env.hi[k] = envs.map { $0.hi[k] }.max { $0.value < $1.value } ?? env.hi[k]
+            }
+            sol.envelopes[id] = env
         }
         shelfPins(m, &sol)
         return sol
@@ -422,7 +477,10 @@ public enum JointSolver {
         return (0..<n).map { lo + e + (len - 2 * e) * Double($0) / Double(n - 1) }
     }
 
-    static func joinery(_ j: FurnitureJoint, through tb: JBox, other ob: JBox, center: Vec3, _ sol: inout JointSolution) {
+    /// One joint's housings, tenons and holes. `piece` is the slat of the other part (nil for single parts); `housed` lists
+    /// the other part's ends that run into grooves (FMG2: housed joints meeting at a corner run on into each other).
+    static func joinery(_ j: FurnitureJoint, through tb: JBox, other ob: JBox, piece: Int? = nil, shapes: (through: JointShape, other: JointShape) = (.box, .box),
+                        housed: [HousedEnd] = [], center: Vec3, _ sol: inout JointSolution) {
         let ax = j.axis
         let (c1, c2) = ax.others
         let near = j.otherEndAtMax ? tb.lo[ax.idx] : tb.hi[ax.idx]
@@ -433,6 +491,26 @@ public enum JointSolver {
         // The joint face: where the parts meet across the other two axes.
         var cLo: [FamilyAxis: PartValue] = [:], cHi: [FamilyAxis: PartValue] = [:]
         for c in [c1, c2] { cLo[c] = maxV(ob.lo[c.idx], tb.lo[c.idx]); cHi[c] = minV(ob.hi[c.idx], tb.hi[c.idx]) }
+        // FMG2: the outline of a shaped part limits the joint face to where the parts meet.
+        if case .profile(let n, _, _) = shapes.through, n == ax, let outline = sol.finalOutlines[j.throughID] {
+            let (u, v, _) = FamilySketchPlane.normal(n).axes
+            let rect = Rect2(min: Vec2(cLo[u]?.value ?? 0, cLo[v]?.value ?? 0), max: Vec2(cHi[u]?.value ?? 0, cHi[v]?.value ?? 0))
+            guard let r = Polygon2(outline.map(\.vec)).clipped(to: rect)?.bounds else { return }
+            for (a, lo, hi) in [(u, r.min.x, r.max.x), (v, r.min.y, r.max.y)] {
+                if let c = cLo[a], lo > c.value + 1e-9 { cLo[a] = PartValue(lo) }
+                if let c = cHi[a], hi < c.value - 1e-9 { cHi[a] = PartValue(hi) }
+            }
+        }
+        if case .profile(let n, _, _) = shapes.other, n != ax, let outline = sol.finalOutlines[j.otherID] {
+            // The other part's outline along its trimmed end: where it reaches the through part's face.
+            let (u, v, _) = FamilySketchPlane.normal(n).axes
+            let k = ax == u ? 0 : 1, across = ax == u ? v : u
+            let atEnd = outline.filter { abs($0[k].value - near.value) < 1e-6 }.map { $0[1 - k].value }
+            if let lo = atEnd.min(), let hi = atEnd.max(), hi - lo > Tolerance.length {
+                if let c = cLo[across], lo > c.value + 1e-9 { cLo[across] = PartValue(lo) }
+                if let c = cHi[across], hi < c.value - 1e-9 { cHi[across] = PartValue(hi) }
+            }
+        }
         guard let l1 = cLo[c1], let h1 = cHi[c1], let l2 = cLo[c2], let h2 = cHi[c2], h1.value - l1.value > Tolerance.length, h2.value - l2.value > Tolerance.length else { return }
         // The other part's thickness across the joint face, and the face's long direction.
         let tO = ob.ext(c1) <= ob.ext(c2) ? c1 : c2
@@ -459,23 +537,48 @@ public enum JointSolver {
             break
         case .dado, .rabbet, .groove, .mortiseTenon:
             let tenon = j.type == .mortiseTenon
-            var d = p.depth ?? 0.25 * inch
-            d = min(d, max(0, tThick - 0.125 * inch))
+            var d = housedDepth(p, tThick: tThick)
             if tenon { d = min(d, max(0.125 * inch, tThick / 2 - (p.tenonThickness ?? thick / 3) / 2 - inch / 32)) }
             guard d > 0.001 else { break }
+            // The cut size grows by what runs into the other part (per slat for slats).
+            func grow(_ env: inout JBox) {
+                if j.otherEndAtMax { env.hi[ax.idx] = maxV(env.hi[ax.idx], near.shifted(d)) } else { env.lo[ax.idx] = minV(env.lo[ax.idx], near.shifted(-d)) }
+            }
+            if let k = piece, var env = sol.pieceEnvelopes[j.otherID]?[k] { grow(&env); sol.pieceEnvelopes[j.otherID]?[k] = env }
+            else if piece == nil, var env = sol.envelopes[j.otherID] { grow(&env); sol.envelopes[j.otherID] = env }
+            // FMG2: a round rail ending along its axis gets a round tenon (or runs whole into a socket): a drilled hole.
+            if case .round(let ra) = shapes.other, ra == ax {
+                let dia = min(ob.ext(c1), ob.ext(c2))
+                let tt = tenon ? min(p.tenonThickness ?? max(0.25 * inch, (dia * 0.6 / inch * 16).rounded() / 16 * inch), dia - inch / 16) : dia
+                let clear = tenon ? 0 : (p.clearance ?? 0) / 2
+                let extra = tenon ? inch / 16 : 0
+                let (pu, pv, _) = FamilySketchPlane.normal(ax).axes
+                let cu = ob.lo[pu.idx].shifted(ob.ext(pu) / 2), cv = ob.lo[pv.idx].shifted(ob.ext(pv) / 2)
+                sol.mods[j.otherID, default: .init()].fineRounds.append(JRound(axis: ax, cu: cu, cv: cv, radius: tt / 2, lo: near, hi: near.shifted(sign * d)))
+                sol.mods[j.throughID, default: .init()].fineRoundVoids.append(JRound(axis: ax, cu: cu, cv: cv, radius: tt / 2 + clear, lo: near, hi: near.shifted(sign * (d + extra))))
+                sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: at(near.value, mid, (lLo.value + lHi.value) / 2), axis: into, diameter: tt + 2 * clear, depth: d + extra),
+                                                    source: src, label: tenon ? "Mortise" : "Socket"))
+                break
+            }
             var t0 = tLo, t1 = tHi, s0 = lLo, s1 = lHi
             if tenon {
                 let tt = min(p.tenonThickness ?? (thick / 3 * 16 / inch).rounded() / 16 * inch, thick - 0.0016)
                 t0 = tLo.shifted((thick - tt) / 2); t1 = tHi.shifted(-(thick - tt) / 2)
                 let sh = p.shoulder ?? 0.25 * inch
                 if lHi.value - lLo.value > 2 * sh + 0.25 * inch { s0 = lLo.shifted(sh); s1 = lHi.shifted(-sh) }
+            } else {
+                // FMG2: where this part's end along the joint also runs into a groove (a back grooved on four sides), the
+                // tongue and the groove run on to meet it, so the corner is filled; only in the part that is there.
+                for h in housed where h.axis == L {
+                    let end = h.atMax ? lHi : lLo
+                    guard abs(end.value - (h.atMax ? ob.h(L) : ob.l(L))) < 1e-7 else { continue }
+                    let covered = h.atMax ? tb.h(L) >= end.value + h.depth - 1e-7 : tb.l(L) <= end.value - h.depth + 1e-7
+                    guard covered else { continue }
+                    if h.atMax { s1 = s1.shifted(h.depth) } else { s0 = s0.shifted(-h.depth) }
+                }
             }
             let tongue = box(along: (near, near.shifted(sign * d)), (t0, t1), (s0, s1))
             sol.mods[j.otherID, default: .init()].fineSolids.append(tongue)
-            if var env = sol.envelopes[j.otherID] {
-                if j.otherEndAtMax { env.hi[ax.idx] = maxV(env.hi[ax.idx], near.shifted(d)) } else { env.lo[ax.idx] = minV(env.lo[ax.idx], near.shifted(-d)) }
-                sol.envelopes[j.otherID] = env
-            }
             let clear = tenon ? 0 : (p.clearance ?? 0) / 2
             let extra = tenon ? inch / 16 : 0
             let void = box(along: (near, near.shifted(sign * (d + extra))), (t0.shifted(-clear), t1.shifted(clear)), (s0, s1))
@@ -529,6 +632,23 @@ public enum JointSolver {
                 }
             }
         }
+    }
+
+    /// How deep a housed joint's groove is in a through part `tThick` thick.
+    static func housedDepth(_ p: JointParameters, tThick: Double) -> Double { min(p.depth ?? 0.25 * inch, max(0, tThick - 0.125 * inch)) }
+
+    /// An end of a part that runs into a groove (dado, rabbet or groove), and how deep.
+    struct HousedEnd: Sendable { var axis: FamilyAxis; var atMax: Bool; var depth: Double }
+
+    /// FMG2: the ends of each box part that run into grooves.
+    static func housedEnds(_ sol: JointSolution) -> [ElementID: [HousedEnd]] {
+        var out: [ElementID: [HousedEnd]] = [:]
+        for j in sol.joints where j.type.isHoused {
+            guard let tb = sol.finalBoxes[j.throughID], let o = sol.parts[j.otherID], o.shape.isBox, o.pieces == nil else { continue }
+            let d = housedDepth(j.parameters, tThick: tb.ext(j.axis))
+            if d > 0.001 { out[j.otherID, default: []].append(HousedEnd(axis: j.axis, atMax: j.otherEndAtMax, depth: d)) }
+        }
+        return out
     }
 
     /// The name hardware schedules count a joint's fasteners by.

@@ -111,7 +111,11 @@ extension SimpleB {
             try s.mattress(x: ix, y: (s.f + pw, s.b - pw), top: deck + 3, thickness: 6)
             // A ladder on the left side, in the plane of the side rails.
             let lx = s.l + pw / 2
-            for y in [s.f + 10, s.f + 26] { try s.railYZ((y, 0), (y, deck), x: lx, "1 1/2\" x 3 1/2\" Pine Rail") }
+            for y in [s.f + 10, s.f + 26] {
+                let stile = try s.railYZ((y, 0), (y, deck), x: lx, "1 1/2\" x 3 1/2\" Pine Rail")
+                // FMG2: both stiles follow Front, so the rungs joined between them keep their length as the piece flexes.
+                s.tx.update(stile) { $0.furnitureRail?.bounds["start.u"] = .plane("Front", offset: s.m(y - s.f)); $0.furnitureRail?.bounds["end.u"] = .plane("Front", offset: s.m(y - s.f)) }
+            }
             var z = 10.0
             while z < deck - 4 {
                 try s.rail((lx, s.f + 11.75), (lx, s.f + 24.25), z: z, "1 1/4\" Round Maple Dowel", just: .center)

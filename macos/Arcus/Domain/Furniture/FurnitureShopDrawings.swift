@@ -5,7 +5,8 @@ import ArcusGeometry
 //   F101 Shop Drawing: plan, Front and Right elevations, Section A and {3D}, with the labelled dimensions and Part Tags;
 //   F102 Part List: the Part List and the Hardware Schedule;
 //   F103 Nesting: one Nesting view per material and thickness;
-//   F104 3D and Costs: a 3D view from the back at Fine (joints and machining show), Edge Banding and Cost.
+//   F104 3D and Costs: a 3D view from the back at Fine (joints and machining show), exploded with its parts tagged
+//   (FMG2: Explode Parts), Edge Banding and Cost.
 // Every sheet uses the Furniture Title Block (piece, category, material, designer, date, sheet). The template makes
 // the sheets, schedules and views (`ensureStandard`); Fabricate ▸ Shop Drawings and Nesting (`update`) tag the parts,
 // make the Nesting views and arrange the sheets at a scale that fits.
@@ -92,7 +93,8 @@ public enum FurnitureShopDrawings {
             v3.camera = Camera3D(eye: Vec3(1.8, 2.2, 1.4), target: Vec3(0, 0, FurnitureTemplates.defaultHeight / 2), orthoHeight: 1.5)
             v3.phaseID = phase
             v3.detailLevel = .fine
-            tx.create(.views, name: back3DName, data: .view(v3))
+            v3.titleOnSheet = "Exploded View" // FMG2
+            tx.create(.views, name: back3DName, data: .view(v3)) { $0.params[FurnitureExplode.onParam] = .bool(true) } // FMG2: Explode Parts
         }
 
         // Sheets.
@@ -217,6 +219,8 @@ public enum FurnitureShopDrawings {
         if let f101 = sheetID(shopDrawing, tx.model) { arrangeShopDrawing(f101, in: tx) }
         tagParts(in: tx) // after the arrangement: tags keep clear of each other at the views' final scale
         if let f104 = sheetID(details, tx.model), let b = tx.model.views.first(where: { $0.name == back3DName }) {
+            // FMG2: Back 3D of older documents explodes too (unless the user turned it off).
+            if b.params[FurnitureExplode.onParam] == nil { tx.update(b.id) { $0.params[FurnitureExplode.onParam] = .bool(true) } }
             arrange([b.id], onSheet: f104, columns: 1, area: Rect2(min: Vec2(0.02, 0.01), max: Vec2(0.165, 0.2694)), in: tx)
         }
         if let f102 = sheetID(partList, tx.model) { arrangeSchedules(f102, in: tx) }

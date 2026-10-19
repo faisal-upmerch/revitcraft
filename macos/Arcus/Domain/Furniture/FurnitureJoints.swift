@@ -14,11 +14,12 @@ public enum FurnitureJoints {
     public static func joint(_ p: ElementID, _ q: ElementID, _ m: BIMModel) -> FurnitureJoint? { JointSolver.solve(m).joint(JointKey(p, q)) }
 
     /// A part's cut size: length × width × thickness (largest first), including what runs into grooves and tenons, and
-    /// the trims its joints make. Parts that aren't single boxes (shaped panels, round rails, slats, forms) give their
-    /// nominal size.
+    /// the trims its joints make. Shaped panels give their blank (the box round their outline), slats one slat's size
+    /// (FMG2); parts the solver doesn't join (forms, shaped legs) give their nominal size.
     public static func cutSize(of id: ElementID, in m: BIMModel) -> (length: Double, width: Double, thickness: Double)? {
         guard let e = m[id] else { return nil }
-        if let env = JointSolver.solve(m).envelopes[id], JointSolver.solve(m).parts[id]?.reshapeable == true {
+        let sol = JointSolver.solve(m)
+        if let env = sol.pieceEnvelopes[id]?.first ?? sol.envelopes[id], sol.parts[id]?.reshapeable == true {
             let d = FamilyAxis.allCases.map { env.ext($0) }.sorted(by: >)
             return (d[0], d[1], d[2])
         }
@@ -76,14 +77,23 @@ public enum FurnitureJoints {
         let mains = raw.solids.indices.filter { !raw.solids[$0].isVoid }
         var hosts = mains.map { raw.solids[$0].id } + raw.placed.flatMap { $0.family.solids.map(\.id) }
         let material = mains.first.flatMap { raw.materials[raw.solids[$0].id] } ?? raw.placed.first?.material
-        if mods.reshapes, part.reshapeable, mains.count == 1, let box = sol.finalBoxes[e.id] {
-            let old = raw.solids[mains[0]]
-            var s = mainSolid(old.name, box, mods.miters, ctx)
-            s.materialParameter = old.materialParameter
-            out.solids[mains[0]] = s
-            out.materials[old.id] = nil
-            if let material { out.materials[s.id] = material }
-            hosts = [s.id] + raw.placed.flatMap { $0.family.solids.map(\.id) }
+        if mods.reshapes, part.reshapeable, let box = sol.finalBoxes[e.id] {
+            // FMG2: each slat with its own final box; round rails stay round; shaped parts keep their (reshaped) outline.
+            let boxes = sol.finalPieces[e.id] ?? [box]
+            if boxes.count == mains.count {
+                var ids: [String] = []
+                for (k, i) in mains.enumerated() {
+                    let old = raw.solids[i]
+                    var s = JointSolver.shapedSolid(old.name, part, boxes[k], outline: sol.finalOutlines[e.id], ctx) ?? mainSolid(old.name, boxes[k], mods.miters, ctx)
+                    s.materialParameter = old.materialParameter
+                    s.visibleAt = old.visibleAt
+                    out.solids[i] = s
+                    out.materials[old.id] = nil
+                    if let material { out.materials[s.id] = material }
+                    ids.append(s.id)
+                }
+                hosts = ids + raw.placed.flatMap { $0.family.solids.map(\.id) }
+            }
         }
         let name = mains.first.map { raw.solids[$0].name } ?? (e.mark.isEmpty ? "Part" : e.mark)
         for (k, b) in mods.fineSolids.enumerated() {
@@ -94,6 +104,19 @@ public enum FurnitureJoints {
         }
         for (k, b) in mods.fineVoids.enumerated() {
             var s = FurniturePartSolids.box("\(name) Joint Cut \(k + 1)", plane: .xy, u: (b.lo[0], b.hi[0]), v: (b.lo[1], b.hi[1]), w: (b.lo[2], b.hi[2]), ctx, void: true)
+            s.visibleAt = [.fine]
+            s.cuts = hosts
+            out.solids.append(s)
+        }
+        // FMG2: round tenons on round rails, and the sockets and round mortises they go in.
+        for (k, r) in mods.fineRounds.enumerated() {
+            var s = JointSolver.roundSolid("\(name) Round Tenon \(k + 1)", r, ctx)
+            s.visibleAt = [.fine]
+            out.solids.append(s)
+            if let material { out.materials[s.id] = material }
+        }
+        for (k, r) in mods.fineRoundVoids.enumerated() {
+            var s = JointSolver.roundSolid("\(name) Socket \(k + 1)", r, ctx, void: true)
             s.visibleAt = [.fine]
             s.cuts = hosts
             out.solids.append(s)

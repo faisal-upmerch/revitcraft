@@ -14,6 +14,14 @@ import ArcusGeometry
 //     is a line from the edge inward along the bore, Z its height above face B; HGROOVE_ and HPOCKET_ likewise.
 //   - Face B operations go to a second program (<Mark>_B), or, with Flip Layers, into the same file on layers
 //     prefixed B_ in face B's coordinates.
+//   - FMG2: shaped parts (Edit Profile, Openings, shelves sketched with more sides) cut their outline as joined (trimmed
+//     and with the tongues their joints add) on OUTLINE, openings on INNER, and get every hole, groove and pocket of
+//     their joints. Slats are one program per slat shape: the first slat's outline and machining, for each of the
+//     Qty slats (they share their ends, so their joints machine them alike).
+//   - FMG2: edge banding: BAND_<thickness> (the band's thickness in inches, "BAND_0.04"), one open polyline per banded
+//     edge, on the outline. L1 is the edge along X at Y = 0, L2 the edge along X at Y = width, W1 the edge along Y at
+//     X = 0 and W2 at X = length; on a shaped outline each side takes the outline edges facing it (outward normal
+//     nearest −Y, +Y, −X or +X), as one polyline per run.
 // Nested sheets place each part's face A program at its position on the sheet (rotated 90° when it was turned), with
 // the stock outline on SHEET.
 
@@ -31,7 +39,7 @@ public struct CNCDrawing: Hashable, Sendable {
     /// Every layer used, sorted.
     public var layers: [String] { Array(Set(paths.map(\.layer) + circles.map(\.layer) + labels.map(\.layer))).sorted() }
     /// Whether the drawing has machining (anything but outline, grain and label).
-    public var hasMachining: Bool { layers.contains { !["OUTLINE", "GRAIN", "LABEL", "SHEET"].contains($0) && !$0.hasPrefix("B_LABEL") } }
+    public var hasMachining: Bool { layers.contains { !["OUTLINE", "GRAIN", "LABEL", "SHEET"].contains($0) && !$0.hasPrefix("B_LABEL") && !$0.hasPrefix(FurnitureCNC.bandPrefix) } }
 
     /// The drawing moved by `t` (and turned 90° counterclockwise first when `rotated`, about the origin, then shifted
     /// back into positive X by `width`).
@@ -61,7 +69,9 @@ public struct CNCPartProgram: Sendable {
     public var faceB: CNCDrawing?
     /// Machining operations on both faces and the edges (outlines, grain and labels aside).
     public var operationCount: Int {
-        func n(_ d: CNCDrawing?) -> Int { (d?.circles.count ?? 0) + (d?.paths.filter { !["OUTLINE", "GRAIN", "INNER"].contains($0.layer) }.count ?? 0) }
+        func n(_ d: CNCDrawing?) -> Int {
+            (d?.circles.count ?? 0) + (d?.paths.filter { !["OUTLINE", "GRAIN", "INNER"].contains($0.layer) && !$0.layer.hasPrefix(FurnitureCNC.bandPrefix) }.count ?? 0)
+        }
         return n(faceA) + n(faceB)
     }
 }
@@ -89,6 +99,9 @@ public enum FurnitureCNC {
     public static func drillLayer(diameter: Double, depth: Double) -> String { "DRILL_\(num(diameter))_\(num(depth))" }
     public static func grooveLayer(depth: Double) -> String { "GROOVE_\(num(depth))" }
     public static func pocketLayer(depth: Double) -> String { "POCKET_\(num(depth))" }
+    /// FMG2: edge banding ("BAND_0.04").
+    public static let bandPrefix = "BAND_"
+    public static func bandLayer(thickness: Double) -> String { bandPrefix + num(thickness) }
 
     // MARK: Part frames
 
@@ -121,10 +134,10 @@ public enum FurnitureCNC {
         }
     }
 
-    /// The frame of an element part: its cut envelope (joints applied) or its box.
+    /// The frame of an element part: its cut envelope (joints applied; FMG2: the first slat's for slats) or its box.
     static func frame(_ e: Element, _ m: BIMModel) -> Frame? {
         let sol = JointSolver.solve(m)
-        if let env = sol.envelopes[e.id], sol.parts[e.id]?.reshapeable == true {
+        if let env = sol.pieceEnvelopes[e.id]?.first ?? sol.envelopes[e.id], sol.parts[e.id]?.reshapeable == true {
             return Frame(lo: Vec3(env.l(.x), env.l(.y), env.l(.z)), hi: Vec3(env.h(.x), env.h(.y), env.h(.z)))
         }
         guard let b = FurniturePartSolids.partBox(e, m)?.box else { return nil }
@@ -176,11 +189,13 @@ public enum FurnitureCNC {
         var outline = rect
         var frame: Frame?
         var ops: [MachiningEntry] = []
-        if !p.isDerived, let e = m[p.elementID], p.quantity == 1 {
+        let sol = JointSolver.solve(m)
+        if !p.isDerived, let e = m[p.elementID], p.quantity == 1 || sol.pieceEnvelopes[e.id] != nil {
             frame = Self.frame(e, m)
             ops = byPart[e.id] ?? []
-            if let f = frame, let shaped = panelOutline(e, f), shaped.count >= 3 { outline = shaped }
-            if let f = frame { for hole in panelOpenings(e, f) { a.paths.append(.init(layer: "INNER", points: hole, closed: true)) } }
+            if sol.pieceEnvelopes[e.id] != nil, let f = frame { ops = ops.filter { inside(center($0.op), f) } } // FMG2: the first slat's
+            if let f = frame, let shaped = shapedOutline(e, f, sol) ?? panelOutline(e, f), shaped.count >= 3 { outline = shaped }
+            if let f = frame { for hole in shapedOpenings(e, f, sol) ?? panelOpenings(e, f) { a.paths.append(.init(layer: "INNER", points: hole, closed: true)) } }
         } else if let f = frontFrame(p, m) {
             frame = f
             let lo = f.lo - Vec3(0.001, 0.001, 0.001), hi = f.hi + Vec3(0.001, 0.001, 0.001)
@@ -190,6 +205,7 @@ public enum FurnitureCNC {
             }
         }
         a.paths.insert(.init(layer: "OUTLINE", points: outline, closed: true), at: 0)
+        a.paths += banding(p, outline: outline, m) // FMG2
         if let f = frame, abs(f.length - L) < 0.002, abs(f.width - W) < 0.002 {
             for e in ops { add(e, f, &a, &b) }
         }

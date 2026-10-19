@@ -113,7 +113,7 @@ public final class FurnitureJointTool: BaseTool, InteractiveTool, ToolWorldMarke
 
     public var options: [ToolOption] {
         guard let j = pickedJoint else { return [] }
-        let types = JointType.allCases.filter { $0 != .miter || j.isCorner }.map(\.rawValue)
+        let types = JointType.allCases.filter { $0 != .miter || j.canMiter }.map(\.rawValue) // FMG2
         var o = [ToolOption(id: "type", label: "Joint", kind: .choice(types), value: .text(j.type.rawValue))]
         if j.isCorner && j.type != .miter {
             o.append(ToolOption(id: "through", label: "Runs Through", kind: .choice([mark(j.key.a), mark(j.key.b)]), value: .text(mark(j.throughID))))
@@ -161,6 +161,9 @@ public final class FurnitureJointTool: BaseTool, InteractiveTool, ToolWorldMarke
 
     /// Space: the next configuration, as Next.
     public func spaceBar() { setOption("next", .bool(true)) }
+
+    /// FMG2: redraws the markers after the picked joint changed elsewhere (Properties).
+    public func refresh() { rebuild() }
 
     // MARK: Markers
 

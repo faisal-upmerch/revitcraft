@@ -38,7 +38,7 @@ public enum FurnitureJointOperations {
     /// Sets the joint's type (Options Bar ▸ Joint); nil returns it to the rule.
     public static func set(_ key: JointKey, type: JointType?, in tx: TransactionContext) throws(TransactionError) {
         try edit(key, in: tx) { d, j in
-            if type == .miter && !j.isCorner { return }
+            if type == .miter && !j.canMiter { return } // FMG2
             if d.type != type { d.parameters = nil }
             d.type = type
         }

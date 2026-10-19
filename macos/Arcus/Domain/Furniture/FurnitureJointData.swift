@@ -176,13 +176,16 @@ public struct JointKey: Hashable, Codable, Sendable, Comparable {
 public enum JointRole: String, Sendable, CaseIterable {
     case side = "Side", top = "Top", bottom = "Bottom", shelf = "Shelf", adjustableShelf = "Adjustable Shelf", back = "Back", divider = "Divider"
     case plinth = "Plinth", leg = "Leg", rail = "Rail"
+    case slat = "Slat" // FMG2
 }
 
 /// The kinds of part pairs Joint Rules sets a joint for.
 public enum JointPairKind: String, Codable, Sendable, CaseIterable {
     case sideTop = "Side – Top", sideBottom = "Side – Bottom", sideSide = "Side – Side", sideBack = "Side – Back", shelfSide = "Shelf – Side"
     case shelfBack = "Shelf – Back", dividerShelf = "Divider – Shelf", plinthCarcass = "Plinth – Carcass", railLeg = "Rail – Leg", railPanel = "Rail – Panel"
-    case railTop = "Rail – Top", topLeg = "Top – Leg", other = "Other"
+    case railTop = "Rail – Top", topLeg = "Top – Leg"
+    case slatFrame = "Slat – Frame" // FMG2
+    case other = "Other"
 
     /// The names of the pair's two parts, as the rule's Runs Through choices show them.
     public var roles: (first: String, second: String) {
@@ -205,6 +208,7 @@ public enum JointPairKind: String, Codable, Sendable, CaseIterable {
         case .railPanel: "Rails into sides and other panels."
         case .railTop: "Aprons under a top or shelf."
         case .topLeg: "Legs under a top or shelf."
+        case .slatFrame: "Slats into the rails, legs or panels they span between." // FMG2
         case .other: "Any other parts that touch."
         }
     }
@@ -250,7 +254,9 @@ public struct FurnitureJointRules: Hashable, Codable, Sendable {
             JointRule(.shelfSide, casework ? .dado : .dowel, through: .second), JointRule(.shelfBack, .butt, through: .second),
             JointRule(.dividerShelf, casework ? .dado : .dowel, through: .second), JointRule(.plinthCarcass, casework ? .pocketScrew : .dowel, through: .second),
             JointRule(.railLeg, .mortiseTenon, through: .second), JointRule(.railPanel, .dowel, through: .second), JointRule(.railTop, .pocketScrew, through: .second),
-            JointRule(.topLeg, .dowel), JointRule(.other, .butt, through: .longer),
+            JointRule(.topLeg, .dowel),
+            JointRule(.slatFrame, casework ? .dowel : .mortiseTenon, through: .second), // FMG2
+            JointRule(.other, .butt, through: .longer),
         ]
         return FurnitureJointRules(rules: rules)
     }

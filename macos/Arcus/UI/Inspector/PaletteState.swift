@@ -28,6 +28,8 @@ enum PaletteSubject: Hashable {
     case elements([ElementID], common: Bool)
     /// A view, sheet or schedule: the active view, or one previewed from the Project Browser.
     case view(ElementID)
+    /// FMG2: the joint the Joint tool picked (set by the user or by the rules).
+    case joint(JointKey)
     case nothing
 }
 
@@ -76,6 +78,7 @@ extension DocumentState {
     /// The palette's subject: the pending new element, the selection, a previewed view or the active view.
     var paletteSubject: PaletteSubject {
         if let cat = placementCategory { return .newElement(cat, placementTypeID) }
+        if let k = (activeTool as? FurnitureJointTool)?.picked { return .joint(k) } // FMG2: the picked joint, automatic or not
         let sel = session.selection.ids.compactMap { model[$0] }
         if !sel.isEmpty {
             if sel.count == 1, sel[0].view != nil || sel[0].sheet != nil || sel[0].schedule != nil { return .view(sel[0].id) }
