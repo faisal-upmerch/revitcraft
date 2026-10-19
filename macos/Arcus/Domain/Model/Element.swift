@@ -164,6 +164,8 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
     // F1415 element kinds:
 
 
+    // FM4 element kinds:
+    case furniturePanel, furnitureShelf, furnitureLeg, furnitureRail, furnitureEdgeProfile, furnitureForm // FM4
 }
 
 /// Kind-specific element data.
@@ -269,6 +271,10 @@ public enum ElementData: Hashable, Codable, Sendable {
     // FES element data:
     // FM3 element data:
     // FM4 element data:
+    /// FM4: Furniture mode parts (Domain/Furniture): panels, shelves/tops/bottoms, legs, rails and slats, edge profiles
+    /// and grooves, and free forms.
+    case furniturePanel(PanelData), furnitureShelf(ShelfData), furnitureLeg(LegData), furnitureRail(RailData)
+    case furnitureEdgeProfile(EdgeProfileData), furnitureForm(FurnitureFormData)
     // FM5 element data:
     // FM6 element data:
     // FM7 element data:
@@ -371,6 +377,12 @@ public enum ElementData: Hashable, Codable, Sendable {
         // F1415 element data kinds:
 
 
+        case .furniturePanel: .furniturePanel // FM4
+        case .furnitureShelf: .furnitureShelf
+        case .furnitureLeg: .furnitureLeg
+        case .furnitureRail: .furnitureRail
+        case .furnitureEdgeProfile: .furnitureEdgeProfile
+        case .furnitureForm: .furnitureForm
         }
     }
 }

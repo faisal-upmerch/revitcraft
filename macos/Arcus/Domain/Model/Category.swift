@@ -62,6 +62,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FES categories:
     // FM3 categories:
     // FM4 categories:
+    case furniturePanels, furnitureShelves, furnitureLegs, furnitureRails, furnitureEdgeProfiles, furnitureForms // FM4
     // FM5 categories:
     // FM6 categories:
     // FM7 categories:
@@ -108,6 +109,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
         case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
         case .renderings: return .internal_ // F810: Render Gallery images
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
         }
     }
 
@@ -124,6 +126,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
         .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, // F34
         .spaces, .mass, // F5
+        .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
     ]
     /// Categories whose instances can be tagged.
     public static let taggable: [Category] = [
@@ -131,6 +134,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .structuralColumns, .structuralFraming, .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .ramps,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking, // W2-LIB
         .spaces, // F5
+        .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
     ]
 
     public var displayName: String {
@@ -240,6 +244,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: "Cut Profiles" // F810
         case .matchlines: "Matchline"
         case .renderings: "Renderings"
+        case .furniturePanels: "Panels" // FM4
+        case .furnitureShelves: "Shelves"
+        case .furnitureLegs: "Legs"
+        case .furnitureRails: "Rails"
+        case .furnitureEdgeProfiles: "Edge Profiles"
+        case .furnitureForms: "Forms"
         }
     }
 
@@ -351,6 +361,12 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: "Cut Profile" // F810
         case .matchlines: "Matchline"
         case .renderings: "Rendering"
+        case .furniturePanels: "Panel" // FM4
+        case .furnitureShelves: "Shelf"
+        case .furnitureLegs: "Leg"
+        case .furnitureRails: "Rail"
+        case .furnitureEdgeProfiles: "Edge Profile"
+        case .furnitureForms: "Form"
         }
     }
 
@@ -368,6 +384,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .walls, .floors, .ceilings, .roofs, .stairs, .railings, .columns, .structuralColumns, .structuralFraming,
              .doors, .windows, .topography, .buildingPads, .genericModels, .casework, .ramps:
             true
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms: true // FM4
         default: false
         }
     }

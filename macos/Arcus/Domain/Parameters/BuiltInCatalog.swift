@@ -809,6 +809,8 @@ enum BuiltInCatalog {
             return F67Parameters.instance(for: e)
         case .mass: // F5
             return MassParameters.instance + [name] + identity + phasing + ifc
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4
+            return FurniturePartParameters.instance(for: e)
         default:
             return []
         }
@@ -834,6 +836,7 @@ enum BuiltInCatalog {
         case .structuralFraming:
             return td.familyID == nil ? [beamWidth, beamDepth, materialParam] + identity : identity
         case .structuralRebar, .fabricReinforcement: return ReinforcementParameters.typeParameters(td) + [materialParam] + identity // F34
+        case let c where c.isFurniturePart: return FurniturePartParameters.type(for: td) + identity // FM4
         default: return identity
         }
     }
@@ -844,6 +847,7 @@ enum BuiltInCatalog {
             for p in type(for: TypeData(instanceCategory: c, familyName: "")) { s.insert(p.id) }
         }
         for td in wp3TypeProbes { for p in type(for: td) { s.insert(p.id) } } // WP3
+        for p in FurniturePartParameters.allType { s.insert(p.id) } // FM4: tops and grooves
         return s
     }()
     static func isTypeParameter(_ id: ParameterID) -> Bool { typeParameterIDs.contains(id) }
@@ -883,6 +887,7 @@ enum BuiltInCatalog {
         for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
         for p in MassParameters.instance where d[p.id] == nil { d[p.id] = p } // F5
         for p in F2Parameters.all where d[p.id] == nil { d[p.id] = p } // F2
+        for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where d[p.id] == nil { d[p.id] = p } // FM4
         return d
     }()
 
@@ -909,6 +914,7 @@ enum BuiltInCatalog {
         for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
         for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         for p in F2Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F2
+        for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM4
         return o
     }()
 }

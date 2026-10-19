@@ -44,6 +44,8 @@ public enum ElementMeshes {
             return LinkedGeometry.meshParts(e, model)
         case .mass: // F5
             return MassGeometry.meshParts(e, model)
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureForm: // FM4: furniture parts
+            return FurniturePartMeshes.meshParts(e, model, detail: detail)
         default:
             return []
         }
@@ -68,6 +70,8 @@ public enum ElementMeshes {
         case .modelText: true // F1
         case .linkedModel, .pointCloud, .decal: true // F67
         case .mass: true // F5
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail: true // FM4
+        case .furnitureForm(let f): !f.isVoid // FM4: void forms cut parts and show no solid of their own
         default: false
         }
     }
@@ -94,6 +98,8 @@ public enum ElementMeshes {
         case .pointClouds: RGBColor(0.36, 0.46, 0.62) // F67
         case .coordinationModels: RGBColor(0.72, 0.74, 0.80, 0.9)
         case .mass: RGBColor(0.72, 0.80, 0.90, 0.5) // F5: masses are translucent, as in RevitCraft
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails: RGBColor(0.85, 0.74, 0.56) // FM4: unfinished wood
+        case .furnitureForms: RGBColor(0.70, 0.72, 0.76) // FM4
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }
@@ -228,6 +234,8 @@ public enum DependencyGraph {
             for sh in ShaftCuts.shafts(cutting: e, model) { s.insert(sh.id); if let l = sh.levelID { s.insert(l) }; if let t = sh.opening?.shaft?.topLevelID { s.insert(t) } }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34: host, bar types, cover
             s.formUnion(Reinforcement.inputs(of: e, model))
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4: edge profiles, void forms
+            s.formUnion(FurniturePartMeshes.inputs(of: e, model))
         default:
             break
         }
@@ -271,6 +279,10 @@ public enum DependencyGraph {
                     for r in m.hosted(by: id) { out.insert(r.id) }
                 case .wallReveal: // F1: the host wall's solid has the groove
                     if let h = e.hostID { out.insert(h) }
+                case .furnitureEdgeProfile: // FM4: the host part's solid has the profile
+                    if let h = e.hostID { out.insert(h) }
+                case .furnitureForm(let f) where f.isVoid: // FM4: a void form cuts every part it reaches
+                    for c in Category.furnitureParts { for x in m.elements(c) { out.insert(x.id) } }
                 case .opening: // WP3
                     if let h = e.hostID { out.insert(h) }
                     for x in ShaftCuts.cutElements(by: e, m) { out.insert(x.id) }

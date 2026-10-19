@@ -44,7 +44,7 @@ public enum FurnitureCompiler {
         f.formatVersion = FamilyDefinition.currentFormatVersion
         f.planLines = symbolicLines(m)
         addComponents(m, to: &f)
-        // FM4 parts: each part becomes a FamilySolid bounded by the same planes (FurnitureCompiler+Parts).
+        addParts(m, to: &f) // FM4: each part becomes family solids bounded by the same planes (FurnitureCompiler+Parts)
         f.furnitureSource = FurnitureSource(m).encoded()
         return f
     }

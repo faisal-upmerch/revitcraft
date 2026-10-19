@@ -240,7 +240,7 @@ struct PropertiesView: View {
         case .wallByFace, .curtainSystemByFace: .walls // F5
         case .floorByFace: .floors // F5
         case .roofByFace: .roofs // F5
-        default: nil
+        default: fm4PropertiesCategory(cmd) // FM4: furniture parts
         }
     }
 

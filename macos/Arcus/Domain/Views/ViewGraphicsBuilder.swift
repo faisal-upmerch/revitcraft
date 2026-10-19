@@ -34,6 +34,7 @@ public struct ViewGraphicsBuilder: Sendable {
         case .threeD: items = ThreeDGraphics(builder: self).build()
         }
         items += furnitureGraphics() // FM3: Furniture reference planes in elevations and sections
+        items += furniturePartGraphics() // FM4: parts in plans; hidden lines, grain and edge profiles in elevations and sections
         items = f810Graphics(items) // F810: Show Hidden Lines, matchlines, walkthrough paths
         items += AnnotationGraphics(builder: self).build()
         if data.kind != .threeD, data.visualStyle == .wireframe { items = Self.wireframe(items) } // BL-VG: 2D visual style
@@ -157,6 +158,7 @@ extension ViewGraphicsBuilder {
          .linkedModels]) // F67: linked models cut in sections and elevations with the host's elements
             .union(Category.f34Structural) // F34
             .union([.mass]) // F5: conceptual masses (hidden when Show Mass is off)
+            .union(Category.furnitureParts) // FM4: furniture parts
     }
 
     func visibleModelElements() -> [(Element, GraphicOverride)] {
