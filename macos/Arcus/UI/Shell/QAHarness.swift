@@ -471,6 +471,7 @@ enum QAHarness {
             await stairScreenshots(s, w, suffix: suffix) // STAIR: Create Stair, every kind on both levels, section, 3D
             await fm7Screenshots(suffix) // FM7: Part List, Hardware Schedule, Cost, Nesting, sheets F101–F104, fabrication dialogs
             await fm8Screenshots(suffix) // FM8: pieces in a project at Coarse/Fine, Load Furniture, Edit Family, the reload prompt
+            await fm9Screenshots(suffix) // FM9: every essential in 3D, Home ▸ Furniture, Load Furniture, the Component Library's Furniture Library
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)

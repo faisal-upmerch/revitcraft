@@ -31,6 +31,7 @@ public enum FurnitureBays {
             var list: [Bounder] = []
             for (id, b) in FurniturePartBinder.boxes(m) {
                 guard let e = m[id], e.furniturePanel?.role != .back else { continue }
+                if e.furnitureShelf?.adjustable == true { continue } // FM9: adjustable shelves sit behind the fronts; they don't bound bays
                 let role = e.furniturePartKind
                 list.append(Bounder(id: id, box: b, shared: role == .divider || role == .shelf, isSeparator: false))
             }

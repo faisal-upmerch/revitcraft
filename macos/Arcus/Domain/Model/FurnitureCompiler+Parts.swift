@@ -104,7 +104,7 @@ extension FurnitureCompiler {
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
                 if let span = p.span {
                     let key = nf.parameter(named: "Height") != nil ? "Height" : "Length"
-                    inst.bindings[key] = "(\(expression(span.end, f))) - (\(expression(span.start, f)))"
+                    inst.bindings[key] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" // FM9: lengths on both sides
                 }
                 if nf.parameter(named: "Material") != nil, let mp = materialParameter(p.material, label: label) { inst.bindings["Material"] = mp }
                 f.nestedInstances.append(inst)
@@ -152,5 +152,5 @@ extension FurnitureCompiler {
     }
 
     /// "+ 0.0127 m" or "- 0.0127 m": an offset added to a length formula.
-    static func lengthTerm(_ v: Double) -> String { "\(v < 0 ? "-" : "+") \(PartSolidContext.number(abs(v))) m" }
+    static func lengthTerm(_ v: Double) -> String { "\(v < 0 ? "-" : "+") \(FurnitureFormLocks.num(abs(v))) m" } // FM9: no exponents in formulas
 }
