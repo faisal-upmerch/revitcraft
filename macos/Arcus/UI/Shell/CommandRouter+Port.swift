@@ -1,16 +1,32 @@
 import AppKit
 import ArcusApplication
 
-// RevitCraft port feature batches: one dispatch point into each batch's CommandRouter+F*.swift.
+// RevitCraft port and Furniture mode batches: one dispatch point into each batch's CommandRouter+<TAG>.swift.
 
 extension CommandRouter {
     func portDisabledReason(_ id: CommandID) -> String? {
-        f1DisabledReason(id) ?? f2DisabledReason(id) ?? f34DisabledReason(id) ?? f5DisabledReason(id) ?? f67DisabledReason(id) ?? f810DisabledReason(id) ?? f11DisabledReason(id) ?? f1415DisabledReason(id) ?? dwgDisabledReason(id)
+        let batches: [(CommandID) -> String?] = [
+            f1DisabledReason, f2DisabledReason, f34DisabledReason, f5DisabledReason, f67DisabledReason, f810DisabledReason,
+            f11DisabledReason, f1415DisabledReason, dwgDisabledReason,
+            homeDisabledReason, fesDisabledReason, fm3DisabledReason, fm4DisabledReason, fm5DisabledReason, fm6DisabledReason,
+            fm7DisabledReason, fm8DisabledReason, fm9DisabledReason,
+        ]
+        for b in batches { if let r = b(id) { return r } }
+        return nil
     }
     func portMakeTool(_ id: CommandID, _ c: ToolContext) -> (any InteractiveTool)? {
-        f1MakeTool(id, c) ?? f2MakeTool(id, c) ?? f34MakeTool(id, c) ?? f5MakeTool(id, c) ?? f67MakeTool(id, c) ?? f810MakeTool(id, c) ?? f11MakeTool(id, c) ?? f1415MakeTool(id, c)
+        let batches: [(CommandID, ToolContext) -> (any InteractiveTool)?] = [
+            f1MakeTool, f2MakeTool, f34MakeTool, f5MakeTool, f67MakeTool, f810MakeTool, f11MakeTool, f1415MakeTool,
+            homeMakeTool, fesMakeTool, fm3MakeTool, fm4MakeTool, fm5MakeTool, fm6MakeTool, fm7MakeTool, fm8MakeTool, fm9MakeTool,
+        ]
+        for b in batches { if let t = b(id, c) { return t } }
+        return nil
     }
     func portPerform(_ id: CommandID) -> Bool {
-        f1Perform(id) || f2Perform(id) || f34Perform(id) || f5Perform(id) || f67Perform(id) || f810Perform(id) || f11Perform(id) || f1415Perform(id) || dwgPerform(id)
+        let batches: [(CommandID) -> Bool] = [
+            f1Perform, f2Perform, f34Perform, f5Perform, f67Perform, f810Perform, f11Perform, f1415Perform, dwgPerform,
+            homePerform, fesPerform, fm3Perform, fm4Perform, fm5Perform, fm6Perform, fm7Perform, fm8Perform, fm9Perform,
+        ]
+        return batches.contains { $0(id) }
     }
 }

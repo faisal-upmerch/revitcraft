@@ -58,6 +58,15 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
 
 
     // F1415 categories:
+    // HOME categories:
+    // FES categories:
+    // FM3 categories:
+    // FM4 categories:
+    // FM5 categories:
+    // FM6 categories:
+    // FM7 categories:
+    // FM8 categories:
+    // FM9 categories:
 
 
 

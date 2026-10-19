@@ -265,6 +265,15 @@ public enum ElementData: Hashable, Codable, Sendable {
 
 
     // F1415 element data:
+    // HOME element data:
+    // FES element data:
+    // FM3 element data:
+    // FM4 element data:
+    // FM5 element data:
+    // FM6 element data:
+    // FM7 element data:
+    // FM8 element data:
+    // FM9 element data:
 
 
 
