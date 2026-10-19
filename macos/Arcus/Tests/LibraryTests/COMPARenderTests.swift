@@ -3,6 +3,7 @@ import Testing
 import ArcusGeometry
 @testable import ArcusDomain
 import ArcusOutput
+import simd
 
 /// COMPA: every Group A component rendered offscreen (a shaded three-quarter view and a view of its mounting face, at
 /// Fine, in its finishes' colours) to `/tmp/arcus-compa/`, one file per component and contact sheets of twelve, to check
@@ -15,6 +16,11 @@ struct COMPARenderTests {
     static func render(_ d: ComponentDefinition, type: String, yaw: Double, pitch: Double, width: Int, height: Int) -> CGImage? {
         var ev = FamilyEvaluator.evaluate(d.family, typeName: type)
         ev.solids = ev.solids.filter { !$0.isVoid && $0.visibleIn3D && $0.visibleAt.contains(.fine) }
+        // Face-based items are shown as mounted on an upright face toward the viewer (family Z out of the face → -Y).
+        if d.frame == .face {
+            let t = Transform3(simd_double4x4(columns: (SIMD4(1, 0, 0, 0), SIMD4(0, 0, 1, 0), SIMD4(0, -1, 0, 0), SIMD4(0, 0, 0, 1))))
+            ev.solids = ev.solids.map { s in var s = s; s.mesh = s.familyMesh.transformed(t); return s }
+        }
         var colors: [String: ArcusDomain.RGBColor] = [:]
         for m in d.materials { colors[m.name] = m.finish.color }
         guard let ctx = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -27,10 +33,7 @@ struct COMPARenderTests {
 
     /// The view that looks at the mounting face: front handles face -Y, face-based items +Z, plan items from the front.
     static func faceView(_ d: ComponentDefinition) -> (Double, Double) {
-        switch d.frame {
-        case .face: (0, Double.pi / 2 - 0.0001)
-        default: (0, 0)
-        }
+        (0, 0)
     }
 
     static func write(_ img: CGImage, _ name: String) throws {
