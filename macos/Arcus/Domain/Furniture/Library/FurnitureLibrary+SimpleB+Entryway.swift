@@ -121,13 +121,13 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A shelf on two brackets with a back rail, hung on the wall.
+    /// A shelf on two brackets in front of a back plate that hangs on the wall.
     static func wallMountedShelf() throws -> BIMModel {
         let p = try SBBuilder("Wall-Mounted Shelf", .furniture, [SBSize(24, 8, 6), SBSize(36, 10, 7)], material: "Solid Walnut")
         try p.step("Shelf and Brackets") { s in
             try s.board(x: (s.l, s.r), y: (s.f, s.b), top: s.h, "1\" Solid Oak Shelf")
-            try s.panelY(s.b, inward: -1, x: (s.l + 1, s.r - 1), z: (s.h - 3, s.h - 1), "3/4\" Solid Walnut")
-            for x in [s.l + 3, s.r - 3.75] { try s.panelX(x, inward: 1, y: (s.f + 3, s.b - 0.75), z: (0, s.h - 1), "3/4\" Solid Walnut") }
+            try s.panelY(s.b, inward: -1, x: (s.l, s.r), z: (0, s.h - 1), "3/4\" Solid Walnut")
+            for x in [s.l + 3, s.r - 3.75] { try s.panelX(x, inward: 1, y: (s.b - 4, s.b - 0.75), z: (1, s.h - 1), "3/4\" Solid Walnut") }
         }
         return try p.finish()
     }

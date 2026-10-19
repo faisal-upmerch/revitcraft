@@ -27,9 +27,10 @@ enum SimpleB {
 
     static var pieces: [Piece] { entryway + kids + outdoor + storage + multipurpose + decorative }
 
-    /// The piece's document (a blank one of its category if it can't be built, which the FM9C tests rule out).
+    /// The piece's document; if it can't be built (the FM9C tests rule that out), a blank one of its category with the
+    /// failure recorded, as LibraryKit records it, so the library generator reports it.
     static func model(_ p: Piece) -> BIMModel {
-        (try? p.make()) ?? FurnitureTemplates.blank(category: p.category, name: p.name)
+        do { return try p.make() } catch { return LibraryKit.failed(FurnitureTemplates.blank(category: p.category, name: p.name), error) }
     }
 
     /// Search words for a piece by its rooms (Load Furniture and Home ▸ Furniture search them with the name).
