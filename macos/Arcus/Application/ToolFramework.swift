@@ -81,6 +81,9 @@ public final class ToolContext {
     /// S3D2: in a 3D view, the work plane tools draw on when it isn't the level's: points are then in its coordinates
     /// and new elements keep it as their sketch plane (Snapping3D+WorkPlane.swift).
     public var sketchPlane: WorkPlaneHost?
+    /// FM3D: a Furniture tool driven from a 3D view: the plane it draws on, in this (plan or elevation) context's
+    /// coordinates (FurniturePlacement3D.swift). nil in 2D views.
+    public var furniture3D: FurniturePlacement3D?
     /// Current type per category (the type selector).
     public var currentTypes: [Category: ElementID] = [:]
     /// Host callbacks.

@@ -389,7 +389,7 @@ public final class FurnitureHardwareTool: BaseTool, InteractiveTool {
     public func pointerMoved(_ i: ToolInput) {
         current = i.point
         preview = ToolPreview()
-        guard let w = world(i.point), let t = typeID else { preview.cursor = .notAllowed; return }
+        guard let w = fm3dWorld(i) ?? world(i.point), let t = typeID else { preview.cursor = .notAllowed; return } // FM3D: on the face under the pointer
         let probe = Element(id: ElementID(UInt64.max - 1), category: .furnitureHardware, data: .component(ComponentData(location: w.xy, rotation: rotation, offset: w.z, mirrored: mirrored)),
                             typeID: t, levelID: ctx.model.levels.first?.id)
         let mesh = ElementMeshes.parts(probe, ctx.model, detail: .fine).reduce(into: Mesh()) { $0.append($1.mesh) }
@@ -401,7 +401,7 @@ public final class FurnitureHardwareTool: BaseTool, InteractiveTool {
     }
 
     public func pointerDown(_ i: ToolInput) {
-        guard let w = world(i.point), let t = typeID else { message(prompt); return }
+        guard let w = fm3dWorld(i) ?? world(i.point), let t = typeID else { message(prompt); return } // FM3D
         let m = mirrored, rot = rotation
         var id: ElementID?
         ctx.session.perform("Place Hardware") { tx in
