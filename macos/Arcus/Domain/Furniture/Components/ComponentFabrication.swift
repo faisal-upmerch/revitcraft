@@ -17,33 +17,34 @@ extension FurnitureMachining {
             let extra = ["Host Thickness": f.thickness]
             func v(_ x: String) -> Double { ComponentChecks.value(x, ev, extra: extra) ?? 0 }
             let w = place.world
-            // Family (x, y) on the mount face → model; the drill axis goes into the host.
-            func at(_ x: Double, _ y: Double) -> Vec3 {
-                switch d.frame {
-                case .face: return w.apply(Vec3(x, y, 0))
-                default:
-                    let o = w.apply(.zero)
-                    return o + f.u * x + f.v * y
-                }
-            }
+            // Mount coordinates are family coordinates (x, y in the family's XY), placed like the geometry.
+            func at(_ x: Double, _ y: Double) -> Vec3 { w.apply(Vec3(x, y, 0)) }
             let into = -f.n
-            let target = { (t: ComponentMountTarget, p: Vec3) -> ElementID in t == .host ? host.id : counterpart(host, near: p, m) ?? host.id }
+            let target = { (t: ComponentMountTarget, p: Vec3) -> ElementID in
+                t == .host ? hostPart(host, face: f.face, m) : counterpart(host, near: p, m) ?? hostPart(host, face: f.face, m)
+            }
+            // Operations a type switches off (a size of 0) aren't machined.
+            func off(_ x: String) -> Bool { v(x) <= 1e-6 }
             for op in d.mounting {
                 switch op {
                 case .drill(let label, let x, let y, let dia, let depth, let through, let t):
+                    guard !off(dia), through || !off(depth) else { continue }
                     let c = at(v(x), v(y))
                     out.append(MachiningEntry(partID: target(t, c), op: .drill(center: c, axis: into, diameter: v(dia), depth: through ? f.thickness : v(depth)),
                                               source: .hardware(e.id), label: label))
                 case .pocket(let label, let x, let y, let wd, let ht, let depth, let through, let t):
+                    guard !off(wd), !off(ht), through || !off(depth) else { continue }
                     let c = (v(x), v(y)), hw = v(wd) / 2, hh = v(ht) / 2
                     let outline = [at(c.0 - hw, c.1 - hh), at(c.0 + hw, c.1 - hh), at(c.0 + hw, c.1 + hh), at(c.0 - hw, c.1 + hh)]
                     out.append(MachiningEntry(partID: target(t, outline[0]), op: .pocket(outline: outline, axis: into, depth: through ? f.thickness : v(depth)),
                                               source: .hardware(e.id), label: label))
                 case .groove(let label, let x0, let y0, let x1, let y1, let wd, let depth, let t):
+                    guard !off(wd), !off(depth) else { continue }
                     let a = at(v(x0), v(y0)), b = at(v(x1), v(y1))
                     out.append(MachiningEntry(partID: target(t, a), op: .groove(start: a, end: b, axis: into, width: v(wd), depth: v(depth)),
                                               source: .hardware(e.id), label: label))
                 case .edgeDrill(let label, let x, let z, let dia, let depth, let t):
+                    guard !off(dia), !off(depth) else { continue }
                     let c = at(v(x), 0) + f.n * v(z)
                     out.append(MachiningEntry(partID: target(t, c), op: .drill(center: c, axis: -f.v, diameter: v(dia), depth: v(depth)),
                                               source: .hardware(e.id), label: label))
@@ -53,12 +54,41 @@ extension FurnitureMachining {
         return out
     }
 
-    /// The part across the gap from a host near a point: a front's or bay's side part on that side.
+    /// The part a host face machines: a bay's face is the part bounding it (its bottom, top, sides or back); parts and
+    /// fronts machine themselves.
+    static func hostPart(_ host: Element, face: ComponentFace, _ m: BIMModel) -> ElementID {
+        guard let o = host.furnitureBay?.opening else { return host.id }
+        let part: ElementID? = switch face {
+        case .bottom: o.bottom
+        case .top: o.top
+        case .left: o.left
+        case .right: o.right
+        case .back: o.back
+        default: nil
+        }
+        return part ?? host.id
+    }
+
+    /// The part across the gap from a host near a point: for a front, its bay's side part on that side; for a bay, its
+    /// front; for a carcass part, the door, drawer or flap moving against it (stays, struts and catches) nearest the point.
     static func counterpart(_ host: Element, near p: Vec3, _ m: BIMModel) -> ElementID? {
-        let bay = host.furnitureBay ?? m[host.hostID]?.furnitureBay
-        guard let b = bay, let o = b.opening else { return nil }
-        let local = BayFrame(b).local(p)
-        return abs(local.x - o.x0) <= abs(local.x - o.x1) ? (o.left ?? o.right) : (o.right ?? o.left)
+        if let b = host.furnitureBay {
+            return m.hosted(by: host.id).first { $0.furnitureFront != nil }?.id ?? b.opening.map { o in
+                let local = BayFrame(b).local(p)
+                return abs(local.x - o.x0) <= abs(local.x - o.x1) ? (o.left ?? o.right) : (o.right ?? o.left)
+            } ?? nil
+        }
+        if host.furnitureFront != nil, let b = m[host.hostID]?.furnitureBay, let o = b.opening {
+            let local = BayFrame(b).local(p)
+            return abs(local.x - o.x0) <= abs(local.x - o.x1) ? (o.left ?? o.right) : (o.right ?? o.left)
+        }
+        // A carcass part: the fronts of the bays it bounds.
+        let fronts = m.elements(.furnitureFronts).filter { f in
+            guard let o = m[f.hostID]?.furnitureBay?.opening else { return false }
+            return [o.left, o.right, o.top, o.bottom, o.back].contains(host.id)
+        }
+        func gap(_ f: Element) -> Double { let b = ElementMeshes.bounds(f, m); return ((b.min + b.max) * 0.5 - p).length }
+        return fronts.min { gap($0) < gap($1) }?.id
     }
 }
 
@@ -132,15 +162,20 @@ public enum ComponentFabrication {
         }
     }
 
-    /// Total watts by supply ("DC 12 V": 36), and the driver size each needs (20% headroom, standard sizes).
+    /// Total watts by voltage ("12 V": 36), and the driver size low-voltage circuits need (20% headroom, standard sizes).
     public static func powerSummary(_ m: BIMModel) -> [(supply: String, watts: Double, driver: Double?)] {
-        var by: [String: Double] = [:]
-        for l in power(m) { by[l.supply, default: 0] += l.watts }
+        var by: [Double: Double] = [:], supplies: [Double: Set<String>] = [:]
+        for l in power(m) {
+            let v = (l.volts * 10).rounded() / 10
+            by[v, default: 0] += l.watts
+            supplies[v, default: []].insert(l.supply)
+        }
         let sizes: [Double] = [15, 30, 36, 60, 100, 150, 200, 300]
-        return by.keys.sorted().map { s in
-            let w = by[s] ?? 0
-            let low = s.hasPrefix("DC")
-            return (s, w, low ? sizes.first { $0 >= w * 1.2 } ?? (w * 1.2).rounded(.up) : nil)
+        return by.keys.sorted().map { v in
+            let w = by[v] ?? 0
+            // Named by the supply when every line on that voltage says the same ("DC 12 V"), else by the voltage.
+            let label = supplies[v].flatMap { $0.count == 1 ? $0.first : nil } ?? "\(LX.num(v)) V"
+            return (label, w, v > 0 && v <= 48 ? sizes.first { $0 >= w * 1.2 } ?? (w * 1.2).rounded(.up) : nil)
         }
     }
 }

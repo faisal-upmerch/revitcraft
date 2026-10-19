@@ -559,3 +559,164 @@ struct COMPProjectTests {
         #expect(ComponentFabrication.bom(m).isEmpty)
     }
 }
+
+/// Shared-infrastructure fixes the group agents asked for.
+@Suite("COMP infrastructure for the groups")
+struct COMPGroupIntegrationTests {
+    static let inch = 0.0254
+    static func cabinet() throws -> BIMModel { try COMPPlacementTests.cabinet() }
+    static func run(_ m: BIMModel, _ body: (TransactionContext) throws -> Void) throws -> BIMModel { try COMPPlacementTests.run(m, "Edit", body) }
+    static func door(_ m: BIMModel) throws -> Element { try COMPPlacementTests.door(m) }
+
+    @Test func openingMountedItemsGetTheOpeningsSize() throws {
+        let m0 = try Self.cabinet()
+        let bay = try #require(m0[try Self.door(m0).hostID])
+        var b = ComponentBuilder("Test Pull-Out", .kitchen, "Pull-Outs", "Test.", frame: .legacyOpening)
+        b.tags("pull out")
+        for n in ["Opening Width", "Opening Depth", "Opening Height"] { b.length(n, 0.3, instance: true) }
+        b.material("Finish Material", .steel)
+        b.host([.bay], faces: [.bottom])
+        b.box("Body", x: (CX.zero, "Opening Width"), y: (CX.zero, "Opening Depth"), z: (CX.zero, "Opening Height / 2"))
+        b.type("Standard", cost: 50, model: "PO")
+        let d = b.build()
+        var ids: [ElementID] = []
+        let m = try Self.run(m0) { tx in ids = try ComponentPlacement.place(d, hostID: bay.id, in: tx) }
+        let o = try #require(bay.furnitureBay?.opening)
+        let e = try #require(m[ids[0]])
+        #expect(abs((e.params[Parameters.familyParamID("Opening Depth")]?.doubleValue ?? 0) - o.depth) < 1e-9)
+        #expect(abs((e.params[Parameters.familyParamID("Opening Height")]?.doubleValue ?? 0) - o.height) < 1e-9)
+    }
+
+    @Test func bayHostedMachiningGoesOnTheBaysPartsAndFollowsTheGeometry() throws {
+        let m0 = try Self.cabinet()
+        let bay = try #require(m0[try Self.door(m0).hostID])
+        var b = ComponentBuilder("Test Under-Top Light", .lighting, "Puck Lights", "Test.", frame: .plan)
+        b.tags("light")
+        b.material("Finish Material", .aluminum)
+        b.host([.bay], faces: [.top, .bottom])
+        b.box("Body", x: ("-0.02 m", "0.02 m"), y: ("0.03 m", "0.07 m"), z: ("-0.01 m", CX.zero))
+        b.drill("Cable hole", x: CX.zero, y: "0.05 m", diameter: CX.mm(8), depth: CX.mm(10))
+        b.drill("Switched off", x: CX.zero, y: CX.zero, diameter: "if(1 > 2, 0.005 m, 0 m)", depth: CX.mm(10))
+        b.type("Standard", cost: 9, model: "UL")
+        let d = b.build()
+        var ids: [ElementID] = []
+        let m = try Self.run(m0) { tx in ids = try ComponentPlacement.place(d, hostID: bay.id, settings: ComponentSettings(face: .top, alignment: .center), in: tx) }
+        let ops = FurnitureMachining.entries(m).filter { if case .hardware(let h) = $0.source { return h == ids[0] }; return false }
+        #expect(ops.count == 1, "the zero-size drill is skipped")
+        let o = try #require(bay.furnitureBay?.opening)
+        #expect(ops.first?.partID == o.top, "into the bay's top part, not the bay")
+        // The hole sits over the body (same y as its geometry).
+        let body = ElementMeshes.parts(m[ids[0]]!, m, detail: .fine).reduce(Box3.empty) { $0.union($1.mesh.bounds) }
+        if case .drill(let c, _, _, _)? = ops.first?.op { #expect(c.y > body.min.y - 1e-6 && c.y < body.max.y + 1e-6, "\(c.y) in \(body.min.y)…\(body.max.y)") }
+    }
+
+    @Test func smallCylindersAreRound() {
+        var b = ComponentBuilder("Test Pin", .connectors, "Pins", "Test.")
+        b.tags("pin")
+        b.material("Finish Material", .steel)
+        b.cylinder("Pin", axis: .z, center: (CX.zero, CX.zero), radius: CX.mm(1), from: CX.zero, to: CX.mm(8))
+        b.type("2 mm", cost: 0.01, model: "P2")
+        let d = b.build()
+        #expect(ComponentKit.validate(d).isEmpty, "\(ComponentKit.validate(d))")
+        let ev = FamilyEvaluator.evaluate(d.family, typeName: "2 mm")
+        #expect(ev.solids.first?.profile.outer.points.count == 32)
+    }
+
+    @Test func componentsGoInsideDrawerBoxes() throws {
+        let m0 = try Self.cabinet()
+        let drawer = try #require(m0.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .drawer })
+        var b = ComponentBuilder("Test Cutlery Tray", .kitchen, "Drawer Organizers", "Test.", frame: .plan)
+        b.tags("cutlery tray")
+        b.material("Finish Material", .whitePlastic)
+        b.host([.drawerBox], faces: [.boxBottom])
+        b.box("Tray", x: ("-0.1 m", "0.1 m"), y: ("-0.1 m", "0.1 m"), z: (CX.zero, "0.04 m"))
+        b.type("Standard", cost: 12, model: "CT")
+        let d = b.build()
+        var ids: [ElementID] = []
+        let m = try Self.run(m0) { tx in ids = try ComponentPlacement.place(d, hostID: drawer.id, in: tx) }
+        let box = try #require(FurnitureFronts.drawerBox(drawer, m))
+        let e = try #require(m[ids[0]])
+        #expect(e.hostID == drawer.id && ComponentSettings(e)?.face == .boxBottom)
+        let z = m.baseElevation(of: e)
+        #expect(abs(z - (box.z0 + box.bottom)) < 1e-6, "on the box's bottom")
+    }
+
+    @Test func fullLengthRunsUpVerticalFaces() throws {
+        let m0 = try Self.cabinet()
+        let side = try #require(m0.elements(.furniturePanels).first { $0.furniturePanel?.role == .panel })
+        var b = ComponentBuilder("Test LED Strip", .lighting, "LED Profiles", "Test.")
+        b.tags("led")
+        b.length("Length", 0.5, instance: true)
+        b.material("Finish Material", .aluminum)
+        b.host([.sidePanel], faces: [.front], align: .full, vertical: true)
+        b.box("Strip", x: ("-Length / 2", "Length / 2"), y: ("-0.005 m", "0.005 m"), z: (CX.zero, "0.003 m"))
+        b.type("Standard", cost: 3, model: "LS")
+        let d = b.build()
+        var ids: [ElementID] = []
+        let m = try Self.run(m0) { tx in ids = try ComponentPlacement.place(d, hostID: side.id, in: tx) }
+        let f = try #require(ComponentPlacement.face(side, .front, m))
+        #expect(abs((m[ids[0]]?.params[Parameters.familyParamID("Length")]?.doubleValue ?? 0) - f.height) < 1e-6, "the edge's length, not its thickness")
+    }
+
+    @Test func powerGroupsByVoltage() throws {
+        var m = try Self.cabinet()
+        let top = try #require(m.elements(.furnitureShelves).first { $0.furnitureShelf?.role == .top })
+        func light(_ supply: String, _ w: Double) -> ComponentDefinition {
+            var b = ComponentBuilder("Test Light \(supply)", .lighting, "Puck Lights", "Test.")
+            b.tags("light")
+            b.material("Finish Material", .aluminum)
+            b.electrical(watts: w, volts: 12, supply: supply, cable: "2-wire")
+            b.host([.top], faces: [.bottom])
+            b.box("Body", x: ("-0.02 m", "0.02 m"), y: ("-0.02 m", "0.02 m"), z: (CX.zero, "0.01 m"))
+            b.type("Standard", cost: 5, model: "L")
+            return b.build()
+        }
+        m = try Self.run(m) { tx in
+            _ = try ComponentPlacement.place(light("DC 12 V", 3), hostID: top.id, settings: ComponentSettings(face: .bottom, alignment: .left, offsetX: 0.1), in: tx)
+            _ = try ComponentPlacement.place(light("12V DC", 4), hostID: top.id, settings: ComponentSettings(face: .bottom, alignment: .right, offsetX: 0.1), in: tx)
+        }
+        let s = ComponentFabrication.powerSummary(m)
+        #expect(s.count == 1 && s.first?.supply == "12 V" && s.first?.watts == 7 && s.first?.driver == 15, "\(s)")
+    }
+
+    @Test func counterpartDrillingFindsTheMovingFront() throws {
+        let m0 = try Self.cabinet()
+        let door = try Self.door(m0)
+        let o = try #require(m0[door.hostID]?.furnitureBay?.opening)
+        let side = try #require(o.left)
+        var b = ComponentBuilder("Test Catch", .motion, "Catches", "Test.")
+        b.tags("catch")
+        b.material("Finish Material", .steel)
+        b.host([.sidePanel, .divider], faces: [.inside], align: .top)
+        b.box("Body", x: ("-0.01 m", "0.01 m"), y: ("-0.01 m", "0.01 m"), z: (CX.zero, "0.01 m"))
+        b.drill("Catch screw", x: CX.zero, y: CX.zero, diameter: CX.mm(3), depth: CX.mm(10))
+        b.drill("Strike screw", x: CX.zero, y: CX.zero, diameter: CX.mm(3), depth: CX.mm(10), target: .counterpart)
+        b.type("Standard", cost: 2, model: "C")
+        let d = b.build()
+        var ids: [ElementID] = []
+        let m = try Self.run(m0) { tx in ids = try ComponentPlacement.place(d, hostID: side, in: tx) }
+        let ops = FurnitureMachining.entries(m).filter { if case .hardware(let h) = $0.source { return h == ids[0] }; return false }
+        #expect(ops.first { $0.label == "Catch screw" }?.partID == side)
+        #expect(ops.first { $0.label == "Strike screw" }.map { m[$0.partID]?.furnitureFront != nil } == true, "the door, not the carcass")
+    }
+
+    @Test func glassFrontsAreGlassHosts() throws {
+        var m = try Self.cabinet()
+        let door = try Self.door(m)
+        #expect(ComponentPlacement.hostKind(door, m) == .door)
+        m = try Self.run(m) { tx in tx.update(door.typeID!) { $0.typeData?.params[FurnitureFrontTypes.style] = .text(FrontStyle.glass.rawValue) } }
+        #expect(ComponentPlacement.hostKind(m[door.id]!, m) == .glass)
+        #expect(ComponentActions.available(for: [door.id], m).contains(.hinges))
+    }
+
+    @Test func edgeBandPickerSetsMaterialAndThickness() throws {
+        let m0 = try Self.cabinet()
+        guard let band = ComponentLibrary.edgeBands.first else { return }
+        let panelType = try #require(m0.types(for: .furniturePanels).first)
+        #expect(BuiltInCatalog.type(for: panelType.typeData!).contains { $0.id == ParameterID("comp.edgeBand") })
+        let m = try Self.run(m0) { tx in try Parameters.set(ParameterID("comp.edgeBand"), to: .text(band.name), on: panelType.id, in: tx) }
+        let td = try #require(m[panelType.id]?.typeData)
+        #expect(m[td.params[FurniturePartTypes.edgeMaterial]?.refValue]?.name == band.name)
+        #expect(td.params[FurniturePartTypes.edgeThickness]?.doubleValue == band.thickness)
+    }
+}

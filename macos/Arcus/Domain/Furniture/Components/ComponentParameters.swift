@@ -82,6 +82,39 @@ enum ComponentParameters {
         return list + [drilling, power]
     }
 
+    /// Edit Type ▸ Edge Band: picks an edge band from the Component Library (its material and thickness), Revit-like
+    /// a type parameter with a list; "Custom" keeps the material and thickness set by hand.
+    static let edgeBandCustom = "Custom"
+    static let edgeBand: P = {
+        let names = ComponentLibrary.edgeBands.map(\.name)
+        return P("comp.edgeBand", "Edge Band", .choice([edgeBandCustom] + names), .materials,
+                 tooltip: "An edge band from the Component Library: sets the Edge Band Material and Thickness.",
+                 get: { e, ctx in
+                     let name = e.typeData?.params[FurniturePartTypes.edgeMaterial]?.refValue.flatMap { ctx.model[$0]?.name }
+                     return .text(name.flatMap { n in names.contains(n) ? n : nil } ?? edgeBandCustom)
+                 },
+                 set: { e, v, ctx in
+                     let n = v.textValue ?? edgeBandCustom
+                     guard n != edgeBandCustom else { return }
+                     guard let band = ComponentLibrary.edgeBands.first(where: { $0.name == n }) else { throw err("Choose an edge band from the list.") }
+                     guard let mat = ctx.model.elements(.materials).first(where: { $0.name == n }) else {
+                         throw err("\(n) isn't in this document yet: it's added with the standard part types.")
+                     }
+                     e.typeData?.params[FurniturePartTypes.edgeMaterial] = .ref(mat.id)
+                     e.typeData?.params[FurniturePartTypes.edgeThickness] = .double(band.thickness)
+                 })
+    }()
+
+    /// Part and front type parameters with the Edge Band picker after the banding and grain settings, when they have
+    /// Edge Band Material.
+    static func withEdgeBand(_ list: [P]) -> [P] {
+        guard let k = list.firstIndex(where: { $0.id == FurniturePartTypes.edgeMaterial }) else { return list }
+        var out = list
+        let grain = out.firstIndex { $0.name == "Grain" }.map { $0 + 1 }
+        out.insert(edgeBand, at: min(grain ?? k, out.count))
+        return out
+    }
+
     static let sku = P("type.sku", "SKU", .text, .identity, get: { e, _ in .text(e.typeData?.params[ComponentKit.skuParam]?.textValue ?? "") },
                        set: { e, v, _ in let s = v.textValue ?? ""; e.typeData?.params[ComponentKit.skuParam] = s.isEmpty ? nil : .text(s) })
     static let version = P("comp.version", "Library Version", .integer, .identity, get: { e, _ in e.typeData?.params[ComponentKit.versionParam] })

@@ -287,7 +287,7 @@ struct COMPDTests {
         #expect(top("gas strut").first == "Gas Strut", "\(top("gas strut"))")
         #expect(top("lazy susan bearing", 4).contains("Swivel Bearing Plate"), "\(top("lazy susan bearing", 4))")
         #expect(top("abs edge banding").first == "ABS Edge Banding", "\(top("abs edge banding"))")
-        #expect(top("usb charger").first == "USB Charging Port", "\(top("usb charger"))")
+        #expect(top("usb charger", 2).contains("USB Charging Port"), "\(top("usb charger"))") // COMP: group C's Desk USB Charging Module ranks with it
         let recessed = index.search("recessed led 24 x 7", limit: 1).first
         #expect(recessed?.definition.name == "Recessed LED Profile")
     }

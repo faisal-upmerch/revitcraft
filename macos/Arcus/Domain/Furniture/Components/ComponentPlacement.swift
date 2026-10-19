@@ -101,6 +101,7 @@ public enum ComponentPlacement {
     public static func hostKind(_ e: Element, _ m: BIMModel) -> ComponentHostKind? {
         switch e.data {
         case .furnitureFront(let f):
+            if f.kind != .drawer, FurnitureFrontTypes.values(of: e, m).style == .glass { return .glass } // a glass door or flap
             switch f.kind {
             case .door: return .door
             case .drawer: return .drawerFront
@@ -115,6 +116,7 @@ public enum ComponentPlacement {
             default: return .sidePanel
             }
         case .furnitureShelf(let s):
+            if let mat = FurniturePartTypes.values(of: e, m).material, m[mat]?.material?.materialClass == .glass { return .glass } // a glass shelf
             switch s.role {
             case .top: return .top
             case .bottom: return .bottom
@@ -300,7 +302,9 @@ public enum ComponentPlacement {
             values[name] = .double(f.thickness)
         }
         if s.alignment == .full, let l = d.parameter(named: "Length"), l.isInstance {
-            values["Length"] = .double(max(Tolerance.length * 10, f.width - 2 * s.offsetX))
+            // Along the face, or up it when the component runs vertically (a strip on a side's front edge).
+            let along = s.vertical ? f.height - 2 * s.offsetY : f.width - 2 * s.offsetX
+            values["Length"] = .double(max(Tolerance.length * 10, along))
         }
         let rot = s.rotation + (s.vertical && d.frame == .face ? .pi / 2 : 0)
         switch d.frame {
