@@ -168,8 +168,8 @@ public enum FurnitureParameters {
     // MARK: Flex
 
     /// Flex: every type, and each length parameter at 50% and 150%, as the Family Editor's Flex Test (problems found).
-    public static func flex(_ m: BIMModel) -> [String] {
-        guard let (family, _) = frame(m) else { return ["This is not a Furniture document."] }
+    public static func flex(_ m: BIMModel, setup: FurnitureSetupData? = nil) -> [String] {
+        guard let (family, _) = frame(m, setup: setup) else { return ["This is not a Furniture document."] }
         var problems = FamilyEvaluator.flexTest(family, units: m.units)
         // Planes that a flexed type would push through their neighbours (Left past Right…).
         for t in family.types {

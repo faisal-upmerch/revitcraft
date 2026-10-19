@@ -85,5 +85,32 @@ public enum FurnitureRegeneration {
             let placed = FurniturePlanes.placed(rp, at: v, extents: extents)
             if placed != rp { tx.propagate(p.id) { $0.referencePlane = placed } }
         }
+        fitCrops(tx, extents)
     }
+
+    /// Views whose crop follows the piece (the template's views, `FurnitureViews.autoCrop`): plans crop to the planes'
+    /// plan extents, elevations and sections to their extents seen from the view.
+    static func fitCrops(_ tx: TransactionContext, _ e: (x: ClosedRange<Double>, y: ClosedRange<Double>, z: ClosedRange<Double>)) {
+        let pad = 0.05
+        for v in tx.model.views where v.params[FurnitureViews.autoCrop]?.boolValue == true {
+            guard let d = v.view else { continue }
+            let crop: Rect2
+            if d.kind.isPlan {
+                crop = Rect2(min: Vec2(e.x.lowerBound - pad, e.y.lowerBound - pad), max: Vec2(e.x.upperBound + pad, e.y.upperBound + pad))
+            } else if d.kind.isVerticalCut, let o = d.planeOrigin, let r = d.rightVector {
+                let us = [Vec2(e.x.lowerBound, e.y.lowerBound), Vec2(e.x.upperBound, e.y.lowerBound), Vec2(e.x.lowerBound, e.y.upperBound),
+                          Vec2(e.x.upperBound, e.y.upperBound)].map { ($0 - o.xy).dot(r) }
+                crop = Rect2(min: Vec2((us.min() ?? 0) - pad, e.z.lowerBound - pad), max: Vec2((us.max() ?? 0) + pad, e.z.upperBound + pad))
+            } else { continue }
+            if d.cropRegion != crop || !d.cropActive || !d.annotationCropActive {
+                tx.propagate(v.id) { $0.view?.cropRegion = crop; $0.view?.cropActive = true; $0.view?.annotationCropActive = true }
+            }
+        }
+    }
+}
+
+/// FM3: view settings of Furniture documents.
+public enum FurnitureViews {
+    /// A view parameter: the crop region follows the piece as its size changes (set on the template's views).
+    public static let autoCrop = ParameterID("furniture.autoCrop")
 }

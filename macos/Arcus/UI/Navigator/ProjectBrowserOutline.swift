@@ -269,6 +269,7 @@ final class ProjectBrowserController: NSObject, NSOutlineViewDataSource, NSOutli
     /// Double-click / Return: opens views, sheets and schedules; types show Type Properties; folders toggle.
     func activate(_ node: BrowserNode) {
         guard let state else { return }
+        if fm3Activate(node) { return } // FM3: Furniture Parameters and Types rows
         switch node.kind {
         case .view, .sheet, .schedule, .placedView:
             if let e = node.elementID { state.open(e) }

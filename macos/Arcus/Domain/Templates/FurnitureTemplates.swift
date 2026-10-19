@@ -113,7 +113,7 @@ public enum FurnitureTemplates {
         var plan = ViewData(kind: .floorPlan, scale: viewScale)
         plan.phaseID = phase
         plan.detailLevel = .fine
-        let planID = tx.create(.views, name: "Ref. Level", data: .view(plan), levelID: level)
+        let planID = tx.create(.views, name: "Ref. Level", data: .view(plan), levelID: level) { $0.params[FurnitureViews.autoCrop] = .bool(true) }
         var elevations: [String: ElementID] = [:]
         let reach = 1.5
         for (n, dir) in [("Front", Vec2(0, 1)), ("Back", Vec2(0, -1)), ("Left", Vec2(1, 0)), ("Right", Vec2(-1, 0))] {
@@ -125,7 +125,7 @@ public enum FurnitureTemplates {
             ev.phaseID = phase
             ev.detailLevel = .fine
             ev.markerPosition = origin - dir * 0.15
-            elevations[n] = tx.create(.views, name: n, data: .view(ev))
+            elevations[n] = tx.create(.views, name: n, data: .view(ev)) { $0.params[FurnitureViews.autoCrop] = .bool(true) }
         }
         var v3 = ViewData(kind: .threeD, scale: viewScale)
         v3.camera = Camera3D(eye: Vec3(-1.7, -2.3, 1.5), target: Vec3(0, 0, defaultHeight / 2), orthoHeight: 1.5)
@@ -146,37 +146,54 @@ public enum FurnitureTemplates {
         // Labelled dimensions with EQ about the centres: plan (Width, Depth), Front (Width, Height), Left (Depth).
         let dimType = annotation[AnnotationTypes.dimensionSpecs(units)[0].name] ?? tx.model.types(for: .dimensions).first?.id
         func ref(_ n: String) -> GeometryReference { GeometryReference(planes[n], .location) }
-        func dim(_ view: ElementID, _ refs: [String], at p: Vec2, label: String? = nil, eq: Bool = false) {
-            var d = DimensionData(kind: .aligned, references: refs.map(ref), linePoint: p)
+        // Witness lines start where each plane meets the piece's near face (`near`, view coordinates).
+        func dim(_ view: ElementID, _ refs: [String], at p: Vec2, near: [Vec2], label: String? = nil, eq: Bool = false) {
+            var d = DimensionData(kind: .aligned, references: refs.map(ref), linePoint: p, fallbackPoints: near)
             d.labelParameter = label
             d.equality = eq
             tx.create(.dimensions, data: .dimension(d), typeID: dimType, ownerViewID: view)
         }
         let inch = 0.0254
-        let front = -defaultDepth / 2, right = defaultWidth / 2
-        dim(planID, ["Left", "Right"], at: Vec2(0, front - 10 * inch), label: "Width")
-        dim(planID, ["Left", "Center (Left/Right)", "Right"], at: Vec2(0, front - 6 * inch), eq: true)
-        dim(planID, ["Front", "Back"], at: Vec2(right + 10 * inch, 0), label: "Depth")
-        dim(planID, ["Front", "Center (Front/Back)", "Back"], at: Vec2(right + 6 * inch, 0), eq: true)
+        let front = -defaultDepth / 2, right = defaultWidth / 2, back = defaultDepth / 2
+        let xs = [-right, 0, right], ys = [front, 0, back]
+        dim(planID, ["Left", "Right"], at: Vec2(0, front - 7 * inch), near: [Vec2(-right, front), Vec2(right, front)], label: "Width")
+        dim(planID, ["Left", "Center (Left/Right)", "Right"], at: Vec2(0, front - 4 * inch), near: xs.map { Vec2($0, front) }, eq: true)
+        dim(planID, ["Front", "Back"], at: Vec2(right + 7 * inch, 0), near: [Vec2(right, front), Vec2(right, back)], label: "Depth")
+        dim(planID, ["Front", "Center (Front/Back)", "Back"], at: Vec2(right + 4 * inch, 0), near: ys.map { Vec2(right, $0) }, eq: true)
         if let fe = elevations["Front"] {
-            dim(fe, ["Left", "Right"], at: Vec2(0, -8 * inch), label: "Width")
-            dim(fe, ["Left", "Center (Left/Right)", "Right"], at: Vec2(0, -4 * inch), eq: true)
-            dim(fe, ["Bottom", "Top"], at: Vec2(right + 8 * inch, 0), label: "Height")
+            dim(fe, ["Left", "Right"], at: Vec2(0, -7 * inch), near: [Vec2(-right, 0), Vec2(right, 0)], label: "Width")
+            dim(fe, ["Left", "Center (Left/Right)", "Right"], at: Vec2(0, -4 * inch), near: xs.map { Vec2($0, 0) }, eq: true)
+            dim(fe, ["Bottom", "Top"], at: Vec2(right + 6 * inch, 0), near: [Vec2(right, 0), Vec2(right, defaultHeight)], label: "Height")
         }
         if let le = elevations["Left"] {
-            dim(le, ["Front", "Back"], at: Vec2(0, -8 * inch), label: "Depth")
-            dim(le, ["Front", "Center (Front/Back)", "Back"], at: Vec2(0, -4 * inch), eq: true)
+            // The Left elevation looks along +X: its right-hand direction is -Y, so view u = -y.
+            dim(le, ["Front", "Back"], at: Vec2(0, -7 * inch), near: [Vec2(-front, 0), Vec2(-back, 0)], label: "Depth")
+            dim(le, ["Front", "Center (Front/Back)", "Back"], at: Vec2(0, -4 * inch), near: ys.map { Vec2(-$0, 0) }, eq: true)
         }
 
         // The shop drawing sheet (Tabloid, 11" x 17") with the plan, front and right elevations and the 3D view.
         let sheet = tx.create(.sheets, name: "Shop Drawing", data: .sheet(SheetData(number: "F101", paper: .ansiB, titleBlockTypeID: titleBlocks["Tabloid Title Block"])))
-        let placements: [(ElementID?, Vec2, String)] = [(planID, Vec2(0.10, 0.20), "1"), (elevations["Front"], Vec2(0.10, 0.08), "2"),
-                                                        (elevations["Right"], Vec2(0.22, 0.08), "3"), (threeD, Vec2(0.23, 0.19), "4")]
+        let placements: [(ElementID?, Vec2, String)] = [(planID, Vec2(0.10, 0.21), "1"), (elevations["Front"], Vec2(0.10, 0.08), "2"),
+                                                        (elevations["Right"], Vec2(0.25, 0.08), "3"), (threeD, Vec2(0.25, 0.21), "4")]
         for (view, center, number) in placements {
             guard let view else { continue }
             tx.create(.viewports, data: .viewport(ViewportData(viewID: view, center: center, detailNumber: number)), ownerViewID: sheet)
         }
         // FM7 schedules: Part List, Hardware Schedule and Material Takeoff are added by the fabrication milestone.
+    }
+
+    /// A new untitled piece from a saved Furniture document (a library piece or the user's own template), renamed and
+    /// put in `category`. nil when `template` isn't a Furniture document.
+    public static func copy(_ template: BIMModel, name: String, category: FamilyTemplate) -> BIMModel? {
+        guard template.isFurniture, let info = template.projectInfoElement else { return nil }
+        let tx = TransactionContext(model: template, name: "New Furniture")
+        tx.update(info.id) { e in
+            e.projectInfo?.projectName = name
+            e.projectInfo?.furniture?.family.name = name
+            e.projectInfo?.furniture?.family.template = category == .casework ? .casework : .furniture
+            e.projectInfo?.furniture?.family.furnitureSource = nil
+        }
+        return try? tx.commit().model
     }
 
     /// The eight framing planes: name, axis, offset formula, strength, origin, position at the default size.

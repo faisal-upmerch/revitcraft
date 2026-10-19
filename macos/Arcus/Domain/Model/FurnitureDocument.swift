@@ -109,8 +109,8 @@ extension BIMModel {
 
 /// Positions and extents of a Furniture document's parametric reference planes.
 public enum FurniturePlanes {
-    /// How far planes reach past the piece (meters, about 1 ft).
-    public static let margin = 0.3048
+    /// How far planes reach past the piece (8").
+    public static let margin = 8 * 0.0254
 
     /// The model's furniture planes: model-wide reference planes with a furniture definition, sorted by id.
     public static func all(_ m: BIMModel) -> [Element] {

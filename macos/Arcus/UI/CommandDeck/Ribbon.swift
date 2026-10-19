@@ -9,6 +9,7 @@ import ArcusApplication
 enum RibbonTab: String, CaseIterable, Identifiable {
     case architecture = "Architecture", structure = "Structure", insert = "Insert", annotate = "Annotate", analyze = "Analyze"
     case massing = "Massing & Site", view = "View", manage = "Manage", modify = "Modify"
+    case create = "Create", fabricate = "Fabricate" // FM3: Furniture mode (RibbonFurniture.swift; `tabs(for:)` lists a mode's tabs)
     var id: String { rawValue }
 }
 
@@ -126,8 +127,9 @@ enum RibbonContent {
         RibbonPanel(title: "Create", items: [.large(.createGroup), .small(.editGroup), .small(.ungroup), .small(.createSimilar)], tint: modify),
     ]
 
-    static func panels(_ tab: RibbonTab) -> [RibbonPanel] {
-        tab == .modify ? tabPanels(tab) : [selectPanel] + tabPanels(tab) // Modify has its own, fuller Select panel
+    static func panels(_ tab: RibbonTab, mode: DocumentKind = .project) -> [RibbonPanel] {
+        let panels = mode == .furniture ? furnitureTabPanels(tab) : tabPanels(tab) // FM3: Furniture mode panels
+        return tab == .modify ? panels : [selectPanel] + panels // Modify has its own, fuller Select panel
     }
 
     /// The panels after Select. N2: panels, their order and the dropdowns follow RevitCraft's ribbon (crates/rc-app
@@ -139,6 +141,7 @@ enum RibbonContent {
 
     static func tabPanels(_ tab: RibbonTab) -> [RibbonPanel] {
         switch tab {
+        case .create, .fabricate: return furnitureTabPanels(tab) // FM3: Furniture-only tabs
         case .modify:
             return [RibbonPanel(title: "Select", items: [.large(.modify), .small(.selectAll), .small(.filterSelection), .small(.selectAllInstancesInView)], tint: modify),
                     RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: modify)] + modifyPanels
@@ -334,12 +337,13 @@ struct RibbonTabsBar: View {
         let _ = state.session.selection.ids
         let contextualTitle = RibbonContent.contextualTitle(state)
         let contextualShown = state.ribbonShowsContextual && contextualTitle != nil
-        let compact = Self.fullWidth(contextual: contextualTitle) > state.ribbonTabsWidth
+        let tabs = RibbonTab.tabs(for: state.mode) // FM3: the mode's tabs
+        let compact = Self.fullWidth(contextual: contextualTitle, tabs: tabs) > state.ribbonTabsWidth
         HStack(spacing: 1) {
             if compact {
                 // Too narrow for every tab: the task tabs collapse into one menu, the contextual tab stays a tab.
                 Menu {
-                    ForEach(RibbonTab.allCases) { t in
+                    ForEach(tabs) { t in
                         Button { pick(t) } label: {
                             if state.ribbonTab == t { Label(t.rawValue, systemImage: "checkmark") } else { Text(t.rawValue) }
                         }
@@ -357,7 +361,7 @@ struct RibbonTabsBar: View {
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
                 .accessibilityLabel("Ribbon tab: \(state.ribbonTab.rawValue)")
             } else {
-                ForEach(RibbonTab.allCases) { t in
+                ForEach(tabs) { t in
                     RibbonTabButton(title: t.rawValue, selected: state.ribbonTab == t && !contextualShown) { pick(t) }
                         doubleTap: { state.ribbonCollapsed.toggle() }
                 }
@@ -394,10 +398,10 @@ struct RibbonTabsBar: View {
     }
 
     /// Width of the full tab row: each tab's title plus its padding, the contextual tab and the minimize control.
-    static func fullWidth(contextual: String?) -> CGFloat {
+    static func fullWidth(contextual: String?, tabs: [RibbonTab] = RibbonTab.tabs(for: .project)) -> CGFloat {
         let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         func w(_ s: String) -> CGFloat { (s as NSString).size(withAttributes: [.font: font]).width + 21 }
-        return RibbonTab.allCases.reduce(0) { $0 + w($1.rawValue) } + (contextual.map(w) ?? 0) + 30
+        return tabs.reduce(0) { $0 + w($1.rawValue) } + (contextual.map(w) ?? 0) + 30
     }
 }
 
@@ -417,7 +421,7 @@ struct RibbonView: View {
                 if contextualShown {
                     scheduleOrContextualPanels(tool: tool) // BL-SCHED
                 } else {
-                    ForEach(RibbonContent.panels(state.ribbonTab)) { p in panelView(p) }
+                    ForEach(RibbonContent.panels(state.ribbonTab, mode: state.mode)) { p in panelView(p) } // FM3: per mode
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 5)
@@ -472,6 +476,7 @@ struct RibbonView: View {
             ForEach(wallPanels) { p in panelView(p, contextual: true) } // BL-SITE
             if let p = RibbonContent.selectionPanel(state) { panelView(p, contextual: true) }
             ForEach(RibbonContent.f810ContextualPanels(state)) { p in panelView(p, contextual: true) } // F810: Edit Walkthrough
+            ForEach(RibbonContent.furnitureContextualPanels(state)) { p in panelView(p, contextual: true) } // FM3: Family Editor panel
         }
     }
 }
