@@ -52,7 +52,7 @@ struct STAIRTests {
     // MARK: Riser math and calculation rules
 
     @Test func riserMathFollowsLevelsTypeAndProperties() throws {
-        let (ctx, ids) = context()
+        let (ctx, _) = context()
         let e = try drawStair(ctx) { t in click(t, Vec2(0, 0)); click(t, Vec2(0, 22 * Self.tread)) }
         let l = try #require(StairGeometry.layout(e, ctx.model))
         // Level 1 to Level 2 is 4 m; the type's Maximum Riser Height is 175 mm: 23 risers of 173.9 mm, 280 mm treads.
