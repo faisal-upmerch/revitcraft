@@ -43,6 +43,7 @@ public enum GripService {
     /// without explicit extents still get end grips.
     public static func grips(for e: Element, _ model: BIMModel, viewKind: ViewKind?, levelLine: (Double, Double)? = nil, viewID: ElementID? = nil) -> [Grip] {
         if let g = annotationGrips(for: e, model) { return g }
+        if let g = fm4Grips(e, model, viewID: viewID) { return g } // FM4: furniture parts
         switch e.data {
         case .wall(let w): return [Grip(elementID: e.id, kind: .start, position: w.location.start), Grip(elementID: e.id, kind: .end, position: w.location.end)]
         case .modelLine(let l) where l.sketchPlane != nil: return [] // S3D2: on another work plane: moved, not stretched in plan
@@ -78,6 +79,7 @@ public enum GripService {
     /// Applies a grip drag. Returns false if not applicable.
     public static func apply(_ g: Grip, to p: Vec2, in tx: TransactionContext) {
         if CameraGrips.apply(g, to: p, in: tx) { return } // W2-CAM
+        if fm4Apply(g, to: p, in: tx) { return } // FM4: furniture parts
         var p = p
         // A wall end dropped on another wall's end joins it (see WallGeometry.joinEndpoint).
         if g.kind == .start || g.kind == .end, let e = tx.model[g.elementID], let w = e.wall, g.kind == .start ? w.allowJoinAtStart : w.allowJoinAtEnd,
@@ -117,6 +119,7 @@ public enum GripService {
     public static func controls(for e: Element, _ model: BIMModel, view: Element?, pixel: Double, levelLine: (Double, Double)? = nil) -> [Grip] {
         let kind = view?.view?.kind
         let gap = 16 * pixel
+        if let c = fm4Controls(e, model, view: view, pixel: pixel) { return c } // FM4: panel flip arrows
         switch e.data {
         case .wall(let w) where kind?.isPlan == true:
             guard let f = WallGeometry.frame(e, model) else { return [] }
@@ -189,7 +192,7 @@ public enum GripService {
         if toggleDatum(g, in: tx) { return } // I4
         tx.update(g.elementID) { e in
             switch g.kind {
-            case .flipWall: e.wall?.flipped.toggle()
+            case .flipWall: e.wall?.flipped.toggle(); e.furniturePanel?.flipped.toggle() // FM4: panels flip like walls
             case .flipFacing: e.insert?.facingFlipped.toggle(); if let f = e.component?.facingFlipped { e.component?.facingFlipped = f ? nil : true } else if e.component != nil { e.component?.facingFlipped = true } // F1415
             case .flipHand: e.insert?.handFlipped.toggle(); e.component?.mirrored.toggle() // F1415
             case .bubble(let atEnd):

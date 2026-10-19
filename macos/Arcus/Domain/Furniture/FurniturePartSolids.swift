@@ -117,16 +117,16 @@ public enum FurniturePartSolids {
 
     /// The world axes of a linear part's line, its cross direction and its extrusion, when the line runs along an axis.
     /// `along` is +1 when the line runs toward +axis; `across` is the sign of the left normal on the cross axis.
-    struct LinearFrame {
-        var plane: FamilySketchPlane
-        var lineAxis: FamilyAxis
-        var crossAxis: FamilyAxis
-        var along: Double
-        var across: Double
-        var lineAlongU: Bool
+    public struct LinearFrame: Sendable {
+        public var plane: FamilySketchPlane
+        public var lineAxis: FamilyAxis
+        public var crossAxis: FamilyAxis
+        public var along: Double
+        public var across: Double
+        public var lineAlongU: Bool
     }
 
-    static func linearFrame(_ plane: FamilySketchPlane, _ s: Vec2, _ e: Vec2) -> LinearFrame? {
+    public static func linearFrame(_ plane: FamilySketchPlane, _ s: Vec2, _ e: Vec2) -> LinearFrame? {
         let d = e - s
         guard d.length > Tolerance.length else { return nil }
         let a = plane.axes

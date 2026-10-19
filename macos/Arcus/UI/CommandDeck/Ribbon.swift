@@ -278,6 +278,7 @@ enum RibbonContent {
         let annot = annotSelectionItems(sel, m); if let t = annot.title { title = t }; items += annot.items // W2-ANNOT
         let site = siteSelectionItems(sel, m); if let t = site.title { title = t }; items += site.items // BL-SITE
         let f2 = f2SelectionItems(sel, m); if let t = f2.title { title = t }; items += f2.items // F2: stairs (Connect Levels)
+        let fm4 = fm4SelectionItems(sel, m); if let t = fm4.title { title = t }; items += fm4.items // FM4: furniture parts
         if sel.count == 1, Parameters.familyDefinition(for: sel[0], m) != nil { items += [.large(.familyEditor)] }
         return items.isEmpty ? nil : RibbonPanel(title: title, items: items, tint: build)
     }
@@ -297,7 +298,7 @@ enum RibbonContent {
         case "Arc": "point.topleft.down.to.point.bottomright.curvepath"
         case "Circle": "circle"
         case "Polygon": "hexagon"
-        case "Pick Lines", "Pick Walls": "cursorarrow.rays"
+        case "Pick Lines", "Pick Walls", "Pick Panels": "cursorarrow.rays" // FM4: Pick Panels
         case "Inscribed Polygon": "hexagon" // WP3 wall draw modes
         case "Circumscribed Polygon": "hexagon.fill"
         case "Tangent Arc": "arrow.turn.up.right"

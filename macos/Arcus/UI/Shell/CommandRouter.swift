@@ -105,6 +105,7 @@ struct CommandRouter {
         case .grid(let g): return g.isMultiSegment // F2: a multi-segment grid's sketch
         case .beamSystem, .areaReinforcement, .fabricArea: return !Reinforcement.isWallHosted(model, e.hostID) // F34: plan sketches
         case .mass: return true // F5: the footprint
+        case .furnitureShelf: return true // FM4: a shelf, top or bottom's boundary
         default: return false
         }
     }

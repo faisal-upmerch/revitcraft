@@ -17,6 +17,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case f5(F5SketchTarget)
         /// F810: View ▸ Cut Profile (SketchTool+F810.swift).
         case f810(F810SketchTarget)
+        /// FM4: shelves, tops and bottoms, panel profiles and forms in Furniture documents (SketchTool+FM4.swift).
+        case fm4(FM4SketchTarget)
     }
     /// Draw tools of the contextual Draw panel (BL-CANVAS: the full set of the reference tool's boundary sketches).
     public enum DrawMode: String, CaseIterable {
@@ -61,6 +63,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public var massOptions = MassSketchOptions.last
     /// F2: roof slope arrows, eave offsets and the Align Eaves mode (SketchTool+F2.swift).
     var f2 = SketchF2State()
+    /// FM4: Furniture sketch options (SketchTool+FM4.swift).
+    var fm4 = FM4SketchState()
 
     public init(ctx: ToolContext, target: Target, commandID: CommandID, editing: ElementID? = nil) {
         self.target = target
@@ -106,6 +110,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .f34(let t): t.title // F34
         case .f5(let t): t.title // F5
         case .f810(let t): t.title // F810
+        case .fm4(let t): t.title // FM4
         }
     }
     public var prompt: String {
@@ -147,6 +152,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             o.append(ToolOption(id: "overhang", label: "Overhang", kind: .length, value: .double(overhang)))
         }
         if case .f5(let t) = target { o += f5Options(t) } // F5
+        if case .fm4(let t) = target { o = fm4Options(t, o) } // FM4: Pick Panels, Height Offset, form extents
         if target == .revisionCloud {
             o.append(ToolOption(id: "revision", label: "Revision", kind: .choice(ctx.model.revisions.map(\.name)), value: .text(ctx.model[revisionID]?.name ?? "")))
         }
@@ -159,10 +165,12 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .callout where commandID == .calloutSketch: DrawMode.allCases.filter { $0 != .pickWalls && $0 != .pickLines } // F810: callout of any shape
         case .callout, .revisionCloud: [.rectangle, .line]
         case .roofExtrusion: [.line, .arc, .centerArc, .tangentArc, .filletArc, .pickLines]
+        case .fm4(let t): t.drawModes // FM4
         default: DrawMode.allCases.filter { $0 != .pickWalls }
         }
     }
     public func setOption(_ id: String, _ value: ParamValue) {
+        if case .fm4(let t) = target, fm4SetOption(t, id, value) { return } // FM4
         switch id {
         case "mode": if let m = DrawMode(rawValue: value.textValue ?? "") ?? (value.textValue == "Arc" ? .arc : nil) { drawMode = m; start = nil; arcEnd = nil; filletPicks = [] }
         case "offset": offset = value.doubleValue ?? 0
@@ -209,6 +217,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             preview.primitives.append(.polyline([a.head - d * h + d.perpendicular * h * 0.4, a.head, a.head - d * h - d.perpendicular * h * 0.4], closed: false, ctx.previewHeavy))
         }
         guard let c = current else { return }
+        if case .fm4 = target, fm4Preview(at: c) { return } // FM4: Pick Panels
         if drawMode == .pickWalls, !arrowMode {
             if let w = pickWall(c) { preview.highlight = [w.id]; preview.cursor = .pick }
             return
@@ -238,6 +247,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
     public func pointerDown(_ i: ToolInput) {
         let p = i.point
         if f2PointerDown(p) { rebuild(); return } // F2: Align Eaves picks
+        if fm4PointerDown(p) { rebuild(); return } // FM4: Pick Panels
         if arrowMode {
             if let s = start {
                 // Default 2% fall; adjust Slope in Properties after finishing.
@@ -373,6 +383,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
             guard commitExtrusion() else { return false }
         case .f34(let t) where t.isOpenPath: // F34: path reinforcement is an open chain
             guard f34FinishPath(t) else { return false }
+        case .fm4(let t) where t.allowsOpenCurves: // FM4: revolve axes and sweep paths are open
+            guard fm4FinishForm(t) else { return false }
         default:
             let loops = splitLoops(curves)
             if let issue = SketchValidation.validate(curves, loops: loops) { // BL-CANVAS: ARCUS-050
@@ -475,6 +487,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .f34(let t): f34Commit(t, sketch, view: view, level: level) // F34
         case .f5(let t): f5Commit(t, sketch, level: level) // F5
         case .f810(let t): f810Commit(t, sketch, view: view) // F810
+        case .fm4(let t): fm4Commit(t, sketch) // FM4
         default: break
         }
     }

@@ -526,4 +526,180 @@ struct FM4Tests {
         let pb = parts.reduce(Box3.empty) { $0.union($1.mesh.bounds) }
         #expect(Self.approx(pb.max.x - pb.min.x, 36 * Self.inch, 1e-5) && Self.approx(pb.max.z - pb.min.z, 30 * Self.inch, 1e-5))
     }
+
+    // MARK: Tools
+
+    static func click(_ tool: some InteractiveTool, _ p: Vec2) {
+        let i = ToolInput(point: p, rawPoint: p)
+        tool.pointerMoved(i)
+        tool.pointerDown(i)
+        tool.pointerUp(i)
+    }
+    static func view(_ m: BIMModel, _ name: String) -> ElementID { m.views.first { $0.name == name || ($0.view?.kind == .floorPlan && name == "Plan") }!.id }
+
+    @Test func panelToolDrawsChainsRectanglesAndFlipsWithSpace() throws {
+        let s = DocumentSession(model: FurnitureTemplates.blank())
+        let ctx = ToolContext(session: s, viewID: Self.view(s.model, "Plan"))
+        let tool = FurniturePanelTool(ctx: ctx)
+        #expect(tool.options.map(\.id).starts(with: ["mode", "basePlane", "baseOffset", "topPlane", "topOffset", "location", "chain"]))
+        let i = Self.inch
+        Self.click(tool, Vec2(-18 * i, -9 * i)); Self.click(tool, Vec2(-18 * i, 9 * i)); Self.click(tool, Vec2(18 * i, 9 * i))
+        #expect(s.model.elements(.furniturePanels).count == 2, "a chain of two panels")
+        #expect(tool.escape() == .stayInTool && tool.escape() == .exitTool)
+        // Space flips: the outside face goes to the right of the drawing direction.
+        tool.spaceBar()
+        Self.click(tool, Vec2(18 * i, -9 * i)); Self.click(tool, Vec2(-18 * i, -9 * i))
+        let last = s.model.elements(.furniturePanels).max { $0.id < $1.id }!
+        #expect(last.furniturePanel?.flipped == true)
+        let b = Self.box(s.model, last.id)
+        #expect(Self.approx(b.min.y, -9 * i - 0.75 * i), "flipped: the panel lies outside the line (toward the front)")
+        // Rectangle in the Front elevation: four panels across the depth.
+        let front = ToolContext(session: s, viewID: Self.view(s.model, "Front"))
+        let rt = FurniturePanelTool(ctx: front, mode: .rectangle)
+        #expect(rt.map?.plane == .xz && rt.extent.basePlane == "Front" && rt.extent.topPlane == "Back")
+        Self.click(rt, Vec2(-10 * i, 2 * i)); Self.click(rt, Vec2(10 * i, 20 * i))
+        let rect = s.model.elements(.furniturePanels).filter { $0.furniturePanel?.plane == .xz }
+        #expect(rect.count == 4)
+        // In the Back elevation (u runs toward -x) a line still lands where it's drawn.
+        let back = ToolContext(session: s, viewID: Self.view(s.model, "Back"))
+        let bt = FurniturePanelTool(ctx: back)
+        #expect(bt.map?.mirrored == true)
+        Self.click(bt, Vec2(-5 * i, 25 * i)); Self.click(bt, Vec2(5 * i, 25 * i))
+        let drawn = s.model.elements(.furniturePanels).max { $0.id < $1.id }!.furniturePanel!
+        #expect(Self.approx(drawn.start.x, 5 * i) && Self.approx(drawn.end.x, -5 * i), "the Back view's u is -x")
+    }
+
+    @Test func shelfToolPicksPanelsAndFinishesLikeAFloor() throws {
+        let (s, ids) = Self.bookcase()
+        let plan = Self.view(s.model, "Plan")
+        let ctx = ToolContext(session: s, viewID: plan)
+        ctx.pixel = 0.001
+        let tool = SketchTool.furniture(ctx, .shelf(.shelf), commandID: .furnitureShelf)
+        #expect(tool.drawMode == .pickWalls && tool.isSketchMode)
+        #expect(tool.options.first?.value.textValue == "Pick Panels")
+        #expect(tool.options.first.map { if case .choice(let c) = $0.kind { return c.contains("Pick Panels") && !c.contains("Pick Walls") }; return false } == true)
+        tool.setOption("fm4.offset", .double(15 * Self.inch))
+        // Click inside the carcass: the sides' inside faces and the front and back planes.
+        Self.click(tool, Vec2(0, 0))
+        #expect(tool.curves.count == 4)
+        #expect(tool.finish())
+        let shelves = s.model.elements(.furnitureShelves)
+        let shelf = shelves.max { $0.id < $1.id }!
+        let b = Self.box(s.model, shelf.id)
+        #expect(Self.approx(b.min.x, -18 * Self.inch + 0.75 * Self.inch) && Self.approx(b.max.z, 15 * Self.inch))
+        // Picking the two sides one by one and the planes: lines meet at the corners.
+        let t2 = SketchTool.furniture(ctx, .shelf(.shelf), commandID: .furnitureShelf)
+        Self.click(t2, Vec2(-18 * Self.inch + 0.3 * Self.inch, 0))
+        #expect(t2.curves.count == 1)
+        _ = ids
+    }
+
+    @Test func legRailAndEdgeToolsPlaceParts() throws {
+        let s = DocumentSession(model: FurnitureTemplates.blank(name: "Table"))
+        let plan = Self.view(s.model, "Plan")
+        let ctx = ToolContext(session: s, viewID: plan)
+        ctx.pixel = 0.001
+        var top: ElementID?
+        _ = s.perform("Top") { tx in
+            top = try FurniturePartOperations.createShelf(boundary: Polygon2.rectangle(Rect2(min: Vec2(-18 * Self.inch, -9 * Self.inch), max: Vec2(18 * Self.inch, 9 * Self.inch))).points,
+                                                          plane: "Top", offset: 0, role: .top, in: tx)
+        }
+        let corners = FurnitureLegTool(ctx: ctx, atCorners: true)
+        Self.click(corners, Vec2(0, 0))
+        #expect(s.model.elements(.furnitureLegs).count == 4)
+        let leg = FurnitureLegTool(ctx: ctx)
+        leg.spaceBar()
+        #expect(Self.approx(leg.rotation, .pi / 2))
+        Self.click(leg, Vec2(0, 0))
+        #expect(s.model.elements(.furnitureLegs).count == 5)
+        let rail = FurnitureRailTool(ctx: ctx)
+        #expect(rail.plane == "Top")
+        Self.click(rail, Vec2(-16 * Self.inch, -8 * Self.inch)); Self.click(rail, Vec2(16 * Self.inch, -8 * Self.inch))
+        #expect(s.model.elements(.furnitureRails).count == 1)
+        // Edge Profile in the Front elevation: the top's front top edge.
+        let fctx = ToolContext(session: s, viewID: Self.view(s.model, "Front"))
+        fctx.pixel = 0.001
+        let edge = FurnitureEdgeProfileTool(ctx: fctx, groove: false)
+        let tt = FurniturePartTypes.values(of: s.model[top!]!, s.model).thickness
+        Self.click(edge, Vec2(0, 30 * Self.inch))
+        let ep = try #require(s.model.elements(.furnitureEdgeProfiles).first?.furnitureEdgeProfile)
+        #expect(ep.edge == PartEdge(axis: .x, firstAtMax: false, secondAtMax: true), "\(ep.edge) (top \(tt))")
+    }
+
+    @Test func backAndDividerToolsPickTheBayInTheFrontElevation() throws {
+        let (s, _) = Self.bookcase()
+        let ctx = ToolContext(session: s, viewID: Self.view(s.model, "Front"))
+        let back = FurnitureBackTool(ctx: ctx)
+        Self.click(back, Vec2(0, 15 * Self.inch))
+        #expect(s.model.elements(.furniturePanels).contains { $0.furniturePanel?.role == .back })
+        let div = FurnitureDividerTool(ctx: ctx)
+        div.setOption("count", .int(2))
+        Self.click(div, Vec2(0, 25 * Self.inch))
+        #expect(s.model.elements(.furniturePanels).filter { $0.furniturePanel?.role == .divider }.count == 2)
+        // The plan has no bays to pick.
+        let pctx = ToolContext(session: s, viewID: Self.view(s.model, "Plan"))
+        #expect(FurnitureBackTool(ctx: pctx).prompt.contains("Front or Back"))
+    }
+
+    @Test func formToolsSketchExtrusionsRevolvesAndSweeps() throws {
+        let s = DocumentSession(model: FurnitureTemplates.blank())
+        let plan = ToolContext(session: s, viewID: Self.view(s.model, "Plan"))
+        let ext = SketchTool.furniture(plan, .form(.extrusion, isVoid: false), commandID: .furnitureExtrusion)
+        ext.setOption("mode", .text("Rectangle"))
+        Self.click(ext, Vec2(-0.1, -0.1)); Self.click(ext, Vec2(0.1, 0.1))
+        #expect(ext.finish())
+        let f = try #require(s.model.elements(.furnitureForms).first?.furnitureForm)
+        #expect(f.kind == .extrusion && Self.approx(f.w1 - f.w0, 12 * Self.inch))
+        // Revolve in the Front elevation: a profile and a vertical axis line.
+        let front = ToolContext(session: s, viewID: Self.view(s.model, "Front"))
+        let rev = SketchTool.furniture(front, .form(.revolve, isVoid: false), commandID: .furnitureRevolve)
+        rev.setOption("mode", .text("Rectangle"))
+        Self.click(rev, Vec2(0.02, 0)); Self.click(rev, Vec2(0.05, 0.3))
+        rev.setOption("mode", .text("Line"))
+        Self.click(rev, Vec2(0, 0)); Self.click(rev, Vec2(0, 0.3))
+        _ = rev.escape()
+        #expect(rev.finish(), "\(rev.curves.count) curves")
+        let r = try #require(s.model.elements(.furnitureForms).first { $0.furnitureForm?.kind == .revolve })
+        let vol = FurniturePartMeshes.meshParts(r, s.model, detail: .fine).reduce(0) { $0 + abs($1.mesh.signedVolume) }
+        #expect(Self.approx(vol, .pi * (0.05 * 0.05 - 0.02 * 0.02) * 0.3, 0.0004), "\(vol)")
+        // Sweep in plan: a path and a profile.
+        let sw = SketchTool.furniture(plan, .form(.sweep, isVoid: false), commandID: .furnitureSweep)
+        Self.click(sw, Vec2(-0.3, 0.3)); Self.click(sw, Vec2(0.3, 0.3))
+        _ = sw.escape()
+        sw.setOption("mode", .text("Rectangle"))
+        Self.click(sw, Vec2(0.5, 0.5)); Self.click(sw, Vec2(0.52, 0.53))
+        #expect(sw.finish())
+        let sweep = try #require(s.model.elements(.furnitureForms).first { $0.furnitureForm?.kind == .sweep })
+        #expect(!FurniturePartMeshes.meshParts(sweep, s.model, detail: .fine).isEmpty)
+        // Cushion: two corners.
+        let cu = FurnitureCushionTool(ctx: plan)
+        Self.click(cu, Vec2(-0.3, -0.2)); Self.click(cu, Vec2(0.3, 0.2))
+        let c = try #require(s.model.elements(.furnitureForms).first { $0.furnitureForm?.kind == .cushion }?.furnitureForm?.cushion)
+        #expect(Self.approx(c.width, 0.6) && Self.approx(c.depth, 0.4))
+    }
+
+    @Test func gripsAndCommandsBehaveLikeTheirRevitCounterparts() throws {
+        let (s, ids) = Self.bookcase()
+        let plan = Self.view(s.model, "Plan"), front = Self.view(s.model, "Front")
+        let left = s.model[ids["left"]!]!
+        let pg = GripService.grips(for: left, s.model, viewKind: .floorPlan, viewID: plan)
+        #expect(pg.map(\.kind) == [.start, .end])
+        let fg = GripService.grips(for: left, s.model, viewKind: .elevation, viewID: front)
+        #expect(fg.filter { $0.kind == .sectionDepth }.count == 2, "height arrows in the elevation")
+        let topArrow = fg.first { $0.kind == .sectionDepth && $0.isOn }!
+        _ = s.perform("Drag") { tx in GripService.apply(topArrow, to: Vec2(topArrow.position.x, 24 * Self.inch), in: tx) }
+        #expect(Self.approx(Self.box(s.model, left.id).max.z, 24 * Self.inch))
+        // The flip arrows sit outside the outside face, and flip the panel.
+        let c = GripService.controls(for: s.model[left.id]!, s.model, view: s.model[plan], pixel: 0.001)
+        #expect(c.count == 1 && c[0].kind == .flipWall && c[0].position.x < -18 * Self.inch)
+        _ = s.perform("Flip") { tx in GripService.toggle(c[0], in: tx) }
+        #expect(s.model[left.id]?.furniturePanel?.flipped == true)
+        // Commands: aliases, groups, and the Furniture-only gate.
+        #expect(CommandCatalog.info(.furniturePanel).aliases == ["PA"] && CommandCatalog.info(.furnitureShelf).aliases == ["SH"])
+        for (id, a) in [(CommandID.furnitureBack, "BK"), (.furnitureDivider, "DV"), (.furnitureLeg, "LG"), (.furnitureRail, "RL"), (.furniturePlinth, "KK")] {
+            #expect(CommandCatalog.info(id).aliases == [a])
+        }
+        let all = CommandCatalog.all.flatMap(\.aliases)
+        #expect(Set(all).count == all.count, "aliases are unique")
+    }
 }

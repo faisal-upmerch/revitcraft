@@ -47,8 +47,8 @@ extension RibbonContent {
 
     static let furniturePropertiesPanel = RibbonPanel(title: "Properties", items: [.large(.furnitureFamilyTypes), .large(.furnitureCategory), .small(.toggleProperties)], tint: furniture)
 
-    /// Forms: free shapes. The project's in-place form tool until the Furniture forms arrive.
-    static let furnitureFormsPanel = RibbonPanel(title: "Forms", items: [.large(.modelInPlace)] + fm4FormItems, tint: build)
+    /// Forms: free shapes (FM4: Extrusion, Blend, Revolve, Sweep, Swept Blend, Cushion, Void Forms).
+    static let furnitureFormsPanel = RibbonPanel(title: "Forms", items: fm4FormItems, tint: build)
 
     static var furnitureModelPanel: RibbonPanel {
         RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary])] + fm5ModelItems + [.small(.modelLine), .small(.modelText)], tint: build)
@@ -102,10 +102,32 @@ extension RibbonContent {
     // MARK: Slots for later milestones
 
     // FM4 panels: Parts (Panel, Shelf, Top, Back, Divider, Leg, Rail, Plinth, Edge Profile) on Create, after Properties.
-    static var fm4CreatePanels: [RibbonPanel] { [] }
+    static var fm4CreatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Parts", items: [.large(.furniturePanel), .large(.furnitureShelf), .large(.furnitureTop),
+                                             .small(.furnitureBack), .small(.furnitureDivider), .small(.furniturePlinth),
+                                             .large(.furnitureLeg, [.furnitureLeg, .furnitureLegsAtCorners]), .large(.furnitureRail, [.furnitureRail, .furnitureSlats]),
+                                             .large(.furnitureEdgeProfile, [.furnitureEdgeProfile, .furnitureGroove])], tint: furniture)]
+    }
 
     // FM4 panels: Furniture forms (Extrusion, Blend, Revolve, Sweep, Swept Blend, Cushion, Void Forms) on Create ▸ Forms.
-    static var fm4FormItems: [RibbonItem] { [] }
+    static var fm4FormItems: [RibbonItem] {
+        [.large(.furnitureExtrusion), .large(.furnitureBlend), .large(.furnitureRevolve), .small(.furnitureSweep), .small(.furnitureSweptBlend), .small(.furnitureCushion),
+         .large(.furnitureVoidExtrusion, [.furnitureVoidExtrusion, .furnitureVoidBlend, .furnitureVoidRevolve, .furnitureVoidSweep, .furnitureVoidSweptBlend])]
+    }
+
+    // FM4 panels: the contextual Modify | Panels, Legs… panel (Edit Profile, Opening, Attach Top/Base, Detach, Flip).
+    static func fm4SelectionItems(_ sel: [Element], _ m: BIMModel) -> (title: String?, items: [RibbonItem]) {
+        let parts = sel.filter { $0.category.isFurniturePart }
+        guard !parts.isEmpty else { return (nil, []) }
+        var items: [RibbonItem] = []
+        if parts.contains(where: { $0.furniturePanel != nil }) {
+            items += [.large(.furnitureEditProfile), .small(.furnitureResetProfile), .small(.furniturePanelOpening), .small(.furnitureFlipPanel)]
+        }
+        if parts.contains(where: { $0.furniturePanel?.plane == .xy || $0.furnitureLeg != nil }) { items += [.large(.furnitureAttach), .small(.furnitureDetach)] }
+        if parts.count == 1, parts[0].furnitureShelf != nil { items += [.large(.furnitureLegsAtCorners)] }
+        let title = parts.allSatisfy({ $0.furniturePanel != nil }) ? "Modify Panel" : parts.allSatisfy({ $0.furnitureLeg != nil }) ? "Modify Leg" : "Modify Part"
+        return items.isEmpty ? (nil, []) : (title, items)
+    }
 
     // FM5 panels: Openings (Bay, Bay Divide, Door, Drawer, Flap) on Create, after Parts.
     static var fm5CreatePanels: [RibbonPanel] { [] }
