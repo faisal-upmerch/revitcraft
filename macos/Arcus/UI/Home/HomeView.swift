@@ -102,7 +102,7 @@ struct HomeSidebar: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .onAppear { cardsFocused = true }
-        .sheet(isPresented: $showClaude) { ClaudeSetupView(onDone: { showClaude = false }) } // MCP
+        .sheet(isPresented: $showClaude) { ClaudeSetupView(onDone: { showClaude = false }).opaqueDialogBackground() } // MCP; DIALOGS: opaque
     }
 }
 

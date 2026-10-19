@@ -19,7 +19,9 @@ enum StairRailingDialog {
             }
             if let parent = panel.sheetParent { parent.endSheet(panel) } else { panel.close() }
         }
-        panel.contentViewController = NSHostingController(rootView: view)
+        let host = NSHostingController(rootView: view.background(DialogColors.background)) // DIALOGS: sized to the dialog, opaque
+        host.sizingOptions = [.preferredContentSize]
+        panel.contentViewController = host
         if let w = state.window { w.beginSheet(panel) } else { panel.center(); panel.makeKeyAndOrderFront(nil) }
     }
 }
@@ -33,24 +35,23 @@ struct StairRailingDialogView: View {
     let done: ((ElementID?, StairRailingPosition)?) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Picker("Railing Type", selection: $typeID) {
-                Text("None").tag(Optional<ElementID>.none)
-                ForEach(model.types(for: .railings), id: \.id) { Text($0.name).tag(Optional($0.id)) }
-            }
-            Picker("Position", selection: $position) {
-                ForEach(StairRailingPosition.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-            }
-            .pickerStyle(.radioGroup)
-            .disabled(typeID == nil)
-            Text("The railing goes on both sides of the stair when you finish it.").font(.callout).foregroundStyle(.secondary)
-            HStack {
-                Spacer()
-                Button("Cancel") { done(nil) }.keyboardShortcut(.cancelAction)
-                Button("OK") { done((typeID, position)) }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
+        ArcusDialog(icon: "stairs", tint: .brown, title: "Railing", subtitle: "Goes on both sides of the stair when you finish it.", size: .small, labelWidth: 90,
+                    onCancel: { done(nil) }, onOK: { done((typeID, position)) }) {
+            DialogSection {
+                DialogRow("Railing type") {
+                    Picker("", selection: $typeID) {
+                        Text("None").tag(Optional<ElementID>.none)
+                        ForEach(model.types(for: .railings), id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                    }.labelsHidden()
+                }
+                DialogRow("Position", alignment: .top) {
+                    Picker("", selection: $position) {
+                        ForEach(StairRailingPosition.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.radioGroup).labelsHidden()
+                    .disabled(typeID == nil)
+                }
             }
         }
-        .padding(20)
-        .frame(width: 360)
     }
 }

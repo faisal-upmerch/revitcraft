@@ -44,40 +44,32 @@ struct WorkPlaneDialog: View {
     var body: some View {
         let m = state.model
         let planes = WorkPlanes.candidates(m)
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Work Plane").font(.title3.weight(.semibold))
-            GroupBox("Current Work Plane") {
-                HStack {
-                    Text("Name:").foregroundStyle(.secondary)
-                    Text(current.map { WorkPlanes.name($0, m) } ?? (m[viewID]?.view?.kind.isVerticalCut == true ? "View plane" : "<not associated>"))
-                    Spacer()
-                    Button("Show") { if m[viewID]?.view?.showsWorkPlane != true { WorkPlanes.toggleShown(viewID, in: state.session) } }
-                        .help("Shows the work plane grid in this view.")
-                }
-                .padding(4)
-            }
-            GroupBox("Specify a new Work Plane") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Picker("", selection: $pick) {
-                        Text("Name").tag(false)
-                        Text("Pick a plane").tag(true)
+        ArcusDialog(icon: "square.grid.3x3.topleft.filled", tint: .blue, title: "Work Plane", subtitle: m[viewID]?.name ?? "", size: .small, labelWidth: 70,
+                    onCancel: { state.presented = nil }, onOK: { ok(planes) }) {
+            DialogSection("Current work plane") {
+                DialogRow("Name") {
+                    HStack {
+                        Text(current.map { WorkPlanes.name($0, m) } ?? (m[viewID]?.view?.kind.isVerticalCut == true ? "View plane" : "<not associated>")).foregroundStyle(.secondary)
+                        Spacer()
+                        Button("Show") { if m[viewID]?.view?.showsWorkPlane != true { WorkPlanes.toggleShown(viewID, in: state.session) } }
+                            .controlSize(.small).help("Shows the work plane grid in this view.")
                     }
-                    .pickerStyle(.radioGroup).labelsHidden()
-                    Picker("Name", selection: Binding(get: { choice ?? current ?? planes.first }, set: { choice = $0 })) {
+                }
+            }
+            DialogSection("Specify a new work plane") {
+                Picker("", selection: $pick) {
+                    Text("Name").tag(false)
+                    Text("Pick a plane").tag(true)
+                }
+                .pickerStyle(.radioGroup).labelsHidden()
+                DialogRow("Name") {
+                    Picker("", selection: Binding(get: { choice ?? current ?? planes.first }, set: { choice = $0 })) {
                         ForEach(planes, id: \.self) { Text(WorkPlanes.name($0, m)).tag(Optional($0)) }
                     }
-                    .disabled(pick).frame(width: 320)
+                    .labelsHidden().disabled(pick)
                 }
-                .padding(4)
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("OK") { ok(planes) }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
             }
         }
-        .padding(20)
-        .frame(width: 420)
     }
 
     func ok(_ planes: [WorkPlaneRef]) {
@@ -115,29 +107,23 @@ struct ConnectLevelsDialog: View {
         let (top, current) = stairTop
         let z = top.flatMap { m[$0]?.level?.elevation }
         let above = z.map { z in m.levels.filter { ($0.level?.elevation ?? -.infinity) > z + Tolerance.length }.sorted { ($0.level?.elevation ?? 0) < ($1.level?.elevation ?? 0) } } ?? []
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Connect Levels").font(.title3.weight(.semibold))
+        ArcusDialog(icon: "stairs", tint: .brown, title: "Connect Levels", subtitle: "A multistory stair repeats from level to level.", size: .small,
+                    okDisabled: top == nil || above.isEmpty, onCancel: { state.presented = nil }, onOK: { ok() }) {
             if top == nil {
-                Text("Give the stair a Top Level first: a multistory stair repeats from level to level.").foregroundStyle(.secondary)
+                DialogNotice(.info, "Give the stair a Top Level first.")
             } else if above.isEmpty {
-                Text("There are no levels above the stair's top level to connect.").foregroundStyle(.secondary)
+                DialogNotice(.info, "There are no levels above the stair's top level to connect.")
             } else {
-                Text("Repeat the stair up to:")
-                List(selection: Binding(get: { pick ?? current }, set: { pick = .some($0) })) {
-                    Text("None (single storey)").tag(Optional<ElementID>.none)
-                    ForEach(above, id: \.id) { Text($0.name).tag(Optional($0.id)) }
+                DialogSection("Repeat the stair up to", boxed: false) {
+                    DialogListBox(count: above.count + 1, rowHeight: 28, minRows: 2, maxRows: 7) {
+                        List(selection: Binding(get: { pick ?? current }, set: { pick = .some($0) })) {
+                            Label("None (single storey)", systemImage: "minus").tag(Optional<ElementID>.none)
+                            ForEach(above, id: \.id) { Label($0.name, systemImage: "square.3.layers.3d").tag(Optional($0.id)) }
+                        }
+                    }
                 }
-                .listStyle(.bordered)
-                .frame(width: 300, height: min(220, CGFloat(above.count + 1) * 24 + 8))
-            }
-            HStack {
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("OK") { ok() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).disabled(top == nil || above.isEmpty)
             }
         }
-        .padding(20)
-        .frame(width: 360)
     }
 
     func ok() {

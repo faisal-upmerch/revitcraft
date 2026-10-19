@@ -14,28 +14,23 @@ struct PrintSetupDialog: View {
     let state: DocumentState
     @State private var setup = PrintSetup()
     var body: some View {
-        DialogFrame(title: "Print Setup", subtitle: "Paper, zoom and colours for printing views, and what to leave out of prints, PDF and DWFx. Sheets print at their own paper size.", state: state) {
+        DialogFrame(title: "Print Setup", icon: "printer", tint: .gray, subtitle: "Paper, zoom and colours for views; what prints, PDF and DWFx leave out.", labelWidth: 110, state: state) {
             let s = setup
             if state.f11Perform("Print Setup", { tx in tx.updateManageData { $0.printSetup = s } }) { state.presented = nil }
         } content: {
-            Form {
-                Section("Paper (views)") {
-                    Picker("Size", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                    Picker("Orientation", selection: $setup.landscape) { Text("Landscape").tag(true); Text("Portrait").tag(false) }.pickerStyle(.radioGroup)
-                    Picker("Zoom", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.radioGroup)
-                }
-                Section("Appearance") {
-                    Picker("Colors", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                }
-                Section("Options") {
-                    Toggle("Hide reference/work planes", isOn: $setup.hideReferencePlanes)
-                    Toggle("Hide scope boxes", isOn: $setup.hideScopeBoxes)
-                    Toggle("Hide crop boundaries", isOn: $setup.hideCropBoundaries)
-                    Toggle("Hide unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
-                }
+            DialogSection("Paper", footnote: "Views print on this paper. Sheets print at their own size.") {
+                DialogRow("Size") { Picker("", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Orientation") { Picker("", selection: $setup.landscape) { Text("Landscape").tag(true); Text("Portrait").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                DialogRow("Zoom") { Picker("", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                DialogRow("Colors") { Picker("", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+            }
+            DialogSection("Hide") {
+                Toggle("Reference/work planes", isOn: $setup.hideReferencePlanes)
+                Toggle("Scope boxes", isOn: $setup.hideScopeBoxes)
+                Toggle("Crop boundaries", isOn: $setup.hideCropBoundaries)
+                Toggle("Unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
             }
         }
-        .frame(minWidth: 480)
         .onAppear { setup = state.model.manageData.printSetup ?? PrintSetup() }
     }
 }
@@ -46,11 +41,14 @@ struct PrintPreviewDialog: View {
     let pdf: Data
     let title: String
     var body: some View {
-        DialogFrame(title: "Print Preview", subtitle: title, okTitle: "Print…", state: state) {
+        DialogFrame(title: "Print Preview", icon: "printer", tint: .gray, size: .wide, subtitle: title, okTitle: "Print…", height: 640, state: state) {
             state.presented = nil
             F13Print.printPDF(pdf, title: title, state: state)
         } content: {
-            PDFPreview(data: pdf).frame(minWidth: 720, minHeight: 480)
+            PDFPreview(data: pdf)
+                .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -74,21 +72,21 @@ struct ExportDWFxDialog: View {
     @State private var includeViews = false
     var items: [Element] { state.model.sheets + (includeViews ? state.model.views.filter { $0.view?.kind != .threeD } + state.model.schedules : []) }
     var body: some View {
-        DialogFrame(title: "Export DWF/DWFx", subtitle: "Sheets and views as a DWFx package for markup and review. Print Setup's options apply.", okTitle: "Export…",
-                    okDisabled: chosen.isEmpty, state: state) {
+        let list = items
+        DialogFrameWithActions(title: "Export DWF/DWFx", icon: "square.and.arrow.up", tint: .teal, subtitle: "A DWFx package for markup and review. Print Setup's options apply.", okTitle: "Export…",
+                    okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", state: state) {
             export()
         } content: {
-            HStack {
+            DialogSection(includeViews ? "Sheets, views and schedules" : "Sheets", boxed: false) {
+                DialogCheckList(items: list.map { e in DialogCheckItem(id: e.id, title: ViewTitles.qualified(e), icon: e.sheet != nil ? "doc.richtext" : e.schedule != nil ? "tablecells" : "rectangle.on.rectangle") },
+                                checked: $chosen, maxRows: 9, noun: "items", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
+            } accessory: {
                 Toggle("Include views and schedules", isOn: $includeViews)
-                Spacer()
-                Button("Select All") { chosen = Set(items.map(\.id)) }
-                Button("Select None") { chosen = [] }
             }
-            List(items, id: \.id) { e in
-                Toggle(isOn: Binding(get: { chosen.contains(e.id) }, set: { if $0 { chosen.insert(e.id) } else { chosen.remove(e.id) } })) { Text(ViewTitles.qualified(e)) }
-            }.frame(minHeight: 220)
+        } actions: {
+            Button("Select All") { chosen = Set(list.map(\.id)) }.disabled(list.isEmpty)
+            Button("Select None") { chosen = [] }.disabled(chosen.isEmpty)
         }
-        .frame(minWidth: 520)
         .onAppear {
             if let a = state.activeView, a.sheet != nil || a.view != nil || a.schedule != nil { chosen = [a.id]; includeViews = a.sheet == nil } else { chosen = Set(state.model.sheets.map(\.id)) }
         }

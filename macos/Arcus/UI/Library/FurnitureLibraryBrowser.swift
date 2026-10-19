@@ -55,7 +55,7 @@ struct FurnitureLibraryBrowser: View {
 
     var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: "chair.lounge").font(.system(size: 20)).foregroundStyle(Color.accentColor).frame(width: 30)
+            DialogIconTile(symbol: "chair.lounge", tint: .brown) // DIALOGS
             VStack(alignment: .leading, spacing: 1) {
                 Text("Load Furniture").font(.title3.weight(.semibold))
                 let pieces = Set(all.map(\.url)).count
@@ -118,11 +118,10 @@ struct FurnitureLibraryBrowser: View {
                 .help("Show your Furniture Templates in Finder")
             Spacer()
             if let s = selectedItem { Text(s.name).font(.system(size: 12)).foregroundStyle(.secondary).lineLimit(1) }
-            Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-            Button("Place") { placeSelected() }.keyboardShortcut(.defaultAction).disabled(selectedItem == nil)
+            Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction).dialogButton()
+            Button("Place") { placeSelected() }.keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent).disabled(selectedItem == nil).dialogButton()
         }
-        .controlSize(.large)
-        .padding(.horizontal, 18).padding(.vertical, 12)
+        .padding(.horizontal, DialogStyle.outer).padding(.vertical, DialogStyle.footerPaddingV) // DIALOGS: the dialog footer
     }
 
     func placeSelected() { if let s = selectedItem { place(s.url) } }
