@@ -7,6 +7,35 @@ import ArcusGeometry
 /// evaluator support it needs (revolves and blends on side work planes).
 @Suite("COMPA components")
 struct COMPATests {
+    // MARK: FM5 hardware values recognise component families by their parameters
+
+    static func td(_ family: String, _ values: [String: ParamValue]) -> TypeData {
+        var p: [ParameterID: ParamValue] = [:]
+        for (k, v) in values { p[Parameters.familyParamID(k)] = v }
+        return TypeData(instanceCategory: .furnitureHardware, familyName: family, params: p)
+    }
+
+    @Test func hardwareValuesReadParameters() {
+        typealias V = FurnitureHardware.Values
+        // New families: by parameters.
+        #expect(V(Self.td("Soft-Close Hinge", ["Cup Diameter": .double(0.035)])).isConcealed)
+        #expect(!V(Self.td("Detachable Hinge", ["Leaf Height": .double(0.05)])).isConcealed)
+        #expect(V(Self.td("Mushroom Knob", ["Hole Spacing": .double(0)])).isKnob)
+        #expect(V(Self.td("Mushroom Knob", ["Hole Spacing": .double(0)])).handleHoleSpacing == 0)
+        #expect(!V(Self.td("Bow Handle", ["Hole Spacing": .double(0.128)])).isKnob)
+        #expect(V(Self.td("J-Pull Profile", ["Edge Mounted": .bool(true)])).isEdgePull)
+        #expect(V(Self.td("Concealed Drawer Runners", ["Undermount": .bool(true)])).isUndermount)
+        #expect(V(Self.td("Continuous Hinge", ["Continuous": .bool(true)])).isPiano)
+        #expect(!V(Self.td("Drawer Slide - Ball Bearing", ["Undermount": .bool(false)])).isUndermount)
+        // FM5 families: by name, as before.
+        #expect(V(Self.td(FurnitureHardware.knob, [:])).isKnob)
+        #expect(V(Self.td(FurnitureHardware.concealedHinge, [:])).isConcealed)
+        #expect(V(Self.td(FurnitureHardware.edgePull, [:])).isEdgePull)
+        #expect(V(Self.td(FurnitureHardware.undermountSlide, [:])).isUndermount)
+        #expect(V(Self.td(FurnitureHardware.pianoHinge, [:])).isPiano)
+        #expect(!V(Self.td(FurnitureHardware.barPull, ["Hole Spacing": .double(0.128)])).isKnob)
+    }
+
     // MARK: Revolves and blends on side work planes
 
     /// A knob-like revolve: radius 10 mm, 20 mm tall, about the sketch's vertical axis.
