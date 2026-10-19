@@ -134,6 +134,8 @@ final class FamilyEditorModel {
     var showWorkPlane = false { didSet { drawingRevision += 1 } }
     /// Closes the window (Load into Project and Close).
     @ObservationIgnored var onClose: (() -> Void)?
+    /// FM8: the .arcusfamily file the family was opened from (File ▸ Open, Finder); Save As starts there.
+    @ObservationIgnored var fileURL: URL?
     /// FES: the window shell's ribbon, dock and status state.
     let chrome = FamilyEditorChrome()
 
@@ -545,8 +547,10 @@ final class FamilyEditorModel {
         }
         let panel = NSSavePanel()
         panel.allowedContentTypes = [.arcusFamily]
-        panel.nameFieldStringValue = family.name + ".arcusfamily"
+        panel.nameFieldStringValue = fileURL?.lastPathComponent ?? (family.name + ".arcusfamily")
+        if let dir = fileURL?.deletingLastPathComponent() { panel.directoryURL = dir } // FM8
         guard panel.runModal() == .OK, let url = panel.url else { return }
+        fileURL = url
         do {
             let v = AppVersionInfo.current
             try FamilyPackage.write(family, thumbnailPNG: nil, to: url, appVersion: v.marketingVersion, build: v.build)
@@ -569,17 +573,7 @@ struct FamilyLoader {
 
     /// Asks what to do with project type values when a family already in the project is loaded again (nil = cancel).
     static func askReloadMode(_ name: String) -> FamilyReloadMode? {
-        let alert = NSAlert()
-        alert.messageText = "“\(name)” is already in this project."
-        alert.informativeText = "Its geometry and parameters will be replaced by this version. Types that exist in both can keep the values set in this project, or take the values stored in the family."
-        alert.addButton(withTitle: "Keep Project Values")
-        alert.addButton(withTitle: "Use Family Values")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .keepProjectValues
-        case .alertSecondButtonReturn: return .overwriteValues
-        default: return nil
-        }
+        FamilyReloadPrompt.ask(name) // FM8: Revit's "Family Already Exists" prompt (FurnitureEditFamily.swift)
     }
 
     func load(_ family: FamilyDefinition, replacing existing: ElementID?, mode: FamilyReloadMode = .keepProjectValues) {

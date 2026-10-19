@@ -32,6 +32,10 @@ extension FurnitureCompiler {
         var overrides: [ElementID: Element] = [:]
         var eqPlanes: [(name: String, axis: FamilyAxis, at: Double)] = []
         var eqDims: [FamilyDimension] = []
+        // FM8: a centre plane whose bounds follow formulas (or never move) gets its share of the bay as a formula, so the
+        // dividers can't drift when the piece flexes (EQ chains of two or more were solved closest to the sketch).
+        var eqFormulas: [String: String] = [:]
+        let stable = stablePlanes(f)
         let dividers = m.elements(.furniturePanels).filter { $0.furniturePanel?.eq != nil }
         let groups = Dictionary(grouping: dividers) { e -> String in
             let q = e.furniturePanel!.eq!
@@ -47,12 +51,14 @@ extension FurnitureCompiler {
                 return nil
             }
             guard let lowName = planeName(q.low, lo), let highName = planeName(q.high, hi) else { continue }
+            let loExpr = stableExpression(PartValue(lo, q.low), f, stable), hiExpr = stableExpression(PartValue(hi, q.high), f, stable) // FM8
             var chain = [lowName]
             for e in members {
                 guard var p = e.furniturePanel, let eq = p.eq else { continue }
                 let c = lo + (hi - lo) * Double(eq.index) / Double(eq.count)
                 let name = "\(e.mark.isEmpty ? "Divider \(e.id.raw)" : e.mark) Center"
                 eqPlanes.append((name, lf.crossAxis, c))
+                if let a = loExpr, let b = hiExpr { eqFormulas[name] = "(\(a)) + ((\(b)) - (\(a))) * \(eq.index) / \(eq.count)" } // FM8
                 chain.append(name)
                 let (fo, fi) = FurniturePartSolids.faceOffsets(p, thickness: FurniturePartTypes.values(of: e, m).thickness)
                 let line = c - lf.across * (fo + fi) / 2
@@ -63,6 +69,7 @@ extension FurnitureCompiler {
                 overrides[e.id] = copy
             }
             chain.append(highName)
+            guard loExpr == nil || hiExpr == nil else { continue } // FM8: formula planes need no EQ chain
             for i in 1..<(chain.count - 1) { eqDims.append(.equality(chain[i - 1], chain[i], chain[i + 1])) }
         }
         for p in eqPlanes { known.insert(p.name) }
@@ -80,7 +87,9 @@ extension FurnitureCompiler {
             }
             for p in ps.placed {
                 var nf = p.family
-                let content = (try? JSONEncoder().encode(nf.solids)).map { String(decoding: $0, as: UTF8.self) } ?? nf.name
+                // FM8: compared without the solids' ids (fresh for every part), so identical legs share one family.
+                let keyed = nf.solids.map { var s = $0; s.id = ""; return s }
+                let content = (try? JSONEncoder().encode(keyed)).map { String(decoding: $0, as: UTF8.self) + "|\(nf.types.map(\.values))" } ?? nf.name
                 if let existing = nestedNames[content] {
                     nf.name = existing
                 } else {
@@ -110,11 +119,11 @@ extension FurnitureCompiler {
         var labelCount = 0
         for name in ctx.helpers.keys.sorted() {
             guard let h = ctx.helpers[name], let axis = axes[h.plane] ?? eqPlanes.first(where: { $0.name == h.plane })?.axis else { continue }
-            let baseOffset = offsets[h.plane] ?? PartSolidContext.number(eqPlanes.first { $0.name == h.plane }?.at ?? 0)
+            let baseOffset = offsets[h.plane] ?? eqFormulas[h.plane] ?? PartSolidContext.number(eqPlanes.first { $0.name == h.plane }?.at ?? 0) // FM8
             let base = FurnitureBoundResolver(m).positions[h.plane] ?? eqPlanes.first { $0.name == h.plane }?.at ?? 0
             let isFormula = Double(baseOffset.trimmingCharacters(in: .whitespaces)) == nil
             // Origin planes never move; planes nothing constrains stay where they are.
-            let follows = isFormula || origins.contains(h.plane) || (!constrained.contains(h.plane) && !eqPlanes.contains { $0.name == h.plane })
+            let follows = isFormula || origins.contains(h.plane) || (!constrained.contains(h.plane) && !eqPlanes.contains { $0.name == h.plane && eqFormulas[$0.name] == nil })
             if follows {
                 // The helper's own formula follows the plane's (or both stay where they are).
                 let formula = isFormula ? "(\(baseOffset)) \(lengthTerm(h.offset))" : PartSolidContext.number(base + h.offset)
@@ -130,7 +139,7 @@ extension FurnitureCompiler {
                 f.dimensions.append(d)
             }
         }
-        for p in eqPlanes { f.referencePlanes.append(FamilyReferencePlane(name: p.name, axis: p.axis, offset: PartSolidContext.number(p.at), strength: .weak)) }
+        for p in eqPlanes { f.referencePlanes.append(FamilyReferencePlane(name: p.name, axis: p.axis, offset: eqFormulas[p.name] ?? PartSolidContext.number(p.at), strength: .weak)) }
         f.dimensions += eqDims
     }
 

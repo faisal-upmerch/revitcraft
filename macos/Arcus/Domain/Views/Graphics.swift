@@ -195,6 +195,9 @@ public enum ObjectStyles {
         case .mass: ObjectStyle(1, 3, color: RGBColor(0.25, 0.25, 0.30)) // F5
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms: ObjectStyle(1, 3) // FM4: casework weights
         case .furnitureEdgeProfiles: ObjectStyle(1, 1) // FM4
+        case .furnitureFronts: ObjectStyle(1, 3) // FM5: doors and drawers read like the carcass
+        case .furnitureHardware: ObjectStyle(1, 1, color: RGBColor(0.25, 0.25, 0.28)) // FM5
+        case .furnitureBays, .furnitureBaySeparators: ObjectStyle(1, 1) // FM5: like rooms and room separators
         default: ObjectStyle(1, 2)
         }
     }
@@ -210,7 +213,7 @@ public enum ObjectStyles {
             return GFill(pattern: .diagonalUp, color: RGBColor(0.4, 0.4, 0.4), background: .white)
         case .structuralColumns, .structuralFraming:
             return GFill(pattern: .solid, color: RGBColor(0.35, 0.35, 0.35))
-        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms: // FM4: the material's cut pattern (wood grain, MDF…)
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms, .furnitureFronts: // FM4: the material's cut pattern (wood grain, MDF…); FM5 fronts
             if detail == .coarse { return GFill(pattern: .solid, color: .white) }
             if let m = material { return GFill(pattern: fillKind(for: m.materialClass), color: RGBColor(0.35, 0.35, 0.35), background: .white) }
             return GFill(pattern: .wood, color: RGBColor(0.4, 0.4, 0.4), background: .white)

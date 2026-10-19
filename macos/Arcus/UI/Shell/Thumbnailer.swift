@@ -6,6 +6,8 @@ import ArcusOutput
 /// Renders a small PNG preview of a project (the lowest floor plan) for the package thumbnail and the hub.
 nonisolated enum Thumbnailer {
     static func png(model: BIMModel, size: CGSize = CGSize(width: 512, height: 384)) -> Data? {
+        // FM8: Furniture documents show the piece in 3D (FurnitureThumbnails.swift).
+        if model.isFurniture, let png = FurnitureThumbnail.png(model, width: Int(size.width), height: Int(size.height)) { return png }
         let plans = model.views.filter { $0.view?.kind == .floorPlan && $0.view?.parentViewID == nil }
         guard let view = plans.min(by: { model.elevation(ofLevel: $0.levelID) < model.elevation(ofLevel: $1.levelID) }) else { return nil }
         let g = ViewGraphicsBuilder(model: model, view: view).build()

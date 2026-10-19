@@ -156,6 +156,8 @@ public enum QuantityEngine {
             MassGeometry.quantities(e, model, &q)
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4: nominal size, area, volume
             FurniturePartMeshes.quantities(e, model, &q)
+        case .furnitureFront: // FM5: front size, area, volume
+            FurnitureFrontSolids.quantities(e, model, &q)
         default:
             break
         }
