@@ -41,6 +41,7 @@ struct SettingsView: View {
             CanvasSettingsSections() // BL-CANVAS: Colors, temporary dimensions, tooltips, double-click
             Section("Notifications") { SaveReminderSettingsSection() } // F11
             Section("DWG") { DWGEngineSettingsSection(); DWGConverterSettingsSection() } // W2-DWG; DWG: bundled engines and the last file read
+            Section("Claude (MCP)") { MCPSettingsSection() } // MCP: Docs/MCP.md
             Section("Privacy") {
                 Text("Arcus makes no network connections, collects no analytics and requires no special permissions. Diagnostics stay on this Mac unless you export them.").font(.caption).foregroundStyle(.secondary)
             }
@@ -51,3 +52,31 @@ struct SettingsView: View {
     }
 }
 
+
+/// MCP: lets Claude (Claude Desktop, Claude Code) build in the open document through arcus-mcp. Off by default.
+struct MCPSettingsSection: View {
+    @AppStorage(MCPLiveService.defaultsKey) private var enabled = false
+    @State private var status = ""
+    var body: some View {
+        Toggle("Allow Claude to edit open documents", isOn: $enabled)
+            .onChange(of: enabled) { _, v in MCPLiveService.shared.setEnabled(v); refresh() }
+        Text("Claude's Arcus tools (arcus-mcp) then work in the front document: every change is one Undo step. Only your Mac account can connect; nothing goes over the network.")
+            .font(.caption).foregroundStyle(.secondary)
+        if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
+        HStack {
+            Button("Copy Claude Code Command") { copy("claude mcp add arcus -- \"\(MCPLiveService.shared.helperPath)\"") }
+            Button("Copy Claude Desktop Setup") {
+                copy("{ \"mcpServers\": { \"arcus\": { \"command\": \"\(MCPLiveService.shared.helperPath)\" } } }")
+            }
+        }
+        .onAppear(perform: refresh)
+    }
+    func refresh() {
+        let s = MCPLiveService.shared
+        status = s.lastError.map { "Not listening: \($0)" } ?? (s.isRunning ? "Listening on \(s.socketPath)" : "")
+    }
+    func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+}

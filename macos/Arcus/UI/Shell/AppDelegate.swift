@@ -41,6 +41,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
     public func applicationDidFinishLaunching(_ notification: Notification) {
         DiagnosticsLog.shared.log("app", "Launched \(AppVersionInfo.current)")
         Viewport3DView.prewarmPipelines() // compile 3D viewport pipelines off the main thread
+        MCPLiveService.shared.applySetting() // MCP: listen for Claude only when Settings ▸ Claude (MCP) is on
 
         let t0 = ProcessInfo.processInfo.systemUptime
         Task { @MainActor in
