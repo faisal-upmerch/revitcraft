@@ -198,7 +198,7 @@ struct ViewTabBar: View {
                 .foregroundStyle(.secondary)
                 .accessibilityLabel("Close \(title(e))")
         }
-        .padding(.leading, 11).padding(.trailing, 6).padding(.vertical, 4)
+        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 4) // room around the icon and close button, so the selected tint doesn't hug them
         .background {
             if active {
                 Capsule().fill(Tokens.selectionColor.opacity(0.14)) // W4-WIRE: a tint on the glass pill
