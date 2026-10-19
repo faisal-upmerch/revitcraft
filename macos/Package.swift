@@ -256,6 +256,13 @@ let package = Package(
             dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication"],
             path: "Arcus/Tests/DomainTests"
         ),
+        // POLISH: the Furniture Library suites (FM9, FM9B, FM9C build, flex and compile every piece, ~5 min) are kept out of
+        // DomainTests so it stays fast. Run them with `swift test --filter LibraryTests`.
+        .testTarget(
+            name: "LibraryTests",
+            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication"],
+            path: "Arcus/Tests/LibraryTests"
+        ),
         .testTarget(name: "IFCTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusIFC"], path: "Arcus/Tests/IFCTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "CADTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusCAD"], path: "Arcus/Tests/CADTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "OutputTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput"], path: "Arcus/Tests/OutputTests"),
