@@ -273,8 +273,9 @@ struct SBStep {
     // MARK: Forms
 
     /// How a form follows the framing planes: by where it is (`auto`: against a side it follows that side, across the
-    /// middle it stretches; heights follow the Bottom unless it reaches the Top), not at all, or per axis.
-    enum Lock { case auto, none, axes(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?) }
+    /// middle it stretches; heights follow the Bottom unless it reaches the Top), not at all, per axis, or by where it is
+    /// in plan with the given mode in height (`z`).
+    enum Lock { case auto, none, axes(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?), z(FormAxisLock.Mode) }
 
     /// A form in `material`, shown at `detail` levels, locked to the planes by `lock` given its extent (inches).
     @discardableResult
@@ -286,9 +287,10 @@ struct SBStep {
         switch lock {
         case .none: g.lock = nil
         case .axes(let x, let y, let z): g.lock = FormLock.framing(tx.model, x: x, y: y, z: z)
-        case .auto:
-            g.lock = FormLock.framing(tx.model, x: Self.autoMode(extent.0, l, r, vertical: false), y: Self.autoMode(extent.1, f, b, vertical: false),
-                                      z: Self.autoMode(extent.2, 0, h, vertical: true))
+        case .auto, .z:
+            var zMode = Self.autoMode(extent.2, 0, h, vertical: true)
+            if case .z(let mode) = lock { zMode = mode }
+            g.lock = FormLock.framing(tx.model, x: Self.autoMode(extent.0, l, r, vertical: false), y: Self.autoMode(extent.1, f, b, vertical: false), z: zMode)
         }
         return try FurniturePartOperations.createForm(g, in: tx)
     }
@@ -312,12 +314,13 @@ struct SBStep {
 
     /// An extrusion of a loop (inches) on `plane`, from w0 to w1 along its normal.
     @discardableResult
-    func extrusion(_ pts: [(Double, Double)], plane: FamilySketchPlane = .xy, w: (Double, Double), _ material: String, lock: Lock = .auto,
-                   detail: Set<DetailLevel> = [.coarse, .medium, .fine]) throws -> ElementID {
+    func extrusion(_ pts: [(Double, Double)], holes: [[(Double, Double)]] = [], plane: FamilySketchPlane = .xy, w: (Double, Double), _ material: String,
+                   lock: Lock = .auto, detail: Set<DetailLevel> = [.coarse, .medium, .fine]) throws -> ElementID {
         let u = Self.range(pts.map(\.0)), v = Self.range(pts.map(\.1)), ww = (min(w.0, w.1), max(w.0, w.1))
         let ext = plane == .xy ? (u, v, ww) : plane == .xz ? (u, ww, v) : (ww, u, v)
-        return try form(FurnitureFormData(kind: .extrusion, plane: plane, profile: pts.map { v2($0.0, $0.1) }, w0: m(w.0), w1: m(w.1)), material,
-                        extent: ext, lock: lock, detail: detail)
+        var f = FurnitureFormData(kind: .extrusion, plane: plane, profile: pts.map { v2($0.0, $0.1) }, w0: m(w.0), w1: m(w.1))
+        f.holes = holes.map { $0.map { v2($0.0, $0.1) } }
+        return try form(f, material, extent: ext, lock: lock, detail: detail)
     }
 
     /// A blend from a plan loop at z0 to another at z1 (inches).
@@ -417,6 +420,8 @@ enum SimpleBKit {
         sheet(.furnitureShelves, "Shelf", "3/4\" Teak Shelf", t: 0.75, core: "Solid Teak"),
         sheet(.furnitureShelves, "Shelf", "3/4\" Cedar Shelf", t: 0.75, core: "Western Red Cedar"),
         sheet(.furnitureShelves, "Shelf", "3/4\" Solid Pine Shelf", t: 0.75, core: "Solid Pine"),
+        sheet(.furnitureShelves, "Shelf", "3/4\" Solid Walnut Shelf", t: 0.75, core: "Solid Walnut"),
+        sheet(.furnitureShelves, "Top", "3/4\" MDF Top", t: 0.75, core: "MDF", grain: .none),
         sheet(.furnitureShelves, "Shelf", "3\" Seat Cushion", t: 3, core: "Fabric", grain: .none),
         sheet(.furnitureShelves, "Shelf", "5\" Seat Cushion", t: 5, core: "Fabric", grain: .none),
         sheet(.furnitureShelves, "Shelf", "4\" Outdoor Seat Cushion", t: 4, core: "Outdoor Fabric", grain: .none),
@@ -478,6 +483,7 @@ enum SimpleBKit {
         rail("1 1/2\" x 1 1/2\" Oak Rail", w: 1.5, h: 1.5, material: "Solid Oak"),
         rail("1 1/2\" x 3\" Oak Rail", w: 1.5, h: 3, material: "Solid Oak"),
         rail("3/4\" x 1 1/2\" Walnut Rail", w: 0.75, h: 1.5, material: "Solid Walnut"),
+        rail("2\" x 2 1/2\" Walnut Foot", w: 2, h: 2.5, material: "Solid Walnut"),
         rail("1 1/2\" x 1 1/2\" Steel Tube", w: 1.5, h: 1.5, material: "Steel"),
         rail("1 1/2\" x 7 1/4\" Bed Rail", w: 1.5, h: 7.25, material: "Solid Oak"),
         rail("1 1/2\" x 5 1/2\" Maple Bed Rail", w: 1.5, h: 5.5, material: "Solid Maple"),
@@ -521,6 +527,9 @@ enum SimpleBKit {
             (.flap, "Slab - Full Overlay Lift-Up", "Teak Slab - Lift-Up Lid", "Solid Teak"),
             (.flap, "Slab - Full Overlay Lift-Up", "Cedar Slab - Lift-Up Lid", "Western Red Cedar"),
             (.flap, "Slab - Full Overlay Lift-Up", "Upholstered - Lift-Up Lid", "Fabric"),
+            (.flap, "Slab - Full Overlay Lift-Up", "Walnut Slab - Lift-Up Lid", "Solid Walnut"),
+            (.flap, "Slab - Full Overlay Drop-Down", "Walnut Slab - Drop-Down", "Solid Walnut"),
+            (.drawer, "Slab - Full Overlay", "Walnut Slab - Full Overlay", "Solid Walnut"),
             (.door, "Slab - Full Overlay", "White Slab - Full Overlay", "Melamine"),
             (.door, "Slab - Full Overlay Pair", "White Slab - Full Overlay Pair", "Melamine"),
             (.drawer, "Slab - Full Overlay", "White Slab - Full Overlay", "Melamine"),

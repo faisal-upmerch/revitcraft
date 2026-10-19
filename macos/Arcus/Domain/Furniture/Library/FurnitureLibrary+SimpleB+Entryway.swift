@@ -106,26 +106,28 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A round stand: a steel tube on a foot ring with a drip tray (revolves).
+    /// A round stand: a steel tube (an extrusion with its bore as a hole) on a foot plate, with a rim ring and a glass
+    /// drip tray, all locked to the planes so the stand flexes.
     static func umbrellaStand() throws -> BIMModel {
-        let p = try SBBuilder("Umbrella Stand", .furniture, [SBSize(10, 10, 22)], material: "Steel")
+        let p = try SBBuilder("Umbrella Stand", .furniture, [SBSize(10, 10, 22), SBSize(12, 12, 24)], material: "Steel")
         try p.step("Body") { s in
             let r = s.w / 2
-            try s.revolve([(0, 0), (r, 0), (r, 0.6), (0, 0.6)], z0: 0, "Steel")
-            try s.revolve([(r - 0.6, 0), (r - 0.1, 0), (r - 0.1, s.h - 0.6), (r - 0.6, s.h - 0.6)], z0: 0.6, "Steel")
-            try s.revolve([(r - 0.8, 0), (r, 0), (r, 0.6), (r - 0.8, 0.6)], z0: s.h - 0.6, "Steel")
-            try s.revolve([(0, 0), (r - 0.6, 0), (r - 0.6, 1.5), (r - 0.9, 1.5), (r - 0.9, 0.3), (0, 0.3)], z0: 0.6, "Glass")
+            let all = SBStep.Lock.axes(.scale, .scale, .scale)
+            try s.extrusion(s.circle((0, 0), r), w: (0, 0.6), "Steel", lock: all)
+            try s.extrusion(s.circle((0, 0), r - 0.1), holes: [s.circle((0, 0), r - 0.6)], w: (0.6, s.h - 0.6), "Steel", lock: all)
+            try s.extrusion(s.circle((0, 0), r), holes: [s.circle((0, 0), r - 0.8)], w: (s.h - 0.6, s.h), "Steel", lock: all)
+            try s.extrusion(s.circle((0, 0), r - 0.7), w: (0.6, 1.2), "Glass", lock: all)
         }
         return try p.finish()
     }
 
     /// A shelf on two brackets with a back rail, hung on the wall.
     static func wallMountedShelf() throws -> BIMModel {
-        let p = try SBBuilder("Wall-Mounted Shelf", .furniture, [SBSize(24, 8, 8), SBSize(36, 10, 8)], material: "Solid Walnut")
+        let p = try SBBuilder("Wall-Mounted Shelf", .furniture, [SBSize(24, 8, 6), SBSize(36, 10, 7)], material: "Solid Walnut")
         try p.step("Shelf and Brackets") { s in
             try s.board(x: (s.l, s.r), y: (s.f, s.b), top: s.h, "1\" Solid Oak Shelf")
-            try s.panelY(s.b, inward: -1, x: (s.l + 1, s.r - 1), z: (s.h - 4, s.h - 1), "3/4\" Solid Walnut")
-            for x in [s.l + 3, s.r - 3.75] { try s.panelX(x, inward: 1, y: (s.f + 1.5, s.b - 0.75), z: (0, s.h - 1), "3/4\" Solid Walnut") }
+            try s.panelY(s.b, inward: -1, x: (s.l + 1, s.r - 1), z: (s.h - 3, s.h - 1), "3/4\" Solid Walnut")
+            for x in [s.l + 3, s.r - 3.75] { try s.panelX(x, inward: 1, y: (s.f + 3, s.b - 0.75), z: (0, s.h - 1), "3/4\" Solid Walnut") }
         }
         return try p.finish()
     }
@@ -182,19 +184,22 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A turned pole on a round foot with four hooks at the top (revolve and extrusions).
+    /// A turned pole on a round foot (a plate and a blended dome) with a finial and four hooks at the top (extrusions),
+    /// the forms locked to the planes so the stand flexes.
     static func coatStand() throws -> BIMModel {
-        let p = try SBBuilder("Coat Stand", .furniture, [SBSize(18, 18, 72)], material: "Solid Walnut")
+        let p = try SBBuilder("Coat Stand", .furniture, [SBSize(18, 18, 72), SBSize(22, 22, 76)], material: "Solid Walnut")
         try p.step("Pole, Foot and Hooks") { s in
             let r = s.w / 2
-            try s.revolve([(0, 0), (r, 0), (r, 0.5), (r * 0.55, 1.6), (1.4, 2.2), (0, 2.2)], z0: 0, "Solid Walnut")
+            let all = SBStep.Lock.axes(.scale, .scale, .scale)
+            try s.extrusion(s.circle((0, 0), r), w: (0, 0.5), "Solid Walnut", lock: all)
+            try s.blend(s.circle((0, 0), r * 0.6), s.circle((0, 0), 1.4), z: (0.5, 2.2), "Solid Walnut", lock: all)
             try s.leg(0, 0, z: (2.2, s.h - 2), "Turned 2\" Walnut")
-            try s.revolve([(0, 0), (1.1, 0), (1.3, 0.8), (0.8, 1.6), (0, 2)], z0: s.h - 2, "Solid Walnut")
+            try s.blend(s.circle((0, 0), 1.2), s.circle((0, 0), 0.3), z: (s.h - 2, s.h), "Solid Walnut", lock: all)
             // Hooks: J shapes in the front and side elevations, 3/4" thick.
             let hook: [(Double, Double)] = [(0.9, -9), (1.4, -9), (1.4, -2.5), (4.2, -0.6), (4.6, 0.6), (4.0, 0.8), (3.8, -0.1), (0.9, -2.0)]
             for side in [1.0, -1.0] {
-                try s.extrusion(hook.map { (side * $0.0, s.h + $0.1 - 4) }, plane: .xz, w: (-0.375, 0.375), "Brass")
-                try s.extrusion(hook.map { (side * $0.0, s.h + $0.1 - 6) }, plane: .yz, w: (-0.375, 0.375), "Brass")
+                try s.extrusion(hook.map { (side * $0.0, s.h + $0.1 - 4) }, plane: .xz, w: (-0.375, 0.375), "Brass", lock: all)
+                try s.extrusion(hook.map { (side * $0.0, s.h + $0.1 - 6) }, plane: .yz, w: (-0.375, 0.375), "Brass", lock: all)
             }
         }
         return try p.finish()

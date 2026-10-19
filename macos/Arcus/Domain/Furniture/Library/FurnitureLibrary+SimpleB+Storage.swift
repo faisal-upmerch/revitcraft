@@ -212,7 +212,7 @@ extension SimpleB {
             try s.board(x: (s.l + 0.75, s.r - 0.75), y: (s.f + 0.75, s.b - 0.75), top: 3.25, "3/4\" Plywood Shelf", role: .bottom)
             for x in [s.l + 1.5, s.r - 1.5] { try s.leg(x, s.f + 1.5, z: (0, 2.5), "Square 1 1/2\" Walnut"); try s.leg(x, s.b - 1.5, z: (0, 2.5), "Square 1 1/2\" Walnut") }
         }
-        try p.step("Lid") { s in try s.lid(x: 0, y: 0) }
+        try p.step("Lid") { s in try s.lid(x: 0, y: 0, "Walnut Slab - Lift-Up Lid") }
         return try p.finish()
     }
 
