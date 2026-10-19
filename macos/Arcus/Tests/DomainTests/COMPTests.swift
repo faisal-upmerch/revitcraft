@@ -96,7 +96,8 @@ enum COMPFixtures {
 
     static let catalog: [ComponentDefinition] = ComponentLibrary.fm5Components + [
         COMPKitTests.sample(),
-        make("Cabinet Door Lock", .locks, "Cabinet Locks", tags: ["lock", "cam", "cylinder"], aliases: ["cupboard lock", "key lock"]),
+        make("Cabinet Door Lock", .locks, "Cabinet Locks", tags: ["lock", "cam", "cylinder"], aliases: ["cupboard lock", "key lock"], hosts: [.door, .drawerFront],
+             faces: [.inside, .front]),
         make("Wardrobe Lock", .locks, "Wardrobe Locks", tags: ["lock", "wardrobe"], aliases: ["closet lock"]),
         make("Soft-Close Hinge", .hinges, "Concealed Hinges", tags: ["hinge", "soft close", "concealed"], length: [("Soft-Close Hinge 110°", 0.05), ("Soft-Close Hinge 165°", 0.05)],
              angle: 110) { b in
@@ -353,5 +354,135 @@ struct COMPPlacementTests {
         let rows = FabricationSchedules.rows(.hardwareSchedule, m)
         #expect(rows.contains { $0.values["Component Category"]?.textValue == "03 Hinges & Door Mechanisms" })
         #expect(rows.contains { $0.values["Power"]?.doubleValue == 3 })
+    }
+}
+
+@Suite("COMP actions, assemblies and custom components")
+struct COMPActionTests {
+    static let inch = 0.0254
+    static let catalog = ComponentCatalog(builtIn: COMPFixtures.catalog)
+
+    /// The base cabinet's carcass with three empty bays.
+    static func emptyBays() throws -> (BIMModel, [ElementID]) {
+        var m = FurnitureTemplates.blank(category: .casework, name: "Carcass")
+        var ids: [String: ElementID] = [:]
+        m = try COMPPlacementTests.run(m) { tx in ids = try FurnitureSamples.baseCabinet(in: tx) }
+        m = try COMPPlacementTests.run(m) { tx in try FurnitureSamples.baseCabinetInterior(in: tx, ids) }
+        var bays: [ElementID] = []
+        let w = (FurniturePlanes.positionsByName(m)["Right"] ?? 0) * 2
+        m = try COMPPlacementTests.run(m) { tx in
+            for x in [-w / 3, 0, w / 3] { bays.append(try FurnitureBays.createBay(face: .front, at: Vec2(x, 20 * Self.inch), in: tx)) }
+        }
+        return (m, bays)
+    }
+
+    @Test func actionsForSelections() throws {
+        let m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        #expect(ComponentActions.available(for: [door.id], m) == [.handle, .hinges, .lock, .softClose, .pushToOpen])
+        let drawer = try #require(m.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .drawer })
+        #expect(ComponentActions.available(for: [drawer.id], m).contains(.slides))
+        #expect(ComponentActions.available(for: [door.hostID!], m).contains(.hangingRod))
+        #expect(ComponentActions.available(for: [], m).isEmpty)
+    }
+
+    @Test func pushToOpenPlansThenApplies() throws {
+        var m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        let plan = ComponentActions.plan(.pushToOpen, for: [door.id], m, catalog: Self.catalog)
+        #expect(plan.items.first?.definition.name == "Push-to-Open Latch")
+        #expect(plan.frontEdits.first?.handlePosition == HandlePosition.none, "the handle comes off")
+        #expect(plan.lines.count == 1 && plan.notes.contains { $0.contains("handle is removed") })
+        // Nothing changes until the plan is applied.
+        #expect(m.hosted(by: door.id).filter { $0.params[ComponentInstanceKeys.face] != nil }.isEmpty)
+        var placed: [ElementID] = []
+        m = try COMPPlacementTests.run(m, "Add Push-to-Open") { tx in placed = try ComponentActions.apply(plan, in: tx) }
+        #expect(placed.count == 1 && m[placed[0]]?.hostID == door.id)
+        #expect(m[door.id]?.furnitureFront?.handlePosition == HandlePosition.none)
+        #expect(!m.hosted(by: door.id).contains { $0.params[FurnitureHardware.slotParam]?.textValue?.hasPrefix("handle") == true })
+    }
+
+    @Test func handleAndHingeActionsUseTheFrontsHardware() throws {
+        var m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        m = try COMPPlacementTests.run(m) { tx in tx.update(door.id) { $0.furnitureFront?.handlePosition = HandlePosition.none } }
+        let plan = ComponentActions.plan(.handle, for: [door.id], m, catalog: Self.catalog)
+        #expect(plan.frontEdits.count == 1 && plan.lines.first?.contains(FurnitureHardware.barPull) == true, "\(plan.lines) \(plan.notes)")
+        m = try COMPPlacementTests.run(m) { tx in try ComponentActions.apply(plan, in: tx) }
+        #expect(m.hosted(by: door.id).contains { $0.params[FurnitureHardware.slotParam]?.textValue?.hasPrefix("handle") == true })
+        let hinges = ComponentActions.plan(.hinges, for: [door.id], m, catalog: Self.catalog)
+        #expect(hinges.lines.first?.hasPrefix("2 ×") == true, "\(hinges.lines)")
+    }
+
+    @Test func hingeRuleIsConfigurable() throws {
+        var m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        func hinges() -> Int { m.hosted(by: door.id).filter { $0.params[FurnitureHardware.slotParam]?.textValue?.hasPrefix("hinge") == true }.count }
+        #expect(hinges() == 2)
+        let rule = ComponentCountRule(steps: [.init(upTo: 20 * Self.inch, count: 2)], maximumCount: 3, inset: 3 * Self.inch)
+        m = try COMPPlacementTests.run(m, "Hardware Rules") { tx in ComponentRules.setHingeRule(rule, in: tx) }
+        #expect(ComponentRules.hingeRule(m) == rule)
+        #expect(hinges() == 3, "a 30\" door takes 3 hinges with the stricter rule")
+        m = try COMPPlacementTests.run(m) { tx in ComponentRules.setHingeRule(nil, in: tx) }
+        #expect(hinges() == 2)
+    }
+
+    @Test func assembliesFillABay() throws {
+        var (m, bays) = try Self.emptyBays()
+        let stack = try #require(ComponentAssembly.builtIn.first { $0.id == "drawer-stack-3" })
+        #expect(ComponentAssemblies.preview(stack, bay: bays[1], m).lines == ["3 drawers (Bay Divide, EQ), with slides and handles"])
+        m = try COMPPlacementTests.run(m, "Insert Assembly") { tx in _ = try ComponentAssemblies.insert(stack, bay: bays[1], in: tx) }
+        let drawers = m.elements(.furnitureFronts).filter { $0.furnitureFront?.kind == .drawer }
+        #expect(drawers.count == 3)
+        #expect(m.elements(.furnitureHardware).contains { $0.params[FurnitureHardware.slotParam]?.textValue == "slides" })
+        // Editable afterwards: they're ordinary drawers (delete one).
+        m = try COMPPlacementTests.run(m) { tx in tx.delete(drawers[0].id) }
+        #expect(m.elements(.furnitureFronts).count == 2)
+        // A pedestal with a lock on its top drawer (from the catalog).
+        let ped = try #require(ComponentAssembly.builtIn.first { $0.id == "desk-pedestal" })
+        m = try COMPPlacementTests.run(m) { tx in _ = try ComponentAssemblies.insert(ped, bay: bays[0], in: tx, catalog: Self.catalog) }
+        let locks = m.elements(.furnitureHardware).filter { ComponentDocument.definition(of: $0, m)?.category == .locks }
+        #expect(locks.count == 1)
+        // Shelves.
+        let shelves = try #require(ComponentAssembly.builtIn.first { $0.id == "door-and-shelves" })
+        let before = m.elements(.furnitureShelves).count
+        m = try COMPPlacementTests.run(m) { tx in _ = try ComponentAssemblies.insert(shelves, bay: bays[2], in: tx) }
+        #expect(m.elements(.furnitureShelves).count == before + 2)
+        // A used bay is refused.
+        #expect(throws: TransactionError.self) { _ = try COMPPlacementTests.run(m) { tx in _ = try ComponentAssemblies.insert(stack, bay: bays[1], in: tx) } }
+    }
+
+    @Test func customComponentsSaveAndLoad() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("comp-tests-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let base = try #require(ComponentLibrary.fm5Components.first { $0.name == FurnitureHardware.knob })
+        let copy = ComponentUserLibrary.duplicate(base, existing: [base.name])
+        #expect(copy.name == "Knob (Custom)" && copy.variantOf == base.id && copy.isUserComponent && copy.id != base.id)
+        try ComponentUserLibrary.save(copy, to: dir)
+        let tpl = ComponentUserLibrary.template(name: "My Bracket")
+        #expect(ComponentKit.validate(tpl).isEmpty, "\(ComponentKit.validate(tpl))")
+        try ComponentUserLibrary.save(tpl, to: dir)
+        let loaded = ComponentUserLibrary.load(from: dir)
+        #expect(loaded.map(\.name) == ["Knob (Custom)", "My Bracket"])
+        #expect(loaded.first == copy)
+        try ComponentUserLibrary.remove(copy, from: dir)
+        #expect(ComponentUserLibrary.load(from: dir).count == 1)
+        // A user catalog finds them, and they place like built-ins.
+        var m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        m = try COMPPlacementTests.run(m) { tx in _ = try ComponentPlacement.place(tpl, hostID: door.id, in: tx) }
+        #expect(m.hosted(by: door.id).contains { ComponentDocument.definitionID(of: $0, m) == tpl.id })
+        #expect(ComponentSearchIndex(ComponentCatalog(user: loaded).all).search("my bracket", limit: 1).first?.definition.id == tpl.id)
+    }
+
+    @Test func saveSelectionAsComponent() throws {
+        let m = try COMPPlacementTests.cabinet()
+        let door = try COMPPlacementTests.door(m)
+        let parts = [Category.furniturePanels, .furnitureShelves].flatMap { m.elements($0) }.filter { !$0.isType }.map(\.id)
+        let d = try ComponentUserLibrary.fromSelection(parts + [door.id], in: m, name: "Shaker Door Module", category: .decorative, subcategory: "Modules")
+        #expect(d.isUserComponent && d.frame == .plan && d.family.template == .furnitureHardware)
+        #expect(!d.family.solids.isEmpty && !d.types.isEmpty)
+        #expect(d.types.allSatisfy { $0.cost > 0 }, "the door's hinges and handle are costed")
+        #expect(d.tags.contains("shaker"))
     }
 }

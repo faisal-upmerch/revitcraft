@@ -330,7 +330,7 @@ public enum ComponentPlacement {
         -> [(face: ComponentHostFace, point: Vec2, mirrored: Bool)] {
         guard let f = face(host, s.face, m) else { return [] }
         let a = p ?? anchor(f, s)
-        if let rule = d.placement.count, d.frame != .legacyOpening {
+        if let rule = ComponentRules.countRule(d, m), d.frame != .legacyOpening {
             let n = max(1, fixed ?? rule.count(forEdge: f.height))
             let inset = min(rule.inset, f.height / 4)
             let lo = -f.height / 2 + inset, hi = f.height / 2 - inset
