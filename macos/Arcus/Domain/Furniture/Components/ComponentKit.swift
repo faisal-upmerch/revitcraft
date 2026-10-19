@@ -503,6 +503,9 @@ public struct ComponentDefinition: Hashable, Sendable, Identifiable, Codable {
     public var variantOf: String?
     /// True for the user's own components (Save Selection as Component, duplicates); built-ins are read-only.
     public var isUserComponent: Bool
+    /// Old type name → new type name (an upgraded FM5 family that renamed its types). The registry drops the old
+    /// types, and documents that use them are migrated: instances keep their type, renamed.
+    public var renamedTypes: [String: String] = [:]
 
     public var defaultType: ComponentType? { types.first(where: \.isDefault) ?? types.first }
     public func type(named n: String) -> ComponentType? { types.first { $0.name == n } }
@@ -520,6 +523,33 @@ public struct ComponentDefinition: Hashable, Sendable, Identifiable, Codable {
         self.placement = placement; self.mounting = mounting; self.clearances = clearances; self.requirements = requirements
         self.symbols = symbols; self.electrical = electrical; self.roles = roles; self.hardwareKind = hardwareKind; self.profile = profile
         self.presets = presets; self.variantOf = variantOf; self.isUserComponent = isUserComponent
+    }
+}
+
+extension ComponentDefinition {
+    /// Tolerant decoding (user library files): fields added after a file was written take their defaults.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), version: try c.decodeIfPresent(Int.self, forKey: .version) ?? 1,
+                  category: try c.decode(ComponentCategory.self, forKey: .category), subcategory: try c.decodeIfPresent(String.self, forKey: .subcategory) ?? "",
+                  tags: try c.decodeIfPresent([String].self, forKey: .tags) ?? [], aliases: try c.decodeIfPresent([String].self, forKey: .aliases) ?? [],
+                  frame: try c.decodeIfPresent(ComponentFrame.self, forKey: .frame) ?? .face, family: try c.decode(FamilyDefinition.self, forKey: .family),
+                  parameters: try c.decodeIfPresent([ComponentParameter].self, forKey: .parameters) ?? [],
+                  types: try c.decodeIfPresent([ComponentType].self, forKey: .types) ?? [],
+                  materials: try c.decodeIfPresent([ComponentMaterialSlot].self, forKey: .materials) ?? [],
+                  placement: try c.decodeIfPresent(ComponentPlacementRule.self, forKey: .placement) ?? .free,
+                  mounting: try c.decodeIfPresent([ComponentMountOp].self, forKey: .mounting) ?? [],
+                  clearances: try c.decodeIfPresent([ComponentClearance].self, forKey: .clearances) ?? [],
+                  requirements: try c.decodeIfPresent([ComponentRequirement].self, forKey: .requirements) ?? [],
+                  symbols: try c.decodeIfPresent([ComponentSymbol].self, forKey: .symbols) ?? [],
+                  electrical: try c.decodeIfPresent(ComponentElectrical.self, forKey: .electrical),
+                  roles: try c.decodeIfPresent(Set<ComponentRole>.self, forKey: .roles) ?? [],
+                  hardwareKind: try c.decodeIfPresent(HardwareKind.self, forKey: .hardwareKind),
+                  profile: try c.decodeIfPresent([FamilyPoint].self, forKey: .profile) ?? [],
+                  presets: try c.decodeIfPresent([ComponentPreset].self, forKey: .presets) ?? [],
+                  variantOf: try c.decodeIfPresent(String.self, forKey: .variantOf),
+                  isUserComponent: try c.decodeIfPresent(Bool.self, forKey: .isUserComponent) ?? false)
+        renamedTypes = try c.decodeIfPresent([String: String].self, forKey: .renamedTypes) ?? [:]
     }
 }
 
@@ -629,6 +659,8 @@ public struct ComponentBuilder {
     public mutating func hardwareKind(_ k: HardwareKind) { definition.hardwareKind = k }
     public mutating func role(_ r: ComponentRole) { definition.roles.insert(r) }
     public mutating func profile(_ pts: [FamilyPoint]) { definition.profile = pts }
+    /// Records renamed types (old name → new name), for upgrades of existing families.
+    public mutating func renames(_ map: [String: String]) { definition.renamedTypes.merge(map) { _, b in b } }
     public mutating func preset(_ name: String, type: String, values: [String: ParamValue] = [:], alignment: ComponentAlignment? = nil) {
         definition.presets.append(ComponentPreset(name: name, definitionID: definition.id, typeName: type, values: values, alignment: alignment))
     }
