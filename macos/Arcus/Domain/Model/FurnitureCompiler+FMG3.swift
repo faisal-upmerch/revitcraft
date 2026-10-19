@@ -86,3 +86,30 @@ extension FurnitureCompiler {
         return PlaneTerms.expression(p, offset: v.offset) { offsets[$0] } ?? "\(FurnitureFormLocks.num(v.value)) m"
     }
 }
+
+extension FurnitureCompiler {
+    /// Doors whose Leaf Count follows a family parameter: the document regenerated with the door single and as a pair,
+    /// and the yes/no parameter that shows each ("<Mark> Single" = Leaf Count is 1, "<Mark> Pair" otherwise), added to
+    /// `f`. The variants keep the divider planes the fronts follow (`withDividerPlanes`).
+    static func leafCountVariants(_ source: BIMModel, to f: inout FamilyDefinition) -> [ElementID: [(model: BIMModel, visibility: String)]] {
+        var out: [ElementID: [(model: BIMModel, visibility: String)]] = [:]
+        for front in source.elements(.furnitureFronts).sorted(by: { $0.id < $1.id }) {
+            guard let d = front.furnitureFront, d.kind == .door, let p = d.leafCountParameter, let fp = f.parameter(named: p) else { continue }
+            let mark = front.mark.isEmpty ? "Front \(front.id.raw)" : front.mark
+            for n in [1, 2] {
+                let tx = TransactionContext(model: source, name: "Leaf Count \(n)")
+                // At a type that is this variant (a pair's leaves are framed or slab as they are at its sizes).
+                if let setup = source.furnitureSetup, let t = setup.family.types.first(where: { t in
+                    FurnitureFronts.leafCount(of: FamilyEvaluator.parameterValues(setup.family, typeName: t.name, units: source.units).values[p]) == n
+                }), t.name != setup.currentType { try? FurnitureParameters.setCurrentType(t.name, in: tx) }
+                tx.update(front.id) { $0.furnitureFront?.leafCountParameter = nil; $0.furnitureFront?.leafCount = n }
+                guard let c = try? tx.commit() else { continue }
+                let name = "\(mark) \(n == 1 ? "Single" : "Pair")"
+                let condition = fp.type == .bool ? (n == 2 ? p : "not(\(p))") : (n == 1 ? "\(p) = 1" : "not(\(p) = 1)")
+                if f.parameter(named: name) == nil { f.parameters.append(FamilyParameter(name: name, type: .bool, group: .other, formula: condition)) }
+                out[front.id, default: []].append((withDividerPlanes(c.model), name))
+            }
+        }
+        return out
+    }
+}

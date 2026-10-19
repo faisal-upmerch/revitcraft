@@ -34,3 +34,15 @@ extension SA.Builder {
         return try FurnitureFronts.createFront(.drawer, in: bay, typeID: try frontType(.drawer, typeName, material: material), in: tx)
     }
 }
+
+extension LibraryBuilder {
+    /// Doors single or a pair by type: an Integer family parameter `name` with `formula` (of the sizes), and every
+    /// door's Leaf Count associated with it (FMG3).
+    public func leafCountByType(_ name: String = "Leaf Count", formula: String) throws {
+        try commit()
+        try FurnitureParameters.edit(tx) { s in
+            if s.family.parameter(named: name) == nil { s.family.parameters.append(FamilyParameter(name: name, type: .integer, group: .construction, formula: formula)) }
+        }
+        try FurnitureFronts.associateLeafCount(tx.model.elements(.furnitureFronts).map(\.id), with: name, in: tx)
+    }
+}

@@ -55,11 +55,19 @@ extension FurnitureCompiler {
             return name
         }
 
-        var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
+        // FMG3: doors whose Leaf Count follows a family parameter are compiled single and as a pair, each shown by a
+        // yes/no parameter of that value (FurnitureCompiler+FMG3).
+        let variants = leafCountVariants(source, to: &f)
+        var work: [(front: Element, model: BIMModel, visibility: String?)] = []
         for front in fronts {
-            var ps = FurnitureFrontSolids.solids(front, m, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
-            let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(m.type(of: front)?.name ?? "")"
-            if let (length, start) = slideLengthFormula(front, m, f), let box = FurnitureFronts.drawerBox(front, m) { // FM8
+            if let vs = variants[front.id] { for v in vs { if let e = v.model[front.id] { work.append((e, v.model, v.visibility)) } } } else { work.append((front, m, nil)) }
+        }
+
+        var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
+        for (front, mm, visibility) in work {
+            var ps = FurnitureFrontSolids.solids(front, mm, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
+            let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(mm.type(of: front)?.name ?? "")"
+            if let (length, start) = slideLengthFormula(front, mm, f), let box = FurnitureFronts.drawerBox(front, mm) { // FM8
                 slideLengths[front.id] = length
                 flexDrawerBox(&ps.solids, mark: front.mark.isEmpty ? (front.furnitureFront?.kind.rawValue ?? "Front") : front.mark, length: length, start: start, back: box.back)
             }
@@ -67,6 +75,7 @@ extension FurnitureCompiler {
                 s.visibleAt = s.visibleAt.intersection([.medium, .fine])
                 guard !s.visibleAt.isEmpty else { continue }
                 if !s.isVoid { s.materialParameter = materialParameter(ps.materials[s.id] ?? nil, label: label) }
+                if let visibility { s.visibilityParameter = visibility } // FMG3
                 f.solids.append(s)
             }
             for p in ps.placed {
@@ -80,41 +89,67 @@ extension FurnitureCompiler {
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
                 if let span = p.span, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" } // FM9: lengths on both sides
                 inst.visibleAt = [.medium, .fine]
+                inst.visibilityParameter = visibility // FMG3
                 f.nestedInstances.append(inst)
             }
-            f.planLines += planSwings(front, m)
-            addElevationSwings(front, m, to: &f) // FMG3: on every face
+            f.planLines += planSwings(front, mm).map { var l = $0; l.visibilityParameter = visibility; return l } // FMG3
+            addElevationSwings(front, mm, to: &f, visibility: visibility) // FMG3: on every face
         }
 
         // Hardware: nested families, owned instances on the front's planes, the others where they are.
         var hinges: [HingeRecord] = [], handles: [HingeRecord] = [] // FM8: hinge sets by door height, centred handles (FurnitureCompiler+FM8)
-        let placements: [String: HardwarePlacement] = Dictionary(fronts.flatMap { fr in FurnitureFronts.hardware(fr, m).map { ("\(fr.id.raw)|\($0.slot)", $0) } },
-                                                                 uniquingKeysWith: { a, _ in a })
-        // FMG3: hardware of fronts on canted faces stays between the face's corners (CantAnchors).
-        var canted: [String: (FamilyBound, FamilyBound)] = [:]
-        for fr in fronts {
-            guard let g = FurnitureFronts.geometry(fr, m), let a = CantAnchors(g.opening, g.frame) else { continue }
-            for p in FurnitureFronts.localHardware(fr, m) { canted["\(fr.id.raw)|\(p.slot)"] = a.point(p.at.x.value, p.at.y.value, ctx) }
+        // FMG3: the varied doors' hardware comes from each of their variants.
+        var hardwareWork: [(h: Element, model: BIMModel, visibility: String?)] = hardware.compactMap { h in
+            guard let owner = h.params[FurnitureHardware.ownerParam]?.refValue, variants[owner] != nil else { return (h, m, nil) }
+            return nil
         }
-        for h in hardware {
-            guard let c = h.component, let t = m[h.typeID], let td = t.typeData, let nested = m[td.familyID]?.family else { continue }
+        for (owner, vs) in variants.sorted(by: { $0.key < $1.key }) {
+            for v in vs {
+                for h in v.model.elements(.furnitureHardware).sorted(by: { $0.id < $1.id }) where h.params[FurnitureHardware.ownerParam]?.refValue == owner {
+                    hardwareWork.append((h, v.model, v.visibility))
+                }
+            }
+        }
+        var placementsByModel: [String: [String: HardwarePlacement]] = [:]
+        var cantedByModel: [String: [String: (FamilyBound, FamilyBound)]] = [:]
+        func placements(_ mm: BIMModel, _ key: String) -> [String: HardwarePlacement] {
+            if let p = placementsByModel[key] { return p }
+            let fr = mm.elements(.furnitureFronts)
+            let p = Dictionary(fr.flatMap { e in FurnitureFronts.hardware(e, mm).map { ("\(e.id.raw)|\($0.slot)", $0) } }, uniquingKeysWith: { a, _ in a })
+            placementsByModel[key] = p
+            return p
+        }
+        // FMG3: hardware of fronts on canted faces stays between the face's corners (CantAnchors).
+        func canted(_ mm: BIMModel, _ key: String) -> [String: (FamilyBound, FamilyBound)] {
+            if let c = cantedByModel[key] { return c }
+            var c: [String: (FamilyBound, FamilyBound)] = [:]
+            for fr in mm.elements(.furnitureFronts) {
+                guard let g = FurnitureFronts.geometry(fr, mm), let a = CantAnchors(g.opening, g.frame) else { continue }
+                for p in FurnitureFronts.localHardware(fr, mm) { c["\(fr.id.raw)|\(p.slot)"] = a.point(p.at.x.value, p.at.y.value, ctx) }
+            }
+            cantedByModel[key] = c
+            return c
+        }
+        for (h, mm, visibility) in hardwareWork {
+            guard let c = h.component, let t = mm[h.typeID], let td = t.typeData, let nested = mm[td.familyID]?.family else { continue }
             if f.nestedFamily(named: nested.name) == nil {
                 var copy = nested
                 copy.furnitureSource = nil
                 for i in copy.types.indices {
-                    guard let pt = m.types(for: .furnitureHardware).first(where: { $0.typeData?.familyID == td.familyID && $0.name == copy.types[i].name })?.typeData else { continue }
+                    guard let pt = mm.types(for: .furnitureHardware).first(where: { $0.typeData?.familyID == td.familyID && $0.name == copy.types[i].name })?.typeData else { continue }
                     for (k, v) in pt.params where k.key.hasPrefix(Parameters.familyParamID("").key) {
                         copy.types[i].values[String(k.key.dropFirst(Parameters.familyParamID("").key.count))] = v
                     }
                 }
                 f.nestedFamilies.append(copy)
             }
+            let key = visibility ?? ""
             var x: FamilyBound = .expr(PartSolidContext.number(c.location.x)), y: FamilyBound = .expr(PartSolidContext.number(c.location.y))
-            var z: FamilyBound = .expr(PartSolidContext.number(m.baseElevation(of: h)))
+            var z: FamilyBound = .expr(PartSolidContext.number(mm.baseElevation(of: h)))
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue,
-               let p = placements["\(owner.raw)|\(slot)"] {
+               let p = placements(mm, key)["\(owner.raw)|\(slot)"] {
                 x = ctx.bound(p.at.x); y = ctx.bound(p.at.y); z = ctx.bound(p.at.z)
-                if let c = canted["\(owner.raw)|\(slot)"] { x = c.0; y = c.1 } // FMG3
+                if let c = canted(mm, key)["\(owner.raw)|\(slot)"] { x = c.0; y = c.1 } // FMG3
             }
             var inst = NestedFamilyInstance(familyName: nested.name, typeName: t.name, x: x, y: y, z: z, rotation: PartSolidContext.number(c.rotation * 180 / .pi), mirrored: c.mirrored)
             for (k, v) in Parameters.familyInstanceValues(h) {
@@ -126,15 +161,17 @@ extension FurnitureCompiler {
                 }
             }
             // A slide pair spans its opening: its width follows the bay's sides.
-            if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = m[owner], let o = m[front.hostID]?.furnitureBay?.opening,
+            if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = mm[owner], let o = mm[front.hostID]?.furnitureBay?.opening,
                nested.parameter(named: "Opening Width") != nil {
                 inst.bindings["Opening Width"] = "(\(sumExpression(o.value("x1"), f, planeOffsets))) - (\(sumExpression(o.value("x0"), f, planeOffsets)))" // FM9: lengths on both sides; FMG3: any face
                 if let length = slideLengths[owner], nested.parameter(named: "Slide Length") != nil { inst.bindings["Slide Length"] = length } // FM8
             }
             inst.visibleAt = [.medium, .fine]
+            inst.visibilityParameter = visibility // FMG3
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue { // FM8
-                if slot.hasPrefix("hinge.") { hinges.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
-                if slot.hasPrefix("handle.") { handles.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
+                let varied = visibility.map { _ in mm } // FMG3: a variant's records read its model
+                if slot.hasPrefix("hinge.") { hinges.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot, model: varied, visibility: visibility)) }
+                if slot.hasPrefix("handle.") { handles.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot, model: varied, visibility: visibility)) }
             }
             f.nestedInstances.append(inst)
         }

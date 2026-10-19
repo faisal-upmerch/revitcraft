@@ -135,7 +135,7 @@ struct FM9Tests {
         #expect(a.allElements == b.allElements)
         #expect(Set(a.allElements.map(\.ifcGUID)).count == a.allElements.count)
         let entry = FurnitureLibraryIndex.entry(p, a)
-        #expect(entry.file == "Kitchen/Kitchen Cabinet.arcusfurniture" && entry.category == "Casework" && entry.types.map(\.width) == [24, 30, 33, 36])
+        #expect(entry.file == "Kitchen/Kitchen Cabinet.arcusfurniture" && entry.category == "Casework" && entry.types.map(\.width) == [12, 15, 18, 21, 24, 27, 30, 33, 36]) // FMG3: one piece for every width
     }
 
     @Test func aMistypedTypeOrMaterialFailsTheBuild() {

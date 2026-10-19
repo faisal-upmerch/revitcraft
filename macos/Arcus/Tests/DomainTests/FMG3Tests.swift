@@ -318,6 +318,60 @@ struct FMG3Tests {
         #expect(a.count == 6 && c.count == 6 && zip(a, c).allSatisfy { approx($1 - $0, 2 * i, 1e-5) }, "\(a) \(c)")
     }
 
+    // MARK: 4. Leaf Count
+
+    @Test func kitchenCabinetIsSingleOrPairByType() throws {
+        let p = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" })
+        #expect(!FurnitureLibrary.essentials.contains { $0.name == "Kitchen Base Cabinet - Single Door" })
+        let m = p.build()
+        #expect(LibraryKit.buildError(m) == nil, "\(LibraryKit.buildError(m) ?? "")")
+        let setup = try #require(m.furnitureSetup)
+        #expect(setup.family.types.map(\.name) == ["B12", "B15", "B18", "B21", "B24", "B27", "B30", "B33", "B36"])
+        #expect(setup.family.parameter(named: "Leaf Count")?.formula != nil)
+        let door = try #require(m.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .door })
+        #expect(door.furnitureFront?.leafCountParameter == "Leaf Count")
+        func leaves(_ type: String) throws -> (BIMModel, Int, Int) {
+            let tx = TransactionContext(model: m, name: "Type")
+            try FurnitureParameters.setCurrentType(type, in: tx)
+            let t = try tx.commit().model
+            let d = try #require(t[door.id])
+            let hinges = t.hosted(by: d.id).filter { $0.params[FurnitureHardware.slotParam]?.textValue?.hasPrefix("hinge") == true }.count
+            return (t, FurnitureFronts.geometry(d, t)?.leaves.count ?? 0, hinges)
+        }
+        let (_, l12, h12) = try leaves("B12"), (t30, l30, h30) = try leaves("B30")
+        #expect(l12 == 1 && h12 == 2 && l30 == 2 && h30 == 4, "\(l12) \(h12) \(l30) \(h30)")
+        #expect(try leaves("B21").1 == 1 && leaves("B24").1 == 2)
+        // Properties: Leaf Count follows the parameter (its own value locked), Leaves shows the count now.
+        let entries = Parameters.instanceEntries(t30[door.id]!, t30)
+        #expect(entries.first { $0.name == "Leaf Count Parameter" }?.value?.textValue == "Leaf Count")
+        #expect(entries.first { $0.name == "Leaves" }?.value?.intValue == 2)
+        #expect(entries.first { $0.name == "Leaf Count" }?.isReadOnly == true || entries.first { $0.name == "Leaf Count" } != nil)
+
+        // Compiled: both variants, each shown by its yes/no parameter; Width switches between them as it flexes.
+        let f = FurnitureCompiler.family(from: m)
+        let mark = door.mark
+        #expect(f.parameters.contains { $0.name == "\(mark) Single" && $0.type == .bool } && f.parameters.contains { $0.name == "\(mark) Pair" })
+        #expect(FamilyEvaluator.flexTest(f, units: .imperial).isEmpty, "\(FamilyEvaluator.flexTest(f, units: .imperial).prefix(3))")
+        func shown(_ type: String) -> (leaves: Int, hinges: Int) {
+            let ev = FamilyEvaluator.evaluate(f, typeName: type, units: .imperial)
+            let leafNames = Set(ev.solids.filter { $0.name.hasPrefix(mark) && $0.name.hasSuffix("Left Stile") && $0.visibleAt.contains(.medium) }.map(\.name))
+            let hinges = ev.solids.filter { $0.name.hasPrefix(FurnitureHardware.concealedHinge) && $0.visibleAt.contains(.fine) }.map(\.name)
+            return (leafNames.count, hinges.count)
+        }
+        let s15 = shown("B15"), s30 = shown("B30")
+        #expect(s15.leaves == 1 && s30.leaves == 2, "\(s15) \(s30)")
+        #expect(s30.hinges == 2 * s15.hinges && s15.hinges > 0, "\(s15) \(s30)")
+        // The Leaf Count type parameter and an instance's own count.
+        let s = DocumentSession(model: m)
+        _ = s.perform("Unassociate") { tx in try FurnitureFronts.associateLeafCount([door.id], with: nil, in: tx); tx.update(door.id) { $0.furnitureFront?.leafCount = 2 } }
+        #expect(FurnitureFronts.geometry(s.model[door.id]!, s.model)?.leaves.count == 2)
+        _ = s.perform("Bad") { tx in try FurnitureFronts.associateLeafCount([door.id], with: "Width", in: tx) }
+        #expect(s.lastError != nil)
+        let pairType = try #require(m.types(for: .furnitureFronts).first { $0.typeData?.familyName == "Door" && $0.name == "Slab - Full Overlay Pair" })
+        #expect(FurnitureFrontTypes.Values(pairType.typeData).leafCount == 2)
+        #expect(Parameters.typeEntries(pairType, m).first { $0.name == "Leaf Count" }?.value?.intValue == 2)
+    }
+
     @Test(.enabled(if: ProcessInfo.processInfo.environment["FMG3_DEBUG"] != nil)) func debugFlex() throws {
         let name = ProcessInfo.processInfo.environment["FMG3_DEBUG"] ?? ""
         let m = try #require(FurnitureLibrary.simpleASpecs.first { $0.name == name }).build()

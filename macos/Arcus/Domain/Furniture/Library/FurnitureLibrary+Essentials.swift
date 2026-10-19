@@ -24,9 +24,8 @@ extension FurnitureLibrary {
             .init("Dining Table", rooms: ["Dining Room"], detail: .high, keywords: ["kitchen table", "4 seat", "6 seat", "8 seat", "white oak"]) { Essentials.diningTable() },
             .init("Dining Chair", rooms: ["Dining Room"], detail: .high, keywords: ["side chair", "kitchen chair", "leather seat", "walnut"]) { Essentials.diningChair() },
             .init("Sideboard", rooms: ["Dining Room"], category: .casework, detail: .high, keywords: ["buffet", "credenza", "server", "walnut"]) { Essentials.sideboard() },
-            .init("Kitchen Cabinet", rooms: ["Kitchen"], category: .casework, detail: .high, keywords: ["base cabinet", "lower cabinet", "drawer", "shaker"]) { Essentials.kitchenCabinet() },
-            .init("Kitchen Base Cabinet - Single Door", rooms: ["Kitchen"], category: .casework, detail: .high,
-                  keywords: ["base cabinet", "narrow", "12\"", "15\"", "18\""]) { Essentials.kitchenBaseSingle() },
+            .init("Kitchen Cabinet", rooms: ["Kitchen"], category: .casework, detail: .high,
+                  keywords: ["base cabinet", "lower cabinet", "drawer", "shaker", "single door", "double door", "narrow", "12\"", "15\"", "18\""]) { Essentials.kitchenCabinet() },
             .init("Kitchen Wall Cabinet", rooms: ["Kitchen"], category: .casework, detail: .high, keywords: ["upper cabinet", "wall cabinet", "shaker"]) { Essentials.kitchenWallCabinet() },
             .init("Pantry Cabinet", rooms: ["Kitchen"], category: .casework, detail: .high, keywords: ["tall cabinet", "larder", "utility", "shelves"]) { Essentials.pantryCabinet() },
             .init("Study Desk", rooms: ["Home Office"], detail: .high, keywords: ["desk", "writing desk", "pedestal", "drawers"]) { Essentials.studyDesk() },
@@ -347,25 +346,17 @@ enum Essentials {
 
     // MARK: Kitchen
 
+    /// FMG3: one base cabinet for every width, B12 to B36: a drawer over a Shaker door that is single up to 21" and a
+    /// pair from 24" (Leaf Count by type, a formula of Width), adjustable shelf, 4" toe kick.
     static func kitchenCabinet() -> BIMModel {
         LibraryKit.piece("Kitchen Cabinet", category: .casework,
-                         sizes: [Size("B24", w: 24, d: 24, h: 34.5), Size("B30", w: 30, d: 24, h: 34.5), Size("B33", w: 33, d: 24, h: 34.5), Size("B36", w: 36, d: 24, h: 34.5)],
-                         description: "Frameless base cabinet: drawer over a pair of Shaker doors, adjustable shelf, 4\" toe kick") { k in
-            shaker(k)
-            try k.carcass(CarcassSpec(panel: whitePanel, top: .inside("3/4\" Painted MDF Shelf (White)"), base: .plinth(height: 4, setback: 3),
-                                      columns: [CarcassColumn(CarcassRow(.pair, shelves: 1), CarcassRow(.drawers(1), height: 5.5))],
-                                      shelf: "3/4\" Painted MDF Shelf (White)", pairType: "Shaker White Pair - Bar Pull", drawerType: "Slab White - Bar Pull"))
-        }
-    }
-
-    static func kitchenBaseSingle() -> BIMModel {
-        LibraryKit.piece("Kitchen Base Cabinet - Single Door", category: .casework,
-                         sizes: [Size("B12", w: 12, d: 24, h: 34.5), Size("B15", w: 15, d: 24, h: 34.5), Size("B18", w: 18, d: 24, h: 34.5), Size("B21", w: 21, d: 24, h: 34.5)],
-                         description: "Frameless base cabinet: drawer over a Shaker door, adjustable shelf, 4\" toe kick") { k in
+                         sizes: stride(from: 12.0, through: 36, by: 3).map { Size("B\(Int($0))", w: $0, d: 24, h: 34.5) },
+                         description: "Frameless base cabinet: drawer over a Shaker door (single to B21, a pair from B24), adjustable shelf, 4\" toe kick") { k in
             shaker(k)
             try k.carcass(CarcassSpec(panel: whitePanel, top: .inside("3/4\" Painted MDF Shelf (White)"), base: .plinth(height: 4, setback: 3),
                                       columns: [CarcassColumn(CarcassRow(.door, shelves: 1), CarcassRow(.drawers(1), height: 5.5))],
                                       shelf: "3/4\" Painted MDF Shelf (White)", doorType: "Shaker White - Bar Pull", drawerType: "Slab White - Bar Pull"))
+            try k.leafCountByType(formula: "if(Width < 22.5\", 1, 2)")
         }
     }
 

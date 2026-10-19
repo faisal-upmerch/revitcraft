@@ -1,5 +1,6 @@
 import Foundation
 import ArcusGeometry
+import ArcusCalc
 
 // FMG3: lids (doors and flaps on top-access bays). A lid hinges on its back edge (concealed hinges, or a piano hinge
 // along the whole edge), is held open by a lid stay on the side (two on lids wider than 24"), can be Slab, Shaker or
@@ -60,15 +61,18 @@ extension FurnitureFronts {
     /// else its type's.
     public static func leafCount(_ e: Element, _ m: BIMModel) -> Int {
         guard let f = e.furnitureFront, f.kind == .door else { return 1 }
-        if let p = f.leafCountParameter, let v = FurnitureParameters.value(p, m) {
-            switch v {
-            case .quantity(let x, _): return x >= 1.5 ? 2 : 1
-            case .bool(let b): return b ? 2 : 1
-            case .text: break
-            }
-        }
+        if let p = f.leafCountParameter, let n = leafCount(of: FurnitureParameters.value(p, m)) { return n }
         if let n = f.leafCount { return n >= 2 ? 2 : 1 }
         return FurnitureFrontTypes.values(of: e, m).leafCount
+    }
+
+    /// A family parameter's value as a Leaf Count (an integer: 2 or more is a pair; yes/no: yes is a pair).
+    public static func leafCount(of v: FormulaValue?) -> Int? {
+        switch v {
+        case .quantity(let x, _)?: x >= 1.5 ? 2 : 1
+        case .bool(let b)?: b ? 2 : 1
+        default: nil
+        }
     }
 
     /// The family parameters a door's Leaf Count can follow: integer and yes/no parameters of the document.
