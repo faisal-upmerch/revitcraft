@@ -107,6 +107,7 @@ final class Viewport3DHost: NSView {
             }.value
             guard let self, !Task.isCancelled, gen == self.generation else { box.cancelled = true; Signpost.end(interval, completed: false); return }
             self.viewport.setScene(scene)
+            self.tools.snapping3D.sceneChanged(scene) // S3D: 3D snapping indexes what the view draws
             Signpost.end(interval)
         }
     }
