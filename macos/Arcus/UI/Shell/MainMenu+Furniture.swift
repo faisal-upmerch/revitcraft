@@ -22,6 +22,6 @@ extension MainMenuBuilder {
         return [openings] + commands([.furnitureHardware]) // FM5
             + [.separator()] + commands([.furnitureJoint, .furnitureJointRules, .furnitureAllowJoin, .furnitureDisallowJoin]) // FM6
             + [.separator()] + commands([.furniturePartList, .furnitureHardwareSchedule, .furnitureMaterialTakeoff, .furnitureEdgeBanding, .furnitureCost, nil,
-                                         .furnitureNesting, .furnitureStockSheets, nil, .furnitureCNCExport, .furnitureShopDrawings, .furnitureCheckParts, .furnitureHardwareCatalog]) // FM7
+                                         .furnitureNesting, .furnitureStockSheets, nil, .furnitureCNCExport, .furnitureShopDrawings, .furnitureExplodeParts, .furnitureCheckParts, .furnitureHardwareCatalog]) // FM7
     }
 }
