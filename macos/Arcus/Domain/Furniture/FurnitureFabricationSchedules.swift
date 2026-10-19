@@ -69,14 +69,17 @@ public enum FabricationSchedules {
     static func partRow(_ p: CutPart, _ m: BIMModel) -> FabricationRow {
         let material = m[p.materialID]?.name ?? "No Material"
         let mc = FurnitureFabrication.materialCost(p, m), bc = FurnitureFabrication.bandingCost(p, m)
-        return FabricationRow(elementID: p.elementID, values: [
+        var row = FabricationRow(elementID: p.elementID, values: [
             "Mark": .text(p.mark), "Part": .text(p.name), "Type": .text(p.typeName), "Material": .text(material),
             "Material and Thickness": .text("\(material) \(FurnitureSizeText.inches(p.thickness))"),
             "Thickness": .double(p.thickness), "Cut Length": .double(p.length), "Cut Width": .double(p.width), "Grain": .text(p.grain.rawValue),
             "Edge Banding": .text(p.banding.code), "L1": .bool(p.banding.l1), "L2": .bool(p.banding.l2), "W1": .bool(p.banding.w1), "W2": .bool(p.banding.w2),
-            "Banding Material": .text(name(p.bandingMaterialID, m)), "Banding Length": .double(p.bandingLength), "Qty": .int(p.quantity),
+            "Banding Material": .text(name(p.bandingMaterialID, m)), "Qty": .int(p.quantity),
             "Area": .double(p.area), "Material Cost": .double(mc), "Banding Cost": .double(bc), "Cost": .double(mc + bc), "Derived": .bool(p.isDerived),
         ])
+        // Unbanded parts leave Banding Length blank.
+        if p.bandingLength > 0 { row.values["Banding Length"] = .double(p.bandingLength) }
+        return row
     }
 
     static func hardwareRow(_ h: HardwareItem, _ m: BIMModel) -> FabricationRow {
@@ -177,7 +180,7 @@ public enum FabricationSchedules {
         // Labor and markup (global parameters).
         let hours = GlobalParameters.named(laborHours, m)?.value.doubleValue ?? 0
         let rate = GlobalParameters.named(laborRate, m)?.value.doubleValue ?? 0
-        if hours > 0 || rate > 0 {
+        if hours > 0 {
             lines.append(CostLine(category: "Labor", item: "Labor", basis: "\(one(hours)) h × \(money(rate))/h", cost: hours * rate))
         }
         let subtotal = lines.reduce(0) { $0 + $1.cost }
@@ -246,9 +249,9 @@ public enum FabricationSchedules {
     public static func partList() -> ScheduleDefinition {
         let k = ScheduleKind.partList
         var d = ScheduleDefinition(kind: k, categories: [], fields: [
-            field("Mark", k, 0.024), field("Part", k, 0.03), field("Material", k, 0.024), field("Thickness", k, 0.014, align: .right),
-            field("Cut Length", k, 0.018), field("Cut Width", k, 0.018), field("Grain", k, 0.02), field("Edge Banding", k, 0.02),
-            field("Banding Length", k, 0.018, total: true), field("Qty", k, 0.009, total: true), field("Area", k, 0.018, total: true),
+            field("Mark", k, 0.022), field("Part", k, 0.03), field("Material", k, 0.022), field("Thickness", k, 0.017, align: .right),
+            field("Cut Length", k, 0.018), field("Cut Width", k, 0.017), field("Grain", k, 0.02), field("Edge Banding", k, 0.023),
+            field("Banding Length", k, 0.02, total: true), field("Qty", k, 0.009, total: true), field("Area", k, 0.018, total: true),
             field("Cost", k, 0.017, total: true), field("Material and Thickness", k, 0.03, hidden: true),
         ])
         func id(_ n: String) -> String { d.fields.first { $0.heading == n }!.id }
@@ -280,9 +283,9 @@ public enum FabricationSchedules {
     public static func edgeBanding() -> ScheduleDefinition {
         let k = ScheduleKind.edgeBanding
         var d = ScheduleDefinition(kind: k, categories: [], fields: [
-            field("Banding Material", k, 0.04), field("Mark", k, 0.06), field("Linear Feet", k, 0.02, total: true), field("Cost", k, 0.02, total: true),
+            field("Banding Material", k, 0.05), field("Linear Feet", k, 0.022, total: true), field("Cost", k, 0.022, total: true),
         ])
-        d.fields[2].decimals = 1
+        d.fields[1].decimals = 1
         d.sorting = [ScheduleSort(fieldID: d.fields[0].id)]
         d.itemizeEveryInstance = false
         d.grandTotals = true
@@ -293,8 +296,8 @@ public enum FabricationSchedules {
     public static func costSummary() -> ScheduleDefinition {
         let k = ScheduleKind.costSummary
         var d = ScheduleDefinition(kind: k, categories: [], fields: [
-            field("Order", k, 0.01, hidden: true), field("Category", k, 0.03), field("Item", k, 0.04), field("Basis", k, 0.05),
-            field("Cost", k, 0.022, total: true),
+            field("Order", k, 0.01, hidden: true), field("Category", k, 0.028), field("Item", k, 0.034), field("Basis", k, 0.046),
+            field("Cost", k, 0.02, total: true),
         ])
         d.sorting = [ScheduleSort(fieldID: d.fields[0].id)]
         d.grandTotals = true

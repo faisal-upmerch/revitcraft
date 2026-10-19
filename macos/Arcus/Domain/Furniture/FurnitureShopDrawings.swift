@@ -123,7 +123,7 @@ public enum FurnitureShopDrawings {
             _ = try? SheetPlacement.place(id, onSheet: sheetID, at: Vec2(0.17, 0.14), in: tx)
         }
         arrangeSchedules(f102, in: tx)
-        arrangeSchedules(f104, in: tx)
+        arrangeSchedules(f104, in: tx, left: 0.17)
     }
 
     static func ensureMaterial(in tx: TransactionContext) {
@@ -149,21 +149,47 @@ public enum FurnitureShopDrawings {
         if changed { try? GlobalParameters.set(list, in: tx) }
     }
 
-    /// The Furniture Title Block (Tabloid): the starter title block with the piece's rows (Piece, Category, Material,
-    /// Designed By) in place of the project's.
+    /// The Furniture Title Block (Tabloid): border, a strip on the right with the organization, revisions and the
+    /// piece's rows (Piece, Category, Material, Designed By, Drawn By, Date, Scale, Sheet Name, Sheet Number).
     static func ensureTitleBlock(in tx: TransactionContext) -> ElementID? {
         if let t = tx.model.elements(.elementTypes).first(where: { $0.typeData?.familyName == titleBlockName }) { return t.id }
-        let size = PaperSize.ansiB.landscapeSize
-        var f = StarterLibrary.titleBlock(titleBlockName, width: size.x, height: size.y)
-        let rename: [String: (String, String)] = ["Project Name": ("Piece Name", "PIECE"), "Project Number": ("Piece Material", "MATERIAL"),
-                                                  "Client Name": ("Piece Category", "CATEGORY"), "Checked By": ("Designed By", "DESIGNER")]
-        let captions: [String: String] = ["PROJECT": "PIECE", "PROJECT NO.": "MATERIAL", "CLIENT": "CATEGORY", "CHECKED": "DESIGNER"]
-        for i in f.labels.indices {
-            if let p = f.labels[i].parameterName, let (n, sample) = rename[p] { f.labels[i].parameterName = n; f.labels[i].sample = sample }
-            if let c = captions[f.labels[i].staticText] { f.labels[i].staticText = c }
-        }
+        let f = titleBlockFamily()
         let fid = tx.create(.families, name: f.name, data: .family(f))
         return tx.create(.elementTypes, name: f.name, data: .type(TypeData(instanceCategory: .titleBlocks, familyID: fid, familyName: f.name)))
+    }
+
+    static func titleBlockFamily() -> FamilyDefinition {
+        let size = PaperSize.ansiB.landscapeSize, w = size.x, h = size.y
+        var f = FamilyDefinition(name: titleBlockName, template: .titleBlock)
+        f.types = [FamilyTypeDefinition(name: titleBlockName, values: [:])]
+        func n(_ v: Double) -> String { String(format: "%.4f", v) }
+        func line(_ a: (Double, Double), _ b: (Double, Double), _ weight: Int) -> FamilyLine {
+            FamilyLine(shape: .line(FamilyPoint(n(a.0), n(a.1)), FamilyPoint(n(b.0), n(b.1))), weight: weight)
+        }
+        let left = 0.02, m = 0.01, stripW = min(0.19, w * 0.22), sx = w - m - stripW
+        var lines = [line((left, m), (w - m, m), 5), line((w - m, m), (w - m, h - m), 5), line((w - m, h - m), (left, h - m), 5), line((left, h - m), (left, m), 5),
+                     line((sx, m), (sx, h - m), 3)]
+        // Rows from the bottom up: height, label parameter, caption, text height, bold.
+        let rows: [(Double, String, String, Double, Bool)] = [
+            (0.03, "Sheet Number", "SHEET", 0.009, true), (0.024, "Sheet Name", "TITLE", 0.0038, true), (0.016, "Scale", "SCALE", 0.0024, false),
+            (0.016, "Sheet Issue Date", "DATE", 0.0024, false), (0.016, "Drawn By", "DRAWN", 0.0024, false), (0.016, "Designed By", "DESIGNER", 0.0024, false),
+            (0.02, "Piece Material", "MATERIAL", 0.003, false), (0.018, "Piece Category", "CATEGORY", 0.003, false), (0.03, "Piece Name", "PIECE", 0.0045, true),
+        ]
+        var y = m
+        var labels: [FamilyLabel] = []
+        for (rh, param, caption, textH, bold) in rows {
+            let top = y + rh
+            lines.append(line((sx, top), (w - m, top), 2))
+            labels.append(FamilyLabel(position: FamilyPoint(n(sx + 0.003), n(top - 0.0032)), parameterName: nil, staticText: caption, height: 0.0013, alignment: .left))
+            labels.append(FamilyLabel(position: FamilyPoint(n(sx + 0.005), n(y + rh * 0.3)), parameterName: param, height: textH, alignment: .left, bold: bold, sample: caption))
+            y = top
+        }
+        labels.append(FamilyLabel(position: FamilyPoint(n(sx + 0.003), n(y + 0.004)), parameterName: "Revision Schedule", height: 0.0016))
+        labels.append(FamilyLabel(position: FamilyPoint(n(sx + stripW / 2), n(h - m - 0.009)), parameterName: "Organization", height: 0.0038, alignment: .center, bold: true))
+        f.annotationLines = lines
+        f.labels = labels
+        f.parameters = [FamilyParameter(name: "Sheet Width", type: .length, isInstance: true), FamilyParameter(name: "Sheet Height", type: .length, isInstance: true)]
+        return f
     }
 
     /// Values of the Furniture Title Block's piece labels.
@@ -187,14 +213,14 @@ public enum FurnitureShopDrawings {
     public static func update(in tx: TransactionContext) {
         guard tx.model.isFurniture else { return }
         ensureStandard(in: tx)
-        tagParts(in: tx)
         updateNesting(in: tx)
         if let f101 = sheetID(shopDrawing, tx.model) { arrangeShopDrawing(f101, in: tx) }
+        tagParts(in: tx) // after the arrangement: tags keep clear of each other at the views' final scale
         if let f104 = sheetID(details, tx.model), let b = tx.model.views.first(where: { $0.name == back3DName }) {
-            arrange([b.id], onSheet: f104, columns: 1, area: Rect2(min: Vec2(0.02, 0.01), max: Vec2(0.17, 0.2694)), in: tx)
+            arrange([b.id], onSheet: f104, columns: 1, area: Rect2(min: Vec2(0.02, 0.01), max: Vec2(0.165, 0.2694)), in: tx)
         }
         if let f102 = sheetID(partList, tx.model) { arrangeSchedules(f102, in: tx) }
-        if let f104 = sheetID(details, tx.model) { arrangeSchedules(f104, in: tx, left: 0.18) }
+        if let f104 = sheetID(details, tx.model) { arrangeSchedules(f104, in: tx, left: 0.17) }
     }
 
     /// F101: plan, Section A and {3D} over the Front and Right elevations.
@@ -211,7 +237,8 @@ public enum FurnitureShopDrawings {
         let views = FurnitureNestingViews.update(in: tx)
         if let f103 = sheetID(nesting, tx.model) {
             let n = views.count
-            arrange(views, onSheet: f103, columns: n <= 1 ? 1 : (n <= 4 ? 2 : 3), in: tx)
+            // Groups stack in one column (each is a row of up to three sheets); more than four groups take two columns.
+            arrange(views, onSheet: f103, columns: n <= 4 ? 1 : 2, in: tx)
         }
         return views
     }
@@ -227,14 +254,21 @@ public enum FurnitureShopDrawings {
         for (view, wanted) in [(front, { (e: Element) in e.furniturePanel?.role != .back }), (section, { (e: Element) in e.furniturePanel?.role == .back })] {
             guard let view, let vd = view.view, let right = vd.rightVector, let origin = vd.planeOrigin else { continue }
             let tagged = Set(tx.model.owned(byView: view.id).compactMap { $0.tag?.taggedID })
+            // The Part Tag's box (18 x 7 mm on paper) at the view's scale, with a little air.
+            let half = Vec2(0.0095, 0.004) * Double(vd.scale)
             var heads = tx.model.owned(byView: view.id).compactMap { $0.tag?.head }
+            func clear(_ h: Vec2) -> Bool { !heads.contains { abs($0.x - h.x) < 2 * half.x && abs($0.y - h.y) < 2 * half.y } }
             for e in parts.sorted(by: { $0.id < $1.id }) where wanted(e) && !tagged.contains(e.id) {
                 guard let box = FurniturePartSolids.partBox(e, tx.model)?.box else { continue }
                 let c = (box.min + box.max) * 0.5
-                var head = Vec2((Vec2(c.x, c.y) - Vec2(origin.x, origin.y)).dot(right), c.z)
-                while heads.contains(where: { $0.distance(to: head) < 1.25 * inch }) { head.y += 1.5 * inch }
+                let at = Vec2((Vec2(c.x, c.y) - Vec2(origin.x, origin.y)).dot(right), c.z)
+                // At the part's centre, else the nearest clear spot up or down, with a leader back to the part.
+                let steps = [0] + (1...12).flatMap { [$0, -$0] }
+                let head = steps.lazy.map { at + Vec2(0, Double($0) * 2.1 * half.y) }.first(where: clear) ?? at
                 heads.append(head)
-                tx.create(.tags, data: .tag(TagData(taggedID: e.id, head: head)), typeID: tagType, ownerViewID: view.id)
+                var t = TagData(taggedID: e.id, head: head, hasLeader: head != at)
+                if head != at { t.leaderEnd = at }
+                tx.create(.tags, data: .tag(t), typeID: tagType, ownerViewID: view.id)
             }
         }
     }
@@ -248,19 +282,42 @@ public enum FurnitureShopDrawings {
         let ids = views.filter { v in tx.model.viewports(showing: v).allSatisfy { $0.ownerViewID == sheetID } }
         guard !ids.isEmpty else { return }
         let cols = max(1, min(columns, ids.count)), rows = (ids.count + cols - 1) / cols
-        let cell = Vec2(area.width / Double(cols), area.height / Double(rows))
-        // Room for the viewport title under each view.
-        let room = Vec2(cell.x - 0.012, cell.y - 0.02)
-        func region(_ id: ElementID) -> Rect2 {
+        let groups = FurnitureFabrication.nesting(tx.model)
+        var fixed: [ElementID: Rect2] = [:]
+        // A view's region on the sheet at scale `s` (Nesting views leave room for their titles at their scale).
+        func region(_ id: ElementID, _ s: Int) -> Rect2 {
             guard let v = tx.model[id] else { return Rect2(center: .zero, halfSize: Vec2(0.5, 0.5)) }
+            if v.view?.kind == .nesting {
+                let key = v.params[FurnitureNestingViews.groupParam]?.textValue
+                return NestingLayout(groups.first { $0.key == key }, scale: s).sheetBounds
+            }
             if let c = v.view?.cropRegion, v.view?.cropActive == true { return c }
-            return SheetGraphicsBuilder.viewRegion(ViewGraphicsBuilder(model: tx.model, view: v).build())
+            if let r = fixed[id] { return r }
+            let r = SheetGraphicsBuilder.viewRegion(ViewGraphicsBuilder(model: tx.model, view: v).build())
+            fixed[id] = r
+            return r
         }
-        let regions = ids.map(region)
-        let scale = scales.first { s in regions.allSatisfy { $0.width / Double(s) <= room.x && $0.height / Double(s) <= room.y } } ?? scales.last!
+        func layout(_ s: Int) -> (regions: [Rect2], colW: [Double], rowH: [Double]) {
+            let regions = ids.map { region($0, s) }
+            let colW = (0..<cols).map { c in stride(from: c, to: ids.count, by: cols).map { regions[$0].width }.max() ?? 0 }
+            let rowH = (0..<rows).map { r in (r * cols..<min(ids.count, (r + 1) * cols)).map { regions[$0].height }.max() ?? 0 }
+            return (regions, colW, rowH)
+        }
+        // Columns as wide as their widest view, rows as tall as their tallest, with room between them and for titles.
+        let padX = 0.012, padY = 0.022
+        let scale = scales.first { s in
+            let l = layout(s)
+            return l.colW.reduce(0, +) / Double(s) + padX * Double(cols) <= area.width && l.rowH.reduce(0, +) / Double(s) + padY * Double(rows) <= area.height
+        } ?? scales.last!
+        let (_, colW, rowH) = layout(scale)
+        // Spread what's left evenly.
+        let spareX = max(0, area.width - colW.reduce(0, +) / Double(scale)) / Double(cols)
+        let spareY = max(0, area.height - rowH.reduce(0, +) / Double(scale)) / Double(rows)
         for (k, id) in ids.enumerated() {
             let r = k / cols, c = k % cols
-            let center = Vec2(area.min.x + cell.x * (Double(c) + 0.5), area.max.y - cell.y * (Double(r) + 0.5) + 0.006)
+            let x0 = area.min.x + colW[..<c].reduce(0, +) / Double(scale) + spareX * Double(c)
+            let y0 = area.max.y - rowH[..<r].reduce(0, +) / Double(scale) - spareY * Double(r)
+            let center = Vec2(x0 + (colW[c] / Double(scale) + spareX) / 2, y0 - (rowH[r] / Double(scale) + spareY) / 2 + 0.006)
             if tx.model[id]?.view?.scale != scale { tx.update(id) { $0.view?.scale = scale } }
             if let vp = tx.model.viewports(showing: id).first(where: { $0.ownerViewID == sheetID }) {
                 if vp.viewport?.center != center { tx.update(vp.id) { $0.viewport?.center = center } }
