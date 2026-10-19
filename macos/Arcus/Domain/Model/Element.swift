@@ -166,6 +166,7 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
     // FM4 element kinds:
     case furniturePanel, furnitureShelf, furnitureLeg, furnitureRail, furnitureEdgeProfile, furnitureForm // FM4
+    case furnitureJoint // FM6
 }
 
 /// Kind-specific element data.
@@ -277,6 +278,8 @@ public enum ElementData: Hashable, Codable, Sendable {
     case furnitureEdgeProfile(EdgeProfileData), furnitureForm(FurnitureFormData)
     // FM5 element data:
     // FM6 element data:
+    /// FM6: a joint the user set with the Joint tool, or a part end where joins are disallowed (Domain/Furniture).
+    case furnitureJoint(JointData)
     // FM7 element data:
     // FM8 element data:
     // FM9 element data:
@@ -383,6 +386,7 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .furnitureRail: .furnitureRail
         case .furnitureEdgeProfile: .furnitureEdgeProfile
         case .furnitureForm: .furnitureForm
+        case .furnitureJoint: .furnitureJoint // FM6
         }
     }
 }

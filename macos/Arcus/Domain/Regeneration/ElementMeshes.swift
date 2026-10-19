@@ -291,6 +291,7 @@ public enum DependencyGraph {
                 for t in m.tags(of: id) { out.insert(t.id) }
                 out.formUnion(Reinforcement.affected(by: e, m)) // F34
                 out.formUnion(SolidJoins.partners(of: id, m))
+                out.formUnion(FurnitureJoints.affected(by: e, m)) // FM6: joint partners, joint elements, Joint Rules
                 if e.typeData?.instanceCategory == .curtainPanels { for w in CurtainWallGeometry.walls(usingPanelType: id, m) { out.insert(w.id) } } // WP3
             }
         }

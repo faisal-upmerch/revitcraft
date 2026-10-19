@@ -65,6 +65,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     case furniturePanels, furnitureShelves, furnitureLegs, furnitureRails, furnitureEdgeProfiles, furnitureForms // FM4
     // FM5 categories:
     // FM6 categories:
+    case furnitureJoints // FM6
     // FM7 categories:
     // FM8 categories:
     // FM9 categories:
@@ -110,6 +111,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
         case .renderings: return .internal_ // F810: Render Gallery images
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
+        case .furnitureJoints: return .internal_ // FM6: user-set joints have no graphics of their own
         }
     }
 
@@ -250,6 +252,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureRails: "Rails"
         case .furnitureEdgeProfiles: "Edge Profiles"
         case .furnitureForms: "Forms"
+        case .furnitureJoints: "Joints" // FM6
         }
     }
 
@@ -367,6 +370,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureRails: "Rail"
         case .furnitureEdgeProfiles: "Edge Profile"
         case .furnitureForms: "Form"
+        case .furnitureJoints: "Joint" // FM6
         }
     }
 
