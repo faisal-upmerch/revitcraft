@@ -67,19 +67,21 @@ struct VisibilityGraphicsDialog: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title).font(.title3.weight(.semibold))
+        ArcusDialog(icon: "eye", tint: .indigo, title: title, subtitle: "Category visibility and graphic overrides" + ({ if case .template = target { return " of the template." } else { return " in this view." } }()),
+                    size: .extraWide, height: 660, onCancel: { close() }, onOK: { apply(); close() }) {
             if let t = controllingTemplate {
                 HStack {
                     Image(systemName: "lock.fill").foregroundStyle(.secondary)
-                    Text("The view template “\(t.name)” controls these settings.").foregroundStyle(.secondary)
+                    Text("The view template “\(t.name)” controls these settings.")
                     Spacer()
-                    Button("Edit Template…") { editTemplate = t.id }
+                    Button("Edit Template…") { editTemplate = t.id }.controlSize(.small)
                 }
-                .padding(8).background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(0.05)))
+                .padding(.horizontal, 12).padding(.vertical, 8)
+                .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(Color.accentColor.opacity(0.22)))
             }
             Picker("", selection: $tab) { ForEach(tabs) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).labelsHidden()
+                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
             Group {
                 switch tab {
                 case .model, .annotation: categoriesTab
@@ -90,26 +92,21 @@ struct VisibilityGraphicsDialog: View {
                 }
             }
             .disabled(controllingTemplate != nil)
-            .frame(minHeight: 380)
-            HStack {
-                if tab == .model || tab == .annotation {
-                    Button("All") { setAll(true) }.help("Show every category in the list")
-                    Button("None") { setAll(false) }.help("Hide every category in the list")
-                    Button("Invert") { invert() }.help("Swap shown and hidden categories")
-                }
-                Spacer()
-                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
-                Button("Apply") { apply() }.disabled(!dirty).help("Apply the changes and keep this dialog open")
-                Button("OK") { apply(); close() }.keyboardShortcut(.defaultAction)
+            .frame(minHeight: 380, maxHeight: .infinity)
+        } leading: {
+            if tab == .model || tab == .annotation {
+                Button("All") { setAll(true) }.help("Show every category in the list")
+                Button("None") { setAll(false) }.help("Hide every category in the list")
+                Button("Invert") { invert() }.help("Swap shown and hidden categories")
             }
+        } trailing: {
+            Button("Apply") { apply() }.disabled(!dirty).help("Apply the changes and keep this dialog open").dialogButton()
         }
-        .padding(20)
-        .frame(minWidth: 1080, idealWidth: 1120, minHeight: 600, idealHeight: 640)
         .onAppear(perform: load)
         .onChange(of: tabs) { _, t in if !t.contains(tab) { tab = .model } }
-        .sheet(isPresented: $showFilters) { FiltersDialog(state: state, initial: selectedFilter, onClose: { showFilters = false }) }
+        .sheet(isPresented: $showFilters) { FiltersDialog(state: state, initial: selectedFilter, onClose: { showFilters = false }).opaqueDialogBackground() } // DIALOGS
         .sheet(item: Binding(get: { editTemplate.map(IdentifiedID.init) }, set: { editTemplate = $0?.id })) { t in
-            VisibilityGraphicsDialog(state: state, target: .template(t.id), onClose: { editTemplate = nil })
+            VisibilityGraphicsDialog(state: state, target: .template(t.id), onClose: { editTemplate = nil }).opaqueDialogBackground() // DIALOGS
         }
     }
 

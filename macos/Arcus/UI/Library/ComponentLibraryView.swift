@@ -138,9 +138,7 @@ struct ComponentLibraryView: View {
 
     var header: some View {
         HStack(spacing: 12) {
-            Image(systemName: categories == ComponentLibrary.siteCategories ? "tree" : "books.vertical")
-                .font(.system(size: 20, weight: .regular)).foregroundStyle(Color.accentColor)
-                .frame(width: 30)
+            DialogIconTile(symbol: categories == ComponentLibrary.siteCategories ? "tree" : "books.vertical", tint: categories == ComponentLibrary.siteCategories ? .green : .blue) // DIALOGS
             VStack(alignment: .leading, spacing: 1) {
                 Text(title).font(.title3.weight(.semibold))
                 Text("\(baseItems.count) families · \(baseItems.reduce(0) { $0 + $1.types.count }) sizes · loaded into the project only when used")
@@ -541,16 +539,19 @@ struct ComponentLibraryView: View {
             Text("Double-click or press Return to place · arrows to browse")
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
             Spacer()
-            Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
+            Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction).dialogButton()
             Button("Load") { if let i = selected { load(i) } }
                 .disabled(selected == nil)
                 .help("Load the selected size into the project without placing it")
+                .dialogButton()
             Button("Place") { placeSelected() }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
                 .disabled(selected == nil)
                 .help("Load the selected size if needed and start placing it")
+                .dialogButton()
         }
-        .padding(.horizontal, 16).padding(.vertical, 11)
+        .padding(.horizontal, DialogStyle.outer).padding(.vertical, DialogStyle.footerPaddingV) // DIALOGS: the dialog footer
     }
 
     func move(_ delta: Int) {
