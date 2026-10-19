@@ -5,7 +5,7 @@ import ArcusApplication
 // (any category template, title blocks and generic annotation symbols).
 extension MainMenuBuilder {
     static func newMenu() -> NSMenuItem {
-        let items: [(CommandID, String)] = [(.newProject, "Project…"), (.newFamily, "Family…"), (.newTitleBlock, "Title Block…"), (.newAnnotationSymbol, "Annotation Symbol…")]
+        let items: [(CommandID, String)] = [(.newProject, "Project…"), (.newFurniture, "Furniture…"), (.newFamily, "Family…"), (.newTitleBlock, "Title Block…"), (.newAnnotationSymbol, "Annotation Symbol…")]
         return submenu("New", items.map { id, title in
             let i = command(id)
             i.title = title

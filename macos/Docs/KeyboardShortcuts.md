@@ -719,6 +719,11 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Purge Unused Families |  |  | Removes families loaded into this family that no component or sweep uses. |
 | Flex Test |  |  | Evaluates every type, and each length parameter at 50% and 150%, reporting geometry and constraint failures. |
 | Save Family As… |  |  | Saves the family as a .arcusfamily file. |
+| Family Types |  |  | Creates types, adds parameters and sets their values and formulas for this piece. |
+| Family Category and Parameters |  |  | Sets the piece's category (Furniture or Casework) and its identity data. |
+| Flex |  |  | Tries every type, and each length parameter at 50% and 150%, and reports what breaks. |
+| Load into Project |  |  | Loads this piece into an open project as a family (reloads it when it is already there). |
+| Load into Project and Close |  |  | Loads this piece into an open project, then closes it. |
 
 ### File
 
@@ -734,8 +739,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | New Annotation Symbol… |  |  | Open the Family Editor on a new generic annotation family. |
 | Print… | `⌘P` |  | Print sheets or views. |
 | Home |  |  | Show the Home screen: start a project, open one, or pick a recent project. |
-| New Project… | `⌘N` |  | Create a project from a template. |
-| Open… | `⌘O` |  | Open an Arcus project. |
+| New Project… | `⌘N` |  | Start a project, furniture or family from Home. |
+| Open… | `⌘O` |  | Open a project, furniture or family. |
 | Save | `⌘S` |  | Save the project. |
 | Save As… | `⇧⌘S` |  | Save a copy under a new name. |
 | Duplicate |  |  | Duplicate the project document. |
@@ -750,6 +755,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Export Family Types… |  |  | Exports the family's types to a type catalog (.txt). |
 | Print Preview |  |  | Shows how the current view or sheet will print. |
 | Print Setup… |  |  | Specifies the paper, zoom, colors and options used to print. |
+| Export DWG… |  |  | Exports views and sheets as 2D DWG drawings (AutoCAD 2000 to 2018 formats), one file each. |
+| New Furniture… |  |  | Creates a Furniture document: a custom piece with parameters, cut lists and shop drawings. |
 
 ### Arcus
 

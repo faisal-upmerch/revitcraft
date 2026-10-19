@@ -40,6 +40,7 @@ enum MainMenuBuilder {
                                                  .specifyCoordinates, .reportCoordinates, .relocateProject, .rotateTrueNorth, .rotateProjectNorth, .mirrorProject, nil, // F11
                                                  .phases, .designOptions, .addToSet, .pickToEdit, nil, .startingView, .decalTypes, .familyEditor, .newFamily, .loadStandardTypes, nil,
                                                  .feFamilyTypes, .feFamilyCategory, .feLoadIntoProject, .feLoadAndClose, .feDefault3D, .feFlexTest, .feSaveFamilyAs, nil, // F1415: Family Editor
+                                                 .furnitureFamilyTypes, .furnitureCategory, .furnitureFlex, .furnitureLoadIntoProject, .furnitureLoadAndClose, nil, // FM3: Furniture documents
                                                  .saveSelection, .loadSelection, .editSelection, nil,
                                                  .warnings, .selectByID, .idsOfSelection, .modelHealth, .purgeUnused, .diagnostics, nil, .keyboardShortcuts]))) // BL-VG: warnings, select by ID
         let window = submenu("Window", [

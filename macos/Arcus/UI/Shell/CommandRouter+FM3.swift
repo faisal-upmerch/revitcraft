@@ -26,7 +26,7 @@ extension CommandRouter {
         case .furnitureFlex: state.presented = .fm3(.flex(FurnitureParameters.flex(model)))
         case .furnitureLoadIntoProject: FurnitureLoad.run(state, close: false)
         case .furnitureLoadAndClose: FurnitureLoad.run(state, close: true)
-        case .newFurniture: AppDelegate.shared?.showNewFurniture()
+        case .newFurniture: AppDelegate.shared?.showHub(tab: .furniture)
         default: return false
         }
         return true

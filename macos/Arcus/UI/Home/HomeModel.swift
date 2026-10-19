@@ -75,11 +75,13 @@ final class HomeModel {
         reload()
     }
 
-    /// `.new` selects Architectural (unless a card is already selected); `.recent` shows Recent.
+    /// `.new` selects Architectural (unless a card is already selected); `.furniture` selects Furniture; `.recent` shows
+    /// Recent.
     func apply(_ tab: AppDelegate.HubTab) {
         switch tab {
         case .new: if selected == nil { selected = .architectural }
         case .recent: selected = nil
+        case .furniture: selected = .furniture
         }
     }
 

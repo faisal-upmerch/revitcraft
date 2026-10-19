@@ -116,6 +116,9 @@ mkdir -p "$STAGE/$APP_NAME.app/Contents/MacOS" "$STAGE/$APP_NAME.app/Contents/Re
 cp "$BIN_DIR/$APP_NAME" "$STAGE/$APP_NAME.app/Contents/MacOS/$APP_NAME"
 sed -e "s/__VERSION__/$VERSION/" -e "s/__BUILD__/$BUILD/" "$ROOT/Arcus/Resources/Info.plist" > "$STAGE/$APP_NAME.app/Contents/Info.plist"
 cp "$ROOT/Arcus/Resources/Icon/AppIcon.icns" "$STAGE/$APP_NAME.app/Contents/Resources/AppIcon.icns"
+# FM3: document icons for .arcus, .arcusfamily and .arcusfurniture, drawn by the bench tool.
+swift build -c "$CONFIG" --product arcus-bench >> "$LOG" 2>&1
+"$BIN_DIR/arcus-bench" --document-icons "$STAGE/$APP_NAME.app/Contents/Resources" >/dev/null
 find "$BIN_DIR" -maxdepth 1 -name "*.bundle" -exec cp -R {} "$STAGE/$APP_NAME.app/Contents/Resources/" \; 2>/dev/null || true
 mkdir -p "$STAGE/$APP_NAME.app/Contents/Resources/Docs"
 cp "$ROOT"/Docs/*.md "$STAGE/$APP_NAME.app/Contents/Resources/Docs/" 2>/dev/null || true

@@ -138,9 +138,10 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     // MARK: Windows
 
-    enum HubTab { case recent, new }
+    enum HubTab { case recent, new, furniture }
 
-    /// Shows Home: `.recent` with no card selected, `.new` with the Architectural card selected. // HOME
+    /// Shows Home: `.recent` with no card selected, `.new` with the Architectural card selected, `.furniture` with the
+    /// Furniture card selected. // HOME
     @MainActor
     func showHub(tab: HubTab) {
         if let w = hubWindow, let m = hubModel {
@@ -237,6 +238,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
             switch id {
             case .home: showHub(tab: .recent)
             case .newProject: showHub(tab: .new)
+            case .newFurniture: showHub(tab: .furniture) // FM3
             case .openProject: NSDocumentController.shared.openDocument(nil)
             case .about: showAbout()
             case .preferences: showSettings()
@@ -250,6 +252,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard item.action == #selector(performArcusCommand(_:)), let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return true }
-        return [.home, .newProject, .openProject, .about, .preferences, .onboarding].contains(id)
+        return [.home, .newProject, .newFurniture, .openProject, .about, .preferences, .onboarding].contains(id)
     }
 }

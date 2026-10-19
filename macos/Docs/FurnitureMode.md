@@ -57,7 +57,7 @@ Shop work in Revit is slow because every board is a hand-made extrusion, and not
 - It adds parametric family behaviour: reference planes with formula offsets, Family Types, Category, Flex, Load into Project.
 
 ### Document and file
-- `ProjectInfoData.documentKind: DocumentKind?` (`.project` when nil, `.furniture`). The manifest gets `kind` (optional), and the format string is `arcus.furniture`.
+- `ProjectInfoData.documentKind: DocumentKind?` (`.project` when nil, `.furniture`) and `ProjectInfoData.furniture` (parameters, types, category; read with `model.furnitureSetup`). The manifest gets `kind` (optional), and the format string is `com.local.arcus.furniture` (as the other formats use their UTType ids).
 - `.arcusfurniture` is a package like `.arcus` (same `ArcusPackage` reader/writer). It has its own exported UTType `com.local.arcus.furniture`, a document icon, and an `ArcusDocument` read type.
 - The **template** (`FurnitureTemplates.blank(category:)`) creates:
   - level Ref. Level at 0;
@@ -150,9 +150,9 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 
 | ID | Milestone | Depends on |
 |---|---|---|
-| FM1 | Home redesign (cards, recents grid, Imperial Architectural, no Residential), onboarding to match | — |
-| FM2 | Family Editor on the main shell + clipping fixes | — |
-| FM3 | Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project | — |
+| FM1 | ✅ Home redesign (cards, recents grid, Imperial Architectural, no Residential), onboarding to match (port/HOME) | — |
+| FM2 | ✅ Family Editor on the main shell + clipping fixes (port/FES; minimum window 1200 × 700) | — |
+| FM3 | ✅ Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project (port/FM3). Open: labelling a new dimension from the UI; Forms use the in-place tool until FM4 | — |
 | FM4 | Parts: Panel, Shelf/Top/Bottom, Back, Divider, Leg, Rail, Plinth, Edge Profile; types, constraints, grips, graphics, Properties | FM3 |
 | FM5 | Bays, Bay Divide, Doors/Drawers/Flaps, hardware families and auto-placement | FM4 |
 | FM6 | Joints: solver, Joint Rules, Joint tool, machining geometry, cut sizes | FM4 |
