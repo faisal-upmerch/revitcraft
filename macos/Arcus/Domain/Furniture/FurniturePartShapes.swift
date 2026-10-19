@@ -35,6 +35,7 @@ public enum FurnitureLegShapes {
         if let mat = tv.material { values["Material"] = .ref(mat) }
         f.types = [FamilyTypeDefinition(name: "Leg", values: values)]
         let w = tv.width, d = tv.depth, rod = max(tv.rod, 0.003)
+        // FM9: offsets from Height are written as lengths ("Height - 0.003 m"), so the leg evaluates in compiled families.
         switch tv.legShape {
         case .square:
             if tv.taper > Tolerance.length {

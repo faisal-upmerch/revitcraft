@@ -13,6 +13,10 @@ struct FM9Tests {
 
     /// Problems with a library piece: a build error, Check Parts errors, Flex problems, types that don't evaluate or
     /// don't take their size, and a family that doesn't load into a project.
+    /// What stands proud of a piece's Width, Depth and Height besides handles (inches): a vanity's backsplash and faucet
+    /// stand above its counter (its Height).
+    static let above: [String: Double] = ["Bathroom Vanity": 10]
+
     static func problems(_ name: String, _ m: BIMModel) -> [String] {
         var out: [String] = []
         if let e = LibraryKit.buildError(m) { return ["\(name): build failed: \(e)"] }
@@ -30,7 +34,8 @@ struct FM9Tests {
                 guard let v = t.values[param]?.doubleValue else { continue }
                 // Handles and pulls stand proud of the front.
                 let over = size - v
-                if over < -0.75 * inch || over > (param == "Depth" ? 1.75 : 0.75) * inch { out.append("\(name) “\(t.name)”: \(param) \(v / inch)\" but the piece is \(size / inch)\"") }
+                let allowed = param == "Depth" ? 1.75 : param == "Height" ? 0.75 + (Self.above[name] ?? 0) : 0.75
+                if over < -0.75 * inch || over > allowed * inch { out.append("\(name) “\(t.name)”: \(param) \(v / inch)\" but the piece is \(size / inch)\"") }
             }
         }
         // Loads into a project and places an instance of every type.
@@ -51,6 +56,20 @@ struct FM9Tests {
             out.append("\(name): loading failed: \(error)")
         }
         return out
+    }
+
+    // MARK: Essentials
+
+    @Test func everyEssentialBuildsFlexesChecksAndLoads() throws {
+        let essentials = FurnitureLibrary.essentials
+        #expect(essentials.count >= 25)
+        for p in essentials {
+            let m = p.build()
+            #expect(m.furnitureSetup?.name == p.name)
+            #expect((m.furnitureSetup?.family.types.count ?? 0) >= 2, "\(p.name): \(m.furnitureSetup?.family.types.count ?? 0) types")
+            let problems = Self.problems(p.name, m)
+            #expect(problems.isEmpty, "\(problems.prefix(8).joined(separator: "\n"))")
+        }
     }
 
     // MARK: Kit recipes
@@ -81,5 +100,52 @@ struct FM9Tests {
             let p = Self.problems(name, m)
             #expect(p.isEmpty, "\(p.prefix(6).joined(separator: "\n"))")
         }
+    }
+
+    // MARK: Library files
+
+    @Test func catalogListsAnIndexedPieceUnderEveryRoomFromOneFile() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "fm9-catalog-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: root) }
+        for f in ["Living Room/Storage Cabinet.arcusfurniture", "Bedroom/Bed.arcusfurniture"] {
+            try FileManager.default.createDirectory(at: root.appending(path: f), withIntermediateDirectories: true)
+        }
+        let index = FurnitureLibraryIndex(pieces: [
+            .init(name: "Storage Cabinet", file: "Living Room/Storage Cabinet.arcusfurniture", rooms: ["Living Room", "Storage & Utility"], category: "Casework",
+                  detail: "high", keywords: ["cupboard"], description: "Doors over shelves", types: [.init(name: "30\"", width: 30, depth: 16, height: 60)]),
+            .init(name: "Bed", file: "Bedroom/Bed.arcusfurniture", rooms: ["Bedroom"], category: "Furniture", detail: "high", keywords: ["queen"], description: "",
+                  types: [.init(name: "Twin", width: 40, depth: 78, height: 48), .init(name: "Queen", width: 62, depth: 83, height: 52)]),
+            .init(name: "Missing", file: "Bedroom/Missing.arcusfurniture", rooms: ["Bedroom"], category: "Furniture", detail: "simple", keywords: [], description: "", types: []),
+        ])
+        try index.encoded().write(to: root.appending(path: FurnitureLibraryIndex.fileName))
+        let items = FurnitureLibraryCatalog.scan(bundled: root, user: nil)
+        #expect(items.count == 3, "a file that isn't there is skipped")
+        let cabinet = items.filter { $0.name == "Storage Cabinet" }
+        #expect(cabinet.map(\.room).sorted() == ["Living Room", "Storage & Utility"] && Set(cabinet.map(\.url)).count == 1 && Set(cabinet.map(\.id)).count == 2)
+        #expect(FurnitureLibraryCatalog.rooms(items).map(\.name) == ["Bedroom", "Living Room", "Storage & Utility"])
+        #expect(FurnitureLibraryCatalog.rooms(items, matching: "cupboard").flatMap(\.items).count == 2)
+        #expect(FurnitureLibraryCatalog.rooms(items, matching: "queen").flatMap(\.items).map(\.name) == ["Bed"])
+        #expect(items.first { $0.name == "Bed" }?.typeCountText == "2 types")
+        #expect(FurnitureLibraryIndex.read(in: root) == index)
+    }
+
+    @Test func rebuiltPiecesAreIdenticalOnceStabilized() throws {
+        let p = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" })
+        let a = FurnitureLibrary.stabilized(p.build(), seed: p.name), b = FurnitureLibrary.stabilized(p.build(), seed: p.name)
+        #expect(a.allElements == b.allElements)
+        #expect(Set(a.allElements.map(\.ifcGUID)).count == a.allElements.count)
+        let entry = FurnitureLibraryIndex.entry(p, a)
+        #expect(entry.file == "Kitchen/Kitchen Cabinet.arcusfurniture" && entry.category == "Casework" && entry.types.map(\.width) == [24, 30, 33, 36])
+    }
+
+    @Test func aMistypedTypeOrMaterialFailsTheBuild() {
+        let m = LibraryKit.piece("Typo", sizes: [.init("A", w: 24, d: 18, h: 30), .init("B", w: 30, d: 18, h: 30)]) { b in
+            try b.table(TableSpec(top: "1 1/2\" Butcher Blok"))
+        }
+        #expect(LibraryKit.buildError(m)?.contains("Butcher Blok") == true)
+        let n = LibraryKit.piece("Typo 2", sizes: [.init("A", w: 24, d: 18, h: 30)]) { b in
+            b.panelType("Odd", thickness: 0.75, material: "Unobtainium")
+        }
+        #expect(LibraryKit.buildError(n)?.contains("Unobtainium") == true)
     }
 }
