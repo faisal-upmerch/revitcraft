@@ -36,7 +36,9 @@ struct StairPlanView {
     let relation: Relation
     /// The run the cut plane crosses and the cut mark across it: a point on the walk line, the mark's direction, the
     /// normal toward the part above, and the gap between the two lines of a double mark.
-    struct Cut { var run: Int; var point: Vec2; var along: Vec2; var normal: Vec2; var gap: Double; var width: Double; var station: Double }
+    struct Cut { var run: Int; var point: Vec2; var along: Vec2; var normal: Vec2; var gap: Double; var width: Double; var station: Double
+        /// How far past the mark a stair below shows again (clear of the rising stair's arrow).
+        var margin: Double }
     let cut: Cut?
     let cutZ: Double
 
@@ -75,7 +77,7 @@ struct StairPlanView {
         let u = -t.perpendicular // left → right across the run
         let along = (u * cos(Double.pi / 6) + t * sin(Double.pi / 6)).normalized
         let gap = l.type.cutMark == .doubleZigzag ? paper(0.002) : 0
-        return Cut(run: i, point: p, along: along, normal: t, gap: gap, width: r.width, station: s)
+        return Cut(run: i, point: p, along: along, normal: t, gap: gap, width: r.width, station: s, margin: paper(0.002))
     }
 
     func zone(_ p: Vec2) -> StairZone {
@@ -171,7 +173,7 @@ struct StairPlanView {
                 let o = r.outline.points
                 for k in o.indices {
                     let a = o[k], b = o[(k + 1) % o.count]
-                    let da = (a - c.point).dot(n) + c.gap / 2, db = (b - c.point).dot(n) + c.gap / 2
+                    let da = (a - c.point).dot(n) - c.gap / 2 - c.margin, db = (b - c.point).dot(n) - c.gap / 2 - c.margin
                     if da <= 0 { pts.append(a) }
                     if (da < 0) != (db < 0), abs(da - db) > 1e-12 { pts.append(a.lerp(to: b, t: da / (da - db))) }
                 }
