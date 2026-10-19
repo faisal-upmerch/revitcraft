@@ -677,6 +677,13 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Align Bottom |  |  | Aligns the selected cells' text to the bottom. |
 | Split & Place |  |  | Splits the schedule and places the parts on a sheet. |
 | Keynote Legend |  |  | Creates a legend listing the keynotes used in the project. |
+| Part List |  |  | Opens the Part List: every part and drawer box piece at its cut size, grouped by material and thickness, with edge banding and cost. |
+| Hardware Schedule |  |  | Opens the Hardware Schedule: hinges, slides, handles and the joints' dowels, cams and screws, with count and cost. |
+| Material Takeoff |  |  | Opens the Material Takeoff with cost: area, volume, cost and sheets needed by material. |
+| Edge Banding |  |  | Opens the Edge Banding takeoff: linear feet and cost by banding material. |
+| Cost |  |  | Opens the Cost schedule: materials, banding, hardware, labor and markup, totalled as the piece cost. |
+| Nesting |  |  | Lays the sheet parts out on stock sheets, one Nesting view per material and thickness, with grain and yield. |
+| Shop Drawings |  |  | Tags the parts, makes the Nesting views and arranges sheets F101–F104 at scales that fit. |
 
 ### Manage
 
@@ -769,6 +776,9 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Load into Project |  |  | Loads this piece into an open project as a family (reloads it when it is already there). |
 | Load into Project and Close |  |  | Loads this piece into an open project, then closes it. |
 | Joint Rules |  |  | Sets the joint each kind of pair gets (side–top, shelf–side, rail–leg…) and its sizes. |
+| Stock Sheets |  |  | Sets the sheet sizes parts are nested on (per material and thickness), the kerf, edge trim, grain and rotation. |
+| Hardware Catalog |  |  | Lists every hardware type with its cost, manufacturer and model for editing. |
+| Check Parts |  |  | Checks the parts before cutting: too thin for their hardware, larger than the stock, missing materials, overlapping without a joint, edges that show unbanded. |
 
 ### File
 
@@ -802,6 +812,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Print Setup… |  |  | Specifies the paper, zoom, colors and options used to print. |
 | Export DWG… |  |  | Exports views and sheets as 2D DWG drawings (AutoCAD 2000 to 2018 formats), one file each. |
 | New Furniture… |  |  | Creates a Furniture document: a custom piece with parameters, cut lists and shop drawings. |
+| CNC Export |  |  | Writes DXF or DWG programs per part or per nested sheet (outline, drilling, grooves, pockets, grain, labels) and a CSV part list. |
 
 ### Arcus
 
