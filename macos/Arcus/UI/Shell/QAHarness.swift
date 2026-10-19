@@ -37,11 +37,13 @@ enum QAHarness {
         MetalCanvasView.drawsWhenOccluded = true
         if let o = args.firstIndex(of: "--qa-out"), o + 1 < args.count { outDir = URL(fileURLWithPath: args[o + 1]) }
         try? FileManager.default.createDirectory(at: outDir, withIntermediateDirectories: true)
+        let recents = RecentDocuments.snapshot() // the user's Recent list comes back unchanged after the run
         Task {
             if scenario == "workflow" || scenario == "all" { await workflow() }
             if scenario == "screenshots" || scenario == "all" { await screenshots() }
             if scenario == "interact" || scenario == "all" { await interaction() }
             writeResults()
+            RecentDocuments.restore(recents)
             if args.contains("--qa-quit") {
                 for d in NSDocumentController.shared.documents { d.updateChangeCount(.changeCleared); d.close() }
                 NSApp.terminate(nil)
@@ -347,9 +349,7 @@ enum QAHarness {
         await step("Open Recent menu lists projects") {
             let url = outDir.appendingPathComponent("QA Project.arcus")
             let dc = NSDocumentController.shared
-            let hadRecents = !dc.recentDocumentURLs.isEmpty
-            dc.noteNewRecentDocumentURL(url)
-            defer { if !hadRecents { dc.clearRecentDocuments(nil) } }
+            dc.noteNewRecentDocumentURL(url) // the run puts the user's list back when it ends
             guard let file = NSApp.mainMenu?.items.first(where: { $0.submenu?.title == "File" })?.submenu else { throw QAError("No File menu") }
             file.delegate?.menuNeedsUpdate?(file)   // what AppKit does when the File menu opens
             guard let recent = file.items.first(where: { $0.title == "Open Recent" })?.submenu else { throw QAError("No Open Recent menu") }

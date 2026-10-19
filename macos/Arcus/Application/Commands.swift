@@ -131,6 +131,14 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case stairSupportPickEdges, stairSketchBoundary, stairSketchRiser, stairSketchPath, stairRailingSettings, stairFlip
     case stairRailingEditPath, stairRailingReset, shaftPickStair
 
+    // POLISH commands:
+
+    // FMG1 commands:
+
+    // FMG2 commands:
+
+    // FMG3 commands:
+
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
@@ -160,7 +168,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands + polishCommands + fmg1Commands + fmg2Commands + fmg3Commands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

@@ -71,6 +71,10 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FM8 categories:
     // FM9 categories:
     // STAIR categories:
+    // POLISH categories:
+    // FMG1 categories:
+    // FMG2 categories:
+    // FMG3 categories:
     case stairRuns, stairLandings, stairSupports // STAIR: run, landing and support types of stair types
 
 

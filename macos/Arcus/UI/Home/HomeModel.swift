@@ -91,7 +91,7 @@ final class HomeModel {
     /// Re-reads the recent documents, user templates and the furniture library.
     func reload() {
         guard readsDisk else { return }
-        recents = NSDocumentController.shared.recentDocumentURLs
+        recents = RecentDocuments.urls()
         userTemplates = UserTemplates.list()
         library = FurnitureLibraryCatalog.all()
     }
