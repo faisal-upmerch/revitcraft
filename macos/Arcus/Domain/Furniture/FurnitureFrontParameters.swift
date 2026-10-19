@@ -102,8 +102,30 @@ enum FurnitureFrontParameters {
                              locked: { e, ctx in
                                  guard let f = e.furnitureFront else { return nil }
                                  if f.kind != .door { return "Only doors hinge on a side." }
-                                 return FurnitureFrontTypes.values(of: e, ctx.model).isPair ? "Pairs hinge on both sides." : nil
+                                 return FurnitureFronts.leafCount(e, ctx.model) >= 2 ? "Pairs hinge on both sides." : nil // FMG3
                              })
+    // FMG3: single or pair by instance, or by a family parameter (each family type sets it).
+    static let leafCount = P("furniture.front.leafCount", "Leaf Count", .choice(["By Type", "1", "2"]), .construction,
+                             tooltip: "1 for a single door, 2 for a pair (By Type: the door type's).",
+                             get: { e, _ in e.furnitureFront.map { f in .text(f.leafCount.map(String.init) ?? "By Type") } },
+                             set: { e, v, _ in
+                                 let t = text(v)
+                                 guard ["By Type", "1", "2"].contains(t) else { throw err("Choose By Type, 1 or 2.") }
+                                 e.furnitureFront?.leafCount = Int(t)
+                             },
+                             locked: { e, _ in e.furnitureFront?.leafCountParameter.map { "Set by the family parameter “\($0)”." } })
+    static let leafCountParameter = P("furniture.front.leafCountParameter", "Leaf Count Parameter", .text, .construction,
+                                      tooltip: "An Integer or Yes/No family parameter (Family Types) that sets 1 or 2 per type, as Associate Family Parameter does. Empty: none.",
+                                      get: { e, _ in e.furnitureFront.map { .text($0.leafCountParameter ?? "") } },
+                                      set: { e, v, ctx in
+                                          let t = text(v).trimmingCharacters(in: .whitespaces)
+                                          if !t.isEmpty, !FurnitureFronts.leafCountParameters(ctx.model).contains(t) {
+                                              throw err("“\(t)” isn't an Integer or Yes/No family parameter. Add it in Family Types first.")
+                                          }
+                                          e.furnitureFront?.leafCountParameter = t.isEmpty ? nil : t
+                                      })
+    static let effectiveLeaves = P("furniture.front.leaves", "Leaves", .integer, .construction, tooltip: "The door's leaves now (1 or 2).",
+                                   get: { e, ctx in e.furnitureFront?.kind == .door ? .int(FurnitureFronts.leafCount(e, ctx.model)) : nil })
     static func hardwareRef(_ id: String, _ name: String, kind: HardwareKind, get: @escaping @Sendable (FrontData) -> ElementID?,
                             set: @escaping @Sendable (inout FrontData, ElementID?) -> Void, typeValue: @escaping @Sendable (FurnitureFrontTypes.Values) -> ElementID?) -> P {
         P("furniture.front.\(id)", name, .elementRef(.furnitureHardware), .construction, tooltip: "Swap the \(name.lowercased()) of this front (the type's when empty).",
@@ -157,7 +179,7 @@ enum FurnitureFrontParameters {
         let typed = [BuiltInCatalog.familyName, BuiltInCatalog.typeName, BuiltInCatalog.familyAndType]
         var list: [P] = typed + [host]
         switch e.furnitureFront?.kind ?? .door {
-        case .door: list += [hingeSide, hinge, hingeCount, handle, handlePosition, handleOffset]
+        case .door: list += [leafCount, leafCountParameter, effectiveLeaves, hingeSide, hinge, hingeCount, handle, handlePosition, handleOffset] // FMG3: Leaf Count
         case .flap: list += [hinge, hingeCount, handle, handlePosition]
         case .drawer: list += [handle, handlePosition, slide, drawerBox]
         }
@@ -208,7 +230,14 @@ enum FurnitureFrontParameters {
           })
     }
     static let tOverlay = typeChoice(FT.overlay, "Overlay", FrontOverlay.allCases.map(\.rawValue))
-    static let tLeaves = typeChoice(FT.leaves, "Leaves", ["Single", "Pair"])
+    // FMG3: Leaf Count (1 or 2) replaces Leaves (Single/Pair), which older types keep and still read.
+    static let tLeaves = P(FT.leafCount.key, "Leaf Count", .integer, .construction, tooltip: "1 for a single door, 2 for a pair.",
+                           get: { e, _ in .int(FurnitureFrontTypes.Values(e.typeData).leafCount) },
+                           set: { e, v, _ in
+                               guard let n = v.intValue, n == 1 || n == 2 else { throw err("Leaf Count is 1 or 2.") }
+                               e.typeData?.params[FT.leafCount] = .int(n)
+                               e.typeData?.params[FT.leaves] = .text(n == 2 ? "Pair" : "Single")
+                           })
     static let tStyle = typeChoice(FT.style, "Style", FrontStyle.allCases.map(\.rawValue))
     static let tThickness = typeNumber(FurniturePartTypes.thickness, "Thickness", min: 0.003)
     static let tReveal = typeNumber(FT.reveal, "Reveal", tooltip: "Gap between neighbouring fronts, and round an inset front.")

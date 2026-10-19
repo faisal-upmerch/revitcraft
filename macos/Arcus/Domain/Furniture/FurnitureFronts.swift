@@ -108,10 +108,12 @@ public enum FurnitureFronts {
     /// The front's leaves in its bay (nil when the bay isn't enclosed).
     public static func geometry(_ e: Element, _ m: BIMModel) -> FrontGeometry? {
         guard let f = e.furnitureFront, let bay = m[e.hostID]?.furnitureBay, let o = bay.opening else { return nil }
-        return geometry(f, type: FurnitureFrontTypes.values(of: e, m), bay: bay, opening: o)
+        let pair: Bool? = f.leafCount != nil || f.leafCountParameter != nil ? leafCount(e, m) >= 2 : nil // FMG3
+        return geometry(f, type: FurnitureFrontTypes.values(of: e, m), bay: bay, opening: o, pair: pair)
     }
 
-    public static func geometry(_ f: FrontData, type tv: FurnitureFrontTypes.Values, bay: BayData, opening o: BayOpening) -> FrontGeometry? {
+    /// `pair` overrides the type's Leaf Count (FMG3: an instance's, or its family parameter's).
+    public static func geometry(_ f: FrontData, type tv: FurnitureFrontTypes.Values, bay: BayData, opening o: BayOpening, pair: Bool? = nil) -> FrontGeometry? {
         let t = tv.thickness, r = tv.reveal, er = tv.edgeReveal, ov = tv.overlay
         let front = bay.face == .front
         let u0 = edge(inner: o.value("x0"), outer: o.value("outer0"), shared: o.sharedLeft, sign: -1, overlay: ov, reveal: r, edgeReveal: er)
@@ -139,7 +141,7 @@ public enum FurnitureFronts {
         case .door:
             if !front {
                 leaves = [FrontLeaf(u: (u0, u1), v: (v0, v1), w: w, hinge: .back)]
-            } else if tv.isPair {
+            } else if pair ?? tv.isPair {
                 let c = mid(u0, u1)
                 leaves = [FrontLeaf(u: (u0, c.shifted(-r / 2)), v: (v0, v1), w: w, hinge: .left),
                           FrontLeaf(u: (c.shifted(r / 2), u1), v: (v0, v1), w: w, hinge: .right)]
@@ -289,6 +291,7 @@ public enum FurnitureFronts {
                 out.append(HardwarePlacement(slot: "stay.1", typeID: st, at: (o.value("x1"), o.value("y0"), z), mirrored: true, values: [:], carcassPartID: o.right))
             }
         }
+        out += lidStays(e, g, tv, m) // FMG3
         return out
     }
 

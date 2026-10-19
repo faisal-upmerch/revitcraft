@@ -130,7 +130,7 @@ extension FurnitureMachining {
             let tv = FurnitureFrontTypes.values(of: front, m)
             let key = "\(front.id.raw)"
             let label = front.mark.isEmpty ? g.kind.rawValue : front.mark
-            let style: FrontStyle = g.face == .front ? tv.style : .slab
+            let style = FurnitureFrontSolids.lidStyle(tv.style, g.face) // FMG3
             for (li, leaf) in g.leaves.enumerated() {
                 let lk = g.leaves.count > 1 ? "\(key)/leaf\(li + 1)" : key
                 let ln = g.leaves.count > 1 ? "\(label) Leaf \(li + 1)" : label

@@ -113,3 +113,43 @@ extension FurnitureBays {
         }
     }
 }
+
+extension FurnitureBays {
+    /// A plan move of a bay or separator (Move, arrows and drags in plan): its point moves with it (on its face, the
+    /// move's part along the face). Other transforms move the point the same way. True when handled.
+    public static func apply(_ t: Transform2, to e: inout Element) -> Bool {
+        switch e.data {
+        case .furnitureBay(let b):
+            guard b.parentID == nil else { return true }
+            if b.face == .top { var d = b; d.seed = t.apply(b.seed); e.furnitureBay = d; return true }
+            let f = BayFrame(b)
+            let depth = b.opening.map { ($0.y0 + $0.y1) / 2 } ?? 0
+            let p = f.world(Vec2(b.seed.x, depth))
+            let q = f.local(t.apply(p))
+            var d = b
+            d.seed = Vec2(q.x, b.seed.y)
+            e.furnitureBay = d
+            return true
+        case .furnitureBaySeparator(let s):
+            var d = s
+            if s.face == .top { d.start = t.apply(s.start); d.end = t.apply(s.end) } else {
+                let f = BayFrame(angle: s.facing ?? 0)
+                func mv(_ p: Vec2) -> Vec2 { Vec2(f.local(t.apply(f.world(Vec2(p.x, 0)))).x, p.y) }
+                d.start = mv(s.start); d.end = mv(s.end)
+            }
+            e.furnitureBaySeparator = d
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Moves a bay or separator in 3D (Move in an elevation or section). True when handled.
+    public static func translate3D(_ e: inout Element, by d: Vec3) -> Bool {
+        switch e.data {
+        case .furnitureBay: translate(&e, by: d); return true
+        case .furnitureBaySeparator: translateSeparator(&e, by: d); return true
+        default: return false
+        }
+    }
+}

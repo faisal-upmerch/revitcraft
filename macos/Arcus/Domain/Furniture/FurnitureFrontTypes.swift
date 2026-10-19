@@ -14,6 +14,8 @@ public enum FurnitureFrontTypes {
 
     public static let overlay = ParameterID("furniture.front.overlay")
     public static let leaves = ParameterID("furniture.front.leaves")
+    /// FMG3: Leaf Count (1 or 2), the type's single or pair (older types say "Single" or "Pair" in `leaves`).
+    public static let leafCount = ParameterID("furniture.front.leafCount")
     public static let style = ParameterID("furniture.front.style")
     /// The gap between neighbouring fronts (and round an inset front).
     public static let reveal = ParameterID("furniture.front.reveal")
@@ -51,7 +53,12 @@ public enum FurnitureFrontTypes {
         func r(_ id: ParameterID) -> ElementID? { td?.params[id]?.refValue }
         public var kind: FrontKind { FrontKind(rawValue: td?.familyName ?? "") ?? .door }
         public var overlay: FrontOverlay { FrontOverlay(rawValue: t(FurnitureFrontTypes.overlay)) ?? .full }
-        public var isPair: Bool { t(FurnitureFrontTypes.leaves) == "Pair" }
+        public var isPair: Bool {
+            if let n = td?.params[FurnitureFrontTypes.leafCount]?.intValue { return n >= 2 } // FMG3
+            return t(FurnitureFrontTypes.leaves) == "Pair"
+        }
+        /// FMG3: 1 or 2.
+        public var leafCount: Int { isPair ? 2 : 1 }
         public var style: FrontStyle { FrontStyle(rawValue: t(FurnitureFrontTypes.style)) ?? .slab }
         public var thickness: Double { d(FurniturePartTypes.thickness, 0.75 * inch) }
         public var reveal: Double { d(FurnitureFrontTypes.reveal, 0.125 * inch) }
@@ -98,6 +105,9 @@ public enum FurnitureFrontTypes {
         var slide = FurnitureHardware.undermountSlide
         var handle = (FurnitureHardware.barPull, "128 mm")
         var profile: EdgeProfileShape? = nil
+        /// FMG3: a hinge other than the overlay's concealed one (family, type), and the stay type.
+        var hinge: (String, String)? = nil
+        var stay: String? = nil
     }
 
     static let standard: [Spec] = [
@@ -116,6 +126,11 @@ public enum FurnitureFrontTypes {
         Spec(family: .drawer, name: "Slab - Inset", overlay: .inset, style: .slab, slide: FurnitureHardware.sideMountSlide, handle: (FurnitureHardware.knob, "1 1/4\"")),
         Spec(family: .flap, name: "Slab - Full Overlay Lift-Up", overlay: .full, style: .slab, flap: .liftUp),
         Spec(family: .flap, name: "Slab - Full Overlay Drop-Down", overlay: .full, style: .slab, flap: .dropDown),
+        // FMG3: lids for top-access bays (chests, benches, ottomans): a piano hinge along the back and a lid stay.
+        Spec(family: .flap, name: "Lid - Slab Piano Hinge", overlay: .full, style: .slab, handle: (FurnitureHardware.knob, "1 1/4\""),
+             hinge: (FurnitureHardware.pianoHinge, "1 1/2\" Open"), stay: "Drop-Down Stay"),
+        Spec(family: .flap, name: "Lid - Shaker Piano Hinge", overlay: .full, style: .shaker, core: "Solid Maple", handle: (FurnitureHardware.knob, "1 1/4\""),
+             hinge: (FurnitureHardware.pianoHinge, "1 1/2\" Open"), stay: "Drop-Down Stay"),
     ]
 
     /// The default type names (the first a tool offers) per family.
@@ -134,6 +149,7 @@ public enum FurnitureFrontTypes {
             var p: [ParameterID: ParamValue] = [:]
             p[overlay] = .text(s.overlay.rawValue)
             p[leaves] = .text(s.pair ? "Pair" : "Single")
+            p[leafCount] = .int(s.pair ? 2 : 1) // FMG3
             p[style] = .text(s.style.rawValue)
             p[FurniturePartTypes.thickness] = .double(0.75 * inch)
             p[reveal] = .double(s.overlay == .inset ? 0.0625 * inch : 0.125 * inch)
@@ -157,10 +173,10 @@ public enum FurnitureFrontTypes {
             switch s.family {
             case .door, .flap:
                 let hinge = switch s.overlay { case .full: "Full Overlay 110°"; case .half: "Half Overlay 110°"; case .inset: "Inset 110°" }
-                p[hingeType] = .ref(FurnitureHardware.type(FurnitureHardware.concealedHinge, hinge, tx.model))
+                p[hingeType] = .ref(s.hinge.flatMap { FurnitureHardware.type($0.0, $0.1, tx.model) } ?? FurnitureHardware.type(FurnitureHardware.concealedHinge, hinge, tx.model)) // FMG3
                 if s.family == .flap {
                     p[flapAction] = .text(s.flap.rawValue)
-                    p[stayType] = .ref(FurnitureHardware.type(FurnitureHardware.flapStay, s.flap == .liftUp ? "Lift-Up Stay" : "Drop-Down Stay", tx.model))
+                    p[stayType] = .ref(FurnitureHardware.type(FurnitureHardware.flapStay, s.stay ?? (s.flap == .liftUp ? "Lift-Up Stay" : "Drop-Down Stay"), tx.model)) // FMG3
                 }
             case .drawer:
                 p[slideType] = .ref(FurnitureHardware.type(s.slide, "18\"", tx.model))

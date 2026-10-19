@@ -59,6 +59,15 @@ extension ViewGraphicsBuilder {
                 items.append(lineItem(e, a, c, stroke(e.category, cut: false, o)))
             case .furnitureFront:
                 guard detailLevel(e.category) != .coarse else { continue }
+                // FMG3: a lid's swing shows in the side elevations (looking along its hinge).
+                let lid = FurnitureSwings.lidElevation(e, model)
+                if !lid.isEmpty {
+                    guard abs(fr.forward.normalized.x) > 0.99 else { continue }
+                    let st = swingStroke(e, o)
+                    items.append(GItem(elementID: e.id, category: e.category, layer: .model,
+                                       primitives: lid.map { .polyline($0.map { Vec2(fr.u($0.xy), $0.z) }, closed: false, st) }, hitPolygons: []))
+                    continue
+                }
                 let segs = FurnitureSwings.elevation(e, model)
                 guard !segs.isEmpty, let g = FurnitureFronts.geometry(e, model), g.frame.faces(fr.forward) else { continue }
                 face = g.frame

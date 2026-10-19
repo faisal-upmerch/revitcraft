@@ -86,7 +86,7 @@ struct FM5UITests {
         // Drawers need the Front elevation; projects grey every FM5 tool out.
         if let plan = model.views.first(where: { $0.view?.kind == .floorPlan }) {
             state.open(plan.id)
-            #expect(CommandRouter(state: state).disabledReason(.furnitureDrawer) == "Open the Front or Back elevation.")
+            #expect(CommandRouter(state: state).disabledReason(.furnitureDrawer) == "Open an elevation or section looking at the face.") // FMG3: any face
             #expect(CommandRouter(state: state).disabledReason(.furnitureBay) == nil, "top-access bays in plan")
         }
         let project = DocumentState(session: DocumentSession(model: ProjectTemplates.make(.empty, units: .imperial).0))

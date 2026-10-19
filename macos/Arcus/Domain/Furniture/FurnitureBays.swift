@@ -78,10 +78,28 @@ public enum FurnitureBays {
 
     /// The opening round `p` seen from the front (x, z), or nil when nothing bounds it.
     static func front(at p: Vec2, _ s: Scene) -> BayOpening? {
+        let tol = 1e-7
+        // FMG3: on a canted face, parts at an angle to it reach across the opening by their extent; only the parts at
+        // the face (within 1 1/2" of its front-most part over the point) bound it.
+        var bounders = s.bounders
+        if !s.frame.isSquare {
+            let over = bounders.filter { !$0.isSeparator && $0.box.box.min.x <= p.x + tol && $0.box.box.max.x >= p.x - tol }
+            if let face = over.map(\.box.box.min.y).min() { bounders = bounders.filter { $0.isSeparator || $0.box.box.min.y <= face + 1.5 * inch } }
+        }
+        guard let o = front(at: p, s, bounders) else { return nil }
+        guard !s.frame.isIdentity else { return o }
+        // FMG3: seen from another face, parts behind the bay's back (the far side's) don't bound it.
+        let inFront = bounders.filter { $0.isSeparator || $0.box.box.min.y < o.y1 - 1e-6 }
+        guard inFront.count < bounders.count else { return o }
+        return front(at: p, s, inFront) ?? o
+    }
+
+    /// One pass of `front(at:)` over the given bounders.
+    static func front(at p: Vec2, _ s: Scene, _ bounders: [Bounder]) -> BayOpening? {
         let px = p.x, pz = p.y
         var left: Bounder?, right: Bounder?, below: Bounder?, above: Bounder?
         let tol = 1e-7
-        for c in s.bounders {
+        for c in bounders {
             let bx = c.box.box
             let sx = bx.max.x - bx.min.x, sz = bx.max.z - bx.min.z
             // Uprights (sides, dividers, legs, vertical separators) are thinner across x than they are tall.
@@ -111,7 +129,9 @@ public enum FurnitureBays {
             let round = Set([left, right, below, above].compactMap { $0?.id })
             for c in s.bounders where !c.isSeparator && !round.contains(c.id) {
                 let bx = c.box.box
-                guard bx.min.x <= mid.x, bx.max.x >= mid.x, bx.min.z <= mid.y, bx.max.z >= mid.y else { continue }
+                // Only boards parallel to the face (thin seen from it): a board at an angle reaches across by its extent.
+                guard bx.max.y - bx.min.y < 0.2 * min(bx.max.x - bx.min.x, bx.max.z - bx.min.z),
+                      bx.min.x <= mid.x, bx.max.x >= mid.x, bx.min.z <= mid.y, bx.max.z >= mid.y else { continue }
                 if bx.min.y <= y0.value + 1e-6 { return nil }
                 if bx.min.y < y1.value { y1 = c.box.y.0; backID = c.id }
             }
@@ -139,6 +159,12 @@ public enum FurnitureBays {
         o.bottom = below.flatMap { $0.isSeparator ? nil : $0.id }; o.top = above.flatMap { $0.isSeparator ? nil : $0.id }; o.back = backID
         o.sharedLeft = left?.shared ?? false; o.sharedRight = right?.shared ?? false
         o.sharedLow = below?.shared ?? false; o.sharedHigh = above?.shared ?? false
+        if !s.frame.isSquare { // FMG3: the canted face's front corners, each on the part beside it
+            let v0 = left?.box.y.0 ?? y0, v1 = right?.box.y.0 ?? y0
+            o.cant = [lx.value, v0.value, rx.value, v1.value]
+            bind("cant.u0", lx); bind("cant.v0", v0); bind("cant.u1", rx); bind("cant.v1", v1)
+            o.bounds = b
+        }
         return o
     }
 

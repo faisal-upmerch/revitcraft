@@ -90,6 +90,12 @@ extension FurnitureCompiler {
         var hinges: [HingeRecord] = [], handles: [HingeRecord] = [] // FM8: hinge sets by door height, centred handles (FurnitureCompiler+FM8)
         let placements: [String: HardwarePlacement] = Dictionary(fronts.flatMap { fr in FurnitureFronts.hardware(fr, m).map { ("\(fr.id.raw)|\($0.slot)", $0) } },
                                                                  uniquingKeysWith: { a, _ in a })
+        // FMG3: hardware of fronts on canted faces stays between the face's corners (CantAnchors).
+        var canted: [String: (FamilyBound, FamilyBound)] = [:]
+        for fr in fronts {
+            guard let g = FurnitureFronts.geometry(fr, m), let a = CantAnchors(g.opening, g.frame) else { continue }
+            for p in FurnitureFronts.localHardware(fr, m) { canted["\(fr.id.raw)|\(p.slot)"] = a.point(p.at.x.value, p.at.y.value, ctx) }
+        }
         for h in hardware {
             guard let c = h.component, let t = m[h.typeID], let td = t.typeData, let nested = m[td.familyID]?.family else { continue }
             if f.nestedFamily(named: nested.name) == nil {
@@ -108,6 +114,7 @@ extension FurnitureCompiler {
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue,
                let p = placements["\(owner.raw)|\(slot)"] {
                 x = ctx.bound(p.at.x); y = ctx.bound(p.at.y); z = ctx.bound(p.at.z)
+                if let c = canted["\(owner.raw)|\(slot)"] { x = c.0; y = c.1 } // FMG3
             }
             var inst = NestedFamilyInstance(familyName: nested.name, typeName: t.name, x: x, y: y, z: z, rotation: PartSolidContext.number(c.rotation * 180 / .pi), mirrored: c.mirrored)
             for (k, v) in Parameters.familyInstanceValues(h) {
@@ -121,7 +128,7 @@ extension FurnitureCompiler {
             // A slide pair spans its opening: its width follows the bay's sides.
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = m[owner], let o = m[front.hostID]?.furnitureBay?.opening,
                nested.parameter(named: "Opening Width") != nil {
-                inst.bindings["Opening Width"] = "(\(lengthExpression(o.value("x1"), f))) - (\(lengthExpression(o.value("x0"), f)))" // FM9: lengths on both sides
+                inst.bindings["Opening Width"] = "(\(sumExpression(o.value("x1"), f, planeOffsets))) - (\(sumExpression(o.value("x0"), f, planeOffsets)))" // FM9: lengths on both sides; FMG3: any face
                 if let length = slideLengths[owner], nested.parameter(named: "Slide Length") != nil { inst.bindings["Slide Length"] = length } // FM8
             }
             inst.visibleAt = [.medium, .fine]

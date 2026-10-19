@@ -196,4 +196,141 @@ struct FMG3Tests {
         _ = closed.perform("Closed") { tx in _ = try FurnitureBays.createBay(face: .front, at: Vec2(0, 20 * i), frame: left, in: tx) }
         #expect(closed.lastError != nil)
     }
+
+    static func click(_ tool: some InteractiveTool, _ p: Vec2) {
+        let inp = ToolInput(point: p, rawPoint: p)
+        tool.pointerMoved(inp)
+        tool.pointerDown(inp)
+        tool.pointerUp(inp)
+    }
+
+    /// A section looking at the face canted 45° to the front right (along (-1, 1)), well in front of it.
+    static func cantedSection(in s: DocumentSession) -> ElementID? {
+        var id: ElementID?
+        _ = s.perform("Section") { tx in
+            var v = ViewData(kind: .section, scale: 12)
+            let d = Vec2(-1, 1).normalized
+            v.planeOrigin = Vec3(d * -1.0, z: 0)
+            v.viewDirection = d
+            v.farClip = 4
+            v.detailLevel = .fine
+            id = tx.create(.views, name: "Canted", data: .view(v))
+        }
+        return id
+    }
+
+    @Test func cornerCabinetHasACantedDoorThatFlexes() throws {
+        let spec = try #require(FurnitureLibrary.simpleASpecs.first { $0.name == "Corner Cabinet" })
+        let m = try spec.build()
+        let bay = try #require(m.elements(.furnitureBays).first)
+        let b = try #require(bay.furnitureBay)
+        let frame = BayFrame(b)
+        #expect(frame.quarter == nil && approx(frame.angle, .pi / 4) && frame.name == "Angled 45°")
+        let o = try #require(b.opening)
+        // Between the returns: u from the front return's end to the right return's end, on sums of the planes.
+        #expect(PlaneTerms.isSum(o.bounds["x0"].flatMap { if case .plane(let n, _) = $0 { n } else { nil } }))
+        let cant = (24.0 - 6) * 2.squareRoot() * i // between the returns' front corners
+        #expect(o.width > cant - 1.2 * i && o.width < cant, "\(o.width / i)")
+        let door = try #require(m.elements(.furnitureFronts).first)
+        let g = try #require(FurnitureFronts.geometry(door, m))
+        #expect(g.frame == frame && g.leaves.count == 1)
+        // The door stands on the cant (x - y constant along it) and turns with it; so do its hinges.
+        let box = Self.bounds(door, m)
+        #expect(box.min.x > -6.6 * i && box.max.y < 6.6 * i && box.max.x < 12.1 * i && box.min.y > -12.1 * i, "\(box)")
+        #expect(abs((box.min.x - box.min.y) - 6 * i) < 1 * i && abs((box.max.x - box.max.y) - 6 * i) < 1 * i, "on the cant: \(box)")
+        for h in m.hosted(by: door.id) where h.category == .furnitureHardware {
+            #expect(approx(h.component?.rotation ?? 0, .pi / 4, 1e-9))
+        }
+        let hinges = FurnitureFronts.hardware(door, m).filter { $0.slot.hasPrefix("hinge") }
+        #expect(hinges.count == 2)
+        // The plan swing opens out of the cant (toward the front right).
+        let plan = FurnitureSwings.plan(door, m)
+        if case .line(let seg)? = plan.first { #expect((seg.end - seg.start).normalized.dot(frame.outward) > 0.99, "\(seg)") }
+        // Drawn in a section looking at the cant.
+        let s = DocumentSession(model: m)
+        let section = try #require(Self.cantedSection(in: s))
+        let items = ViewGraphicsBuilder(model: s.model, view: s.model[section]!).build().items
+        #expect(items.contains { $0.elementID == bay.id } && items.contains { $0.elementID == door.id && $0.layer == .model && $0.primitives.count == 2 })
+        // The Bay tool in that section finds the same opening (and refuses a second bay there).
+        let ctx = ToolContext(session: s, viewID: section)
+        let map = try #require(FurnitureFaceMap.of(s.model[section]?.view))
+        #expect(map.frame == frame)
+        let tool = FurnitureBayTool(ctx: ctx)
+        tool.tagOnPlacement = false
+        let p = map.toView(FurnitureBays.center(o, .front))
+        tool.pointerMoved(ToolInput(point: p, rawPoint: p))
+        #expect(!tool.preview.primitives.isEmpty)
+        Self.click(tool, p)
+        #expect(s.lastError?.message.contains("already") == true)
+
+        // Compiled: the door's corners are formulas of the planes, so a bigger cabinet (Width and Depth) gets a wider door.
+        let f = FurnitureCompiler.family(from: m)
+        func leafWidth(_ size: Double) throws -> Double {
+            var gf = f
+            gf.types[0].values["Width"] = .double(size * i)
+            gf.types[0].values["Depth"] = .double(size * i)
+            let ev = FamilyEvaluator.evaluate(gf, typeName: gf.types[0].name, units: .imperial)
+            #expect(ev.errors.isEmpty, "\(ev.errors.prefix(2))")
+            let mark = door.mark
+            let solids = ev.solids.filter { $0.name.hasPrefix(mark) && !$0.isVoid && $0.visibleAt.contains(.medium) }
+            let pts = solids.flatMap { $0.profile.outer.points }
+            let us = pts.map { frame.local($0).x }
+            return (us.max() ?? 0) - (us.min() ?? 0)
+        }
+        let w24 = try leafWidth(24), w28 = try leafWidth(28)
+        #expect(approx(w28 - w24, 4 * 2.squareRoot() * i, 1e-4), "\(w24 / i) \(w28 / i)")
+        // The elevation swing is in a nested family turned to the cant.
+        #expect(f.nestedInstances.contains { inst in approx(Double(inst.rotation), 45) && f.nestedFamily(named: inst.familyName)?.modelLines.isEmpty == false })
+    }
+
+    @Test func storageBedHasDrawersAlongBothSides() throws {
+        let spec = try #require(FurnitureLibrary.simpleASpecs.first { $0.name == "Storage Bed" })
+        let m = try spec.build()
+        #expect(LibraryKit.buildError(m) == nil)
+        let tops = m.elements(.furnitureBays).filter { $0.furnitureBay?.parentID == nil }
+        #expect(Set(tops.compactMap { $0.furnitureBay.map { BayFrame($0).name } }) == ["Left", "Right"])
+        let drawers = m.elements(.furnitureFronts).filter { $0.furnitureFront?.kind == .drawer }
+        #expect(drawers.count == 6)
+        for d in drawers {
+            let box = try #require(FurnitureFronts.drawerBox(d, m), "\(d.mark) has a drawer box")
+            #expect(box.depth > 17 * i && box.depth < 20 * i, "\(box.depth / i)")
+            // Each drawer and its box stay in the 20" side box it opens from.
+            let b = Self.bounds(d, m, .fine)
+            let leftSide = b.min.x < 0
+            #expect(leftSide ? (b.min.x > -32.8 * i && b.max.x < -11.9 * i) : (b.max.x < 32.8 * i && b.min.x > 11.9 * i), "\(d.mark) \(b)")
+            #expect(b.min.y > -43 * i && b.max.y < 43 * i && b.min.z > 3 * i && b.max.z < 15.5 * i, "\(d.mark) \(b)")
+        }
+        // In the plan the drawer boxes are dashed along the sides; in the Left elevation the left drawers are drawn.
+        let left = try Self.view(m, "Left")
+        let items = ViewGraphicsBuilder(model: m, view: left).build().items
+        let cells = tops.filter { $0.furnitureBay.map { BayFrame($0).name } == "Left" }.flatMap { FurnitureBays.cellIDs(of: $0.id, m) }
+        #expect(cells.count == 3 && cells.allSatisfy { c in items.contains { $0.elementID == c } })
+        // Compiled: a longer bed makes longer drawers (the EQ lines follow Depth).
+        let f = FurnitureCompiler.family(from: m)
+        func widths(_ depth: Double) throws -> [Double] {
+            var g = f
+            g.types[0].values["Depth"] = .double(depth * i)
+            let ev = FamilyEvaluator.evaluate(g, typeName: g.types[0].name, units: .imperial)
+            #expect(ev.errors.isEmpty, "\(ev.errors.prefix(2))")
+            return drawers.compactMap { d in ev.solids.first { $0.name == d.mark && !$0.isVoid }?.bounds.size.y }
+        }
+        let a = try widths(86), c = try widths(92)
+        #expect(a.count == 6 && c.count == 6 && zip(a, c).allSatisfy { approx($1 - $0, 2 * i, 1e-5) }, "\(a) \(c)")
+    }
+
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["FMG3_DEBUG"] != nil)) func debugFlex() throws {
+        let name = ProcessInfo.processInfo.environment["FMG3_DEBUG"] ?? ""
+        let m = try #require(FurnitureLibrary.simpleASpecs.first { $0.name == name }).build()
+        let f = FurnitureCompiler.family(from: m)
+        let param = ProcessInfo.processInfo.environment["FMG3_PARAM"] ?? "Depth"
+        var g = f
+        g.types[0].values[param] = .double((g.types[0].values[param]?.doubleValue ?? 0) * (Double(ProcessInfo.processInfo.environment["FMG3_SCALE"] ?? "") ?? 0.85))
+        let ev0 = FamilyEvaluator.evaluate(f, typeName: f.types[0].name, units: .imperial)
+        let ev = FamilyEvaluator.evaluate(g, typeName: g.types[0].name, units: .imperial)
+        print("FMG3 bounds \(ev0.bounds) → \(ev.bounds)")
+        for s in ev.solids where !s.isVoid {
+            let b = s.bounds
+            print("FMG3 \(s.name) x \(b.min.x / i)…\(b.max.x / i) y \(b.min.y / i)…\(b.max.y / i)")
+        }
+    }
 }

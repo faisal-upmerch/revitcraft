@@ -196,6 +196,10 @@ public struct BayFrame: Hashable, Sendable {
                                zMin: ctx.bound(wb.z.0), zMax: ctx.bound(wb.z.1), isVoid: isVoid)
         }
         let corners = [(lb.x.0, lb.y.0), (lb.x.1, lb.y.0), (lb.x.1, lb.y.1), (lb.x.0, lb.y.1)]
+        if ctx.symbolic, let a = ctx.cantAnchors {
+            let pts = corners.compactMap { a.point($0.0.value, $0.1.value, ctx) }.map { FamilyPoint($0.0, $0.1) }
+            if pts.count == 4 { return FamilySolid(name: name, profile: .polygon(pts), zMin: ctx.bound(lb.z.0), zMax: ctx.bound(lb.z.1), isVoid: isVoid) }
+        }
         let pts = corners.map { FamilyPoint(ctx.bound(worldX($0.0, $0.1)), ctx.bound(worldY($0.0, $0.1))) }
         return FamilySolid(name: name, profile: .polygon(pts), zMin: ctx.bound(lb.z.0), zMax: ctx.bound(lb.z.1), isVoid: isVoid)
     }
@@ -234,5 +238,41 @@ public struct BayFrame: Hashable, Sendable {
         q.x = w.x; q.y = w.y; q.z = w.z
         q.rotation = p.rotation + angle * 180 / .pi
         return q
+    }
+}
+
+/// Compiling a front on a canted face: the face's two front corners in the model (with their planes), so the front's
+/// solids and hardware stay between them when a loaded piece flexes out of square (the face then turns a little, as a
+/// door on a reference line between two planes does).
+public struct CantAnchors {
+    public var p0: (x: PartValue, y: PartValue)
+    public var p1: (x: PartValue, y: PartValue)
+    public var u0: Double, v0: Double, u1: Double, v1: Double
+
+    public init?(_ o: BayOpening, _ f: BayFrame) {
+        guard let c = o.cant, c.count == 4, !f.isSquare else { return nil }
+        let a = (o.value("cant.u0"), o.value("cant.v0")), b = (o.value("cant.u1"), o.value("cant.v1"))
+        p0 = (f.worldX(a.0, a.1), f.worldY(a.0, a.1))
+        p1 = (f.worldX(b.0, b.1), f.worldY(b.0, b.1))
+        u0 = c[0]; v0 = c[1]; u1 = c[2]; v1 = c[3]
+    }
+
+    /// A local point (u along the face, v into it) as formulas of the planes: from the nearer corner, along the line
+    /// between the corners and square to it.
+    public func point(_ u: Double, _ v: Double, _ ctx: PartSolidContext) -> (FamilyBound, FamilyBound)? {
+        guard let formula = ctx.planeFormula else { return nil }
+        func e(_ p: PartValue) -> String? {
+            guard let n = p.plane else { return "\(FurnitureFormLocks.num(p.value)) m" }
+            return PlaneTerms.expression(n, offset: p.offset, formula)
+        }
+        guard let x0 = e(p0.x), let y0 = e(p0.y), let x1 = e(p1.x), let y1 = e(p1.y) else { return nil }
+        let dx = "((\(x1)) - (\(x0)))", dy = "((\(y1)) - (\(y0)))"
+        let len = "sqrt(\(dx) * \(dx) + \(dy) * \(dy))"
+        let near0 = abs(u - u0) <= abs(u - u1)
+        let (ax, ay, du, dv) = near0 ? (x0, y0, u - u0, v - v0) : (x1, y1, u - u1, v - v1)
+        let n = FurnitureFormLocks.num
+        let x = "(\(ax)) + \(dx) / \(len) * (\(n(du)) m) - \(dy) / \(len) * (\(n(dv)) m)"
+        let y = "(\(ay)) + \(dy) / \(len) * (\(n(du)) m) + \(dx) / \(len) * (\(n(dv)) m)"
+        return (.expr(x), .expr(y))
     }
 }

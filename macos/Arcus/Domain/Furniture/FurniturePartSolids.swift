@@ -39,6 +39,8 @@ public final class PartSolidContext {
     /// FMG3: a plane's offset formula in the family being compiled, for coordinates that follow a sum of planes (a
     /// canted face's): written as formulas.
     public var planeFormula: ((String) -> String?)?
+    /// FMG3: compiling a canted front: its face's front corners (see CantAnchors).
+    public var cantAnchors: CantAnchors?
 
     static func number(_ v: Double) -> String {
         guard v.isFinite else { return "0" }

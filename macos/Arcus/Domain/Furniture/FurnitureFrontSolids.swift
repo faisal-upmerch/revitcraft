@@ -21,12 +21,13 @@ public enum FurnitureFrontSolids {
         let tv = FurnitureFrontTypes.values(of: e, m)
         let base = e.mark.isEmpty ? g.kind.rawValue : e.mark
         // FMG3: a front on another face is written in its bay's frame and turned into the model as it's written.
-        let savedFrame = ctx.frame
+        let savedFrame = ctx.frame, savedAnchors = ctx.cantAnchors
         ctx.frame = g.frame.isIdentity ? nil : g.frame
-        defer { ctx.frame = savedFrame }
+        ctx.cantAnchors = ctx.symbolic ? CantAnchors(g.opening, g.frame) : nil
+        defer { ctx.frame = savedFrame; ctx.cantAnchors = savedAnchors }
         for (li, leaf) in g.leaves.enumerated() {
             let name = g.leaves.count > 1 ? "\(base) Leaf \(li + 1)" : base
-            let style: FrontStyle = g.face == .front ? tv.style : .slab
+            let style = lidStyle(tv.style, g.face) // FMG3: lids take the Shaker and framed styles too
             if style == .slab || leaf.width < 3 * tv.stileWidth || leaf.height < 3 * tv.railWidth {
                 let s = leafBox(name, leaf, g, ctx)
                 out.solids.append(s); out.materials[s.id] = tv.material
@@ -67,26 +68,37 @@ public enum FurnitureFrontSolids {
         FurniturePartSolids.PartBox(x: l.u, y: l.w, z: l.v)
     }
 
-    /// Stiles, rails and the panel (or glass, or louvers) of a framed leaf seen from the front.
+    /// FMG3: the style a front is built in: lids (seen from above) take Slab, Shaker and Glass Panel; a louvered lid is
+    /// framed with a panel.
+    public static func lidStyle(_ style: FrontStyle, _ face: BayFace) -> FrontStyle { face == .front || style != .louvered ? style : .shaker }
+
+    /// Stiles, rails and the panel (or glass, or louvers) of a framed leaf seen from the front (FMG3: or a lid's, seen
+    /// from above: stiles along its depth, the panel recessed from its top).
     static func frame(_ name: String, _ l: FrontLeaf, _ g: FrontGeometry, _ tv: FurnitureFrontTypes.Values, _ style: FrontStyle, _ ctx: PartSolidContext,
                       detail: Set<DetailLevel>, into out: inout PartSolids) {
         let S = tv.stileWidth, R = tv.railWidth
         let (u0, u1, v0, v1) = (l.u.0, l.u.1, l.v.0, l.v.1)
         let w = l.w
+        let lid = g.face == .top
         func add(_ s: FamilySolid, _ mat: ElementID?) { var s = s; s.visibleAt = detail; out.solids.append(s); out.materials[s.id] = mat }
-        add(FurniturePartSolids.box("\(name) Left Stile", plane: .xy, u: (u0, u0.shifted(S)), v: w, w: (v0, v1), ctx), tv.material)
-        add(FurniturePartSolids.box("\(name) Right Stile", plane: .xy, u: (u1.shifted(-S), u1), v: w, w: (v0, v1), ctx), tv.material)
-        add(FurniturePartSolids.box("\(name) Bottom Rail", plane: .xy, u: (u0.shifted(S), u1.shifted(-S)), v: w, w: (v0, v0.shifted(R)), ctx), tv.material)
-        add(FurniturePartSolids.box("\(name) Top Rail", plane: .xy, u: (u0.shifted(S), u1.shifted(-S)), v: w, w: (v1.shifted(-R), v1), ctx), tv.material)
+        // A piece across the leaf: u along its width, v along its height (a lid's depth), t through its thickness.
+        func piece(_ n: String, _ u: (PartValue, PartValue), _ v: (PartValue, PartValue), _ t: (PartValue, PartValue)) -> FamilySolid {
+            lid ? FurniturePartSolids.box(n, plane: .xy, u: u, v: v, w: t, ctx) : FurniturePartSolids.box(n, plane: .xy, u: u, v: t, w: v, ctx)
+        }
+        add(piece("\(name) Left Stile", (u0, u0.shifted(S)), (v0, v1), w), tv.material)
+        add(piece("\(name) Right Stile", (u1.shifted(-S), u1), (v0, v1), w), tv.material)
+        add(piece("\(name) Bottom Rail", (u0.shifted(S), u1.shifted(-S)), (v0, v0.shifted(R)), w), tv.material)
+        add(piece("\(name) Top Rail", (u0.shifted(S), u1.shifted(-S)), (v1.shifted(-R), v1), w), tv.material)
         let pu = (u0.shifted(S), u1.shifted(-S)), pv = (v0.shifted(R), v1.shifted(-R))
         switch style {
         case .shaker, .slab:
-            // The panel, recessed from the frame's face.
-            let face = w.0.shifted(tv.panelRecess)
-            add(FurniturePartSolids.box("\(name) Panel", plane: .xy, u: pu, v: (face, face.shifted(tv.panelThickness)), w: pv, ctx), tv.panelMaterial)
+            // The panel, recessed from the frame's face (a lid's top).
+            let face = lid ? w.1.shifted(-tv.panelRecess) : w.0.shifted(tv.panelRecess)
+            let t = lid ? (face.shifted(-tv.panelThickness), face) : (face, face.shifted(tv.panelThickness))
+            add(piece("\(name) Panel", pu, pv, t), tv.panelMaterial)
         case .glass:
             let c = FurnitureFronts.mid(w.0, w.1)
-            add(FurniturePartSolids.box("\(name) Glass", plane: .xy, u: pu, v: (c.shifted(-tv.panelThickness / 2), c.shifted(tv.panelThickness / 2)), w: pv, ctx), tv.panelMaterial)
+            add(piece("\(name) Glass", pu, pv, (c.shifted(-tv.panelThickness / 2), c.shifted(tv.panelThickness / 2))), tv.panelMaterial)
         case .louvered:
             // Slats at 45° across the frame's thickness, one per pitch.
             let h = pv.1.value - pv.0.value
@@ -165,6 +177,7 @@ public enum FurnitureFrontSolids {
         while let h = host, let b = m[h] { s.insert(h); host = b.furnitureBay?.parentID }
         if let td = m.typeData(of: e) { for v in td.params.values { if let r = v.refValue { s.insert(r) } } }
         let tv = FurnitureFrontTypes.values(of: e, m)
+        if e.furnitureFront?.leafCountParameter != nil, let info = m.projectInfoElement { s.insert(info.id) } // FMG3: Leaf Count by type
         if let st = tv.slideType, let fam = m[st]?.typeData?.familyName {
             for t in m.types(for: .furnitureHardware) where t.typeData?.familyName == fam { s.insert(t.id) }
         }

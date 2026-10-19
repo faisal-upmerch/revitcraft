@@ -9,7 +9,8 @@ import ArcusGeometry
 extension FurnitureCompiler {
     /// Adds a front's elevation swing lines to `f`.
     static func addElevationSwings(_ front: Element, _ m: BIMModel, to f: inout FamilyDefinition, visibility: String? = nil) {
-        guard let g = FurnitureFronts.geometry(front, m), g.face == .front else { return }
+        guard let g = FurnitureFronts.geometry(front, m) else { return }
+        if g.face == .top { addLidSwings(front, m, to: &f, visibility: visibility); return }
         if g.frame.isIdentity, visibility == nil { f.modelLines += elevationSwings(front, m); return }
         let segs = FurnitureSwings.elevationLines(front, m)
         guard !segs.isEmpty else { return }
@@ -50,5 +51,38 @@ extension FurnitureCompiler {
         l.subcategory = .elevationSwing
         l.visibleAt = [.medium, .fine]
         return l
+    }
+
+    /// A lid's swing as model lines on the side plane (YZ) through its middle: shown in the side elevations.
+    static func addLidSwings(_ front: Element, _ m: BIMModel, to f: inout FamilyDefinition, visibility: String?) {
+        let n = PartSolidContext.number
+        var lines: [FamilyModelLine] = []
+        for poly in FurnitureSwings.lidElevation(front, m) {
+            for (a, b) in zip(poly, poly.dropFirst()) {
+                var l = FamilyModelLine(plane: .yz, offset: .expr(n(a.x)), start: FamilyPoint(n(a.y), n(a.z)), end: FamilyPoint(n(b.y), n(b.z)))
+                l.subcategory = .elevationSwing
+                l.visibleAt = [.medium, .fine]
+                lines.append(l)
+            }
+        }
+        guard !lines.isEmpty else { return }
+        guard let visibility else { f.modelLines += lines; return }
+        let mark = front.mark.isEmpty ? "Front \(front.id.raw)" : front.mark
+        var nf = FamilyDefinition(name: "\(mark) Lid Swing (\(visibility))", template: .genericModel)
+        nf.types = [FamilyTypeDefinition(name: "Swing", values: [:])]
+        nf.modelLines = lines
+        f.nestedFamilies.append(nf)
+        var inst = NestedFamilyInstance(familyName: nf.name, typeName: "Swing", x: .expr("0"), y: .expr("0"), z: .expr("0"), rotation: "0", mirrored: false)
+        inst.visibilityParameter = visibility
+        inst.visibleAt = [.medium, .fine]
+        f.nestedInstances.append(inst)
+    }
+
+    /// A coordinate as a length formula, a sum of planes (a turned face's) included; `formulas` gives the offset
+    /// formulas of planes not in `f` yet (Bay Divide lines).
+    static func sumExpression(_ v: PartValue, _ f: FamilyDefinition, _ formulas: [String: String] = [:]) -> String {
+        guard let p = v.plane, PlaneTerms.isSum(p) || f.referencePlanes.first(where: { $0.name == p }) == nil else { return lengthExpression(v, f) }
+        let offsets = Dictionary(f.referencePlanes.map { ($0.name, $0.offset) }, uniquingKeysWith: { a, _ in a }).merging(formulas) { a, _ in a }
+        return PlaneTerms.expression(p, offset: v.offset) { offsets[$0] } ?? "\(FurnitureFormLocks.num(v.value)) m"
     }
 }
