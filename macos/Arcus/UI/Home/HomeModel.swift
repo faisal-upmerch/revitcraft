@@ -58,6 +58,8 @@ final class HomeModel {
     /// The library piece to start from; nil is Blank.
     var furnitureTemplate: URL?
     var library: [FurnitureLibraryCatalog.Item] = []
+    /// FMG4: the name the last picked piece filled in (so picking another piece renames it, but a typed name stays).
+    var furnitureAutoName: String?
 
     // Family
     var familyCategory: FamilyTemplate = .door { didSet { if !familyNameEdited { familyName = Self.defaultFamilyName(familyCategory) } } }
@@ -109,6 +111,18 @@ final class HomeModel {
     }
 
     // MARK: Actions
+
+    /// FMG4: picks the piece to start from (nil: Blank). The name and category follow the piece unless the user typed
+    /// a name of their own, so picking Entryway Bench and then Kitchen Cart starts a Kitchen Cart.
+    func pickFurnitureTemplate(_ item: FurnitureLibraryCatalog.Item?) {
+        furnitureTemplate = item?.url
+        let typed = furnitureName != "Untitled Furniture" && furnitureName != furnitureAutoName
+        if !typed {
+            furnitureName = item?.name ?? "Untitled Furniture"
+            furnitureAutoName = item?.name
+        }
+        if let c = item?.category { furnitureCategory = c == "Casework" ? .casework : .furniture }
+    }
 
     /// Return / Create: starts the selected card's document.
     func create() {

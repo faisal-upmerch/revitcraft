@@ -170,7 +170,7 @@ struct HomeFurniturePane: View {
             LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 12) {
                 HomeGalleryTile(title: "Blank", subtitle: model.furnitureCategory.rawValue, selected: model.furnitureTemplate == nil) {
                     HomeBlankThumbnail()
-                } action: { model.furnitureTemplate = nil }
+                } action: { model.pickFurnitureTemplate(nil) }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             if model.library.isEmpty {
@@ -190,8 +190,7 @@ struct HomeFurniturePane: View {
                                                 selected: model.furnitureTemplate == item.url) {
                                     FurnitureFileThumbnail(url: item.url, size: CGSize(width: 148, height: 80)) // FM9: the piece's own preview
                                 } action: {
-                                    model.furnitureTemplate = item.url
-                                    if model.furnitureName == "Untitled Furniture" { model.furnitureName = item.name }
+                                    model.pickFurnitureTemplate(item) // FMG4: the name follows the picked piece
                                 }
                                 .help(item.summary.isEmpty ? item.name : item.summary)
                             }

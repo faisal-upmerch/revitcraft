@@ -26,6 +26,7 @@ public enum FurnitureRegeneration {
         FurnitureDimensionLocks.regenerate(tx) // FMG1: locked dimensions to part faces keep their parts
         FurnitureOpeningsRegeneration.regenerate(tx, touched) // FM5: bays follow the parts; fronts and their hardware follow the bays
         FurnitureJointOperations.regenerate(tx) // FM6: joint elements whose parts are gone
+        FurnitureAutoScale.regenerate(tx, touched) // FMG4: the template views' scale, dimensions and markers follow the piece
     }
 
     /// Gives axis-aligned reference planes drawn in a Furniture document their axis, so dimensions can drive them.
