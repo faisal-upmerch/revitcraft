@@ -993,7 +993,7 @@ extension ComponentsC {
             b.drill("Bracket screw", x: "\(s)(Top Width / 2 - 0.08 m)", y: "-0.25 m", diameter: CX.mm(5), depth: CX.mm(16))
         }
         b.symbol(.top, [.coarse], .rect(("-Top Width / 2", "0 m"), ("Top Width / 2", "Top Depth")))
-        b.symbol(.top, [.medium, .fine], dashed: true, .arc(center: FamilyPoint("-Top Width / 2", "0 m"), radius: "Top Depth", startDegrees: "0", sweepDegrees: "90"))
+        b.symbol(.side, [.coarse, .medium, .fine], dashed: true, .arc(center: FamilyPoint("0 m", "0 m"), radius: "Top Depth", startDegrees: "0", sweepDegrees: "-90"))
         b.symbol(.face, [.coarse], .rect(("-Top Width / 2", "-0.3 m"), ("Top Width / 2", "0 m")))
         for (w, d, cost) in [(24.0, 12.0, 119.0), (30, 16, 149), (36, 20, 179)] {
             b.type("Fold-Down Worktop - \(Int(w))\" x \(Int(d))\"", ["Top Width": CC.inch(w), "Top Depth": CC.inch(d)], cost: cost, model: "FDW-\(Int(w))\(Int(d))",

@@ -220,10 +220,18 @@ extension ComponentBuilder {
 
     /// The usual symbol set: at Coarse an outline in plan (`plan` view) and in front elevation (`elevation` view);
     /// at Medium and Fine the 3D geometry shows (solids are Medium/Fine for face-mounted hardware).
+    /// Face-based items pass plan: .top, elevation: .face (their family Y is up the host face). Each view's
+    /// rectangle is in that view's own coordinates: face (x, y), top (x, z), side (z, y).
     mutating func outlines(plan: ComponentSymbolView = .face, elevation: ComponentSymbolView = .top, x: (String, String), y: (String, String), z: (String, String)) {
-        symbol(plan, [.coarse], .rect((x.0, y.0), (x.1, y.1)))
-        let ev: ComponentSymbolShape = elevation == .side ? .rect((z.0, y.0), (z.1, y.1)) : .rect((x.0, z.0), (x.1, z.1))
-        symbol(elevation, [.coarse], ev)
+        func outline(_ v: ComponentSymbolView) -> ComponentSymbolShape {
+            switch v {
+            case .face: .rect((x.0, y.0), (x.1, y.1))
+            case .top: .rect((x.0, z.0), (x.1, z.1))
+            case .side: .rect((z.0, y.0), (z.1, y.1))
+            }
+        }
+        symbol(plan, [.coarse], outline(plan))
+        symbol(elevation, [.coarse], outline(elevation))
     }
 
     /// Kitchen / bay items: the opening parameters (instance, sized from the bay) and their requirements.
