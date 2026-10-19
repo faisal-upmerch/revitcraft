@@ -30,6 +30,8 @@ public enum Snap3DFeature: String, Sendable, Hashable {
     case edge
     /// A point of a point cloud.
     case point
+    /// The centre of a curved edge (a tessellated arc or circle).
+    case curveCenter
     /// The face under the pointer (face-hosted placement).
     case face
 }
@@ -106,6 +108,13 @@ public final class Snap3DIndex {
     /// Extracted geometry of one element.
     final class Features {
         var edges: [Segment3] = []
+        /// Per edge: whether each end is a corner. Facet points along a tessellated curve (two nearly collinear
+        /// edges meeting) are not, so a curved wall's top edge offers nearest points, not dozens of endpoints.
+        var corners: [(a: Bool, b: Bool)] = []
+        /// Midpoints of edges made of several pieces (a straight edge split at a join, an arc by its length) and
+        /// centres of curved edges, with the edge piece they lie on.
+        var extras: [(p: Vec3, kind: SnapKind, feature: Snap3DFeature, edge: Int)] = []
+        var extraTree = BoxTree()
         var edgeTree = BoxTree()
         /// Triangle corners, three per triangle, with whether each triangle hides what is behind it.
         var tris: [Vec3] = []
@@ -195,9 +204,100 @@ public final class Snap3DIndex {
                 f.triOpaque.append(opaque)
             }
         }
+        f.corners = cornerFlags(f.edges)
+        f.extras = chainPoints(f.edges, corners: f.corners)
+        f.extraTree = BoxTree(boxes: f.extras.map { Box3(min: $0.p, max: $0.p) })
         f.edgeTree = BoxTree(boxes: f.edges.map { Box3(points: [$0.a, $0.b]) })
         f.triTree = BoxTree(boxes: stride(from: 0, to: f.tris.count, by: 3).map { Box3(points: [f.tris[$0], f.tris[$0 + 1], f.tris[$0 + 2]]) })
         return f
+    }
+
+    /// Which edge ends are corners: anything but a point where exactly two edges continue within 25° of straight.
+    static func cornerFlags(_ edges: [Segment3]) -> [(a: Bool, b: Bool)] {
+        var incident: [SIMD3<Int64>: [Vec3]] = [:]
+        func key(_ v: Vec3) -> SIMD3<Int64> { SIMD3(Int64((v.x * 1e5).rounded()), Int64((v.y * 1e5).rounded()), Int64((v.z * 1e5).rounded())) }
+        for e in edges {
+            incident[key(e.a), default: []].append((e.b - e.a).normalized)
+            incident[key(e.b), default: []].append((e.a - e.b).normalized)
+        }
+        let straight = -cos(25 * Double.pi / 180)
+        func corner(_ v: Vec3) -> Bool {
+            guard let d = incident[key(v)], d.count == 2 else { return true }
+            return d[0].dot(d[1]) > straight
+        }
+        return edges.map { (corner($0.a), corner($0.b)) }
+    }
+
+    /// Chains of edges between corners: the midpoint of each chain of two or more pieces (by length) and the centre
+    /// of curved chains (arcs through their ends and middle; closed loops by their centroid when round).
+    static func chainPoints(_ edges: [Segment3], corners: [(a: Bool, b: Bool)]) -> [(p: Vec3, kind: SnapKind, feature: Snap3DFeature, edge: Int)] {
+        func key(_ v: Vec3) -> SIMD3<Int64> { SIMD3(Int64((v.x * 1e5).rounded()), Int64((v.y * 1e5).rounded()), Int64((v.z * 1e5).rounded())) }
+        var at: [SIMD3<Int64>: [Int]] = [:]
+        for (i, e) in edges.enumerated() { at[key(e.a), default: []].append(i); at[key(e.b), default: []].append(i) }
+        var used = [Bool](repeating: false, count: edges.count)
+        var out: [(p: Vec3, kind: SnapKind, feature: Snap3DFeature, edge: Int)] = []
+        /// Walks from `start` along edge `first` through non-corner points; returns the points and edges passed.
+        func walk(_ first: Int, from start: Vec3) -> (pts: [Vec3], ids: [Int]) {
+            var pts = [start], ids: [Int] = []
+            var cur = first, here = start
+            while true {
+                used[cur] = true
+                ids.append(cur)
+                let e = edges[cur]
+                let atA = key(e.a) == key(here)
+                let next = atA ? e.b : e.a
+                pts.append(next)
+                let nextIsCorner = atA ? corners[cur].b : corners[cur].a
+                if nextIsCorner || key(next) == key(start) { break }
+                guard let n = at[key(next)]?.first(where: { !used[$0] }) else { break }
+                cur = n; here = next
+                if ids.count > 4096 { break }
+            }
+            return (pts, ids)
+        }
+        func emit(_ pts: [Vec3], _ ids: [Int], closed: Bool) {
+            guard ids.count >= 2 else { return }
+            var lens: [Double] = [0]
+            for k in 1..<pts.count { lens.append(lens[k - 1] + pts[k].distance(to: pts[k - 1])) }
+            let total = lens.last ?? 0
+            guard total > Tolerance.length else { return }
+            let chord = pts.last!.distance(to: pts[0])
+            let straight = !closed && chord >= total * (1 - 1e-6)
+            var mid = pts[0], midEdge = ids[0]
+            for k in 1..<pts.count where lens[k] >= total / 2 {
+                let t = (total / 2 - lens[k - 1]) / max(lens[k] - lens[k - 1], 1e-12)
+                mid = pts[k - 1].lerp(to: pts[k], t: t); midEdge = ids[k - 1]
+                break
+            }
+            if !closed { out.append((mid, .midpoint, .edgeMidpoint, midEdge)) }
+            guard !straight, pts.count >= 4 else { return }
+            if closed {
+                let ring = Array(pts.dropLast())
+                let c = ring.reduce(Vec3.zero, +) / Double(ring.count)
+                let r = ring.map { $0.distance(to: c) }
+                if let lo = r.min(), let hi = r.max(), lo > Tolerance.length, hi - lo <= 0.05 * hi { out.append((c, .center, .curveCenter, ids[0])) }
+            } else if let c = circumcenter(pts[0], mid, pts.last!) {
+                out.append((c, .center, .curveCenter, midEdge))
+            }
+        }
+        for i in edges.indices where !used[i] && (corners[i].a || corners[i].b) {
+            let (pts, ids) = walk(i, from: corners[i].a ? edges[i].a : edges[i].b)
+            emit(pts, ids, closed: false)
+        }
+        for i in edges.indices where !used[i] {
+            let (pts, ids) = walk(i, from: edges[i].a)
+            emit(pts, ids, closed: key(pts.last!) == key(pts[0]))
+        }
+        return out
+    }
+
+    /// Centre of the circle through three points; nil when they are (nearly) collinear.
+    static func circumcenter(_ a: Vec3, _ b: Vec3, _ c: Vec3) -> Vec3? {
+        let ab = b - a, ac = c - a
+        let n = ab.cross(ac)
+        let n2 = n.dot(n)
+        guard n2 > 1e-14 * ab.lengthSquared * ac.lengthSquared else { return nil }
+        return a + (n.cross(ab) * ac.lengthSquared + ac.cross(n) * ab.lengthSquared) / (2 * n2)
     }
 
     /// Edges of a mesh that has none recorded (some imported meshes): boundary edges and creases sharper than 25°.
@@ -273,9 +373,10 @@ public final class Snap3DIndex {
                 let ds = Segment2(pa, pb).distance(to: ptr)
                 guard ds <= r else { return }
                 lines.append((s, e.id, ds))
-                consider(s.a, .endpoint, .vertex, [e.id], edge: s)
-                consider(s.b, .endpoint, .vertex, [e.id], edge: s)
-                consider(s.midpoint, .midpoint, .edgeMidpoint, [e.id], edge: s)
+                let c = f.corners[k]
+                if c.a { consider(s.a, .endpoint, .vertex, [e.id], edge: s) }
+                if c.b { consider(s.b, .endpoint, .vertex, [e.id], edge: s) }
+                if c.a && c.b { consider(s.midpoint, .midpoint, .edgeMidpoint, [e.id], edge: s) }
                 let t = Intersect3D.segmentParameter(closestToLine: ray.origin, ray.direction, s.a, s.b)
                 consider(s.a.lerp(to: s.b, t: t), .nearest, .edge, [e.id], edge: s)
                 if let from = q.from {
@@ -290,6 +391,10 @@ public final class Snap3DIndex {
                     let tz = (z - s.a.z) / (s.b.z - s.a.z)
                     consider(s.a.lerp(to: s.b, t: tz), .intersection, .workPlaneIntersection, [e.id], edge: s)
                 }
+            }
+            f.extraTree.visit(nodeNear) { k in
+                let x = f.extras[k]
+                consider(x.p, x.kind, x.feature, [e.id], edge: f.edges[x.edge])
             }
             if !f.points.isEmpty {
                 // A cloud: the front-most points under the pointer, the closest few.

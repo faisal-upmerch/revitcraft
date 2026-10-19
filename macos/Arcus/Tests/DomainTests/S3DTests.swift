@@ -155,6 +155,33 @@ struct S3DTests {
         #expect(perp.kind == .perpendicular && perp.point.distance(to: Vec3(0.5, -2, 1)) < 1e-9)
     }
 
+    @Test func curvedEdgesOfferTheirMidpointAndCentreNotTheirFacetPoints() throws {
+        // A quarter circle of radius 2 round (0, 0, 1) in 12 pieces, and a straight edge split in two at a join.
+        var m = Mesh()
+        let n = 12
+        m.positions = (0...n).map { k in let a = Double.pi / 2 * Double(k) / Double(n); return Vec3(2 * cos(a), 2 * sin(a), 1) }
+        m.featureEdges = (0..<n).flatMap { [UInt32($0), UInt32($0 + 1)] }
+        let base = UInt32(m.positions.count)
+        m.positions += [Vec3(4, 0, 0), Vec3(6, 0, 0), Vec3(10, 0, 0)]
+        m.featureEdges += [base, base + 1, base + 1, base + 2]
+        let index = Snap3DIndex(sources: [Snap3DSource(id: ElementID(3), category: .railings, meshes: [m])])
+        let cam = ScreenProjection3D.looking(from: Vec3(3, -6, 12), at: Vec3(3, 1, 0.5), perspective: true, fieldOfView: 40 * .pi / 180, size: Vec2(1000, 800))
+        let facet = m.positions[3]
+        let f = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, facet))))
+        #expect(f.kind == .nearest, "a facet point is not a corner: \(f.kind)")
+        let mid = Vec3(2 * cos(Double.pi / 4), 2 * sin(Double.pi / 4), 1)
+        let am = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, mid) + Vec2(1, 1))))
+        #expect(am.kind == .midpoint && am.point.distance(to: mid) < 1e-6, "the arc's midpoint by length: \(am.point)")
+        let c = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, Vec3(0, 0, 1)) + Vec2(2, 0))))
+        #expect(c.kind == .center && c.feature == .curveCenter && c.point.distance(to: Vec3(0, 0, 1)) < 1e-6)
+        #expect(try #require(index.snap(Self.query(cam, at: try Self.screen(cam, Vec3(2, 0, 1))))).kind == .endpoint, "the arc's ends are corners")
+        // The split straight edge: no corner at the split, its midpoint is the whole edge's.
+        let split = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, Vec3(6, 0, 0)))))
+        #expect(split.kind == .nearest)
+        let whole = try #require(index.snap(Self.query(cam, at: try Self.screen(cam, Vec3(7, 0, 0)) + Vec2(0, 2))))
+        #expect(whole.kind == .midpoint && whole.point.distance(to: Vec3(7, 0, 0)) < 1e-9)
+    }
+
     @Test func pointCloudsSnapToTheirFrontPoints() throws {
         // Point markers as LinkedGeometry draws them: small tetrahedra around each point.
         let pts = [Vec3(4, 0, 1), Vec3(4.3, 0, 1), Vec3(4, 3, 1)]
