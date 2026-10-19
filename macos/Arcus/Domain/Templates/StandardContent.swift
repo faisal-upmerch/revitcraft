@@ -11,11 +11,11 @@ import ArcusCalc
 /// both systems) alongside keys for the new names.
 public enum StandardContent {
     /// Called at the end of `ProjectTemplates.populate`.
-    public static func populate(_ tx: TransactionContext, ids: inout ProjectTemplates.Ids, kind: ProjectTemplateKind, units: UnitsSettings) {
+    public static func populate(_ tx: TransactionContext, ids: inout ProjectTemplates.Ids, units: UnitsSettings) {
         let installer = Installer(tx: tx, ids: ids)
         let system = units.system
         for m in MaterialLibrary.newProjectSet { _ = installer.material(m.name) }
-        if system == .imperial { installer.convertBaseToImperial(residential: kind == .residential) }
+        if system == .imperial { installer.convertBaseToImperial() }
         for spec in BuildingTypesLibrary.assemblies(system) { installer.assembly(spec) }
         for entry in OpeningLibrary.doors(system) + OpeningLibrary.windows(system) {
             installer.family(entry, replaceTypes: system == .imperial)
@@ -58,7 +58,6 @@ public enum StandardContent {
         let i = 0.0254
         return [
             ("Monolithic - 175 max riser", "Monolithic - 7\" max riser", ["stair.maxRiser": 7 * i, "stair.minTread": 11 * i, "stair.treadThickness": 1.5 * i, "stair.waist": 6 * i]),
-            ("Residential - 190 max riser", "Residential - 7 3/4\" max riser", ["stair.maxRiser": 7.75 * i, "stair.minTread": 10 * i, "stair.treadThickness": 1.5 * i, "stair.waist": 6 * i]),
             ("Guard - 1100mm", "Guard - 42\"", ["railing.height": 42 * i, "railing.balusterSpacing": 4 * i, "railing.balusterSize": 0.75 * i, "railing.railSize": 2 * i]),
             ("Handrail - 900mm", "Handrail - 36\"", ["railing.height": 36 * i, "railing.balusterSpacing": 32 * i, "railing.balusterSize": 1.25 * i, "railing.railSize": 1.75 * i]),
             ("Concrete Column 400 x 400", "Concrete Column 16\" x 16\"", ["column.width": 16 * i, "column.depth": 16 * i]),
@@ -143,7 +142,7 @@ public enum StandardContent {
         }
 
         /// Imperial projects: the base template's metric types become their imperial equivalents in place.
-        func convertBaseToImperial(residential: Bool) {
+        func convertBaseToImperial() {
             let specs = Dictionary(BuildingTypesLibrary.assemblies(.imperial).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
             for (metricName, imperialName) in BuildingTypesLibrary.imperialEquivalents {
                 guard let spec = specs[imperialName], let e = existingType(metricName, spec.category) else { continue }
