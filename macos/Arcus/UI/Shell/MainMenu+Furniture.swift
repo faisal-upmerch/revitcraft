@@ -19,7 +19,7 @@ extension MainMenuBuilder {
     static func furnitureMenuAdditions() -> [NSMenuItem] {
         let openings = submenu("Openings", commands([.furnitureBay, .furnitureBaySeparator, .furnitureBayDivide, .furnitureRemoveDivide, .furnitureBayTag, nil,
                                                       .furnitureDoor, .furnitureDrawer, .furnitureFlap, nil, .furnitureFlipHinge, .furniturePickNewHost, .furnitureSelectHardware])) // FM5
-        return [openings] + commands([.furnitureHardware]) // FM5
+        return [openings] + commands([.furnitureHardware, .componentPlace, .componentReplace, .componentAssembly, .componentHardwareRules, .componentUpdate, .componentBOM, .componentPowerSummary]) // FM5, COMP
             + [.separator()] + commands([.furnitureJoint, .furnitureJointRules, .furnitureAllowJoin, .furnitureDisallowJoin]) // FM6
             + [.separator()] + commands([.furniturePartList, .furnitureHardwareSchedule, .furnitureMaterialTakeoff, .furnitureEdgeBanding, .furnitureCost, nil,
                                          .furnitureNesting, .furnitureStockSheets, nil, .furniture3DDesign, nil, .furnitureCNCExport, .furnitureShopDrawings, .furnitureExplodeParts, .furnitureCheckParts, .furnitureHardwareCatalog]) // FM7

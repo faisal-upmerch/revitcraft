@@ -30,7 +30,7 @@ enum MainMenuBuilder {
         main.addItem(submenu("Insert", commands([.linkModel, .linkIFC, .linkCAD, .linkTopography, .dwfMarkup, .placeDecal, .decalTypes, .pointCloud, .coordinationModel, .linkPDF, .linkImage, nil, // F67
                                                  .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
                                                  .importCAD, .importGbXML, .importPDF, .importImage, .importIFC, .importRevit, nil,
-                                                 .loadFamily, .loadFurniture, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
+                                                 .loadFamily, .loadFurniture, .components, .componentBrowser, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
         main.addItem(submenu("Annotate", commands([.alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension, nil,
                                                    .spotElevation, .spotCoordinate, .spotSlope, nil, .detailLine, .filledRegion, .maskingRegion, .detailComponent, .insulation, nil,
                                                    .textNote, .tagByCategory, .tagAll, .roomTag, .spaceTag, .colorFillLegend, // F5 .symbol, .northArrow, nil, .revisionCloud, nil,
@@ -143,7 +143,7 @@ enum MainMenuBuilder {
         let importMenu = submenu("Import", commands([.importCAD, .importIFC, .importRevit, .importScheduleCSV])) // BL-SCHED
         let pageSetup = command(.printSetup) // F13: Print Setup (paper, zoom, hidden items) replaces the generic Page Setup
         pageSetup.keyEquivalent = "p"; pageSetup.keyEquivalentModifierMask = [.command, .shift]
-        return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), command(.saveAsFurnitureTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
+        return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), command(.saveAsFurnitureTemplate), command(.componentSaveSelection), command(.componentNewFamily), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
                 importMenu, export, .separator(), pageSetup, command(.printPreview), command(.print)]
     }
 
