@@ -73,10 +73,15 @@ extension ViewGraphicsBuilder {
         let edges = HiddenLineRenderer.render(inputs, projection: proj, isCancelled: isCancelled)
         var byTag: [Int: [Segment2]] = [:]
         for e in edges { byTag[e.tag, default: []].append(e.segment) }
+        // Grain arrows only on the shelves seen from above (not under another one below the cut).
+        let seen = map.values.compactMap { $0.0.furnitureShelf.map { (s: $0, top: Polygon2($0.boundary)) } }.filter { $0.s.elevation <= cutZ }
         for (tag, (e, o, hull)) in map.sorted(by: { $0.key < $1.key }) {
             let st = stroke(e.category, cut: false, o)
             var prims: [GPrimitive] = (byTag[tag] ?? []).map { .polyline([proj.unproject($0.start), proj.unproject($0.end)], closed: false, st) }
-            if detailLevel(e.category) != .coarse, let s = e.furnitureShelf { prims += grainArrow(planShelf: s, e, o) }
+            if detailLevel(e.category) != .coarse, let s = e.furnitureShelf, s.boundary.count >= 3,
+               !seen.contains(where: { $0.s.elevation > s.elevation + Tolerance.length && $0.top.contains(Polygon2(s.boundary).centroid) }) {
+                prims += grainArrow(planShelf: s, e, o)
+            }
             items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: [.rectangle(hull)]))
         }
         // Hidden lines at Fine: what each part has that the others hide.

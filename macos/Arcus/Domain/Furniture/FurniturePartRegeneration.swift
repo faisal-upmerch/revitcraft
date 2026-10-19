@@ -133,6 +133,8 @@ public enum FurniturePartRegeneration {
         let resolver = FurnitureBoundResolver(tx.model)
         let touchedSet = Set(touched)
         let needsBinding = parts.contains { touchedSet.contains($0.id) }
+        // When the planes moved in this transaction (a Family Types edit), new parts follow the planes they name.
+        let planesMoved = FurniturePlanes.positionsByName(tx.originalModel) != resolver.positions
         let boxes = needsBinding ? FurniturePartBinder.boxes(tx.model) : [:]
         for part in parts {
             guard var e = tx.model[part.id] else { continue }
@@ -148,6 +150,10 @@ public enum FurniturePartRegeneration {
                     // New, copied or moved by the user: a bound that still holds stays; otherwise the coordinate locks to
                     // the plane (or plane-bound part face) it was put on, or keeps following its plane at the new offset.
                     if let b = bounds[c.key], let v = resolver.resolve(b), abs(v - c.value) <= 1e-9 { continue }
+                    if before == nil, planesMoved, let b = bounds[c.key], let v = resolver.resolve(b) {
+                        FurniturePartCoordinates.set(c.key, v, in: &e)
+                        continue
+                    }
                     if let b = binder?.bound(c.value, along: c.axis) {
                         bounds[c.key] = b
                     } else if case .plane(let n, _)? = bounds[c.key], let p = resolver.positions[n] {

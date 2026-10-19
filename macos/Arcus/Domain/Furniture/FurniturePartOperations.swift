@@ -156,11 +156,14 @@ public enum FurniturePartOperations {
         var below: (ElementID, FurniturePartSolids.PartBox)?, above: (ElementID, FurniturePartSolids.PartBox)?
         for (id, b) in boxes {
             let bx = b.box
-            if bx.min.z <= pz, bx.max.z >= pz {
+            // Sides are thin across x; bottoms, shelves and tops are thin in z.
+            let sx = bx.max.x - bx.min.x, sy = bx.max.y - bx.min.y, sz = bx.max.z - bx.min.z
+            let side = sx <= sy && sx <= sz, flat = sz <= sx && sz <= sy
+            if side, bx.min.z <= pz, bx.max.z >= pz {
                 if bx.max.x <= px + 1e-9, left.map({ bx.max.x > $0.1.box.max.x }) ?? true { left = (id, b) }
                 if bx.min.x >= px - 1e-9, right.map({ bx.min.x < $0.1.box.min.x }) ?? true { right = (id, b) }
             }
-            if bx.min.x <= px, bx.max.x >= px {
+            if flat, bx.min.x <= px, bx.max.x >= px {
                 if bx.max.z <= pz + 1e-9, below.map({ carcass ? bx.max.z < $0.1.box.max.z : bx.max.z > $0.1.box.max.z }) ?? true { below = (id, b) }
                 if bx.min.z >= pz - 1e-9, above.map({ carcass ? bx.min.z > $0.1.box.min.z : bx.min.z < $0.1.box.min.z }) ?? true { above = (id, b) }
             }

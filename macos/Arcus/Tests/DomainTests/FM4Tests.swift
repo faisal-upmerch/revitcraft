@@ -702,4 +702,13 @@ struct FM4Tests {
         let all = CommandCatalog.all.flatMap(\.aliases)
         #expect(Set(all).count == all.count, "aliases are unique")
     }
+
+    @Test func partsRoundTripThroughJSON() throws {
+        let m = try #require(FurnitureSamples.bookcaseModel())
+        let parts = Category.furnitureParts.flatMap { m.elements($0) }
+        #expect(parts.count >= 9)
+        let data = try JSONEncoder().encode(parts)
+        let back = try JSONDecoder().decode([Element].self, from: data)
+        #expect(back == parts)
+    }
 }

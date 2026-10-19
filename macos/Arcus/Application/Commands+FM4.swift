@@ -17,7 +17,7 @@ extension CommandCatalog {
         CommandInfo(.furnitureBack, "Back", .build, "rectangle.inset.filled", aliases: ["BK"],
                     help: "Places a back across a carcass: click inside it in an elevation; fits inside or over the back edges.", keywords: ["furniture", "back", "hardboard"]),
         CommandInfo(.furnitureDivider, "Divider", .build, "rectangle.split.2x1", aliases: ["DV"],
-                    help: "Splits a bay into equal spaces with vertical or horizontal panels (EQ): click inside the bay in an elevation.", keywords: ["furniture", "divider", "partition", "fixed shelf"]),
+                    help: "Splits a bay into equal spaces with vertical or horizontal panels (EQ): click inside the bay in an elevation.", keywords: ["furniture", "divider", "upright", "fixed shelf"]),
         CommandInfo(.furnitureLeg, "Leg", .build, "rectangle.portrait.arrowtriangle.2.inward", aliases: ["LG"],
                     help: "Places legs like columns at points; Space rotates. At Corners places one in each corner of a top.", keywords: ["furniture", "leg", "foot", "column", "post"]),
         CommandInfo(.furnitureLegsAtCorners, "At Corners", .build, "square.grid.2x2",
