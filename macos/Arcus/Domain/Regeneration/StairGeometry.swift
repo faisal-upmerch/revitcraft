@@ -454,4 +454,31 @@ public enum StairGeometry {
         let faces = pts.count >= 2 ? [offset(pts, by: info.width / 2), offset(pts, by: -info.width / 2)] : []
         return StairLayout.Support(kind: kind, side: side, run: run, info: info, path: path, faces: faces)
     }
+
+    // MARK: Stair path
+
+    /// The stair path through the whole stair: the runs' walk lines joined across the landings (straight segments to
+    /// the middle of each landing).
+    public static func walkPath(_ layout: StairLayout) -> [Vec2] {
+        var out: [Vec2] = []
+        func add(_ p: Vec2) { if out.last.map({ !$0.isAlmostEqual(p, tolerance: 1e-6) }) ?? true { out.append(p) } }
+        for (k, r) in layout.runs.enumerated() {
+            for p in r.walk { add(p) }
+            guard k + 1 < layout.runs.count else { continue }
+            let next = layout.runs[k + 1]
+            let a = r.walk.last ?? r.endEdge.midpoint, b = next.walk.first ?? next.startEdge.midpoint
+            let d0 = r.endDirection, d1 = next.direction
+            if abs(d0.cross(d1)) > 0.2, let x = Segment2(a, a + d0).lineIntersection(Segment2(b, b - d1)), x.t > 0, x.u > 0 {
+                add(x.point) // a turn: through the corner of the two walk lines
+            } else if d0.dot(d1) < -0.5 {
+                let depth = layout.landings.first { $0.afterRun == r.index }.map { l in
+                    l.polygon.points.map { ($0 - a).dot(d0) }.max() ?? r.width
+                } ?? r.width
+                add(a + d0 * (depth / 2)); add(b + d0 * (depth / 2)) // a switchback: across the middle of the landing
+            }
+            add(b)
+        }
+        return out
+    }
+
 }

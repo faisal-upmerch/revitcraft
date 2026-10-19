@@ -1,5 +1,6 @@
 import Foundation
 import ArcusGeometry
+import ArcusCalc
 
 /// STAIR: Revit-style Properties and Type Properties of stairs, their run, landing and support types, and the stair
 /// railings' placement.
@@ -146,6 +147,13 @@ enum StairParameters {
                                 tooltip: "Off: the stair ends with a tread at the top level instead of a riser.",
                                 get: { e, _ in e.stair.map { .bool($0.endWithRiser ?? true) } },
                                 set: { e, v, _ in e.stair?.endWithRiser = try flag(v) })
+    // The Stair Tag's lines ("23 R @ 174 mm", "22 T @ 280 mm").
+    static let riserText = P("stair.riserText", "Riser Count and Height", .text, .other,
+                             get: { e, ctx in layout(e, ctx).map { .text("\($0.riserCount) R @ \(QuantityFormatter.format($0.riserHeight, kind: .length, units: ctx.units))") } })
+    static let treadText = P("stair.treadText", "Tread Count and Depth", .text, .other,
+                             get: { e, ctx in layout(e, ctx).map { l in
+                                 .text("\(l.runs.reduce(0) { $0 + $1.treads.count }) T @ \(QuantityFormatter.format(l.treadDepth, kind: .length, units: ctx.units))")
+                             } })
     static let runCount = P("stair.runCount", "Runs", .integer, .construction,
                             get: { e, ctx in layout(e, ctx).map { .int($0.runs.count) } })
     // Older (shape-only) stairs keep their shape and turn until they are edited.
@@ -165,7 +173,7 @@ enum StairParameters {
         var list: [P] = [baseLevel, baseOffset, topLevel, topOffset, height] + F2Parameters.stair
             + [upText, downText, upLabel, upArrow, downLabel, downArrow, upArrowAllViews,
                desiredRisers, actualRisers, actualRiserHeight, actualTreadDepth, treadStart, runWidth,
-               beginWithRiser, endWithRiser, runCount]
+               beginWithRiser, endWithRiser, runCount, riserText, treadText]
         if e.stair?.isComponentStair != true { list += [shape, turnsLeft] }
         return list
     }

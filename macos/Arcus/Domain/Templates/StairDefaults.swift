@@ -108,7 +108,32 @@ public enum StairDefaults {
                 if guardRail { e.typeData?.params[R.handrailHeight] = len(0.9, 36); e.typeData?.params[R.handrailSize] = len(0.04, 1.5) }
             }
         }
+        ensureStairTag(tx)
         return out
+    }
+
+    /// The Stair Tag: the risers with their height over the treads with their depth, boxed.
+    static func ensureStairTag(_ tx: TransactionContext) {
+        guard !tx.model.elements(.families).contains(where: { $0.name == "Stair Tag" }) else { return }
+        var f = FamilyDefinition(name: "Stair Tag", template: .tag)
+        f.taggedCategories = [.stairs]
+        f.types = [FamilyTypeDefinition(name: "Risers and Treads", values: [:])]
+        let w = "0.0115", h = "0.0038"
+        f.annotationLines = [
+            FamilyLine(shape: .line(FamilyPoint("-\(w)", "-\(h)"), FamilyPoint("\(w)", "-\(h)"))),
+            FamilyLine(shape: .line(FamilyPoint("\(w)", "-\(h)"), FamilyPoint("\(w)", "\(h)"))),
+            FamilyLine(shape: .line(FamilyPoint("\(w)", "\(h)"), FamilyPoint("-\(w)", "\(h)"))),
+            FamilyLine(shape: .line(FamilyPoint("-\(w)", "\(h)"), FamilyPoint("-\(w)", "-\(h)"))),
+            FamilyLine(shape: .line(FamilyPoint("-\(w)", "0"), FamilyPoint("\(w)", "0"))),
+        ]
+        f.fills = [FamilyFill(points: [FamilyPoint("-\(w)", "-\(h)"), FamilyPoint("\(w)", "-\(h)"), FamilyPoint("\(w)", "\(h)"), FamilyPoint("-\(w)", "\(h)")],
+                              isMasking: true)]
+        f.labels = [
+            FamilyLabel(position: FamilyPoint("0", "0.0019"), parameterName: "Riser Count and Height", height: 0.002, sample: "23 R @ 174 mm"),
+            FamilyLabel(position: FamilyPoint("0", "-0.0019"), parameterName: "Tread Count and Depth", height: 0.002, sample: "22 T @ 280 mm"),
+        ]
+        let fid = tx.create(.families, name: f.name, data: .family(f))
+        tx.create(.elementTypes, name: "Risers and Treads", data: .type(TypeData(instanceCategory: .tags, familyID: fid, familyName: f.name)))
     }
 
     /// Standard stair types a project is missing (Load Standard Types), by the project's unit system. Older stair types

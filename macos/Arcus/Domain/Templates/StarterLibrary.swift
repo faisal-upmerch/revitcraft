@@ -390,7 +390,7 @@ public enum StarterLibrary {
          tagFamily("Window Tag", categories: [.windows], label: "Type Mark", shape: "hexagon"),
          tagFamily("Wall Tag", categories: [.walls], label: "Type Mark", shape: "diamond"),
          tagFamily("Revision Tag", categories: [.revisionClouds], label: "Revision Number", shape: "triangle"),
-         tagFamily("Generic Mark Tag", categories: [.furniture, .casework, .genericModels, .plumbingFixtures, .columns, .structuralColumns, .structuralFraming, .floors, .ceilings, .roofs, .stairs, .railings], label: "Mark", shape: "circle"),
+         tagFamily("Generic Mark Tag", categories: [.furniture, .casework, .genericModels, .plumbingFixtures, .columns, .structuralColumns, .structuralFraming, .floors, .ceilings, .roofs, .railings], label: "Mark", shape: "circle"), // STAIR: stairs have the Stair Tag
          roomTag(), roomTagWithArea(),
          titleBlock("A1 Title Block", width: 0.841, height: 0.594), titleBlock("A3 Title Block", width: 0.42, height: 0.297),
          titleBlock("ARCH D Title Block", width: 0.9144, height: 0.6096),
