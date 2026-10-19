@@ -53,30 +53,19 @@ struct SettingsView: View {
 }
 
 
-/// MCP: lets Claude (Claude Desktop, Claude Code) build in the open document through arcus-mcp. Off by default.
+/// MCP: Design with Claude: live editing and the setup sheet. Off by default.
 struct MCPSettingsSection: View {
-    @AppStorage(MCPLiveService.defaultsKey) private var enabled = false
-    @State private var status = ""
+    @State private var claude = ClaudeIntegration.shared
     var body: some View {
-        Toggle("Allow Claude to edit open documents", isOn: $enabled)
-            .onChange(of: enabled) { _, v in MCPLiveService.shared.setEnabled(v); refresh() }
-        Text("Claude's Arcus tools (arcus-mcp) then work in the front document: every change is one Undo step. Only your Mac account can connect; nothing goes over the network.")
+        Toggle("Allow Claude to edit open documents", isOn: Binding(get: { claude.liveEnabled }, set: { claude.setLive($0) }))
+        Text("Claude's Arcus tools then work in the front document: every change is one Undo step. Only your Mac account can connect; nothing goes over the network.")
             .font(.caption).foregroundStyle(.secondary)
-        if !status.isEmpty { Text(status).font(.caption).foregroundStyle(.secondary) }
         HStack {
-            Button("Copy Claude Code Command") { copy("claude mcp add arcus -- \"\(MCPLiveService.shared.helperPath)\"") }
-            Button("Copy Claude Desktop Setup") {
-                copy("{ \"mcpServers\": { \"arcus\": { \"command\": \"\(MCPLiveService.shared.helperPath)\" } } }")
-            }
+            ClaudeStatusBadge(status: claude.status, compact: true)
+            if let e = claude.listenError, claude.liveEnabled { Text("Not listening: \(e)").font(.caption).foregroundStyle(.secondary) }
+            Spacer()
+            Button("Design with Claude…") { ClaudeSetupWindow.show() }
         }
-        .onAppear(perform: refresh)
-    }
-    func refresh() {
-        let s = MCPLiveService.shared
-        status = s.lastError.map { "Not listening: \($0)" } ?? (s.isRunning ? "Listening on \(s.socketPath)" : "")
-    }
-    func copy(_ text: String) {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(text, forType: .string)
+        .onAppear { claude.refresh() }
     }
 }

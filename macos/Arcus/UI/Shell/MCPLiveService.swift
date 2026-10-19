@@ -44,21 +44,30 @@ final class MCPLiveService {
                 lastError = error.description
                 DiagnosticsLog.shared.log("mcp", "Could not start: \(error.description)")
             }
+            ClaudeIntegration.shared.refresh()
         } else {
             server?.stop()
             server = nil
             DiagnosticsLog.shared.log("mcp", "Stopped")
+            ClaudeIntegration.shared.refresh()
         }
     }
 
     func handle(_ req: JSONValue) async -> JSONValue {
-        await LiveProtocol.reply(to: req, backend: toolbox) {
+        // Design with Claude: the bottom bar pill shows the call while it runs and lists it afterwards.
+        let tool = req["op"]?.stringValue == "call" ? req["tool"]?.stringValue : nil
+        if let tool { ClaudeIntegration.shared.begin(tool) }
+        let reply = await LiveProtocol.reply(to: req, backend: toolbox) {
             ["app": "Arcus", "version": .string(AppVersionInfo.current.marketingVersion),
              "documents": .array(NSApp.orderedDocuments.compactMap { $0 as? ArcusDocument }.map { d in
                  ["name": .string(d.displayName ?? ""), "path": d.fileURL.map { .string($0.path) } ?? .null,
                   "furniture": .bool(d.session.model.isFurniture), "front": .bool(d === host.target)]
              })]
         }
+        if let tool {
+            ClaudeIntegration.shared.finish(tool, document: host.documentName, result: reply["result"].flatMap(ToolResult.init(json:)) ?? .error(reply["error"]?.stringValue ?? ""))
+        }
+        return reply
     }
 }
 

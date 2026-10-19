@@ -83,7 +83,8 @@ extension RibbonContent {
                                                 .small(.snapSettings), .small(.purgeUnused),
                                                 .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage)]
             + fm6ManagePanels + fm7ManagePanels
-            + [RibbonPanel(title: "Inquiry", items: [.small(.warnings), .small(.selectByID), .small(.idsOfSelection)], tint: manage)]
+            + [RibbonPanel(title: "Inquiry", items: [.small(.warnings), .small(.selectByID), .small(.idsOfSelection)], tint: manage),
+               RibbonPanel(title: "Add-Ins", items: [.large(.designWithClaude)], tint: manage)] // MCP: Design with Claude
     }
 
     /// Panels without the tools a furniture piece has no use for (walls, rooms, site, structure…); empty panels go.

@@ -45,9 +45,9 @@ if args.contains("--install-claude-code") {
     print("""
     Run:
 
-      claude mcp add arcus -- "\(selfPath)"
+      \(ClaudeClientConfig.codeCommand(serverPath: selfPath))
 
-    (add --scope user to use it in every project). Then /mcp in Claude Code shows the arcus tools.
+    Then /mcp in Claude Code shows the arcus tools. (Drop --scope user to add it to the current project only.)
     """)
     exit(0)
 }

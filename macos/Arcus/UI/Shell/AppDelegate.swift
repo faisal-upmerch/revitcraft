@@ -244,6 +244,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
             case .about: showAbout()
             case .preferences: showSettings()
             case .onboarding: showOnboarding()
+            case .designWithClaude: ClaudeSetupWindow.show() // MCP
             case .keyboardShortcuts:
                 if let s = activeState { s.presented = .keyboardShortcuts } else { showHub(tab: .recent) }
             default: break
@@ -253,6 +254,6 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
         guard item.action == #selector(performArcusCommand(_:)), let raw = item.representedObject as? String, let id = CommandID(rawValue: raw) else { return true }
-        return [.home, .newProject, .newFurniture, .openProject, .about, .preferences, .onboarding].contains(id)
+        return [.home, .newProject, .newFurniture, .openProject, .about, .preferences, .onboarding, .designWithClaude].contains(id) // MCP
     }
 }

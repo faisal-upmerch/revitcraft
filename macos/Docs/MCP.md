@@ -132,32 +132,44 @@ touched (`warnings`) plus the document's overall health count, so Claude can che
 are `isError: true` with a sentence saying what to change ("No wall type matches “Brick”. Close: Exterior - Brick on
 CMU, …").
 
-## 6. Install
+## 6. Install and Design with Claude
 
-`arcus-mcp --install-claude-desktop` and `arcus-mcp --install-claude-code` print (never write) the configuration:
+**In the app** (the usual way): *Design with Claude* sets everything up. It is on Home (a card under the Start cards
+with its status: Not set up / Ready / Claude connected), Help ▸ Design with Claude…, Manage ▸ Add-Ins ▸ Claude (projects
+and Furniture documents), Settings ▸ Claude (MCP), command search (claude, mcp, ai), an onboarding step, and a hint on
+Home ▸ Furniture and in Load Furniture's empty library. The sheet has:
+
+* what it is and that it stays on the Mac;
+* **Claude Desktop**: *Add to Claude Desktop…* (after a confirmation, backs up `claude_desktop_config.json` beside it as
+  `claude_desktop_config.backup-<date>.json` and merges an `arcus` server, keeping every other key and server; a file
+  that isn't valid JSON is left alone) or *Copy Configuration*;
+* **Claude Code**: *Copy Command* (`claude mcp add --scope user arcus -- "<path>"`);
+* the live-mode switch (*Allow Claude to edit open documents*);
+* *Test Connection*: starts the bundled server, lists its tools, and asks the app's socket for hello when live mode is on;
+* five example prompts with Copy buttons.
+
+The status comes from reading the two configs (`ClaudeClientConfig`) and from live-mode activity. While live mode
+listens, document windows show a **Claude pill** in the bottom bar (Claude / Claude connected / Claude is editing…);
+it opens the recent Claude actions (tool, document, time, errors) with *Undo <last change>* when that change is the
+document's next undo step.
+
+**From the command line**: `arcus-mcp --install-claude-desktop` and `arcus-mcp --install-claude-code` print (never
+write) the configuration for the binary's own location:
 
 ```json
 { "mcpServers": { "arcus": { "command": "/Applications/Arcus.app/Contents/Helpers/arcus-mcp" } } }
 ```
 
-goes in `~/Library/Application Support/Claude/claude_desktop_config.json`; for Claude Code:
-
 ```
-claude mcp add arcus -- /Applications/Arcus.app/Contents/Helpers/arcus-mcp
+claude mcp add --scope user arcus -- /Applications/Arcus.app/Contents/Helpers/arcus-mcp
 ```
 
-The path printed is the binary's own location. `arcus-mcp --help` lists options (`--mode file|live|auto`,
-`--demo`).
+`arcus-mcp --help` lists the options (`--mode auto|file|live`).
 
-**Bundling** (in `script/build_and_run.sh`, after the DWG helpers are copied, before signing):
-
-```bash
-swift build -c "$CONFIG" --product arcus-mcp >> "$LOG" 2>&1
-mkdir -p "$STAGE/$APP_NAME.app/Contents/Helpers"
-cp "$BIN_DIR/arcus-mcp" "$STAGE/$APP_NAME.app/Contents/Helpers/"
-```
-
-The existing helper loop signs it, and the validation loop checks it is arm64 and links only system libraries.
+**Bundling**: `script/build_and_run.sh` builds `arcus-mcp` after the DWG helpers and copies it to
+`Arcus.app/Contents/Helpers/`; the helper loop signs it, the validation loop checks it is arm64, links only system
+libraries and runs (`--version`). The setup sheet points at the running app's own copy (else
+`/Applications/Arcus.app/Contents/Helpers/arcus-mcp`).
 
 ## 7. Demo and tests
 
@@ -168,7 +180,11 @@ The existing helper loop signs it, and the validation loop checks it is arm64 an
 * `swift test --filter MCPTests`: protocol (initialize, tools/list, tools/call, JSON-RPC errors, batches), the tool
   layer end to end in file mode (project → walls → doors → windows → floor → roof → rooms → views → dimensions → tags →
   sheet → PNG/PDF/DXF → save → reopen), undo per call, validation messages, Furniture parts, and the live socket
-  (0600/0700 permissions, hello, forwarded calls editing the served document, refusing a second server).
+  (0600/0700 permissions, hello, forwarded calls editing the served document, refusing a second server), and the
+  Claude Desktop config merge (other servers kept, backup written, invalid JSON left alone).
+* `swift test --filter MCPUITests`: renders Home with the card, the Set Up sheet, the pill (ready, connected, editing),
+  the activity popover and the onboarding step, light and dark, to `/tmp/arcus-mcp-ui/`; checks Help, Manage ▸ Add-Ins
+  and command search reach the feature. In-app captures: `QAHarness.mcpScreenshots` (`mcp-*.png`).
 
 ## 8. Limits
 

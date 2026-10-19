@@ -130,7 +130,7 @@ enum UserTemplates {
 struct OnboardingView: View {
     let onFinish: () -> Void
     @State private var step: Int
-    static let steps = 3
+    static let steps = 4 // MCP: + Design with Claude
 
     init(onFinish: @escaping () -> Void, step: Int = 0) {
         self.onFinish = onFinish
@@ -143,6 +143,7 @@ struct OnboardingView: View {
                 switch step {
                 case 0: welcome
                 case 1: start
+                case 2: claude // MCP
                 default: finish
                 }
             }
@@ -204,6 +205,25 @@ struct OnboardingView: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: 520, alignment: .leading)
+    }
+
+    /// MCP: Design with Claude: what it does and where to set it up.
+    var claude: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 14) {
+                ClaudeMark(size: 48)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Design with Claude").font(.title2.weight(.semibold))
+                    Text("Describe it; Claude builds it in Arcus.").foregroundStyle(.secondary)
+                }
+            }
+            row("text.bubble", "Say what you want", "“A two-bedroom cottage, 36' x 28', with a gable roof” or “a walnut bookcase with four shelves”: Claude lays out walls, doors, rooms, roofs, furniture parts and sheets.")
+            row("arrow.uturn.backward.circle", "Watch and undo", "With live editing on, Claude works in your open document. Each change is one Undo step, listed in the window's bottom bar.")
+            row("lock.shield", "Stays on your Mac", "Arcus connects to the Claude app you use, never to the internet itself.")
+            Button("Set Up Claude…") { ClaudeSetupWindow.show() }.controlSize(.large).padding(.top, 4)
+            Text("Later: Help ▸ Design with Claude, Manage ▸ Claude, or the card on Home.").font(.caption).foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: 560, alignment: .leading)
     }
 
     var finish: some View {

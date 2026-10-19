@@ -87,3 +87,44 @@ struct MCPProtocolTests {
         #expect(!v.jsonText.contains("\n"))
     }
 }
+
+// MCP: Claude Desktop / Claude Code configuration (Design with Claude ▸ Add to Claude Desktop).
+@Suite("MCP client configuration")
+struct MCPClientConfigTests {
+    @Test func detectsTheArcusEntry() {
+        #expect(ClaudeClientConfig.status(of: nil, clientInstalled: false) == .clientMissing)
+        #expect(ClaudeClientConfig.status(of: nil, clientInstalled: true) == .notConfigured)
+        #expect(ClaudeClientConfig.status(of: Data("{\"mcpServers\":{}}".utf8), clientInstalled: true) == .notConfigured)
+        #expect(ClaudeClientConfig.status(of: Data("{\"mcpServers\":{\"arcus\":{\"command\":\"/x/arcus-mcp\"}}}".utf8), clientInstalled: true) == .configured(path: "/x/arcus-mcp"))
+        #expect(ClaudeClientConfig.status(of: Data("not json".utf8), clientInstalled: true) == .unreadable)
+    }
+
+    @Test func mergeKeepsOtherServersAndBacksUp() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("arcus-claude-\(UUID().uuidString.prefix(6))")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("claude_desktop_config.json")
+        // No file yet: created, no backup.
+        #expect(try ClaudeClientConfig.installDesktop(serverPath: "/A/arcus-mcp", at: url) == nil)
+        #expect(ClaudeClientConfig.status(of: try Data(contentsOf: url), clientInstalled: true) == .configured(path: "/A/arcus-mcp"))
+        // An existing config with other settings: kept, arcus replaced, the old file backed up.
+        try Data(#"{"globalShortcut":"Cmd+Space","mcpServers":{"files":{"command":"npx","args":["-y","server-files"]},"arcus":{"command":"/old"}}}"#.utf8).write(to: url)
+        let backup = try #require(try ClaudeClientConfig.installDesktop(serverPath: "/B/arcus-mcp", at: url, now: Date(timeIntervalSince1970: 0)))
+        #expect(try String(contentsOf: backup, encoding: .utf8).contains("/old"))
+        let root = try #require(try JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
+        #expect(root["globalShortcut"] as? String == "Cmd+Space")
+        let servers = try #require(root["mcpServers"] as? [String: Any])
+        #expect((servers["files"] as? [String: Any])?["command"] as? String == "npx")
+        #expect((servers["arcus"] as? [String: Any])?["command"] as? String == "/B/arcus-mcp")
+        // A broken file is left alone.
+        try Data("{oops".utf8).write(to: url)
+        #expect(throws: ClaudeClientConfig.Failure.self) { try ClaudeClientConfig.installDesktop(serverPath: "/C", at: url) }
+        #expect(try String(contentsOf: url, encoding: .utf8) == "{oops")
+    }
+
+    @Test func snippetsNameTheServer() throws {
+        let s = ClaudeClientConfig.desktopSnippet(serverPath: "/Applications/Arcus.app/Contents/Helpers/arcus-mcp")
+        #expect(ClaudeClientConfig.status(of: Data(s.utf8), clientInstalled: true) == .configured(path: "/Applications/Arcus.app/Contents/Helpers/arcus-mcp"))
+        #expect(ClaudeClientConfig.codeCommand(serverPath: "/p q/arcus-mcp") == "claude mcp add --scope user arcus -- \"/p q/arcus-mcp\"")
+        #expect(throws: Never.self) { _ = ClaudeClientConfig.probe(serverPath: "/nonexistent/arcus-mcp") }
+    }
+}
