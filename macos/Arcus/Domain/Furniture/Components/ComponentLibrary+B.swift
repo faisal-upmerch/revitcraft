@@ -7,5 +7,5 @@ import ArcusGeometry
 
 extension ComponentLibrary {
     /// Group B's component definitions, in browser order.
-    static var groupB: [ComponentDefinition] { [] }
+    static var groupB: [ComponentDefinition] { groupBConnectors + groupBLegs }
 }
