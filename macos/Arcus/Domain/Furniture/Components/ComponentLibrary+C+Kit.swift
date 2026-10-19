@@ -18,7 +18,17 @@ import ArcusGeometry
 /// Group C's component definitions, in browser order.
 public enum ComponentsC {
     /// Every Group C definition (categories 10–14).
-    public static var all: [ComponentDefinition] { kitchen }
+    public static var all: [ComponentDefinition] { (kitchen + tables + beds + sofas + chairs).map(finished) }
+
+    /// Host cutouts (voids named "… Cutout": grommet bores, sink and module cutouts) cut the host part, never the
+    /// component's own solids, so their Cut Geometry is empty.
+    static func finished(_ d: ComponentDefinition) -> ComponentDefinition {
+        var d = d
+        for k in d.family.solids.indices where d.family.solids[k].isVoid && d.family.solids[k].name.hasSuffix("Cutout") && d.family.solids[k].cuts == nil {
+            d.family.solids[k].cuts = []
+        }
+        return d
+    }
 }
 
 /// Type value constants (meters).

@@ -95,7 +95,10 @@ struct COMPCRenderTests {
                 for m in d.materials { colors[m.name] = m.finish.color }
                 ctx.saveGState()
                 ctx.translateBy(x: x0, y: y0)
-                ShadedFamilyRenderer.draw(ev, colors: colors, fallback: ArcusDomain.RGBColor(hex: 0x9EA3A8), ctx, width: tw, height: th)
+                // Items hung under a part are seen from below.
+                let under = ev.solids.reduce(-Double.infinity) { max($0, $1.bounds.max.z) } <= 0.003
+                ShadedFamilyRenderer.draw(ev, colors: colors, fallback: ArcusDomain.RGBColor(hex: 0x9EA3A8), ctx, width: tw, height: th,
+                                          pitch: under ? -ShadedFamilyRenderer.pitch : ShadedFamilyRenderer.pitch)
                 ctx.restoreGState()
                 let planView: ComponentSymbolView = .face
                 Self.drawSymbols(Self.symbolLines(d, type, planView, .coarse), in: CGRect(x: x0 + CGFloat(tw), y: y0 + CGFloat(th / 2), width: CGFloat(sym), height: CGFloat(th / 2)), ctx)
