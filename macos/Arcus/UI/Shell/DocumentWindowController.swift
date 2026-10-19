@@ -290,7 +290,18 @@ struct ProjectHeader: View {
 struct InspectorDock: View {
     @Bindable var state: DocumentState
     var body: some View {
-        if state.workspace == .macSpacious && state.showProperties && !PanelWindows.isDetached(.properties) {
+        let properties = state.workspace == .macSpacious && state.showProperties && !PanelWindows.isDetached(.properties)
+        if ComponentPanelModel.of(state).isShown { // COMP: the Components panel, under Properties in Mac Spacious
+            if properties {
+                PersistentVSplit(key: "inspectorDock.componentsFraction", defaultFraction: 0.45, minTop: 200, minBottom: 300) {
+                    PropertiesView(state: state)
+                } bottom: {
+                    ComponentsPanel(state: state)
+                }
+            } else {
+                ComponentsPanel(state: state).frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else if properties {
             PropertiesView(state: state).frame(maxWidth: .infinity, maxHeight: .infinity) // W4-SHELL
         } else {
             Color.clear

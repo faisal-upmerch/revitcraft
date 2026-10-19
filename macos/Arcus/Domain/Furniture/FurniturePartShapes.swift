@@ -131,6 +131,9 @@ public enum EdgeProfileShapes {
         switch shape {
         case .chamfer:
             return [Vec2(-m, -m), Vec2(s, -m), Vec2(s, 0), Vec2(0, s), Vec2(-m, s)]
+        case .bevel: // COMPD: an unequal chamfer, Size by Depth
+            let d = depth > Tolerance.length ? depth : s
+            return [Vec2(-m, -m), Vec2(s, -m), Vec2(s, 0), Vec2(0, d), Vec2(-m, d)]
         case .roundOver:
             return [Vec2(-m, -m), Vec2(s, -m)] + arc(Vec2(s, s), s, from: -.pi / 2, to: -.pi) + [Vec2(-m, s)]
         case .cove:

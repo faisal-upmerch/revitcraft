@@ -111,7 +111,7 @@ public enum ComponentActions {
         guard !kinds.isEmpty else { return [] }
         var out: [ComponentAction] = []
         func add(_ a: [ComponentAction]) { for x in a where !out.contains(x) { out.append(x) } }
-        if kinds.contains(.door) { add([.handle, .hinges, .lock, .softClose, .pushToOpen]) }
+        if kinds.contains(.door) || kinds.contains(.glass) { add([.handle, .hinges, .lock, .softClose, .pushToOpen]) }
         if kinds.contains(.flap) || kinds.contains(.lid) { add([.handle, .hinges, .lock, .pushToOpen]) }
         if kinds.contains(.drawerFront) { add([.handle, .slides, .lock, .softClose, .pushToOpen, .organizer]) }
         if kinds.contains(.bay) { add([.hangingRod, .shoeRack, .lighting, .organizer, .slides, .slidingSystem]) }

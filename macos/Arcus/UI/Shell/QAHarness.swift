@@ -478,6 +478,7 @@ enum QAHarness {
             await fm7Screenshots(suffix) // FM7: Part List, Hardware Schedule, Cost, Nesting, sheets F101–F104, fabrication dialogs
             await fm8Screenshots(suffix) // FM8: pieces in a project at Coarse/Fine, Load Furniture, Edit Family, the reload prompt
             await fm9Screenshots(suffix) // FM9: every essential in 3D, Home ▸ Furniture, Load Furniture, the Component Library's Furniture Library
+            await compScreenshots(suffix) // COMP: Components panel and browser, Place Component, one-click hardware, Replace
             await polishScreenshots(s, w, suffix) // POLISH: no ribbon panel clipped at 1280 and at the minimum size (project, Furniture, Family Editor)
             await fmg2Screenshots(suffix) // FMG2: shaped side's joints, joints in Properties, Explode Parts, F104 exploded
             await fmg1Screenshots(suffix) // FMG1: locked part-face dimensions, Blend Edit Top, Sweep in an elevation, pieces that flex fully
@@ -485,6 +486,7 @@ enum QAHarness {
             await fmg3Screenshots(suffix) // FMG3: fronts on the back, sides and canted faces, lids, Leaf Count, swings in a project elevation
             await compbScreenshots(suffix) // COMPB: Joint Rules with connector components, a table on Component Library hairpin legs
             await dialogsScreenshots(s, w, suffix: suffix) // DIALOGS: the ten dialogs of the owner's review, as sheets
+            await fm3dScreenshots(suffix) // FM3D: the Create tab in 3D, a shelf sketched in 3D, a panel on a face, shape handles
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)

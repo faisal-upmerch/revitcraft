@@ -8,7 +8,7 @@ extension MainMenuBuilder {
     static func furnitureMenu() -> NSMenuItem {
         let voids = submenu("Void Forms", commands([.furnitureVoidExtrusion, .furnitureVoidBlend, .furnitureVoidRevolve, .furnitureVoidSweep, .furnitureVoidSweptBlend]))
         let forms = submenu("Forms", commands([.furnitureExtrusion, .furnitureBlend, .furnitureRevolve, .furnitureSweep, .furnitureSweptBlend, .furnitureCushion]) + [voids])
-        let modify = submenu("Modify Parts", commands([.furnitureEditProfile, .furnitureResetProfile, .furnitureBlendEditTop, .furnitureBlendEditBase, .furniturePanelOpening, .furnitureAttach, .furnitureDetach, .furnitureFlipPanel]))
+        let modify = submenu("Modify Parts", commands([.furnitureEditProfile, .furnitureResetProfile, .furnitureBlendEditTop, .furnitureBlendEditBase, .furnitureEditSketch, .furniturePanelOpening, .furnitureAttach, .furnitureDetach, .furnitureFlipPanel]))
         return submenu("Furniture", commands([.furniturePanel, .furnitureShelf, .furnitureTop, .furnitureBack, .furnitureDivider, .furnitureLeg, .furnitureLegsAtCorners,
                                               .furnitureRail, .furnitureSlats, .furniturePlinth, .furnitureEdgeProfile, .furnitureGroove]) // FM4
                        + [forms, modify]
@@ -22,6 +22,6 @@ extension MainMenuBuilder {
         return [openings] + commands([.furnitureHardware]) // FM5
             + [.separator()] + commands([.furnitureJoint, .furnitureJointRules, .furnitureAllowJoin, .furnitureDisallowJoin]) // FM6
             + [.separator()] + commands([.furniturePartList, .furnitureHardwareSchedule, .furnitureMaterialTakeoff, .furnitureEdgeBanding, .furnitureCost, nil,
-                                         .furnitureNesting, .furnitureStockSheets, nil, .furnitureCNCExport, .furnitureShopDrawings, .furnitureExplodeParts, .furnitureCheckParts, .furnitureHardwareCatalog]) // FM7
+                                         .furnitureNesting, .furnitureStockSheets, nil, .furniture3DDesign, nil, .furnitureCNCExport, .furnitureShopDrawings, .furnitureExplodeParts, .furnitureCheckParts, .furnitureHardwareCatalog]) // FM7
     }
 }

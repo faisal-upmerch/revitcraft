@@ -40,6 +40,7 @@ final class Viewport3DSnapping {
         let resolver = view.map { VisibilityResolver(model: model, view: $0) }
         let lines = Lines3D.traces(on: f, model: model, visible: { e in resolver?.resolve(e) != nil })
             .map { Snap3DExtraLine(segment: $0.segment, id: $0.id, category: $0.category) }
+            + FurnitureSnapTraces.traces(on: f, model) // FM3D: part faces crossing the plane
         traceCache = (f, model.revision, lines)
         return lines
     }

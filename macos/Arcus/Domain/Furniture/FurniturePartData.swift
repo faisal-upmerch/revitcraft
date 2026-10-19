@@ -291,6 +291,7 @@ public struct PartEdge: Hashable, Codable, Sendable {
 /// The profile cut along a part edge (as a wall sweep or reveal).
 public enum EdgeProfileShape: String, Codable, Sendable, CaseIterable {
     case roundOver = "Round-Over", chamfer = "Chamfer", bullnose = "Bullnose", ogee = "Ogee", cove = "Cove", fingerPull = "Finger Pull", groove = "Groove"
+    case bevel = "Bevel" // COMPD: Size across the first face, Groove Depth down the second
 }
 
 /// An edge profile or groove on a part's edge. The host is the element's `hostID`.

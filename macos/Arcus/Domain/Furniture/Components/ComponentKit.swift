@@ -250,6 +250,9 @@ public enum ComponentHostKind: String, CaseIterable, Codable, Sendable, Hashable
     case rail = "Rail", leg = "Leg", plinth = "Plinth", form = "Form"
     /// Inside an enclosed bay (slides, rods, organizers, pull-outs): placed between its sides.
     case bay = "Bay"
+    /// Inside a drawer's box (cutlery trays, dividers, inserts): on its inside faces (`ComponentFace.boxBottom`…); the
+    /// host element is the drawer front.
+    case drawerBox = "Drawer Box"
     /// Glass panels and glass fronts.
     case glass = "Glass"
     /// The floor (Ref. Level) or a project level.
@@ -277,6 +280,9 @@ public enum ComponentFace: String, CaseIterable, Codable, Sendable, Hashable {
     case topEdge = "Top Edge", bottomEdge = "Bottom Edge", leftEdge = "Left Edge", rightEdge = "Right Edge", frontEdge = "Front Edge"
     /// Any face the pointer is on.
     case any = "Any"
+    /// The inside faces of a drawer's box (hosts of kind `drawerBox`).
+    case boxBottom = "Box Bottom", boxLeft = "Box Left", boxRight = "Box Right", boxBack = "Box Back", boxFront = "Box Front"
+    public var isDrawerBox: Bool { [.boxBottom, .boxLeft, .boxRight, .boxBack, .boxFront].contains(self) }
 }
 
 /// Where on the host face the component sits by default (Revit-like justification).
@@ -419,6 +425,15 @@ public struct ComponentElectrical: Hashable, Sendable, Codable {
         self.powerParameter = powerParameter; self.voltageParameter = voltageParameter; self.perFoot = perFoot
         self.supply = supply; self.cable = cable; self.connector = connector
     }
+}
+
+/// How a drawer slide mounts, for machining: a pair on the bay's side panels (side-mount, the default), a pair
+/// screwed near the sides' bottom edge under the drawer (undermount), or one rail on the bay's bottom under the drawer's
+/// centre (center-mount).
+public enum ComponentSlideMount: String, Codable, Sendable, Hashable, CaseIterable {
+    case sidePair = "Side Pair", undermount = "Undermount", centerRail = "Center Rail"
+    /// The type parameter (text) slides carry it in, read by drawer machining.
+    public static let parameter = "Slide Mounting"
 }
 
 /// Roles that tie a component into other Furniture tools.
@@ -662,6 +677,16 @@ public struct ComponentBuilder {
     public mutating func hardwareKind(_ k: HardwareKind) { definition.hardwareKind = k }
     public mutating func role(_ r: ComponentRole) { definition.roles.insert(r) }
     public mutating func profile(_ pts: [FamilyPoint]) { definition.profile = pts }
+    /// Drawer slides: how the slide mounts (machining drills the side panels, near their bottom edge, or the bay's
+    /// bottom). Adds the "Slide Mounting" type parameter.
+    public mutating func slideMounting(_ m: ComponentSlideMount) {
+        if definition.parameter(named: ComponentSlideMount.parameter) == nil {
+            text(ComponentSlideMount.parameter, m.rawValue, group: .manufacturing)
+        }
+        if let k = definition.parameters.firstIndex(where: { $0.name == ComponentSlideMount.parameter }) { definition.parameters[k].defaultValue = .text(m.rawValue) }
+        for k in definition.types.indices { definition.types[k].values[ComponentSlideMount.parameter] = .text(m.rawValue) }
+    }
+
     /// Records renamed types (old name → new name), for upgrades of existing families.
     public mutating func renames(_ map: [String: String]) { definition.renamedTypes.merge(map) { _, b in b } }
     public mutating func preset(_ name: String, type: String, values: [String: ParamValue] = [:], alignment: ComponentAlignment? = nil) {
@@ -787,7 +812,8 @@ public struct ComponentBuilder {
     @discardableResult
     public mutating func cylinder(_ name: String, axis: FamilyAxis, center: (String, String), radius: String, from: String, to: String, void: Bool = false) -> String {
         let plane = Self.plane(normal: axis)
-        var s = FamilySolid(name: name, profile: .circle(center: FamilyPoint(center.0, center.1), radius: radius), zMin: .expr(from), zMax: .expr(to), isVoid: void)
+        // A 32-sided polygon (angle-based, so small pins and screws stay round; family circles split by chord length).
+        var s = FamilySolid(name: name, profile: .polygon(ComponentKit.circle(center: center, radius: radius, segments: 32)), zMin: .expr(from), zMax: .expr(to), isVoid: void)
         if plane != .xy { s.workPlane = plane }
         return add(s)
     }

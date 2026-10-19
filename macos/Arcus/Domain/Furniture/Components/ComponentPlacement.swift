@@ -101,6 +101,7 @@ public enum ComponentPlacement {
     public static func hostKind(_ e: Element, _ m: BIMModel) -> ComponentHostKind? {
         switch e.data {
         case .furnitureFront(let f):
+            if f.kind != .drawer, FurnitureFrontTypes.values(of: e, m).style == .glass { return .glass } // a glass door or flap
             switch f.kind {
             case .door: return .door
             case .drawer: return .drawerFront
@@ -115,6 +116,7 @@ public enum ComponentPlacement {
             default: return .sidePanel
             }
         case .furnitureShelf(let s):
+            if let mat = FurniturePartTypes.values(of: e, m).material, m[mat]?.material?.materialClass == .glass { return .glass } // a glass shelf
             switch s.role {
             case .top: return .top
             case .bottom: return .bottom
@@ -135,6 +137,7 @@ public enum ComponentPlacement {
         if hosts.contains(kind) { return true }
         if hosts.contains(.anyPart), ![.bay, .floor, .wall].contains(kind) { return true }
         if kind == .lid, hosts.contains(.flap) { return true }
+        if kind == .drawerFront, hosts.contains(.drawerBox) { return true }
         return false
     }
 
@@ -183,6 +186,14 @@ public enum ComponentPlacement {
                    (.left, Vec3(b.lo.x, c.y, c.z), -Y, Z, -X, d.y, d.z, d.x), (.right, Vec3(b.hi.x, c.y, c.z), Y, Z, X, d.y, d.z, d.x),
                    (.top, Vec3(c.x, c.y, b.hi.z), X, Y, Z, d.x, d.y, d.z), (.bottom, Vec3(c.x, c.y, b.lo.z), X, -Y, -Z, d.x, d.y, d.z)]
         }
+        // A drawer's box: its inside faces (the box is derived from the bay and the slides, not an element).
+        if e.furnitureFront?.kind == .drawer, let db = FurnitureFronts.drawerBox(e, m) {
+            let lo = Vec3(db.x0 + db.side, db.y0 + db.back, db.z0 + db.bottom), hi = Vec3(db.x0 + db.width - db.side, db.y0 + db.depth - db.back, db.z0 + db.height)
+            let c2 = (lo + hi) * 0.5, d2 = hi - lo
+            out += [(.boxBottom, Vec3(c2.x, c2.y, lo.z), X, Y, Z, d2.x, d2.y, d2.z), (.boxLeft, Vec3(lo.x, c2.y, c2.z), Y, Z, X, d2.y, d2.z, d2.x),
+                    (.boxRight, Vec3(hi.x, c2.y, c2.z), -Y, Z, -X, d2.y, d2.z, d2.x), (.boxBack, Vec3(c2.x, hi.y, c2.z), X, Z, -Y, d2.x, d2.z, d2.y),
+                    (.boxFront, Vec3(c2.x, lo.y, c2.z), -X, Z, Y, d2.x, d2.z, d2.y)]
+        }
         let fr = b.frame
         return out.map { f in
             ComponentHostFace(hostID: e.id, face: f.0, origin: fr.world(f.1), u: fr.world(f.2), v: fr.world(f.3), n: fr.world(f.4),
@@ -206,7 +217,7 @@ public enum ComponentPlacement {
         let isBay = e.furnitureBay != nil
         func named(_ f: ComponentFace) -> ComponentHostFace? { all.first { $0.face == f } }
         switch which {
-        case .front, .back, .left, .right, .top, .bottom: return named(which)
+        case .front, .back, .left, .right, .top, .bottom, .boxBottom, .boxLeft, .boxRight, .boxBack, .boxFront: return named(which)
         case .topEdge: return named(.top)
         case .bottomEdge: return named(.bottom)
         case .leftEdge: return named(.left)
@@ -291,7 +302,9 @@ public enum ComponentPlacement {
             values[name] = .double(f.thickness)
         }
         if s.alignment == .full, let l = d.parameter(named: "Length"), l.isInstance {
-            values["Length"] = .double(max(Tolerance.length * 10, f.width - 2 * s.offsetX))
+            // Along the face, or up it when the component runs vertically (a strip on a side's front edge).
+            let along = s.vertical ? f.height - 2 * s.offsetY : f.width - 2 * s.offsetX
+            values["Length"] = .double(max(Tolerance.length * 10, along))
         }
         let rot = s.rotation + (s.vertical && d.frame == .face ? .pi / 2 : 0)
         switch d.frame {
@@ -312,6 +325,8 @@ public enum ComponentPlacement {
             if let bay = m[f.hostID]?.furnitureBay, let op = bay.opening {
                 let fr = BayFrame(bay)
                 values["Opening Width"] = .double(op.width)
+                if d.family.parameter(named: "Opening Depth") != nil { values["Opening Depth"] = .double(op.y1 - op.y0) }
+                if d.family.parameter(named: "Opening Height") != nil { values["Opening Height"] = .double(op.z1 - op.z0) }
                 let corner = fr.world(Vec3(op.x0, op.y0, op.z0))
                 return (ComponentData(location: corner.xy, rotation: fr.angle, offset: corner.z - levelZ + s.offsetY, mirrored: false), values)
             }
@@ -431,6 +446,11 @@ public enum ComponentPlacement {
             }
             let (data, values) = Self.data(d, on: f, at: p, s, mirrored: e.component?.mirrored ?? false, tx.model, levelZ: levelZ)
             write(e, data, values, tx)
+        }
+        // Live warnings: the rules of components placed, edited or whose host changed in this transaction.
+        for e in all where touchedSet.contains(e.id) || (e.hostID.map(touchedSet.contains) ?? false) {
+            guard let now = tx.model[e.id] else { continue }
+            ComponentChecks.check(instance: now, tx.model).forEach(tx.warn)
         }
     }
 
