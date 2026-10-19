@@ -33,12 +33,39 @@ struct FM7DialogHost: View {
 @MainActor
 enum FM7Text {
     static func length(_ v: Double, _ m: BIMModel) -> String { FurnitureSizeText.inches(v) }
-    static func parseLength(_ s: String, _ m: BIMModel) -> Double? { try? QuantityParser.parse(s, kind: .length, units: m.units) }
+    /// A length typed in a fabrication dialog: a plain number is inches (shop sizes), otherwise the document's units.
+    static func parseLength(_ s: String, _ m: BIMModel) -> Double? {
+        let t = s.trimmingCharacters(in: .whitespaces)
+        if let d = Double(t) { return d * 0.0254 }
+        return try? QuantityParser.parse(t, kind: .length, units: m.units)
+    }
     static func money(_ v: Double, _ m: BIMModel) -> String { Parameters.format(.double(v), type: .currency, model: m) }
     static func parseMoney(_ s: String, _ m: BIMModel) -> Double? {
         let t = s.replacingOccurrences(of: m.units.currencySymbol, with: "").trimmingCharacters(in: .whitespaces)
         return Double(t)
     }
+}
+
+/// A text field that edits freely and applies its text on Return or when it loses focus (then shows the value again,
+/// formatted), as Properties fields do.
+struct FM7CommitField: View {
+    var placeholder = ""
+    let text: () -> String
+    let commit: (String) -> Void
+    @State private var draft = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        TextField(placeholder, text: $draft)
+            .textFieldStyle(.roundedBorder)
+            .focused($focused)
+            .onSubmit { apply() }
+            .onChange(of: focused) { _, now in if !now { apply() } }
+            .onAppear { draft = text() }
+            .onChange(of: text()) { _, v in if !focused { draft = v } }
+    }
+
+    func apply() { commit(draft); draft = text() }
 }
 
 // MARK: - Stock Sheets
@@ -159,9 +186,9 @@ struct StockSheetsEditor: View {
             lengthField(s.length).frame(width: w[3])
             lengthField(s.width).frame(width: w[4])
             Picker("", selection: s.grain) { ForEach(GrainDirection.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: w[5])
-            TextField("Material's", text: Binding(get: { s.wrappedValue.cost.map { FM7Text.money($0, model) } ?? "" },
-                                                  set: { s.wrappedValue.cost = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : FM7Text.parseMoney($0, model) }))
-                .textFieldStyle(.roundedBorder).frame(width: w[6])
+            FM7CommitField(placeholder: "Material's", text: { s.wrappedValue.cost.map { FM7Text.money($0, model) } ?? "" },
+                           commit: { s.wrappedValue.cost = $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : FM7Text.parseMoney($0, model) })
+                .frame(width: w[6])
         }
         .padding(.horizontal, 10).padding(.vertical, 4)
         .background(selection == s.wrappedValue.id ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -170,8 +197,7 @@ struct StockSheetsEditor: View {
     }
 
     func lengthField(_ v: Binding<Double>) -> some View {
-        TextField("", text: Binding(get: { FM7Text.length(v.wrappedValue, model) }, set: { if let d = FM7Text.parseLength($0, model), d >= 0 { v.wrappedValue = d } }))
-            .textFieldStyle(.roundedBorder)
+        FM7CommitField(text: { FM7Text.length(v.wrappedValue, model) }, commit: { if let d = FM7Text.parseLength($0, model), d >= 0 { v.wrappedValue = d } })
     }
 }
 
@@ -251,8 +277,8 @@ struct HardwareCatalogTable: View {
                                 Text(r.family).frame(width: Self.columns[0].1, alignment: .leading).lineLimit(1)
                                 Text(r.type).frame(width: Self.columns[1].1, alignment: .leading).lineLimit(1)
                                 Text(r.kind).foregroundStyle(.secondary).frame(width: Self.columns[2].1, alignment: .leading)
-                                TextField("", text: Binding(get: { FM7Text.money(r.cost, model) }, set: { if let v = FM7Text.parseMoney($0, model) { r.cost = v } }))
-                                    .textFieldStyle(.roundedBorder).frame(width: Self.columns[3].1)
+                                FM7CommitField(text: { FM7Text.money(r.cost, model) }, commit: { if let v = FM7Text.parseMoney($0, model), v >= 0 { r.cost = v } })
+                                    .frame(width: Self.columns[3].1)
                                 TextField("", text: $r.manufacturer).textFieldStyle(.roundedBorder).frame(width: Self.columns[4].1)
                                 TextField("", text: $r.model).textFieldStyle(.roundedBorder).frame(width: Self.columns[5].1)
                             }
@@ -351,11 +377,11 @@ struct CNCExportOptions: View {
                     }
                     FormRow(label: "Format") {
                         Picker("", selection: $format) {
-                            ForEach(CNCExport.Format.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) }
+                            ForEach(dwgReason == nil ? CNCExport.Format.allCases : [.dxf], id: \.self) { Text($0.rawValue).tag($0.rawValue) }
                         }
-                        .pickerStyle(.segmented).labelsHidden().frame(width: 160)
-                        .disabled(dwgReason != nil)
+                        .pickerStyle(.segmented).labelsHidden().frame(width: dwgReason == nil ? 160 : 80)
                         .help(dwgReason ?? "DWG is written by the bundled DWG engine")
+                        if dwgReason != nil { Text("DWG needs the bundled DWG engine.").font(.caption).foregroundStyle(.secondary) }
                     }
                     FormRow(label: "Face B") {
                         Picker("", selection: $faceB) { ForEach(CNCExport.FaceB.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }
@@ -365,7 +391,7 @@ struct CNCExportOptions: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Layers").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text("OUTLINE · INNER · DRILL_<dia>_<depth> · GROOVE_<depth> · POCKET_<depth> · HDRILL (edge) · GRAIN · LABEL · SHEET (nested)")
+                    Text(verbatim: "OUTLINE · INNER · DRILL_<dia>_<depth> · GROOVE_<depth> · POCKET_<depth> · HDRILL (edge) · GRAIN · LABEL · SHEET (nested)")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("Inches. X along the cut length, Y along the width, origin at face A's lower-left corner.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
