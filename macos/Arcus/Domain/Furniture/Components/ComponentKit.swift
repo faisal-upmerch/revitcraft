@@ -569,6 +569,9 @@ public enum ComponentKit {
     public static let versionParam = ParameterID("comp.version")
     /// Type identity data: SKU (manufacturer, model, description and cost use the standard type.* ids).
     public static let skuParam = ParameterID("type.sku")
+    /// Family element parameter: the definition's library data (JSON, without the family), so a document keeps
+    /// placing, following hosts and machining with a component whose definition is gone from the library.
+    public static let metaParam = ParameterID("comp.meta")
 
     /// "comp.01.bar-handle" from a category and a name.
     public static func id(_ category: ComponentCategory, _ name: String) -> String {

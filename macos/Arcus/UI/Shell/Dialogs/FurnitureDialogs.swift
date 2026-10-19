@@ -68,24 +68,19 @@ struct FurnitureTypesDialog: View {
 
     var body: some View {
         let s = setup ?? model.furnitureSetup
-        VStack(alignment: .leading, spacing: DialogMetrics.spacing) {
-            DialogTitle(title: "Family Types", subtitle: s?.name ?? "")
+        ArcusDialog(icon: "square.grid.2x2", tint: .brown, title: "Family Types", subtitle: s?.name ?? "", size: .wide, height: 540,
+                    onCancel: { state.presented = nil }, onOK: { apply(); state.presented = nil }) {
             if let s {
-                typeRow(s)
-                parameterTable(s)
-                newParameterRow(s)
+                DialogSection { typeRow(s) }
+                parameterTable(s).frame(maxHeight: .infinity)
+                DialogSection("New parameter") { newParameterRow(s) }
+                if let message { DialogNotice(.info, message) }
             }
-            HStack {
-                if let message { Text(message).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                Spacer()
-                Button("Flex") { flex() }.help("Try every type, and each length at 50% and 150%.")
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("Apply") { apply() }.disabled(!edited)
-                Button("OK") { apply(); state.presented = nil }.keyboardShortcut(.defaultAction)
-            }
+        } leading: {
+            Button("Flex") { flex() }.help("Try every type, and each length at 50% and 150%.")
+        } trailing: {
+            Button("Apply") { apply() }.disabled(!edited).dialogButton()
         }
-        .padding(DialogMetrics.padding)
-        .frame(minWidth: 720, idealWidth: 780, minHeight: 440)
         .onAppear { if setup == nil { setup = model.furnitureSetup } }
     }
 
@@ -93,7 +88,7 @@ struct FurnitureTypesDialog: View {
 
     func typeRow(_ s: FurnitureSetupData) -> some View {
         HStack {
-            Text("Type name").foregroundStyle(.secondary)
+            Text("Type name").frame(width: 90, alignment: .leading)
             Picker("", selection: Binding(get: { s.currentType }, set: { t in setup?.currentType = t })) {
                 ForEach(s.family.types) { Text($0.name).tag($0.name) }
             }
@@ -105,7 +100,9 @@ struct FurnitureTypesDialog: View {
             }
             .disabled(s.family.types.count <= 1).help("Delete Type")
             Spacer()
+            Text("\(s.family.types.count) type\(s.family.types.count == 1 ? "" : "s")").foregroundStyle(.secondary)
         }
+        .buttonStyle(.borderless)
     }
 
     func newTypeAsked(_ s: FurnitureSetupData) {
@@ -138,21 +135,21 @@ struct FurnitureTypesDialog: View {
                     GridRow {
                         Text("Parameter"); Text("Value"); Text("Formula"); Text("Kind"); Text("")
                     }
-                    .font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                    .font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
                     Divider().gridCellUnsizedAxes(.horizontal)
                     ForEach(groups(s), id: \.0) { group, params in
                         GridRow {
-                            Text(group.rawValue).font(.caption.weight(.semibold)).foregroundStyle(.secondary).gridCellColumns(5).padding(.top, 6)
+                            Text(group.rawValue).font(DialogStyle.sectionTitle).foregroundStyle(.secondary).gridCellColumns(5).padding(.top, 8)
                         }
                         ForEach(params) { p in parameterRow(p, s, value: values[p.name]) }
                     }
                 }
-                .padding(8)
+                .padding(12)
             }
             .frame(minHeight: 200)
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.035)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.08)))
+        .background(RoundedRectangle(cornerRadius: Tokens.radiusSection).fill(DialogColors.sectionFill))
+        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
     }
 
     @ViewBuilder func parameterRow(_ p: FamilyParameter, _ s: FurnitureSetupData, value: FormulaValue?) -> some View {
@@ -302,38 +299,25 @@ struct FurnitureCategoryDialog: View {
     @State private var setup: FurnitureSetupData?
 
     var body: some View {
-        DialogFrame(title: "Family Category and Parameters", state: state, onOK: commit) {
+        DialogFrame(title: "Family Category and Parameters", icon: "cube", tint: .brown, subtitle: setup?.family.name ?? "", labelWidth: 130, state: state, onOK: commit) {
             if let s = setup {
-                Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                    GridRow {
-                        Text("Family Category").foregroundStyle(.secondary)
+                DialogSection("Family category", footnote: "Projects schedule and tag the piece by its category.") {
+                    DialogRow("Category") {
                         Picker("", selection: Binding(get: { s.family.template }, set: { setup?.family.template = $0 })) {
                             Text("Furniture").tag(FamilyTemplate.furniture)
                             Text("Casework").tag(FamilyTemplate.casework)
                         }
-                        .pickerStyle(.radioGroup).labelsHidden()
-                    }
-                    GridRow {
-                        Text("Name").foregroundStyle(.secondary)
-                        TextField("", text: Binding(get: { s.family.name }, set: { setup?.family.name = $0 })).textFieldStyle(.roundedBorder).frame(width: 260)
-                    }
-                    GridRow {
-                        Text("Description").foregroundStyle(.secondary)
-                        TextField("", text: Binding(get: { s.family.description }, set: { setup?.family.description = $0 })).textFieldStyle(.roundedBorder).frame(width: 260)
-                    }
-                    GridRow {
-                        Text("Manufacturer").foregroundStyle(.secondary)
-                        TextField("", text: Binding(get: { s.family.manufacturer }, set: { setup?.family.manufacturer = $0 })).textFieldStyle(.roundedBorder).frame(width: 260)
-                    }
-                    GridRow {
-                        Text("Shared").foregroundStyle(.secondary)
-                        Toggle("", isOn: Binding(get: { s.family.isShared }, set: { setup?.family.isShared = $0 })).labelsHidden()
+                        .pickerStyle(.segmented).labelsHidden().fixedSize()
                     }
                 }
-                Text("Projects schedule and tag the piece by its category.").font(.caption).foregroundStyle(.secondary)
+                DialogSection("Family parameters") {
+                    DialogRow("Name") { TextField("", text: Binding(get: { s.family.name }, set: { setup?.family.name = $0 })).labelsHidden() }
+                    DialogRow("Description") { TextField("", text: Binding(get: { s.family.description }, set: { setup?.family.description = $0 })).labelsHidden() }
+                    DialogRow("Manufacturer") { TextField("", text: Binding(get: { s.family.manufacturer }, set: { setup?.family.manufacturer = $0 })).labelsHidden() }
+                    DialogRow("Shared") { Toggle("", isOn: Binding(get: { s.family.isShared }, set: { setup?.family.isShared = $0 })).labelsHidden() }
+                }
             }
         }
-        .frame(width: 460)
         .onAppear { if setup == nil { setup = state.model.furnitureSetup } }
     }
 
@@ -355,24 +339,15 @@ struct FurnitureFlexDialog: View {
     let state: DocumentState
     let problems: [String]
     var body: some View {
-        DialogFrame(title: "Flex", subtitle: state.model.furnitureSetup?.name ?? "", okTitle: "Done", showCancel: false, state: state, onOK: { state.presented = nil }) {
+        DialogFrame(title: "Flex", icon: "arrow.up.left.and.arrow.down.right", tint: problems.isEmpty ? .green : .orange,
+                    subtitle: (state.model.furnitureSetup?.name ?? "") + (problems.isEmpty ? "" : " · \(problems.count) problem\(problems.count == 1 ? "" : "s")"),
+                    okTitle: "Done", showCancel: false, state: state, onOK: { state.presented = nil }) {
             if problems.isEmpty {
-                Label("Every type flexes: each length at 50% and 150% solves.", systemImage: "checkmark.seal.fill").foregroundStyle(.green)
+                DialogNotice(.success, title: "Every type flexes", "Each length at 50% and 150% solves.")
             } else {
-                Text("\(problems.count) problem(s)").font(.headline)
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(problems.enumerated()), id: \.offset) { _, p in
-                            Label(p, systemImage: "exclamationmark.triangle.fill").labelStyle(.titleAndIcon).font(.callout)
-                                .foregroundStyle(.primary).fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .frame(minHeight: 120, maxHeight: 260)
+                DialogIssueList(issues: problems.enumerated().map { DialogIssue(id: "\($0.offset)", severity: .warning, title: $0.element) }, maxHeight: 280) { _ in EmptyView() } empty: { EmptyView() }
             }
         }
-        .frame(width: 520)
     }
 }
 
@@ -386,16 +361,11 @@ struct FurnitureLoadDialog: View {
 
     var body: some View {
         let projects = FurnitureLoad.openProjects()
-        DialogFrame(title: "Load into Projects", subtitle: "Check the projects to load “\(state.model.furnitureSetup?.name ?? "")” into.", okTitle: "OK",
-                    okDisabled: chosen.isEmpty, state: state, onOK: { load(projects) }) {
-            VStack(alignment: .leading, spacing: 6) {
-                ForEach(projects, id: \.fm3ID) { p in
-                    Toggle(p.documentName, isOn: Binding(get: { chosen.contains(p.fm3ID) }, set: { v in if v { chosen.insert(p.fm3ID) } else { chosen.remove(p.fm3ID) } }))
-                        .toggleStyle(.checkbox)
-                }
-            }
+        DialogFrame(title: "Load into Projects", icon: "square.and.arrow.down.on.square", tint: .brown, subtitle: "Check the projects to load “\(state.model.furnitureSetup?.name ?? "")” into.", okTitle: "OK",
+                    okDisabled: chosen.isEmpty, disabledReason: "Check at least one project", state: state, onOK: { load(projects) }) {
+            DialogCheckList(items: projects.map { DialogCheckItem(id: $0.fm3ID, title: $0.documentName, icon: "building.2") }, checked: $chosen, maxRows: 8,
+                            emptyTitle: "No open projects", emptyMessage: "Open a project to load the piece into.", emptyIcon: "building.2")
         }
-        .frame(width: 420)
         .onAppear {
             // FM8: a piece opened by Edit Family starts with its own project checked.
             let tied = FurnitureEditFamily.project(of: state).flatMap { t in projects.first { $0 === t } }

@@ -28,18 +28,15 @@ struct FurnitureJointRulesDialog: View {
     var category: FamilyTemplate { state.model.furnitureSetup?.category ?? .casework }
 
     var body: some View {
-        DialogFrame(title: "Joint Rules", subtitle: category == .casework ? "Casework" : "Furniture", state: state, onOK: commit) {
+        ArcusDialog(icon: "square.split.diagonal", tint: .brown, title: "Joint Rules", subtitle: (category == .casework ? "Casework" : "Furniture") + " · joints you set with the Joint tool keep their settings.",
+                    size: .extraWide, onCancel: { state.presented = nil }, onOK: commit) {
             if rules != nil {
                 JointRulesEditor(rules: Binding(get: { rules ?? .defaults(category) }, set: { rules = $0 }), model: state.model, category: category)
-                HStack {
-                    Button("Defaults") { rules = .defaults(category) }
-                        .help("The \(category == .casework ? "Casework" : "Furniture") defaults")
-                    Spacer()
-                    Text("Joints you set with the Joint tool keep their settings.").font(.caption).foregroundStyle(.secondary)
-                }
             }
+        } leading: {
+            Button("Defaults") { rules = .defaults(category) }
+                .help("The \(category == .casework ? "Casework" : "Furniture") defaults")
         }
-        .frame(width: 1010)
         .onAppear { if rules == nil { rules = state.model.furnitureJointRules } }
     }
 
@@ -66,14 +63,15 @@ struct JointRulesEditor: View {
                 VStack(spacing: 0) {
                     ForEach(JointPairKind.allCases, id: \.self) { pair in
                         row(pair)
-                        Divider().opacity(0.5)
+                        DialogColors.rowDivider.frame(height: 1)
                     }
                 }
             }
             .frame(height: 420)
         }
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color.primary.opacity(0.12)))
+        .background(RoundedRectangle(cornerRadius: Tokens.radiusSection).fill(DialogColors.sectionFill))
+        .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
     }
 
     var header: some View {
@@ -83,8 +81,8 @@ struct JointRulesEditor: View {
             Text("Runs Through").frame(width: 120, alignment: .leading)
             Text("Sizes").frame(maxWidth: .infinity, alignment: .leading)
         }
-        .font(.system(size: 11, weight: .semibold)).foregroundStyle(.secondary)
-        .padding(.horizontal, 10).padding(.vertical, 6)
+        .font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
+        .padding(.horizontal, 10).padding(.vertical, 7)
     }
 
     func rule(_ pair: JointPairKind) -> JointRule { rules.rule(pair, category: category) }

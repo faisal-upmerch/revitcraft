@@ -74,7 +74,7 @@ struct AssemblyEditor: View {
                 Text("Total \(format(draft.totalThickness))").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             }
             .controlSize(.small)
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error { DialogNotice(.error, error) } // DIALOGS
             if isWall {
                 HStack(spacing: 16) {
                     Picker("Wrapping at Inserts", selection: Binding(get: { draft.wrappingAtInserts }, set: { var a = draft; a.wrappingAtInserts = $0; update(a) })) {

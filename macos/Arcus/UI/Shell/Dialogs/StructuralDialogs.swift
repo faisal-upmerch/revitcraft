@@ -41,7 +41,7 @@ struct StructuralSettingsDialog: View {
     }
 
     var body: some View {
-        DialogFrame(title: "Structural Settings", subtitle: "Plan symbols of framing, and the load cases and combinations of the project.", state: state) {
+        DialogFrame(title: "Structural Settings", icon: "building.columns", tint: .gray, size: .large, subtitle: "Plan symbols of framing, and the project's load cases and combinations.", labelWidth: 170, state: state) {
             let parsed = texts.map(Self.parsePaper)
             guard parsed.allSatisfy({ $0 != nil }) else {
                 state.show("Enter the cutback distances as lengths on paper, such as 2.38 mm.", error: true); return
@@ -54,7 +54,7 @@ struct StructuralSettingsDialog: View {
             state.presented = nil
         } content: {
             Picker("", selection: $tab) { ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).labelsHidden()
+                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
             Group {
                 switch tab {
                 case .symbolic: symbolic
@@ -62,9 +62,8 @@ struct StructuralSettingsDialog: View {
                 case .combinations: combinations
                 }
             }
-            .frame(minHeight: 230, alignment: .top)
+            .frame(minHeight: 260, alignment: .top)
         }
-        .frame(width: 560)
         .onAppear {
             s = state.model.structuralSettings
             texts = [s.braceCutback, s.beamCutback, s.columnCutback, s.braceOffset].map(Self.paper)
@@ -74,51 +73,54 @@ struct StructuralSettingsDialog: View {
     }
 
     var symbolic: some View {
-        VStack(alignment: .leading, spacing: DialogMetrics.spacing) {
-            Text("Symbolic Cutback Distance").font(DialogMetrics.sectionHeader)
-            ForEach(Array(["Brace:", "Beam/Truss:", "Column:"].enumerated()), id: \.offset) { k, label in
-                FormRow(label: label) { TextField("", text: $texts[k]).textFieldStyle(.roundedBorder).frame(width: 110) }
+        VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+            DialogSection("Symbolic cutback distance", footnote: "Lengths on paper.") {
+                ForEach(Array(["Brace", "Beam/Truss", "Column"].enumerated()), id: \.offset) { k, label in
+                    DialogRow(label) { TextField("", text: $texts[k]).labelsHidden().multilineTextAlignment(.trailing).frame(width: 110) }
+                }
             }
-            Text("Brace Symbols").font(DialogMetrics.sectionHeader).padding(.top, 4)
-            FormRow(label: "Plan representation:") {
-                Picker("", selection: $s.braceParallel) { Text("Parallel Line").tag(true); Text("Line w/Angle").tag(false) }.labelsHidden().frame(width: 150)
+            DialogSection("Brace symbols") {
+                DialogRow("Plan representation") {
+                    Picker("", selection: $s.braceParallel) { Text("Parallel Line").tag(true); Text("Line w/Angle").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                }
+                DialogRow("Parallel line offset") { TextField("", text: $texts[3]).labelsHidden().multilineTextAlignment(.trailing).frame(width: 110) }
+                Toggle("Show brace above", isOn: $s.kickerSymbol)
             }
-            FormRow(label: "Parallel line offset:") { TextField("", text: $texts[3]).textFieldStyle(.roundedBorder).frame(width: 110) }
-            FormRow(label: "") { Toggle("Show brace above", isOn: $s.kickerSymbol) }
         }
     }
 
     var loadCases: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                GridRow { Text(""); Text("Name").font(DialogMetrics.sectionHeader); Text("Nature").font(DialogMetrics.sectionHeader) }
-                ForEach($cases) { $row in
-                    GridRow {
-                        Button { cases.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).accessibilityLabel("Remove \(row.name)")
-                        TextField("", text: $row.name).textFieldStyle(.roundedBorder).frame(width: 180)
-                        Picker("", selection: $row.value) { ForEach(StructuralLoadCase.natures, id: \.self) { Text($0).tag($0) } }.labelsHidden().frame(width: 150)
-                    }
+        DialogSection("Load cases") {
+            HStack(spacing: 12) { Text("Name").frame(width: 200, alignment: .leading); Text("Nature"); Spacer() }.font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
+            ForEach($cases) { $row in
+                HStack(spacing: 12) {
+                    TextField("", text: $row.name).labelsHidden().frame(width: 200)
+                    Picker("", selection: $row.value) { ForEach(StructuralLoadCase.natures, id: \.self) { Text($0).tag($0) } }.labelsHidden().frame(width: 160)
+                    Spacer()
+                    Button { cases.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).accessibilityLabel("Remove \(row.name)")
                 }
             }
-            Button("Add") { cases.append(Row(name: "LC\(cases.count + 1)", value: "Dead")) }
+            HStack { Button("Add Load Case") { cases.append(Row(name: "LC\(cases.count + 1)", value: "Dead")) }; Spacer() }
         }
     }
 
     var combinations: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
-                GridRow { Text(""); Text("Name").font(DialogMetrics.sectionHeader); Text("Formula").font(DialogMetrics.sectionHeader) }
-                ForEach($combos) { $row in
-                    GridRow {
-                        Button { combos.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).accessibilityLabel("Remove \(row.name)")
-                        TextField("", text: $row.name).textFieldStyle(.roundedBorder).frame(width: 160)
-                        TextField("", text: $row.value).textFieldStyle(.roundedBorder).frame(width: 240)
-                    }
+        DialogSection("Load combinations") {
+            HStack(spacing: 12) { Text("Name").frame(width: 180, alignment: .leading); Text("Formula"); Spacer() }.font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
+            if combos.isEmpty { Text("No load combinations.").foregroundStyle(.secondary) }
+            ForEach($combos) { $row in
+                HStack(spacing: 12) {
+                    TextField("", text: $row.name).labelsHidden().frame(width: 180)
+                    TextField("", text: $row.value).labelsHidden()
+                    Button { combos.removeAll { $0.id == row.id } } label: { Image(systemName: "minus.circle") }.buttonStyle(.borderless).accessibilityLabel("Remove \(row.name)")
                 }
             }
-            Button("Add") {
-                let f = cases.prefix(2).map { "1.0*\($0.name)" }.joined(separator: " + ")
-                combos.append(Row(name: "Combination \(combos.count + 1)", value: f))
+            HStack {
+                Button("Add Combination") {
+                    let f = cases.prefix(2).map { "1.0*\($0.name)" }.joined(separator: " + ")
+                    combos.append(Row(name: "Combination \(combos.count + 1)", value: f))
+                }
+                Spacer()
             }
         }
     }
@@ -129,7 +131,7 @@ struct RebarCoverDialog: View {
     let state: DocumentState
     @State private var text = ""
     var body: some View {
-        DialogFrame(title: "Rebar Cover Settings", subtitle: "The distance from the concrete faces to the bars.", state: state) {
+        DialogFrame(title: "Rebar Cover Settings", icon: "square.grid.3x3.square", tint: .gray, size: .small, subtitle: "Distance from the concrete faces to the bars.", state: state) {
             guard let v = try? Parameters.parse(text, type: .length, model: state.model).doubleValue, v > 0 else {
                 state.show("Enter a positive length for the cover.", error: true); return
             }
@@ -138,12 +140,8 @@ struct RebarCoverDialog: View {
             state.session.perform("Rebar Cover Settings") { tx in StructuralFraming.setSettings(s, in: tx) }
             state.presented = nil
         } content: {
-            Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                GridRow { Text("Description").font(DialogMetrics.sectionHeader); Text("Setting").font(DialogMetrics.sectionHeader) }
-                GridRow {
-                    Text("Rebar Cover")
-                    TextField("", text: $text).textFieldStyle(.roundedBorder).frame(width: 120)
-                }
+            DialogSection {
+                DialogRow("Rebar Cover") { TextField("", text: $text).labelsHidden().multilineTextAlignment(.trailing).frame(width: 120) }
             }
         }
         .onAppear { text = Parameters.format(.double(Reinforcement.cover(state.model)), type: .length, model: state.model) }

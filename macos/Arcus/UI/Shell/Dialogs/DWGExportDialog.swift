@@ -28,29 +28,29 @@ struct ExportDWGDialog: View {
     var layers: DXFLayerStandard { DXFLayerStandard(rawValue: layersName) ?? DXFLayerStandard.allCases[0] }
 
     var body: some View {
-        DialogFrame(title: "Export DWG", subtitle: "Views and sheets as 2D DWG drawings, one file each. Print Setup's hide options apply.",
-                    okTitle: "Export…", okDisabled: chosen.isEmpty, state: state) {
+        let list = items
+        DialogFrameWithActions(title: "Export DWG", icon: "square.and.arrow.up", tint: .teal, subtitle: "2D DWG drawings, one file per view or sheet. Print Setup's hide options apply.",
+                    okTitle: "Export…", okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", labelWidth: 90, state: state) {
             export()
         } content: {
-            HStack {
+            DialogSection(includeViews ? "Sheets and views" : "Sheets", boxed: false) {
+                DialogCheckList(items: list.map { e in DialogCheckItem(id: e.id, title: ViewTitles.qualified(e), icon: e.sheet != nil ? "doc.richtext" : "rectangle.on.rectangle") },
+                                checked: $chosen, maxRows: 7, noun: "items", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
+            } accessory: {
                 Toggle("Include views", isOn: $includeViews)
-                Spacer()
-                Button("Select All") { chosen = Set(items.map(\.id)) }
-                Button("Select None") { chosen = [] }
             }
-            List(items, id: \.id) { e in
-                Toggle(isOn: Binding(get: { chosen.contains(e.id) }, set: { if $0 { chosen.insert(e.id) } else { chosen.remove(e.id) } })) { Text(ViewTitles.qualified(e)) }
-            }.frame(minHeight: 220)
-            FormRow(label: "Version") {
-                Picker("", selection: $versionCode) { ForEach(DWGExportVersion.allCases) { Text($0.title).tag($0.rawValue) } }.labelsHidden()
+            DialogSection("Format", footnote: "Model views are written at full size in \(state.model.units.system == .metric ? "millimetres" : "inches"); sheets at paper size in millimetres. Each file is read back before it is saved.") {
+                DialogRow("Version") {
+                    Picker("", selection: $versionCode) { ForEach(DWGExportVersion.allCases) { Text($0.title).tag($0.rawValue) } }.labelsHidden().fixedSize()
+                }
+                DialogRow("Layers") {
+                    Picker("", selection: $layersName) { ForEach(DXFLayerStandard.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }.labelsHidden().fixedSize()
+                }
             }
-            FormRow(label: "Layers") {
-                Picker("", selection: $layersName) { ForEach(DXFLayerStandard.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }.labelsHidden()
-            }
-            Text("Model views are written at full size in \(state.model.units.system == .metric ? "millimetres" : "inches"); sheets at paper size in millimetres. Each file is read back before it is saved.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } actions: {
+            Button("Select All") { chosen = Set(list.map(\.id)) }.disabled(list.isEmpty)
+            Button("Select None") { chosen = [] }.disabled(chosen.isEmpty)
         }
-        .frame(minWidth: 520)
         .onAppear {
             if let a = state.activeView, a.sheet != nil || (a.view != nil && a.view?.kind != .threeD) { chosen = [a.id]; includeViews = a.sheet == nil }
             else { chosen = Set(state.model.sheets.map(\.id)) }

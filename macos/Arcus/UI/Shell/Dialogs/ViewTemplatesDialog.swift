@@ -43,32 +43,24 @@ struct ViewTemplatesDialog: View {
     var temporaryActive: Bool { viewID.flatMap { state.session.temporaryVisibility[$0]?.temporaryTemplateID } != nil }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(mode.title + (view.map { " – \($0.name)" } ?? "")).font(.title3.weight(.semibold))
-            if mode == .temporary {
-                Text("The template's settings show in this view until you restore it. Nothing is saved.").font(.callout).foregroundStyle(.secondary)
-            }
-            HStack(alignment: .top, spacing: 12) {
-                templateList.frame(width: 240)
-                Divider()
+        ArcusDialog(icon: "doc.text.below.ecg", tint: .indigo, title: mode.title, subtitle: mode == .temporary ? "Shown in “\(view?.name ?? "")” until you restore it. Nothing is saved." : (view?.name ?? "Templates of view settings"),
+                    size: .wide, okTitle: primaryTitle, okDisabled: mode != .manage && selection == nil, disabledReason: "Choose a template", height: 560,
+                    onCancel: { close() }, onOK: { primary() }) {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                templateList.frame(width: 250)
                 if let d = draft { settingsTable(d) } else {
-                    ContentUnavailableView("No Template Selected", systemImage: "doc.text.below.ecg",
-                                           description: Text(view == nil ? "Create a template from a view." : "Create one from the current view."))
-                        .frame(maxWidth: .infinity)
+                    DialogPane {
+                        DialogEmptyState(icon: "doc.text.below.ecg", title: "No Template Selected", message: view == nil ? "Create a template from a view." : "Create one from the current view.")
+                    }
                 }
             }
-            .frame(minHeight: 380)
-            HStack {
-                if mode == .temporary, temporaryActive { Button("Restore View Properties") { setTemporary(nil); close() } }
-                if mode == .assign, view?.view?.templateID != nil { Button("Remove Template") { assign(nil) } }
-                Spacer()
-                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
-                if mode == .manage { Button("Apply") { save() }.disabled(!dirty) }
-                Button(primaryTitle) { primary() }.keyboardShortcut(.defaultAction).disabled(mode != .manage && selection == nil)
-            }
+            .frame(maxHeight: .infinity)
+        } leading: {
+            if mode == .temporary, temporaryActive { Button("Restore View Properties") { setTemporary(nil); close() } }
+            if mode == .assign, view?.view?.templateID != nil { Button("Remove Template") { assign(nil) } }
+        } trailing: {
+            if mode == .manage { Button("Apply") { save() }.disabled(!dirty).dialogButton() }
         }
-        .padding(20)
-        .frame(minWidth: 820, minHeight: 520)
         .onAppear {
             let current = mode == .assign || mode == .manage ? view?.view?.templateID : nil
             select(initial ?? current ?? templates.first?.id)
@@ -78,7 +70,7 @@ struct ViewTemplatesDialog: View {
             select(new)
         }
         .sheet(item: Binding(get: { editVG.map(IdentifiedID.init) }, set: { editVG = $0?.id })) { t in
-            VisibilityGraphicsDialog(state: state, target: .template(t.id), onClose: { editVG = nil; reloadVisibility() })
+            VisibilityGraphicsDialog(state: state, target: .template(t.id), onClose: { editVG = nil; reloadVisibility() }).opaqueDialogBackground() // DIALOGS
         }
     }
 
@@ -94,20 +86,21 @@ struct ViewTemplatesDialog: View {
     // MARK: List
 
     var templateList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if view != nil { Toggle("Show all view types", isOn: $showAll).controlSize(.small) }
-            List(templates, id: \.id, selection: $selection) { t in
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(t.name)
-                    Text("\(t.viewTemplate?.appliesTo.rawValue ?? "") · \(ViewTemplates.views(using: t.id, model).count) view(s)").font(.caption).foregroundStyle(.secondary)
-                }.tag(t.id)
-            }
-            .overlay { if templates.isEmpty { Text("No view templates").foregroundStyle(.secondary) } }
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 8) {
+            DialogPane("Templates") {
+                List(templates, id: \.id, selection: $selection) { t in
+                    let n = ViewTemplates.views(using: t.id, model).count
+                    DialogListRow(icon: "doc.text.below.ecg", title: t.name, subtitle: "\(t.viewTemplate?.appliesTo.rawValue ?? "") · \(n) view\(n == 1 ? "" : "s")").tag(t.id)
+                }
+                .overlay { if templates.isEmpty { DialogEmptyState(icon: "doc.text.below.ecg", title: "No view templates") } }
+            } bar: {
                 Button("New from View") { createFromView() }.disabled(view?.view == nil).help("Create a template from the current view's settings")
+                Spacer()
                 Button { duplicate() } label: { Image(systemName: "plus.square.on.square") }.help("Duplicate").accessibilityLabel("Duplicate template").disabled(selection == nil)
                 Button { delete() } label: { Image(systemName: "minus") }.help("Delete (views using it keep their settings)").accessibilityLabel("Delete template").disabled(selection == nil)
             }
+            .buttonStyle(.borderless)
+            if view != nil { Toggle("Show all view types", isOn: $showAll).controlSize(.small) }
             if selection != nil { TextField("Name", text: $name).textFieldStyle(.roundedBorder).accessibilityLabel("Template name") }
         }
     }
@@ -116,12 +109,14 @@ struct ViewTemplatesDialog: View {
 
     func settingsTable(_ d: ViewTemplateData) -> some View {
         let source = view?.view ?? ViewData(kind: d.appliesTo)
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("View type: \(d.appliesTo.rawValue)").foregroundStyle(.secondary)
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("View properties · \(d.appliesTo.rawValue)").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
+            ScrollView {
             Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 8) {
                 GridRow {
-                    Text("Parameter").font(.caption.weight(.semibold)); Text("Value").font(.caption.weight(.semibold)); Text("Include").font(.caption.weight(.semibold))
+                    Text("Parameter"); Text("Value"); Text("Include")
                 }
+                .font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
                 Divider().gridCellColumns(3)
                 ForEach(ViewTemplates.Setting.allCases, id: \.self) { s in
                     if s != .viewRange || d.appliesTo.isPlan {
@@ -137,9 +132,13 @@ struct ViewTemplatesDialog: View {
                     }
                 }
             }
-            Text("Included settings are controlled by the template: views that use it show the template's values and lock them in Properties.")
-                .font(.caption).foregroundStyle(.secondary)
-            Spacer()
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            DialogCaption("Included settings are controlled by the template: views that use it show the template's values and lock them in Properties.").padding(.horizontal, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
