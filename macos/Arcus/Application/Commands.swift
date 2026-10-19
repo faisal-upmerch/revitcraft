@@ -138,6 +138,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FMG1 commands:
 
     // FMG2 commands:
+    case furnitureExplodeParts
 
     // FMG3 commands:
 

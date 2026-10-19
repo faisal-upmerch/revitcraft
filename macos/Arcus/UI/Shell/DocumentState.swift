@@ -37,6 +37,7 @@ enum DialogKind: Identifiable, Equatable {
     case fm6(FM6Dialog) // FM6: Joint Rules (FurnitureJointRulesDialog.swift)
     case fm7(FM7Dialog) // FM7: Stock Sheets, Hardware Catalog, CNC Export, Check Parts (FurnitureFabricationDialogs.swift)
     case fm8(FM8Dialog) // FM8: Load Furniture, Save as Furniture Template (Dialogs/FM8Dialogs.swift)
+    case fmg2(FMG2Dialog) // FMG2: Explode Parts (Dialogs/FurnitureExplodeDialog.swift)
     var id: String { String(describing: self) }
 }
 

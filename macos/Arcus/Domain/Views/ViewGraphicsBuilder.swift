@@ -193,9 +193,11 @@ struct ThreeDGraphics {
         var inputs: [HLRInput] = []
         var tagMap: [Int: Element] = [:]
         let box = builder.data.sectionBoxActive ? builder.data.sectionBox : nil
+        let explode = FurnitureExplode.offsets(builder.model, view: builder.view) // FMG2: Explode Parts
         for (i, (e, _)) in builder.visibleModelElements().enumerated() {
             var mesh = Mesh()
             for p in GeometryCache.shared.parts(e, builder.model, detail: builder.detailLevel(e.category)) where p.isVisibleIn3D { mesh.append(p.mesh) } // BL-VG
+            if let off = explode[e.id] { mesh = mesh.transformed(.translation(off)) }
             if let box, !box.intersects(mesh.bounds) { continue }
             guard !mesh.isEmpty else { continue }
             inputs.append(HLRInput(tag: i, mesh: mesh))
@@ -204,11 +206,21 @@ struct ThreeDGraphics {
         let edges = HiddenLineRenderer.render(inputs, projection: proj, isCancelled: builder.isCancelled)
         var byTag: [Int: [HLREdge]] = [:]
         for e in edges { byTag[e.tag, default: []].append(e) }
-        return byTag.keys.sorted().compactMap { tag in
+        var items: [GItem] = byTag.keys.sorted().compactMap { tag in
             guard let e = tagMap[tag] else { return nil }
             let st = builder.stroke(e.category, cut: false, builder.resolver.resolve(e) ?? GraphicOverride())
             return GItem(elementID: e.id, category: e.category, layer: .model,
                          primitives: byTag[tag]!.map { .polyline([$0.segment.start, $0.segment.end], closed: false, st) })
         }
+        // FMG2: an exploded view tags its parts (at the middle of each part's visible edges).
+        if !explode.isEmpty, FurnitureExplode.showsTags(builder.view) {
+            let centers: [(Element, Vec2)] = byTag.keys.sorted().compactMap { tag in
+                guard let e = tagMap[tag], FurnitureExplode.tagged(e) else { return nil }
+                let b = byTag[tag]!.reduce(Rect2.empty) { var r = $0; r.include($1.segment.start); r.include($1.segment.end); return r }
+                return b.isEmpty ? nil : (e, b.center)
+            }
+            items += FurnitureExplode.tagItems(builder, centers)
+        }
+        return items
     }
 }

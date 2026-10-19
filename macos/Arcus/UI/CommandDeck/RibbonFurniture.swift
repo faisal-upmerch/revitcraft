@@ -203,7 +203,7 @@ extension RibbonContent {
         [RibbonPanel(title: "Part List", items: [.large(.furniturePartList), .large(.furnitureHardwareSchedule), .small(.furnitureMaterialTakeoff),
                                                  .small(.furnitureEdgeBanding), .small(.furnitureCost)], tint: view),
          RibbonPanel(title: "Nesting", items: [.large(.furnitureNesting), .large(.furnitureStockSheets)], tint: furniture),
-         RibbonPanel(title: "Output", items: [.large(.furnitureCNCExport), .large(.furnitureShopDrawings), .large(.furnitureCheckParts)], tint: sheet)]
+         RibbonPanel(title: "Output", items: [.large(.furnitureCNCExport), .large(.furnitureShopDrawings), .large(.furnitureExplodeParts), .large(.furnitureCheckParts)], tint: sheet)]
     }
 
     // FM7 panels: Stock Sheets and Hardware Catalog on Manage.

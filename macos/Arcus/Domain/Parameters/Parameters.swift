@@ -86,6 +86,7 @@ public enum Parameters {
                                       readOnlyReason: d.formula != nil ? "Driven by a formula." : nil))
         }
         out = GlobalParameters.lock(out, of: e, model) // F11: parameters associated with a global parameter are read-only
+        out = FMG2Properties.adjust(out, e, model) // FMG2: a part's joints, a joint's Runs Through, Explode Parts in 3D views
         return out.sorted { ($0.group, $0.orderKey) < ($1.group, $1.orderKey) }
     }
 
@@ -198,6 +199,7 @@ public enum Parameters {
     /// Sets a parameter inside a transaction. Type parameters are written to the element's type.
     public static func set(_ id: ParameterID, to value: ParamValue, on elementID: ElementID, in tx: TransactionContext) throws(ParameterError) {
         guard let e = tx.model[elementID] else { throw ParameterError("The element no longer exists.") }
+        if try FMG2Properties.set(id, to: value, on: elementID, in: tx) { return } // FMG2: joints made by editing them; Explode Parts
         let ctx = ParameterContext(model: tx.model)
         if let b = builtIn(id, for: e, tx.model) {
             let targetID: ElementID

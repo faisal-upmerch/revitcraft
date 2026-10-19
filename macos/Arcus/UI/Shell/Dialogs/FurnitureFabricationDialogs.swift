@@ -391,7 +391,7 @@ struct CNCExportOptions: View {
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Layers").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
-                    Text(verbatim: "OUTLINE · INNER · DRILL_<dia>_<depth> · GROOVE_<depth> · POCKET_<depth> · HDRILL (edge) · GRAIN · LABEL · SHEET (nested)")
+                    Text(verbatim: "OUTLINE · INNER · DRILL_<dia>_<depth> · GROOVE_<depth> · POCKET_<depth> · HDRILL (edge) · BAND_<thickness> · GRAIN · LABEL · SHEET (nested)") // FMG2: BAND
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     Text("Inches. X along the cut length, Y along the width, origin at face A's lower-left corner.")
                         .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
