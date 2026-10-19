@@ -96,6 +96,15 @@ extension FurnitureMachining {
         var y = hv.firstHole
         var holes: [Double] = []
         while y <= hv.slideLength - 0.01 + 1e-9 { holes.append(y); y += max(0.016, hv.holeSpacing) }
+        // COMP: a center-mount rail screws down into the bay's bottom, under the drawer's centre.
+        if hv.slideMount == .centerRail {
+            guard let bottom = o.bottom else { return out }
+            let x = (o.x0 + o.x1) / 2
+            return holes.map { h in
+                MachiningEntry(partID: bottom, op: .drill(center: Vec3(x, p.origin.y + hv.d("Front Setback", 0) + h, o.z0), axis: Vec3(0, 0, -1),
+                                                          diameter: hv.screwHoleDiameter, depth: hv.screwHoleDepth), source: src, label: "Slide screw")
+            }
+        }
         // Undermount slides screw into the sides near their bottom edge; side-mount slides on the slide's centreline.
         let zHole = hv.isUndermount ? o.z0 + max(0.009, z - o.z0) : z
         for (part, x, axis) in [(o.left, o.x0, Vec3(-1, 0, 0)), (o.right, o.x1, Vec3(1, 0, 0))] {

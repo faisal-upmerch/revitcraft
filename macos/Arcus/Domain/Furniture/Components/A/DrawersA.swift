@@ -287,6 +287,7 @@ extension GroupA {
         g.b.tags("center mount", "monorail", "face frame", "single rail", "wood drawer")
         g.b.aliases("center-mount slides", "centre mount slide", "monorail slide", "single drawer slide", "under drawer center slide")
         g.b.definition.placement.mirroredPair = false
+        g.b.slideMounting(.centerRail) // COMP: machined into the bay's bottom, not the sides
         let cx = "Opening Width / 2", z = "Mount Height", y = ("Front Setback", "Front Setback + Slide Length")
         g.prism("Rail", along: 1, profile: [("\(cx) - Slide Thickness / 2", "\(z) - Slide Height / 2"), ("\(cx) - Slide Thickness / 2 + 0.0015 m", "\(z) - Slide Height / 2"),
                                             ("\(cx) - Slide Thickness * 0.3", "\(z) + Slide Height / 2 - 0.0015 m"), ("\(cx) + Slide Thickness * 0.3", "\(z) + Slide Height / 2 - 0.0015 m"),

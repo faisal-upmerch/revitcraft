@@ -94,7 +94,12 @@ public enum FurnitureHardware {
         public var slideHeight: Double { d("Slide Height", mm(45)) }
         public var firstHole: Double { d("First Hole", mm(37)) }
         public var holeSpacing: Double { d("Hole Spacing", mm(128)) }
-        public var isUndermount: Bool { familyName == FurnitureHardware.undermountSlide || flag("Undermount") } // COMPA
+        public var isUndermount: Bool { familyName == FurnitureHardware.undermountSlide || flag("Undermount") || slideMount == .undermount } // COMPA
+        /// COMP: how the slide mounts (its "Slide Mounting" type value; FM5's undermount family, else a side pair).
+        public var slideMount: ComponentSlideMount {
+            if let t = td?.params[Parameters.familyParamID(ComponentSlideMount.parameter)]?.textValue, let m = ComponentSlideMount(rawValue: t) { return m }
+            return familyName == FurnitureHardware.undermountSlide || flag("Undermount") ? .undermount : .sidePair
+        }
         // Handles
         public var handleHoleSpacing: Double { isKnob ? 0 : d("Hole Spacing", mm(128)) }
         public var handleHoleDiameter: Double { d("Hole Diameter", mm(5)) }
@@ -164,7 +169,13 @@ public enum FurnitureHardware {
 
     /// A hardware type by family and type name.
     public static func type(_ family: String, _ name: String, _ m: BIMModel) -> ElementID? {
-        m.types(for: .furnitureHardware).first { $0.typeData?.familyName == family && $0.name == name }?.id
+        let types = m.types(for: .furnitureHardware).filter { $0.typeData?.familyName == family }
+        if let t = types.first(where: { $0.name == name }) { return t.id }
+        // COMP: an upgraded family renamed its types ("128 mm" → "Bar Pull - 128 mm CC"): either name finds the type.
+        guard let d = ComponentCatalog.current.definition(named: family) else { return nil }
+        if let new = d.renamedTypes[name], let t = types.first(where: { $0.name == new }) { return t.id }
+        if let old = d.renamedTypes.first(where: { $0.value == name })?.key, let t = types.first(where: { $0.name == old }) { return t.id }
+        return nil
     }
 
     /// The slide type of `family` whose length is the longest standard length that fits `depth` (less the rear
