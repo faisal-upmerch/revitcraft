@@ -57,10 +57,16 @@ enum FurnitureEditFamily {
         doc.makeWindowControllers()
         doc.showWindows()
         if let furniture = doc.state {
-            links.append(Link(project: state, furniture: furniture, familyID: familyID))
+            tie(furniture, to: state, familyID: familyID)
             furniture.show("Editing “\(family.name)” from “\(state.documentName)”. Load into Project updates it there.")
         }
         return true
+    }
+
+    /// Ties a Furniture document to the project family it edits (Edit Family; tests).
+    static func tie(_ furniture: DocumentState, to project: DocumentState, familyID: ElementID) {
+        links.removeAll { !$0.isLive || $0.furniture === furniture }
+        links.append(Link(project: project, furniture: furniture, familyID: familyID))
     }
 
     /// The family's Furniture document, on `typeName` when the document has that type.
