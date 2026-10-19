@@ -430,6 +430,11 @@ public enum StairGeometry {
             let next = pts[(i + 1)...].first { !$0.isAlmostEqual(p) }
             let n0 = prev.map { (p - $0).normalized.perpendicular }
             let n1 = next.map { ($0 - p).normalized.perpendicular }
+            // At a repeated point (a height step, a winder's inner corner, a turn back round a newel) the first copy
+            // keeps the incoming side and the last the outgoing one, so the path goes round the corner, not across it.
+            let dupBefore = i > 0 && pts[i - 1].isAlmostEqual(p), dupAfter = i + 1 < pts.count && pts[i + 1].isAlmostEqual(p)
+            if dupAfter && !dupBefore, let a = n0 { return p + a * d }
+            if dupBefore && !dupAfter, let b = n1 { return p + b * d }
             switch (n0, n1) {
             case let (a?, b?):
                 let m = a + b

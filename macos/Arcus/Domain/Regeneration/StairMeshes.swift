@@ -168,6 +168,8 @@ public enum StairMeshes {
             guard seg.length > 1e-4 else { continue }
             let za = p.z + lift(p), zb = q.z + lift(q)
             let slope = (zb - za) / seg.length
+            // A step at a corner (landing to run) is a joint, not a piece of stringer.
+            if abs(slope) > 2.5 { continue }
             let cosA = 1 / (1 + slope * slope).squareRoot()
             let depth = (p.onLanding && q.onLanding ? info.landingDepth : info.depth) / cosA
             let n = seg.direction.perpendicular * (info.width / 2)

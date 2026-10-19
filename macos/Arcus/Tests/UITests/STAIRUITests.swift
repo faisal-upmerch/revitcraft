@@ -3,8 +3,8 @@ import SwiftUI
 import Testing
 import ArcusGeometry
 import ArcusDomain
-import ArcusApplication
 import ArcusOutput
+@testable import ArcusApplication
 @testable import ArcusUI
 
 /// STAIR: stairs on screen, rendered offscreen to `/tmp/arcus-stair/`: each stair kind in plan at its base and upper
@@ -56,16 +56,22 @@ struct STAIRUITests {
         return v
     }
 
-    /// The audit set: straight, L and U stairs with railings and a multistory straight stair, in every view.
+    /// The audit set, as the older stair tools made them (shape-only stairs with a railing each side): straight, L
+    /// and U, and a multistory straight stair, in every view. They read as component stairs now.
     @Test func auditRenders() throws {
         let (ctx, ids) = Self.context()
-        for (cmd, a, b) in [(StairShape.straight, Vec2(0, 0), Vec2(0, 5)), (.lShaped, Vec2(6, 0), Vec2(6, 5)), (.uShaped, Vec2(12, 0), Vec2(12, 5))] {
-            let t = StairTool(ctx: ctx, shape: cmd)
-            Self.click(t, a); Self.click(t, b)
+        ctx.session.perform("Older stairs") { tx in
+            for (k, shape) in [StairShape.straight, .lShaped, .uShaped, .straight].enumerated() {
+                var s = StairData(shape: shape, origin: Vec2([0.0, 6, 12, 20][k], 0), direction: .pi / 2, width: 1.1, topLevelID: ids.levels[1])
+                if k == 3 { s.multistoryTopLevelID = ids.levels[2] }
+                let sid = tx.create(.stairs, data: .stair(s), typeID: ids.systemTypes["Stair"], levelID: ids.levels[0])
+                for left in [true, false] {
+                    var r = RailingData(path: [])
+                    r.followsHost = true; r.hostSideLeft = left
+                    tx.create(.railings, data: .railing(r), typeID: ids.systemTypes["Railing"], levelID: ids.levels[0], hostID: sid)
+                }
+            }
         }
-        let ms = StairTool(ctx: ctx, shape: .straight)
-        ms.multistoryTopLevelID = ids.levels[2]
-        Self.click(ms, Vec2(20, 0)); Self.click(ms, Vec2(20, 5))
         let m = ctx.model
         #expect(m.elements(.stairs).count == 4)
         let crop = Rect2(min: Vec2(-3, -3), max: Vec2(24, 10))
@@ -79,5 +85,84 @@ struct STAIRUITests {
         }
         #expect(Self.draw(m, Self.section(Vec3(0, -4, 0), Vec2(0, 1), crop: Rect2(min: Vec2(-3, -1), max: Vec2(24, 9))), "audit-section-across") > 0)
         #expect(Self.draw(m, Self.section(Vec3(0.1, 0, 0), Vec2(1, 0), crop: Rect2(min: Vec2(-12, -1), max: Vec2(12, 9))), "audit-section-along") > 0)
+    }
+
+    /// Stairs of every kind drawn with Create Stair: straight; L and U from two runs with automatic landings; Full-Step
+    /// spiral; L- and U-Shape winders; a sketched run. Returns the model and the plan crop of each.
+    static func componentStairs(type: String? = nil) throws -> (BIMModel, ProjectTemplates.Ids, [(String, Rect2)]) {
+        let (ctx, ids) = context()
+        if let type, let t = ctx.model.types(for: .stairs).first(where: { $0.name == type }) { ctx.currentTypes[.stairs] = t.id }
+        var crops: [(String, Rect2)] = []
+        func make(_ name: String, at x: Double, _ draw: (StairTool) throws -> Void) throws {
+            let t = StairTool(ctx: ctx)
+            try draw(t)
+            #expect(t.finish(), "\(name) did not finish")
+            crops.append((name, Rect2(min: Vec2(x - 3.5, -2), max: Vec2(x + 4.5, 8))))
+        }
+        let tread = 0.28
+        try make("straight", at: 0) { t in click(t, Vec2(0, 0)); click(t, Vec2(0, 22 * tread)) }
+        try make("l", at: 8) { t in
+            click(t, Vec2(8, 0)); click(t, Vec2(8, 11 * tread))
+            let c = try #require(t.startCandidates.first { $0.direction.isAlmostEqual(Vec2(-1, 0), tolerance: 1e-6) })
+            click(t, c.point); click(t, c.point + Vec2(-10 * tread, 0))
+        }
+        try make("u", at: 16) { t in
+            click(t, Vec2(16, 0)); click(t, Vec2(16, 11 * tread))
+            let c = try #require(t.startCandidates.first { $0.direction.isAlmostEqual(Vec2(0, -1), tolerance: 1e-6) && $0.point.x < 16 })
+            click(t, c.point); click(t, c.point + Vec2(0, -10 * tread))
+        }
+        try make("spiral", at: 24) { t in
+            t.choose(StairTool.RunMode.fullStepSpiral)
+            click(t, Vec2(24, 3)); click(t, Vec2(25.6, 3))
+        }
+        try make("lwinder", at: 32) { t in t.choose(StairTool.RunMode.lWinder); click(t, Vec2(32, 0)) }
+        try make("uwinder", at: 40) { t in t.choose(StairTool.RunMode.uWinder); click(t, Vec2(39, 0)) }
+        try make("sketch", at: 48) { t in
+            t.choose(StairTool.RunMode.sketch)
+            t.choose(StairTool.SketchLine.boundary)
+            click(t, Vec2(47.4, 0)); click(t, Vec2(47.4, 5)); _ = t.escape()
+            click(t, Vec2(48.6, 0)); click(t, Vec2(49.4, 5)); _ = t.escape()
+            t.choose(StairTool.SketchLine.riser)
+            for k in 0..<12 { let y = Double(k) * 0.4; click(t, Vec2(47.2, y)); click(t, Vec2(49.6, y)) }
+            t.choose(StairTool.SketchLine.path)
+            click(t, Vec2(48.1, 0)); click(t, Vec2(48.3, 4.6)); _ = t.escape()
+            #expect(t.finish(), "the run sketch finishes first")
+        }
+        return (ctx.model, ids, crops)
+    }
+
+    /// Every kind in plan on its base level and the level it arrives at, light and dark.
+    @Test func componentStairRenders() throws {
+        for type in ["Assembled - 175 max riser", "Monolithic - 175 max riser"] {
+            let (m, ids, crops) = try Self.componentStairs(type: type)
+            #expect(m.elements(.stairs).count == crops.count)
+            let tag = type.hasPrefix("Assembled") ? "assembled" : "monolithic"
+            for (name, r) in crops {
+                #expect(Self.draw(m, Self.cropPlan(m, ids, level: 0, r), "\(tag)-\(name)-L1", width: 800) > 0)
+                Self.draw(m, Self.cropPlan(m, ids, level: 1, r), "\(tag)-\(name)-L2", width: 800)
+            }
+            Self.draw(m, Self.section(Vec3(8.3, 0, 0), Vec2(1, 0), crop: Rect2(min: Vec2(-8, -1), max: Vec2(2, 5))), "\(tag)-section-l")
+            Self.draw(m, Self.section(Vec3(0.1, 0, 0), Vec2(1, 0), crop: Rect2(min: Vec2(-7, -1), max: Vec2(2, 5))), "\(tag)-section-straight")
+        }
+    }
+
+    /// Create Stair while a run is drawn: the riser readout, and Edit Stairs with a selected run's grips.
+    @Test func createStairModeRenders() throws {
+        let (ctx, ids) = Self.context()
+        let t = StairTool(ctx: ctx)
+        Self.click(t, Vec2(0, 0))
+        t.pointerMoved(ToolInput(point: Vec2(0, 2.3), rawPoint: Vec2(0, 2.3)))
+        let crop = Rect2(min: Vec2(-3, -2), max: Vec2(4, 7))
+        Self.draw(ctx.model, Self.cropPlan(ctx.model, ids, level: 0, crop), "mode-readout", overlay: t.preview.primitives, width: 800)
+        #expect(t.preview.primitives.contains { if case .text(let g) = $0 { return g.string.contains("RISERS CREATED") }; return false })
+        Self.click(t, Vec2(0, 2.24))
+        let c = try #require(t.startCandidates.first { $0.direction.isAlmostEqual(Vec2(0, -1), tolerance: 1e-6) && $0.point.x > 0 })
+        Self.click(t, c.point)
+        t.pointerMoved(ToolInput(point: c.point + Vec2(0, -1.5), rawPoint: c.point + Vec2(0, -1.5)))
+        Self.draw(ctx.model, Self.cropPlan(ctx.model, ids, level: 0, crop), "mode-second-run", overlay: t.preview.primitives, width: 800)
+        _ = t.escape(); _ = t.escape()
+        Self.click(t, Vec2(0, 1))
+        Self.draw(ctx.model, Self.cropPlan(ctx.model, ids, level: 0, crop), "mode-selected-run", overlay: t.preview.primitives, width: 800)
+        #expect(t.selection == .run(0))
     }
 }

@@ -36,7 +36,7 @@ struct StairPlanView {
     let relation: Relation
     /// The run the cut plane crosses and the cut mark across it: a point on the walk line, the mark's direction, the
     /// normal toward the part above, and the gap between the two lines of a double mark.
-    struct Cut { var run: Int; var point: Vec2; var along: Vec2; var normal: Vec2; var gap: Double; var width: Double }
+    struct Cut { var run: Int; var point: Vec2; var along: Vec2; var normal: Vec2; var gap: Double; var width: Double; var station: Double }
     let cut: Cut?
     let cutZ: Double
 
@@ -75,17 +75,34 @@ struct StairPlanView {
         let u = -t.perpendicular // left → right across the run
         let along = (u * cos(Double.pi / 6) + t * sin(Double.pi / 6)).normalized
         let gap = l.type.cutMark == .doubleZigzag ? paper(0.002) : 0
-        return Cut(run: i, point: p, along: along, normal: t, gap: gap, width: r.width)
+        return Cut(run: i, point: p, along: along, normal: t, gap: gap, width: r.width, station: s)
     }
 
     func zone(_ p: Vec2) -> StairZone {
         guard let c = cut else { return .below }
-        // Signed distance along the travel normal, measured parallel to the slanted mark.
+        // Far from the mark along the run (the other legs of a winder, the rest of a spiral) the walk distance decides;
+        // near it, the side of the slanted mark.
+        let s = Self.station(of: p, on: layout.runs[c.run])
+        if s < c.station - c.width * 0.6 { return .below }
+        if s > c.station + c.width * 0.6 { return .above }
         let n = c.along.perpendicular * (c.along.perpendicular.dot(c.normal) >= 0 ? 1 : -1)
         let d = (p - c.point).dot(n)
         if d < -c.gap / 2 - 1e-9 { return .below }
         if d > c.gap / 2 + 1e-9 { return .above }
         return .gap
+    }
+
+    /// Walk distance along a run of the walk-line point nearest `p`.
+    static func station(of p: Vec2, on r: StairLayout.Run) -> Double {
+        guard r.walk.count >= 2 else { return 0 }
+        var best = (Double.infinity, 0.0)
+        for i in 0..<(r.walk.count - 1) {
+            let seg = Segment2(r.walk[i], r.walk[i + 1])
+            let t = seg.isDegenerate ? 0 : max(0, min(1, seg.parameter(of: p)))
+            let d = seg.point(at: t).distance(to: p)
+            if d < best.0 - 1e-9 { best = (d, r.walkStations[i] + (r.walkStations[i + 1] - r.walkStations[i]) * t) }
+        }
+        return best.1
     }
 
     /// Zone of a whole run or landing that isn't the cut one.
@@ -266,8 +283,9 @@ extension PlanGraphics {
         for (i, r) in l.runs.enumerated() {
             draw(r.left.map(\.point), run: i, StairSubcategory.outlines, boost: 1)
             draw(r.right.map(\.point), run: i, StairSubcategory.outlines, boost: 1)
-            draw([r.startEdge.start, r.startEdge.end], run: i, StairSubcategory.nosingLines)
-            draw([r.endEdge.start, r.endEdge.end], run: i, StairSubcategory.outlines)
+            // A landing's outline already draws the run ends it joins.
+            if !l.landings.contains(where: { $0.afterRun == r.index - 1 }) { draw([r.startEdge.start, r.startEdge.end], run: i, StairSubcategory.nosingLines) }
+            if !l.landings.contains(where: { $0.afterRun == r.index }) { draw([r.endEdge.start, r.endEdge.end], run: i, StairSubcategory.outlines) }
             for (k, t) in r.treads.enumerated() where k > 0 {
                 // The tread's front edge (its nosing, toward the step below) as seen from above.
                 let f = nose > 1e-6 ? t.front.offset(by: -nose) : t.front

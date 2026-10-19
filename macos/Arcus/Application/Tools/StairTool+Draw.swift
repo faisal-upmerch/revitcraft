@@ -50,7 +50,7 @@ extension StairTool {
 
     public func pointerDown(_ i: ToolInput) {
         guard ctx.isPlan else { message("Sketch stairs in a plan view."); return }
-        if modifying { modifyDown(i); return }
+        if modifying { modifyDown(i); rebuild(); return }
         let p = snapped(i)
         if runSketch != nil { sketchClick(p); rebuild(); return }
         switch component {
@@ -63,12 +63,15 @@ extension StairTool {
 
     /// Where the next run could start: straight on, turned left or right after a landing (L), or back beside the last
     /// run (U); each as a point on the Location Line for the direction the run would take.
-    var startCandidates: [(point: Vec2, direction: Vec2)] {
+    public var startCandidates: [(point: Vec2, direction: Vec2)] {
         guard component == .run, clicks.isEmpty, let l = layout(), let last = l.runs.last else { return [] }
         let e = last.endEdge.midpoint, d = last.endDirection, n = d.perpendicular, w = last.width
+        // Back beside the run (U), clear of both runs' stringers by 100 mm.
+        let supports = [type.left, type.right].map { $0.kind == .stringerClosed ? $0.width + $0.lateralOffset : 0 }.reduce(0, +)
+        let gap = 0.1 + supports
         // Straight on past a landing one run width deep; turned left or right (L); back beside the run (U).
         let centres: [(Vec2, Vec2)] = [(e + d * w, d), (e + d * (w / 2) + n * (w / 2), n), (e + d * (w / 2) - n * (w / 2), -n),
-                                       (e + n * (w / 2 + width / 2), -d), (e - n * (w / 2 + width / 2), -d)]
+                                       (e + n * (w / 2 + width / 2 + gap), -d), (e - n * (w / 2 + width / 2 + gap), -d)]
         return centres.map { c, t in (c - t.perpendicular * centerOffset, t) }
     }
 
@@ -337,10 +340,13 @@ extension StairTool {
             if let p = pending, let pr = l.runs.last {
                 let created = p.risers, left = (numbers?.desired ?? 0) - risersSoFar - created
                 let text = left >= 0 ? "\(created) RISERS CREATED, \(left) REMAINING" : "\(created) RISERS CREATED, \(-left) TOO MANY"
-                let at = pr.walk.last ?? pr.endEdge.midpoint
-                let side = pr.endDirection.perpendicular * -(pr.width / 2 + ctx.paper(0.006))
-                preview.primitives.append(.text(GText(position: at + side, height: 0.0025, string: text, alignment: .center, verticalAnchor: 0.5,
-                                                      color: RGBColor(0.35, 0.35, 0.38))))
+                // Beside the run, at its middle, on the side away from the run's left (as Revit shows it).
+                let at = pr.walkPoint(pr.walkLength / 2)
+                let toRight = -pr.endDirection.perpendicular
+                let right = toRight.x >= 0
+                let side = toRight * (pr.width / 2 + ctx.paper(0.004))
+                preview.primitives.append(.text(GText(position: at + side, height: 0.0025, string: text, alignment: right ? .left : .right,
+                                                      verticalAnchor: 0.5, color: RGBColor(0.35, 0.35, 0.38))))
                 if let s = clicks.first, runMode == .straight { preview.tempDims = [tempDim(s, pr.endEdge.midpoint - pr.endDirection.perpendicular * centerOffset)] }
             }
         }
