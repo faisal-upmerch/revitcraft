@@ -1,6 +1,7 @@
 // arcus-bench: repeatable, offline performance measurements for Arcus's engine (no UI).
 //
 //   swift run -c release arcus-bench [--quick] [--out results.json] [--stress 20000]
+//   swift run arcus-bench --two-story-house <file.arcus> [--renders <dir>]   (HOUSE: sample house and its drawings)
 //
 // Every measurement runs on generated fixtures (Courtyard House and the stress grid), so results never depend on
 // user files or the network. Times are wall-clock medians over several runs; memory is the process physical
@@ -35,6 +36,13 @@ let outPath = args.firstIndex(of: "--out").flatMap { i in i + 1 < args.count ? a
 // FM3: `--document-icons <dir>` writes the .arcus, .arcusfamily and .arcusfurniture document icons (.icns) and exits.
 if let i = args.firstIndex(of: "--document-icons"), i + 1 < args.count {
     exit(DocumentIcons.writeAll(to: URL(fileURLWithPath: args[i + 1])).count == DocumentIcons.Kind.allCases.count ? 0 : 1)
+}
+
+// HOUSE: `--two-story-house <file.arcus> [--renders <dir>]` saves the Two-Story House sample (and its drawings) and exits.
+if let i = args.firstIndex(of: "--two-story-house"), i + 1 < args.count {
+    let renders = args.firstIndex(of: "--renders").flatMap { j in j + 1 < args.count ? URL(fileURLWithPath: args[j + 1]) : nil }
+    try await TwoStoryHouseExport.run(to: URL(fileURLWithPath: args[i + 1]), renders: renders)
+    exit(0)
 }
 
 // `--commands-markdown` prints the command catalog (shortcuts and typed aliases) as Markdown tables and exits;
