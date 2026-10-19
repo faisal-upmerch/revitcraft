@@ -17,6 +17,7 @@ enum DialogKind: Identifiable, Equatable {
     case exportPDF, exportIFC, exportDXF, importCAD(URL, isLink: Bool, isDWG: Bool), importIFC(URL), manageLinks, modelHealth, rename(ElementID)
     case newFamily, keyboardShortcuts, csvImport(ElementID, URL), selectByCategory, filterSelection, pasteToLevels, purge, linkPDF(URL), linkImage(URL)
     case dwgUnavailable, report(String, String), newView(ViewKind), snaps
+    case exportDWG // DWG
     case overrideGraphics(view: ElementID, elements: [ElementID]) // WP6a
     case tagAll(ElementID), colorSchemes(ElementID, placeLegend: Bool), newAreaPlan
     case importRevit(URL)

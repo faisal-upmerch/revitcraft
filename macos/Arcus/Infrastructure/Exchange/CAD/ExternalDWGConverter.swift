@@ -4,11 +4,11 @@ import ArcusDomain
 
 // DWG through a converter the user installed (W2-DWG).
 //
-// Arcus contains no DWG reader. When it is built without the licensed ODA Drawings SDK it can still link and import DWG
-// files by running a free converter that the user installed themselves, as a separate process, turning the DWG into a
-// DXF in a private temporary folder. The DXF then goes through Arcus's own DXF path (layers, units, blocks, text,
-// linetypes). Arcus never downloads, bundles or links a converter; it only looks for one in the usual install locations
-// or at a path the user chose in Settings. See Docs/DWGSDKSetup.md.
+// Arcus reads DWG with the engines bundled in Arcus.app (BundledDWGEngine.swift). When those cannot read a drawing it can
+// also run a free converter that the user installed themselves, as a separate process, turning the DWG into a DXF in a
+// private temporary folder. The DXF then goes through Arcus's own DXF path (layers, units, blocks, text, linetypes).
+// Arcus never downloads or links such a converter; it only looks for one in the usual install locations or at a path
+// the user chose in Settings. See Docs/DWGSDKSetup.md.
 
 /// The third-party converters Arcus knows how to drive.
 public enum ExternalDWGConverterKind: String, Sendable, Codable, CaseIterable, Hashable {
@@ -172,7 +172,7 @@ public enum DWGConverterPreferences {
             switch self {
             case .invalidChosenPath(let p):
                 return "The DWG converter chosen in Settings (\(p)) was not found or is not ODA File Converter or LibreDWG dwg2dxf. "
-                    + "Choose it again in Arcus ▸ Settings ▸ DWG Converter, or clear the choice to detect an installed converter."
+                    + "Choose it again in Arcus ▸ Settings ▸ DWG, or clear the choice to detect an installed converter."
             }
         }
     }
@@ -244,10 +244,30 @@ public enum ExternalDWGConversion {
     /// afterwards; the source file is only read (copied), never written.
     public static func convert(_ source: URL, with converter: ExternalDWGConverter, timeout: TimeInterval = 600,
                                progress: @Sendable (Double) -> Void = { _ in }, isCancelled: @Sendable () -> Bool = { false }) throws -> Data {
-        let fm = FileManager.default
         guard converter.isExecutable else {
-            throw CADError("\(converter.kind.rawValue) was not found at \(converter.executableURL.path). Install it again, or choose it in Arcus ▸ Settings ▸ DWG Converter.")
+            throw CADError("\(converter.kind.rawValue) was not found at \(converter.executableURL.path). Install it again, or choose it in Arcus ▸ Settings ▸ DWG.")
         }
+        return try run(source, executable: converter.executableURL, name: converter.kind.rawValue, timeout: timeout,
+                       arguments: converter.arguments(inputDirectory:outputDirectory:), progress: progress, isCancelled: isCancelled).dxf
+    }
+
+    /// What a conversion run produced.
+    public struct Result: Sendable {
+        public var dxf: Data
+        public var exitCode: Int32
+        public var standardOutput: String
+        public var standardError: String
+    }
+
+    /// Runs any DWG→DXF program on a staged copy of `source` (see `ExternalDWGConverter.stagedInputName`) and returns the
+    /// DXF it wrote in the output folder. `arguments` builds the command line from the input and output folders.
+    /// Shared by the converters the user installed and the engines bundled in Arcus.app (BundledDWGEngine.swift).
+    /// - Parameter failure: turns a run that produced no DXF into the error to throw (default: a generic message).
+    public static func run(_ source: URL, executable: URL, name: String, timeout: TimeInterval,
+                           arguments: (URL, URL) -> [String],
+                           failure: ((ExternalProcessRunner.Outcome, String?) -> CADError)? = nil,
+                           progress: @Sendable (Double) -> Void = { _ in }, isCancelled: @Sendable () -> Bool = { false }) throws -> Result {
+        let fm = FileManager.default
         guard fm.isReadableFile(atPath: source.path) else {
             throw CADError("“\(source.lastPathComponent)” could not be read. Check that the file exists and that Arcus may open it.")
         }
@@ -263,12 +283,13 @@ public enum ExternalDWGConversion {
         }
         progress(0.05)
         if isCancelled() { throw CancellationError() }
-        let outcome = try ExternalProcessRunner.run(converter.executableURL, arguments: converter.arguments(inputDirectory: input, outputDirectory: output),
+        let outcome = try ExternalProcessRunner.run(executable, arguments: arguments(input, output),
                                                     workingDirectory: work, logDirectory: logs, timeout: timeout, isCancelled: isCancelled)
         progress(0.9)
         let found = discoverOutput(in: output)
         guard let dxf = found.dxf else {
-            var msg = "\(converter.kind.rawValue) did not produce a DXF file"
+            if let failure { throw failure(outcome, found.errorLog) }
+            var msg = "\(name) did not produce a DXF file"
             msg += outcome.exitCode != 0 ? " (exit status \(outcome.exitCode))." : "."
             let detail = [found.errorLog, outcome.standardError, outcome.standardOutput].compactMap { $0 }.first { !$0.isEmpty }
             if let detail { msg += " It reported: " + String(detail.prefix(600)) }
@@ -278,10 +299,10 @@ public enum ExternalDWGConversion {
         let data: Data
         do { data = try Data(contentsOf: dxf) } catch { throw CADError("The converted DXF could not be read: \(error.localizedDescription)") }
         guard DXFReader.looksLikeDXF(data) else {
-            throw CADError("\(converter.kind.rawValue) wrote a file that is not a DXF drawing, so it was not imported.")
+            throw CADError("\(name) wrote a file that is not a DXF drawing, so it was not imported.")
         }
         progress(1)
-        return data
+        return Result(dxf: data, exitCode: outcome.exitCode, standardOutput: outcome.standardOutput, standardError: outcome.standardError)
     }
 
     /// Finds the converter's DXF output (any `.dxf`, case-insensitive, in the output folder or below; the staged name
@@ -313,23 +334,26 @@ public enum ExternalDWGConversion {
 /// Keyed by source path, size, modification date and converter; a changed file (a reload after editing) converts again.
 final class ExternalDWGConversionCache: @unchecked Sendable {
     static let shared = ExternalDWGConversionCache()
-    private struct Key: Hashable { var path: String; var size: Int; var modified: Date; var converter: String }
+    private struct Key: Hashable { var path: String; var size: Int; var modified: Date; var engine: String }
     private let lock = NSLock()
     private var entries: [(Key, Data)] = []
     private let maxEntries = 2
     private let maxBytes = 256 << 20
 
-    private func key(_ url: URL, _ c: ExternalDWGConverter) -> Key? {
+    private func key(_ url: URL, _ engine: String) -> Key? {
         guard let a = try? FileManager.default.attributesOfItem(atPath: url.path), let size = a[.size] as? Int, let m = a[.modificationDate] as? Date else { return nil }
-        return Key(path: url.standardizedFileURL.path, size: size, modified: m, converter: c.executableURL.path)
+        return Key(path: url.standardizedFileURL.path, size: size, modified: m, engine: engine)
     }
-    func data(for url: URL, converter c: ExternalDWGConverter) -> Data? {
-        guard let k = key(url, c) else { return nil }
+    func data(for url: URL, converter c: ExternalDWGConverter) -> Data? { data(for: url, engine: c.executableURL.path) }
+    func store(_ data: Data, for url: URL, converter c: ExternalDWGConverter) { store(data, for: url, engine: c.executableURL.path) }
+    /// `engine` identifies the program that converted (its executable path).
+    func data(for url: URL, engine: String) -> Data? {
+        guard let k = key(url, engine) else { return nil }
         lock.lock(); defer { lock.unlock() }
         return entries.first { $0.0 == k }?.1
     }
-    func store(_ data: Data, for url: URL, converter c: ExternalDWGConverter) {
-        guard data.count <= maxBytes, let k = key(url, c) else { return }
+    func store(_ data: Data, for url: URL, engine: String) {
+        guard data.count <= maxBytes, let k = key(url, engine) else { return }
         lock.lock(); defer { lock.unlock() }
         entries.removeAll { $0.0 == k }
         entries.insert((k, data), at: 0)
@@ -346,7 +370,7 @@ public struct ExternalConverterDWGProvider: DWGImportProvider {
 
     public var isAvailable: Bool { converter.isExecutable }
     public var unavailableReason: String? {
-        isAvailable ? nil : "\(converter.kind.rawValue) was not found at \(converter.executableURL.path). Install it again or choose it in Arcus ▸ Settings ▸ DWG Converter."
+        isAvailable ? nil : "\(converter.kind.rawValue) was not found at \(converter.executableURL.path). Install it again or choose it in Arcus ▸ Settings ▸ DWG."
     }
     public var sdkName: String { "\(converter.kind.rawValue) (installed separately; runs as its own program)" }
     public var sdkVersion: String? { converter.version }
@@ -366,7 +390,7 @@ public struct ExternalConverterDWGProvider: DWGImportProvider {
                                      progress: { progress(0.6 + 0.4 * $0) }, isCancelled: isCancelled)
         doc.format = "DWG"
         if let v = DWGProviders.sniffVersion(url) { doc.version = v; doc.versionName = CADDocument.friendlyVersion(v) }
-        doc.warnings.append("Converted from DWG to DXF on this Mac by \(converter.displayName), a separately installed third-party program. Arcus itself does not read DWG.")
+        doc.warnings.append("Converted from DWG to DXF on this Mac by \(converter.displayName), a separately installed third-party program.")
         return doc
     }
 }

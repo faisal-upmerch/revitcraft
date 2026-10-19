@@ -10,12 +10,17 @@ import ArcusCAD
 import ArcusServices
 
 enum DWGStatus {
-    static var reason: String { DWGProviders.current.unavailableReason ?? "DWG import is available (\(DWGProviders.current.sdkName) \(DWGProviders.current.sdkVersion ?? ""))." }
-    /// W2-DWG: who does the conversion, shown in the DWG link/import dialog.
+    static var reason: String { let p = DWGProviders.current; return p.unavailableReason ?? "DWG import is available (\(p.sdkName))." } // DWG: the name carries the version
+    /// W2-DWG: who reads the DWG, shown in the DWG link/import dialog. // DWG: the bundled engines come first
     static var conversionNote: String {
         let p = DWGProviders.current
         if let e = p as? ExternalConverterDWGProvider { return "The DWG is converted to DXF on this Mac by \(e.converter.displayName), a separately installed third-party program." }
-        return ""
+        guard let c = p as? DWGEngineChain, let first = c.available.first else { return "" }
+        if first is BundledAcadrustDWGProvider || first is BundledLibreDWGProvider {
+            return "Read on this Mac by Arcus's built-in DWG engines" + (c.available.count > 1 ? ", with \(c.available.count - 1) fallback\(c.available.count == 2 ? "" : "s")." : ".")
+        }
+        if let e = first as? ExternalConverterDWGProvider { return "The DWG is converted to DXF on this Mac by \(e.converter.displayName), a separately installed third-party program." }
+        return "Read by \(first.sdkName)."
     }
 }
 

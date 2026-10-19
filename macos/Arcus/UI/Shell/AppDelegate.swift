@@ -24,6 +24,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
     public override init() {
         super.init()
         AppDelegate.shared = self
+        _ = ArcusDocumentController() // DWG: the first document controller made becomes the shared one (opens DWG/DXF too)
     }
 
     public func applicationWillFinishLaunching(_ notification: Notification) {

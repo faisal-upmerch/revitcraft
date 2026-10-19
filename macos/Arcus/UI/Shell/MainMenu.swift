@@ -133,7 +133,7 @@ enum MainMenuBuilder {
         saveAs.keyEquivalentModifierMask = [.command, .shift, .option]
         let revert = NSMenuItem(title: "Revert To Saved", action: #selector(NSDocument.revertToSaved(_:)), keyEquivalent: "")
         // F13: File ▸ Export grouped as RevitCraft does (CAD Formats, DWF/DWFx, PDF, IFC, Family Types, gbXML, Images, Reports).
-        let cad = submenu("CAD Formats", commands([.exportDXF, .exportOBJ, .exportSTL]))
+        let cad = submenu("CAD Formats", commands([.exportDWG, .exportDXF, .exportOBJ, .exportSTL])) // DWG: DWG first, as Revit lists it
         let frames = command(.walkthroughExport); frames.title = "Walkthrough…" // F810: the command's own title is just "Export"
         let images = submenu("Images and Animations", commands([.exportImage]) + [frames])
         let reports = submenu("Reports", commands([.exportScheduleCSV, .exportRoomAreaReport]))

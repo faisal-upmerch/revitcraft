@@ -1,0 +1,10 @@
+# GNU LibreDWG release bundled with Arcus as its DWG read fallback (dwg2dxf only, run as a separate program).
+# build_libredwg.sh refuses a tarball whose SHA-256 differs from this one.
+#
+# Checked 2026-10-19: the tarball from ftp.gnu.org and the one from ftpmirror.gnu.org (a different GNU mirror) had this
+# same SHA-256. The detached .sig was downloaded but not checked (no gpg on the build Mac); build_libredwg.sh checks it
+# when gpg and the GNU keyring are available.
+LIBREDWG_VERSION=0.14
+LIBREDWG_TARBALL=libredwg-0.14.tar.xz
+LIBREDWG_SHA256=62ebb73b984f865960f20ed26619ea5f8789d5e3fd088fa40a2598384da81275
+LIBREDWG_URLS="https://ftp.gnu.org/gnu/libredwg/libredwg-0.14.tar.xz https://ftpmirror.gnu.org/libredwg/libredwg-0.14.tar.xz"

@@ -58,6 +58,19 @@
 		</dict>
 		<dict>
 			<key>CFBundleTypeName</key>
+			<string>CAD Drawing</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.local.arcus.dwg</string>
+				<string>com.local.arcus.dxf</string>
+			</array>
+		</dict>
+		<dict>
+			<key>CFBundleTypeName</key>
 			<string>Arcus Family</string>
 			<key>CFBundleTypeRole</key>
 			<string>Viewer</string>
@@ -130,6 +143,16 @@
 			<array><string>public.data</string></array>
 			<key>UTTypeTagSpecification</key>
 			<dict><key>public.filename-extension</key><array><string>dxf</string></array></dict>
+		</dict>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.local.arcus.dwg</string>
+			<key>UTTypeDescription</key>
+			<string>DWG Drawing</string>
+			<key>UTTypeConformsTo</key>
+			<array><string>public.data</string></array>
+			<key>UTTypeTagSpecification</key>
+			<dict><key>public.filename-extension</key><array><string>dwg</string></array></dict>
 		</dict>
 	</array>
 </dict>

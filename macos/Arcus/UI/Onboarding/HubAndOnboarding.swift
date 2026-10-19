@@ -386,7 +386,7 @@ struct OnboardingView: View {
             Text("How your work is kept").font(.title2.weight(.semibold))
             row("externaldrive", "Local documents", "Projects are .arcus packages on your Mac. Arcus never uploads anything and needs no account.")
             row("clock.arrow.circlepath", "Autosave and recovery", "Changes are saved automatically and journaled as you work. If Arcus quits unexpectedly, you're offered your unsaved changes next launch.")
-            row("arrow.left.arrow.right", "Exchange", "IFC2x3/IFC4 import and export for BIM exchange; DXF link/import and export; vector PDF sets. DWG needs a licensed ODA Drawings SDK build. Revit files (RVT/RFA) aren't supported — export IFC from Revit instead.")
+            row("arrow.left.arrow.right", "Exchange", "IFC2x3/IFC4 import and export for BIM exchange; DXF and DWG link/import and export (DWG through engines built into Arcus); vector PDF sets. Revit files (RVT/RFA) aren't supported — export IFC from Revit instead.")
             row("lock.shield", "Privacy", "Arcus asks for no special permissions. Files you pick in Open and Save panels are the only files it can read.")
         }.frame(maxWidth: 560, alignment: .leading)
     }

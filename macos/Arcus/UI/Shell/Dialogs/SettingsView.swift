@@ -41,7 +41,7 @@ struct SettingsView: View {
             }
             CanvasSettingsSections() // BL-CANVAS: Colors, temporary dimensions, tooltips, double-click
             Section("Notifications") { SaveReminderSettingsSection() } // F11
-            Section("DWG Converter") { DWGConverterSettingsSection() } // W2-DWG
+            Section("DWG") { DWGEngineSettingsSection(); DWGConverterSettingsSection() } // W2-DWG; DWG: bundled engines and the last file read
             Section("Privacy") {
                 Text("Arcus makes no network connections, collects no analytics and requires no special permissions. Diagnostics stay on this Mac unless you export them.").font(.caption).foregroundStyle(.secondary)
             }

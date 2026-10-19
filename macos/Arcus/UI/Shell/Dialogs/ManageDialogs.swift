@@ -403,7 +403,7 @@ struct ModelHealthDialog: View {
 struct DWGUnavailableDialog: View {
     let state: DocumentState
     var body: some View {
-        DialogFrame(title: "No DWG Converter Found", okTitle: "Import DXF Instead…", state: state) {
+        DialogFrame(title: "DWG Import Not Available", okTitle: "Import DXF Instead…", state: state) {
             state.presented = nil
             CommandRouter(state: state).run(.importDXF)
         } content: {

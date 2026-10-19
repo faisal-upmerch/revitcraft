@@ -44,7 +44,7 @@ The app bundle is staged at `build/Arcus.app`, signed with the first "Apple Deve
   |---|---|---|---|
   | IFC2x3 CV 2.0 / IFC4 RV | ✓ (native elements where possible, otherwise reference geometry; GUIDs preserved) | | ✓ |
   | DXF (R12–2018, ASCII and binary) | ✓ | ✓ (reload keeps the source untouched) | ✓ |
-  | DWG | only with a licensed ODA Drawings SDK build; otherwise Arcus says plainly that it is unavailable | same | |
+  | DWG (R13–2018) | ✓ (bundled engines, nothing to install; File ▸ Open too) | ✓ | ✓ views and sheets as 2D DWG, AutoCAD 2000–2018 |
   | PDF / PNG / JPEG / TIFF underlays | | ✓ | |
   | PDF (vector) | | | ✓ |
   | CSV (schedules) | ✓ (update parameters) | | ✓ |
@@ -75,7 +75,7 @@ script/                      bootstrap, build/run/verify, QA capture, local rele
 - [Engine decision](Docs/EngineDecision.md): why IFC and geometry are native Swift
 - [File format](Docs/FileFormat.md): the `.arcus` and `.arcusfamily` packages
 - [IFC mapping](Docs/IFCMapping.md)
-- [DWG SDK setup](Docs/DWGSDKSetup.md)
+- [DWG engines and setup](Docs/DWGSDKSetup.md)
 - [Keyboard shortcuts](Docs/KeyboardShortcuts.md)
 - [Revit parity](Docs/RevitParity.md): the conventions and features Revit users expect, and their status
 - [Revit interop](Docs/RevitInterop.md): the Arcus Bridge add-in, the `.arcusx` format and direct-import licensing
@@ -89,7 +89,16 @@ script/                      bootstrap, build/run/verify, QA capture, local rele
 
 ## DWG
 
-Arcus never pretends to read DWG. DWG support compiles in only when `ARCUS_ODA_SDK_DIR` points at a licensed ODA Drawings SDK. Set `ARCUS_REQUIRE_DWG=1` to make the build fail with setup instructions when the SDK is missing. Without the SDK, opening a DWG shows an explanation and offers DXF instead. See [Docs/DWGSDKSetup.md](Docs/DWGSDKSetup.md). Vendor headers, binaries and activation keys stay out of this repository.
+DWG works out of the box: two open-source engines ship inside Arcus.app as separate local programs (no network, nothing to install).
+
+| | Engine | Licence |
+|---|---|---|
+| Read (first) and write | `arcus-dwg`, Arcus's helper around [acadrust](https://github.com/hakanaktt/acadrust) 0.6.5 (`Tools/DWGHelper`) | MPL-2.0 |
+| Read fallback | GNU LibreDWG 0.14 `dwg2dxf`, unmodified, with its source in the bundle (`Tools/LibreDWG`) | GPLv3+ |
+
+Import CAD, Link CAD and File ▸ Open accept `.dwg`. If both engines fail, Arcus tries a converter you installed (ODA File Converter or LibreDWG), then the licensed ODA Drawings SDK when built with `ARCUS_ODA_SDK_DIR`. If everything fails it says why and offers DXF. File ▸ Export ▸ CAD Formats ▸ DWG… writes views and sheets as 2D DWG (AutoCAD 2018 by default; 2013, 2010, 2007, 2004, 2000) with the DXF export's AIA or category layers, and reads each file back before saving it. Settings ▸ DWG shows which engine read the last file.
+
+`script/build_and_run.sh` builds both helpers (Rust in `~/.cargo/bin`; LibreDWG from a SHA-256-checked tarball fetched once with `Tools/LibreDWG/build_libredwg.sh --download`) and still builds the app, with a warning, if they can't be built. See [Docs/DWGSDKSetup.md](Docs/DWGSDKSetup.md).
 
 ## Proprietary formats
 
