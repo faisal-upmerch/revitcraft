@@ -197,6 +197,7 @@ extension QAHarness {
         add("furniture-check-parts", .fm7(.checkParts), furniture: true)
         add("furniture-save-template", .fm8(.saveTemplate), furniture: true)
         add("load-furniture", .fm8(.loadFurniture))
+        d += compDialogCatalog(f) // COMP: Component Library dialogs (QAHarness+COMP.swift)
         return d
     }
 

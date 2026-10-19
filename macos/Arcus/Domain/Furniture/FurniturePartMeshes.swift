@@ -114,7 +114,7 @@ public enum FurniturePartMeshes {
         case .furnitureEdgeProfile(let ep):
             guard let host = m[e.hostID], let b = FurniturePartSolids.partBox(host, m)?.box else { return nil }
             let len: Double = switch ep.edge.axis { case .x: b.max.x - b.min.x; case .y: b.max.y - b.min.y; case .z: b.max.z - b.min.z }
-            return (len - ep.startSetback - ep.endSetback, tv.size, tv.profileShape == .groove ? tv.grooveDepth : tv.size)
+            return (len - ep.startSetback - ep.endSetback, tv.size, [.groove, .bevel].contains(tv.profileShape) ? tv.grooveDepth : tv.size) // COMPD: bevels
         case .furnitureForm:
             guard let (ev, _) = evaluated(e, m) else { return nil }
             let b = ev.bounds

@@ -208,7 +208,7 @@ public enum FurnitureFronts {
             for (li, leaf) in g.leaves.enumerated() {
                 guard let h = leaf.hinge else { continue }
                 let along: (Double, Double) = h == .left || h == .right ? (leaf.v.0.value, leaf.v.1.value) : (leaf.u.0.value, leaf.u.1.value)
-                let count = hv.isPiano ? 1 : hingeCount(edgeLength: along.1 - along.0)
+                let count = hv.isPiano ? 1 : ComponentRules.hingeRule(m).count(forEdge: along.1 - along.0) // COMP: Hardware Rules (default as hingeCount)
                 let positions = hv.isPiano ? [(along.0 + along.1) / 2] : hingePositions(along.0, along.1, count: count, inset: tv.hingeInset)
                 // The end hinges keep their inset from the leaf's ends as it resizes; the ones between are placed by number.
                 let ends: (PartValue, PartValue) = h == .left || h == .right ? leaf.v : leaf.u

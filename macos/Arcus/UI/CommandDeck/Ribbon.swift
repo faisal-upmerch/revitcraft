@@ -182,7 +182,8 @@ enum RibbonContent {
                                                        .small(.pointCloud), .small(.coordinationModel), .small(.linkPDF), .small(.linkImage)], tint: build),
                     RibbonPanel(title: "Import", items: [.large(.importCAD), .small(.importGbXML), .small(.importPDF), .small(.importImage),
                                                          .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
-                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .large(.loadFurniture), .large(.loadAsGroup), // FM8: Load Furniture
+                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.components), .large(.loadFamily), // COMP: Components panel
+                                                                    .large(.loadFurniture), .large(.loadAsGroup), // FM8: Load Furniture
                                                                     .large(.insertViewsFromFile, [.insertViewsFromFile, .insert2DElementsFromFile]),
                                                                     .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
         case .annotate:
@@ -287,6 +288,7 @@ enum RibbonContent {
         let fm4 = fm4SelectionItems(sel, m); if let t = fm4.title { title = t }; items += fm4.items // FM4: furniture parts
         let fm5 = fm5SelectionItems(sel, m); if let t = fm5.title { title = t }; items += fm5.items // FM5: bays, doors, drawers
         items += fm6SelectionItems(sel) // FM6: Joint, Allow/Disallow Join for parts
+        items += compSelectionItems(sel, m) // COMP: one-click hardware, Insert Assembly, Replace
         if sel.count == 1, Parameters.familyDefinition(for: sel[0], m) != nil { items += [.large(.familyEditor)] }
         return items.isEmpty ? nil : RibbonPanel(title: title, items: items, tint: build)
     }

@@ -51,7 +51,7 @@ extension RibbonContent {
     static let furnitureFormsPanel = RibbonPanel(title: "Forms", items: fm4FormItems, tint: build)
 
     static var furnitureModelPanel: RibbonPanel {
-        RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary])] + fm5ModelItems + [.small(.modelLine), .small(.modelText)], tint: build)
+        RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary])] + compModelItems + fm5ModelItems + [.small(.modelLine), .small(.modelText)], tint: build) // COMP: Components
     }
 
     static let furnitureDatumPanel = RibbonPanel(title: "Datum", items: [.large(.referencePlane)], tint: datum)
@@ -71,7 +71,7 @@ extension RibbonContent {
     // MARK: Fabricate
 
     static var furnitureFabricatePanels: [RibbonPanel] {
-        fm6FabricatePanels + fm7FabricatePanels
+        fm6FabricatePanels + fm7FabricatePanels + compFabricatePanels // COMP: Component BOM, Power Summary
             + [RibbonPanel(title: "Schedules", items: [.large(.schedule)], tint: view), // FM7: Material Takeoff opens the piece's takeoff (Part List panel)
                RibbonPanel(title: "Export", items: [.large(.exportPDF), .small(.exportDXF), .small(.exportDWG), .small(.exportImage)], tint: sheet)]
     }
@@ -82,7 +82,7 @@ extension RibbonContent {
         [RibbonPanel(title: "Settings", items: [.large(.materials), .small(.objectStyles), .small(.projectUnits), .small(.projectInfo),
                                                 .small(.snapSettings), .small(.purgeUnused),
                                                 .small(.additionalSettings, [.additionalSettings, .lineStyles, .lineWeights, .linePatterns, .fillPatterns, .arrowheads, .temporaryDimensionSettings])], tint: manage)]
-            + fm6ManagePanels + fm7ManagePanels
+            + fm6ManagePanels + fm7ManagePanels + compManagePanels // COMP: Hardware Rules, Update Components
             + [RibbonPanel(title: "Inquiry", items: [.small(.warnings), .small(.selectByID), .small(.idsOfSelection)], tint: manage),
                RibbonPanel(title: "Add-Ins", items: [.large(.designWithClaude)], tint: manage)] // MCP: Design with Claude
     }
