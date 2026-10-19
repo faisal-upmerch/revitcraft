@@ -318,6 +318,171 @@ struct FMG3Tests {
         #expect(a.count == 6 && c.count == 6 && zip(a, c).allSatisfy { approx($1 - $0, 2 * i, 1e-5) }, "\(a) \(c)")
     }
 
+    // MARK: 2. Moving bays
+
+    @Test func baysMoveLikeRoomsAndTheirFrontsFollow() throws {
+        let s = try Self.openCarcass()
+        let front = try Self.view(s.model, "Front")
+        var bay: ElementID?, door: [ElementID] = []
+        _ = s.perform("Bay and Door") { tx in
+            bay = try FurnitureBays.createBay(face: .front, at: Vec2(-18 * i, 20 * i), in: tx)
+            door = try FurnitureFronts.createFront(.door, in: bay!, in: tx)
+        }
+        let before = try #require(s.model[bay]?.furnitureBay?.opening)
+        #expect(before.x1 < -8 * i)
+        // Move in the Front elevation (as Move, the arrow keys and a drag do): 36" right, into the right-hand region.
+        _ = s.perform("Move") { tx in try ElementOperations.transform([bay!], by: .translation(Vec2(36 * i, 0)), in: tx, viewID: front.id) }
+        #expect(s.lastError == nil, "\(s.lastError?.message ?? "")")
+        let after = try #require(s.model[bay]?.furnitureBay?.opening)
+        #expect(after.x0 > 8 * i && approx(after.x1, 26.25 * i), "\(after.x0 / i) \(after.x1 / i)")
+        let d = try #require(s.model[door.first])
+        #expect(d.hostID == bay && Self.bounds(d, s.model).min.x > 8 * i, "the door follows its bay")
+        #expect(s.model.hosted(by: d.id).filter { $0.category == .furnitureHardware }.allSatisfy { ($0.component?.location.x ?? 0) > 8 * i })
+        // A plan move moves it along its face too; moving it onto another bay's region warns, as rooms do.
+        _ = s.perform("Second") { tx in _ = try FurnitureBays.createBay(face: .front, at: Vec2(0, 20 * i), in: tx) }
+        let plan = try #require(s.model.views.first { $0.view?.kind == .floorPlan })
+        _ = s.perform("Plan Move") { tx in try ElementOperations.transform([bay!], by: .translation(Vec2(-18 * i, 5 * i)), in: tx, viewID: plan.id) }
+        #expect(abs((s.model[bay]?.furnitureBay?.opening?.x0 ?? 1) - (s.model.elements(.furnitureBays).first { $0.id != bay }?.furnitureBay?.opening?.x0 ?? 0)) < 1e-6)
+        #expect(s.lastWarnings.contains { $0.code == "bay.sameRegion" })
+        _ = s.perform("Back") { tx in try ElementOperations.transform([bay!], by: .translation(Vec2(18 * i, -5 * i)), in: tx, viewID: plan.id) }
+        // A drag of a cell drags its divided bay.
+        _ = s.perform("Divide") { tx in try FurnitureBays.divide(bay!, BayDivision(direction: .rows, count: 2), in: tx) }
+        let cell = try #require(FurnitureBays.cellIDs(of: bay!, s.model).first)
+        let ctx = ToolContext(session: s, viewID: front.id)
+        s.selection.select([cell])
+        let tool = SelectTool(ctx: ctx)
+        let start = Vec2(18 * i - FurnitureFaceMap.of(front.view)!.toLocal(.zero).x, 15 * i)
+        #expect(tool.beginDrag(at: start, grip: nil))
+        tool.dragged(to: start + Vec2(-36 * i, 0))
+        tool.endDrag(at: start + Vec2(-36 * i, 0))
+        #expect((s.model[bay]?.furnitureBay?.opening?.x1 ?? 0) < -8 * i, "\(s.model[bay]?.furnitureBay?.opening?.x1 ?? 0)")
+        #expect(FurnitureBays.cellIDs(of: bay!, s.model).count == 2)
+    }
+
+    // MARK: 3. Lids
+
+    /// An open-top box 36" x 18" x 18" (sides, front, back, bottom) with a lid.
+    static func chest(_ typeName: String) throws -> (DocumentSession, ElementID) {
+        let s = DocumentSession(model: FurnitureTemplates.blank(category: .furniture, name: "Chest"))
+        _ = s.perform("Box") { tx in
+            try FurnitureParameters.setValue("Width", .double(36 * i), in: tx)
+            try FurnitureParameters.setValue("Depth", .double(18 * i), in: tx)
+            try FurnitureParameters.setValue("Height", .double(18 * i), in: tx)
+            let l = -18 * i, r = 18 * i, f = -9 * i, b = 9 * i, t = 0.75 * i
+            let ply = type(tx.model, .furniturePanels, "3/4\" Plywood")
+            _ = try FurniturePartOperations.createPanel(start: Vec2(l, f), end: Vec2(l, b), extent: PartExtent(), typeID: ply, in: tx)
+            _ = try FurniturePartOperations.createPanel(start: Vec2(r, b), end: Vec2(r, f), extent: PartExtent(), typeID: ply, in: tx)
+            _ = try FurniturePartOperations.createPanel(start: Vec2(r - t, f), end: Vec2(l + t, f), extent: PartExtent(), typeID: ply, in: tx)
+            _ = try FurniturePartOperations.createPanel(start: Vec2(l + t, b), end: Vec2(r - t, b), extent: PartExtent(), typeID: ply, in: tx)
+            _ = try FurniturePartOperations.createShelf(boundary: [Vec2(l + t, f + t), Vec2(r - t, f + t), Vec2(r - t, b - t), Vec2(l + t, b - t)], plane: "Bottom", offset: 2 * i,
+                                                        role: .bottom, typeID: type(tx.model, .furnitureShelves, "3/4\" Plywood Shelf"), in: tx)
+        }
+        var lid: ElementID?
+        _ = s.perform("Lid") { tx in
+            let bay = try FurnitureBays.createBay(face: .top, at: .zero, in: tx)
+            let t = tx.model.types(for: .furnitureFronts).first { $0.typeData?.familyName == "Flap" && $0.name == typeName }?.id
+            lid = try FurnitureFronts.createFront(.flap, in: bay, typeID: t, in: tx).first
+        }
+        #expect(s.lastError == nil, "\(s.lastError?.message ?? "")")
+        return (s, try #require(lid))
+    }
+
+    @Test func lidsTakeStylesPianoHingesStaysAndASwing() throws {
+        let (s, lid) = try Self.chest("Lid - Shaker Piano Hinge")
+        let m = s.model
+        let e = try #require(m[lid])
+        // Shaker: stiles, rails and a panel recessed from the top.
+        let solids = FurnitureFrontSolids.solids(e, m, PartSolidContext(symbolic: false)).solids
+        #expect(solids.contains { $0.name.hasSuffix("Left Stile") } && solids.contains { $0.name.hasSuffix("Panel") })
+        let parts = FurnitureMachining.derivedParts(m).filter { $0.sourceID == lid }
+        #expect(parts.contains { $0.name.hasSuffix("Stile") && $0.quantity == 2 } && parts.contains { $0.name.hasSuffix("Panel") })
+        let top = Self.bounds(e, m, .fine).max.z
+        let panel = try #require(ElementMeshes.parts(e, m, detail: .fine).map(\.mesh.bounds).min { $0.max.z < $1.max.z })
+        #expect(panel.max.z < top - 0.2 * i, "the panel sits below the frame's top")
+        // A piano hinge along the back and two lid stays (wider than 24").
+        let hw = FurnitureFronts.hardware(e, m)
+        let hinges = hw.filter { $0.slot.hasPrefix("hinge") }
+        #expect(hinges.count == 1 && hinges[0].values["Back Edge"]?.boolValue == true && (hinges[0].values["Length"]?.doubleValue ?? 0) > 30 * i)
+        let piano = FurnitureHardware.Values(m[hinges[0].typeID]?.typeData).isPiano
+        #expect(piano)
+        let stays = hw.filter { $0.slot.hasPrefix("stay") }
+        #expect(stays.count == 2 && stays.allSatisfy { m[$0.typeID]?.name == "Drop-Down Stay" })
+        #expect(FurnitureMachining.entries(m).contains { $0.label == "Flap stay screw" })
+        // The swing: shown in the side elevations (the lid upright and its arc), not the front one.
+        func dashed(_ v: String) throws -> [GPrimitive] {
+            ViewGraphicsBuilder(model: m, view: try Self.view(m, v)).build().items.filter { $0.elementID == lid }.flatMap(\.primitives)
+                .filter { if case .polyline(_, _, let st) = $0 { st.pattern == .dash } else { false } }
+        }
+        let side = try dashed("Right"), frontItems = try dashed("Front")
+        #expect(side.count == 2 && frontItems.isEmpty, "\(side.count) \(frontItems.count)")
+        let arc = FurnitureSwings.lidElevation(e, m)
+        #expect(arc.count == 2 && approx(arc[1].last?.z, top + 17.75 * i, 0.3 * i), "\(arc.map { $0.last.map { $0.z / i } ?? 0 })")
+        // Compiled: the swing as model lines on the side plane; the Slab lid with a concealed hinge type still works.
+        let f = FurnitureCompiler.family(from: m)
+        #expect(f.modelLines.filter { $0.subcategory == .elevationSwing && $0.plane == .yz }.count >= 13)
+        let (s2, lid2) = try Self.chest("Slab - Full Overlay Lift-Up")
+        #expect(FurnitureFronts.hardware(s2.model[lid2]!, s2.model).contains { $0.slot == "stay.0" && s2.model[$0.typeID]?.name == "Drop-Down Stay" }, "a lid stay, not the flap's lift-up one")
+    }
+
+    // MARK: 5. Hinge cups in compiled families
+
+    @Test func compiledHingesBoreTheirCupsAtFineByHeight() throws {
+        let p = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" })
+        let m = p.build()
+        let f = FurnitureCompiler.family(from: m)
+        let hinge = try #require(f.nestedFamily(named: FurnitureHardware.concealedHinge))
+        #expect(hinge.solids.contains { $0.name == "Cup Bore" && $0.isVoid && $0.visibleAt == [.fine] && !($0.cuts ?? []).isEmpty })
+        func fine(_ type: String, height: Double? = nil) throws -> (bores: Int, hinges: Int?, cut: Double, whole: Double) {
+            var g = f
+            let t = try #require(g.types.firstIndex { $0.name == type })
+            if let height { g.types[t].values["Height"] = .double(height * i) }
+            let ev = FamilyEvaluator.evaluate(g, typeName: type, units: .imperial)
+            let bores = ev.solids.filter { $0.isVoid && $0.name.hasSuffix("Cup Bore") }.count
+            let stile = ev.solids.filter { !$0.isVoid && $0.name.hasSuffix("Left Stile") }
+            let cut = stile.filter { $0.visibleAt.contains(.fine) }.reduce(0) { $0 + abs($1.familyMesh.signedVolume) }
+            let whole = stile.filter { $0.visibleAt.contains(.medium) }.reduce(0) { $0 + abs($1.familyMesh.signedVolume) }
+            let n: Int? = if case .quantity(let v, _)? = ev.values["Hinges"] { Int(v.rounded()) } else { nil }
+            return (bores, n, cut, whole)
+        }
+        let a = try fine("B15"), b = try fine("B15", height: 80), c = try fine("B30")
+        #expect(a.bores == 2 && a.hinges == 2, "\(a)")
+        #expect(b.bores == 4 && b.hinges == 4, "a taller door: \(b)")
+        #expect(c.bores == 4 && c.hinges == 4, "a pair: \(c)")
+        #expect(a.cut < a.whole - 1e-7, "the stile is bored at Fine: \(a.cut) < \(a.whole)")
+    }
+
+    // MARK: 6. Swings in project elevations
+
+    @Test func loadedCaseworkDrawsItsSwingsInProjectElevations() throws {
+        let src = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" }).build()
+        let f = FurnitureCompiler.family(from: src)
+        let s = DocumentSession(model: ProjectTemplates.make(.architectural, units: .imperial).0)
+        var fid: ElementID?
+        _ = s.perform("Load") { tx in fid = FurnitureLoading.load(f, from: src, replacing: nil, in: tx) }
+        let type = try #require(s.model.elements(.elementTypes).first { $0.typeData?.familyID == fid && $0.name == "B30" })
+        var inst: ElementID?, front: ElementID?, back: ElementID?
+        _ = s.perform("Place and views") { tx in
+            inst = tx.create(.casework, data: .component(ComponentData(location: .zero)), typeID: type.id, levelID: tx.model.levels.first?.id)
+            for (dir, keep) in [(Vec2(0, 1), true), (Vec2(0, -1), false)] {
+                var v = ViewData(kind: .elevation, scale: 24)
+                v.planeOrigin = Vec3(dir * -3, z: 0)
+                v.viewDirection = dir
+                v.farClip = 10
+                v.detailLevel = .medium
+                let id = tx.create(.views, name: keep ? "Cabinet Front" : "Cabinet Back", data: .view(v))
+                if keep { front = id } else { back = id }
+            }
+        }
+        #expect(s.lastError == nil, "\(s.lastError?.message ?? "")")
+        func swings(_ view: ElementID?) throws -> Int {
+            let g = ViewGraphicsBuilder(model: s.model, view: try #require(s.model[view])).build()
+            return g.items.filter { $0.elementID == inst }.flatMap(\.primitives).filter { if case .polyline(_, _, let st) = $0 { st.pattern == .dash } else { false } }.count
+        }
+        let seen = try swings(front), behind = try swings(back)
+        #expect(seen == 4, "two leaves, two lines each: \(seen)")
+        #expect(behind == 0, "hidden behind the cabinet")
+    }
+
     // MARK: 4. Leaf Count
 
     @Test func kitchenCabinetIsSingleOrPairByType() throws {
