@@ -56,6 +56,8 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     private var dragAwaitingValue = false
     private var tooltipVisible = false
     private var tooltipTimer: Timer?
+    /// Snapping to the model geometry of the view (Viewport3DSnapping.swift). // S3D
+    let snapping3D = Viewport3DSnapping()
 
     init(state: DocumentState, viewID: ElementID, viewport: Viewport3DView, host: NSView) {
         self.state = state
@@ -152,6 +154,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     func toolChanged() {
         numericField?.removeFromSuperview(); numericField = nil
         snap = nil
+        snapping3D.reset() // S3D
         if let tool = state.activeTool {
             if let plan = (tool as? BaseTool)?.ctx.viewID, state.model[plan]?.view?.kind.isPlan == true { listen(plan) }
             if let v = viewport { v.window?.makeFirstResponder(v) }
@@ -203,7 +206,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     /// Tools that pick a host face take the surface point under the pointer rather than the work plane.
-    private func prefersSurface(_ tool: any InteractiveTool) -> Bool {
+    func prefersSurface(_ tool: any InteractiveTool) -> Bool { // S3D: internal for Tab snap cycling
         tool is InsertTool || tool is SplitTool || tool is PickHostTool || tool is TagTool || tool is AlignTool || tool is TrimExtendTool
             || tool is WallRevealTool // F1
     }
@@ -238,16 +241,16 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         planePoint = q.xy
         setPixel(ctx, at: q)
         let g = modelPlans[ctx.viewID]?.graphics ?? state.graphics.graphics(ctx.viewID).map { WorkPlane3D.modelGraphics($0, model: state.model) }
-        return WorkPlane3D.toolInput(s, planeZ: z, ctx: ctx, graphics: g, snapFrom: tool.snapFrom, preferSurface: surface,
-                                     constrainOrtho: event.modifierFlags.contains(.shift))
+        return snappedInput(s, at: p, planeZ: z, ctx: ctx, graphics: g, snapFrom: tool.snapFrom, preferSurface: surface, // S3D
+                            constrainOrtho: event.modifierFlags.contains(.shift))
     }
 
     private func dragInput(_ event: NSEvent, at p: CGPoint, _ st: SelectTool) -> ToolInput? {
         guard let s = sample(event, at: p, pick: false), let q = WorkPlane3D.planPoint(s, planeZ: planeZ) else { return nil }
         planePoint = q.xy
         setPixel(st.ctx, at: q)
-        return withModelSnaps(st.ctx) { WorkPlane3D.toolInput(s, planeZ: planeZ, ctx: st.ctx, graphics: modelPlans[st.ctx.viewID]?.graphics,
-                                     snapFrom: st.dragAnchor, orthoOnly: true) }
+        return withModelSnaps(st.ctx) { snappedInput(s, at: p, planeZ: planeZ, ctx: st.ctx, graphics: modelPlans[st.ctx.viewID]?.graphics, // S3D
+                                                     snapFrom: st.dragAnchor, orthoOnly: true) }
     }
 
     // MARK: Viewport3DPointerHandler
@@ -265,6 +268,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
             snap = i.snap
             tool.pointerDown(i)
             (tool as? BaseTool)?.ctx.snapOverride = nil
+            snapping3D.tab = nil // S3D
             state.toolChangedState()
             refresh()
             return true
@@ -383,6 +387,10 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
             guard let t = tool else { return false }
             if t.finish() { state.toolChangedState() }
             refresh(); return true
+        case 48: // Tab: step through the snaps under the pointer (S3D)
+            guard tool != nil, let i = withModelSnaps(toolContext(of: tool), { cycleSnap3D() }) else { return false }
+            snap = i.snap
+            refresh(); return true
         case 49: // Space
             guard let t = tool else { return false }
             t.spaceBar(); state.toolChangedState(); refresh(); return true
@@ -419,6 +427,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         dragTool = nil
         dragAwaitingValue = false
         snap = nil
+        snapping3D.pick = nil // S3D
         planePoint = nil
         state.hoverDescription = ""
         releasePlansIfIdle()
@@ -517,6 +526,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     var tooltipText: String? {
         if let st = dragTool, st.isDragging { return "Drag to new position" }
         guard let tool = state.activeTool else { return nil }
+        if snapLabelShown, !(tool is InsertTool) { return nil } // S3D: the snap label shows beside the marker, as in plan
         if let s = snap, !(tool is InsertTool) { return s.shortLabel ?? s.kind.rawValue }
         let level = workPlaneLevel.flatMap { state.model[$0]?.name }
         return tool.prompt + (level.map { " (Work plane: \($0))" } ?? "")
@@ -555,9 +565,9 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         if let t = tool { prims += t.preview.primitives; guides += t.preview.guides; dims += t.preview.tempDims }
         if dragging, let st = dragTool { prims += st.preview.primitives; guides += st.preview.guides; dims += st.preview.tempDims }
         for p in prims { draw(p, cg, seg: seg, pt: pt) }
-        drawGuides(guides + (snap?.guides ?? []), cg, seg: seg)
+        drawGuides(guides, cg, seg: seg)
         for d in dims { drawTempDim(d, cg, seg: seg) }
-        if let s = snap, !(tool is InsertTool), let p = pt(s.point) { drawSnapMarker(s, at: p, cg) }
+        if let s = snap, !(tool is InsertTool) { drawSnap3D(s, cg, bounds: bounds, planeZ: z) } // S3D: plan markers, on the model
         drawTooltip(cg, bounds: bounds)
     }
 
@@ -624,31 +634,6 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         let size = (d.text as NSString).size(withAttributes: TempDimLabelStyle.attributes(active: d.isActive)) // BL-CANVAS: ARCUS-080
         let mid = d.isAngle ? CGPoint(x: a.x + (b.x - a.x) * 0.25, y: a.y + (b.y - a.y) * 0.25 - 16) : CGPoint(x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 + 10)
         TempDimLabelStyle.draw(d.text, in: TempDimLabelStyle.box(size: size, mid: mid), active: d.isActive, highlighted: false, canvas: .windowBackgroundColor)
-    }
-
-    private func drawSnapMarker(_ s: SnapResult, at p: CGPoint, _ cg: CGContext) {
-        let r: CGFloat = 5
-        cg.saveGState()
-        cg.setStrokeColor(NSColor.systemPink.cgColor)
-        cg.setLineWidth(1.5)
-        switch s.kind.markerShape {
-        case "square": cg.stroke(CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
-        case "triangle":
-            cg.move(to: CGPoint(x: p.x - r, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x + r, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x, y: p.y + r))
-            cg.closePath(); cg.strokePath()
-        case "circle": cg.strokeEllipse(in: CGRect(x: p.x - r, y: p.y - r, width: 2 * r, height: 2 * r))
-        case "diamond":
-            cg.move(to: CGPoint(x: p.x, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x + r, y: p.y)); cg.addLine(to: CGPoint(x: p.x, y: p.y + r))
-            cg.addLine(to: CGPoint(x: p.x - r, y: p.y)); cg.closePath(); cg.strokePath()
-        case "perpendicular":
-            cg.move(to: CGPoint(x: p.x - r, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x + r, y: p.y - r))
-            cg.move(to: CGPoint(x: p.x - r, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x - r, y: p.y + r)); cg.strokePath()
-        case "none": break
-        default:
-            cg.move(to: CGPoint(x: p.x - r, y: p.y - r)); cg.addLine(to: CGPoint(x: p.x + r, y: p.y + r))
-            cg.move(to: CGPoint(x: p.x - r, y: p.y + r)); cg.addLine(to: CGPoint(x: p.x + r, y: p.y - r)); cg.strokePath()
-        }
-        cg.restoreGState()
     }
 
     private func drawTooltip(_ cg: CGContext, bounds: CGRect) {
