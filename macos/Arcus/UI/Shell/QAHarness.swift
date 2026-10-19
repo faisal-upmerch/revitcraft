@@ -347,7 +347,13 @@ enum QAHarness {
             return "\(m2.count) elements, schema \(manifest.schemaVersion)"
         }
         await step("Open Recent menu lists projects") {
-            let url = outDir.appendingPathComponent("QA Project.arcus")
+            // Temporary files are left out of Recent, so the check uses a copy in Application Support (removed after).
+            let qaDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Arcus/QA", isDirectory: true)
+            try? FileManager.default.createDirectory(at: qaDir, withIntermediateDirectories: true)
+            let url = qaDir.appendingPathComponent("QA Project.arcus")
+            try? FileManager.default.removeItem(at: url)
+            try FileManager.default.copyItem(at: outDir.appendingPathComponent("QA Project.arcus"), to: url)
+            defer { try? FileManager.default.removeItem(at: qaDir) }
             let dc = NSDocumentController.shared
             dc.noteNewRecentDocumentURL(url) // the run puts the user's list back when it ends
             guard let file = NSApp.mainMenu?.items.first(where: { $0.submenu?.title == "File" })?.submenu else { throw QAError("No File menu") }
