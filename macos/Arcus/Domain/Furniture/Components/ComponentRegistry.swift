@@ -53,7 +53,7 @@ extension ComponentLibrary {
     static func merged(upgrade d: ComponentDefinition, over old: ComponentDefinition) -> ComponentDefinition {
         var out = d
         out.id = old.id
-        for t in old.types where out.type(named: t.name) == nil {
+        for t in old.types where out.type(named: t.name) == nil && d.renamedTypes[t.name] == nil {
             out.types.append(t)
             out.family.types.append(FamilyTypeDefinition(name: t.name, values: t.values))
         }

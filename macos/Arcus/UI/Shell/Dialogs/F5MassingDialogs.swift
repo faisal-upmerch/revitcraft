@@ -26,20 +26,22 @@ struct ModelInPlaceDialog: View {
     @State private var name = ""
 
     var body: some View {
-        DialogFrame(title: "Model In-place", subtitle: "Family Category and Parameters", okDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty, state: state) {
+        DialogFrame(title: "Model In-place", icon: "cube", tint: .purple, size: .small, subtitle: "Family Category and Parameters", okDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty,
+                    disabledReason: "Enter a name", labelWidth: 60, state: state) {
             state.presented = nil
             InPlaceFamilyFlow.begin(state: state, template: template, name: name)
         } content: {
-            Text("Family Category").font(DialogMetrics.sectionHeader)
-            List(InPlaceFamilies.templates, id: \.self, selection: Binding(get: { template }, set: { if let t = $0 { template = t } })) { t in
-                Text(t.category.displayName).tag(t)
+            DialogSection("Family category", boxed: false) {
+                DialogListBox(count: InPlaceFamilies.templates.count, rowHeight: 26, minRows: 4, maxRows: 7) {
+                    List(InPlaceFamilies.templates, id: \.self, selection: Binding(get: { template }, set: { if let t = $0 { template = t } })) { t in
+                        Text(t.category.displayName).tag(t)
+                    }
+                }
             }
-            .frame(height: 150)
-            FormRow(label: "Name") { TextField("", text: $name).frame(width: 220) }
-            Text("The family opens in the Family Editor. Load into Project places it at the project origin on this view's level.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            DialogSection(footnote: "The family opens in the Family Editor. Load into Project places it at the project origin on this view's level.") {
+                DialogRow("Name") { TextField("", text: $name).labelsHidden() }
+            }
         }
-        .frame(width: 420)
         .onAppear { if name.isEmpty { name = InPlaceFamilies.defaultName(state.model) } }
     }
 }

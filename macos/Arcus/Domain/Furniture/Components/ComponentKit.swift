@@ -503,6 +503,9 @@ public struct ComponentDefinition: Hashable, Sendable, Identifiable, Codable {
     public var variantOf: String?
     /// True for the user's own components (Save Selection as Component, duplicates); built-ins are read-only.
     public var isUserComponent: Bool
+    /// Old type name → new type name (an upgraded FM5 family that renamed its types). The registry drops the old
+    /// types, and documents that use them are migrated: instances keep their type, renamed.
+    public var renamedTypes: [String: String] = [:]
 
     public var defaultType: ComponentType? { types.first(where: \.isDefault) ?? types.first }
     public func type(named n: String) -> ComponentType? { types.first { $0.name == n } }
@@ -523,6 +526,33 @@ public struct ComponentDefinition: Hashable, Sendable, Identifiable, Codable {
     }
 }
 
+extension ComponentDefinition {
+    /// Tolerant decoding (user library files): fields added after a file was written take their defaults.
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.init(id: try c.decode(String.self, forKey: .id), version: try c.decodeIfPresent(Int.self, forKey: .version) ?? 1,
+                  category: try c.decode(ComponentCategory.self, forKey: .category), subcategory: try c.decodeIfPresent(String.self, forKey: .subcategory) ?? "",
+                  tags: try c.decodeIfPresent([String].self, forKey: .tags) ?? [], aliases: try c.decodeIfPresent([String].self, forKey: .aliases) ?? [],
+                  frame: try c.decodeIfPresent(ComponentFrame.self, forKey: .frame) ?? .face, family: try c.decode(FamilyDefinition.self, forKey: .family),
+                  parameters: try c.decodeIfPresent([ComponentParameter].self, forKey: .parameters) ?? [],
+                  types: try c.decodeIfPresent([ComponentType].self, forKey: .types) ?? [],
+                  materials: try c.decodeIfPresent([ComponentMaterialSlot].self, forKey: .materials) ?? [],
+                  placement: try c.decodeIfPresent(ComponentPlacementRule.self, forKey: .placement) ?? .free,
+                  mounting: try c.decodeIfPresent([ComponentMountOp].self, forKey: .mounting) ?? [],
+                  clearances: try c.decodeIfPresent([ComponentClearance].self, forKey: .clearances) ?? [],
+                  requirements: try c.decodeIfPresent([ComponentRequirement].self, forKey: .requirements) ?? [],
+                  symbols: try c.decodeIfPresent([ComponentSymbol].self, forKey: .symbols) ?? [],
+                  electrical: try c.decodeIfPresent(ComponentElectrical.self, forKey: .electrical),
+                  roles: try c.decodeIfPresent(Set<ComponentRole>.self, forKey: .roles) ?? [],
+                  hardwareKind: try c.decodeIfPresent(HardwareKind.self, forKey: .hardwareKind),
+                  profile: try c.decodeIfPresent([FamilyPoint].self, forKey: .profile) ?? [],
+                  presets: try c.decodeIfPresent([ComponentPreset].self, forKey: .presets) ?? [],
+                  variantOf: try c.decodeIfPresent(String.self, forKey: .variantOf),
+                  isUserComponent: try c.decodeIfPresent(Bool.self, forKey: .isUserComponent) ?? false)
+        renamedTypes = try c.decodeIfPresent([String: String].self, forKey: .renamedTypes) ?? [:]
+    }
+}
+
 // MARK: Kit helpers
 
 public enum ComponentKit {
@@ -539,6 +569,9 @@ public enum ComponentKit {
     public static let versionParam = ParameterID("comp.version")
     /// Type identity data: SKU (manufacturer, model, description and cost use the standard type.* ids).
     public static let skuParam = ParameterID("type.sku")
+    /// Family element parameter: the definition's library data (JSON, without the family), so a document keeps
+    /// placing, following hosts and machining with a component whose definition is gone from the library.
+    public static let metaParam = ParameterID("comp.meta")
 
     /// "comp.01.bar-handle" from a category and a name.
     public static func id(_ category: ComponentCategory, _ name: String) -> String {
@@ -552,7 +585,7 @@ public enum ComponentKit {
     public static func validate(_ d: ComponentDefinition) -> [String] {
         var out: [String] = []
         if d.types.isEmpty { out.append("\(d.name): no types") }
-        if d.types.count > 6 { out.append("\(d.name): \(d.types.count) types (1–4 standard sizes expected)") }
+        if d.types.count > 8 { out.append("\(d.name): \(d.types.count) types (1–4 standard sizes expected, slides up to 8)") }
         if Set(d.types.map(\.name)).count != d.types.count { out.append("\(d.name): duplicate type names") }
         if d.family.solids.isEmpty { out.append("\(d.name): no geometry") }
         if d.tags.isEmpty { out.append("\(d.name): no search tags") }
@@ -629,6 +662,8 @@ public struct ComponentBuilder {
     public mutating func hardwareKind(_ k: HardwareKind) { definition.hardwareKind = k }
     public mutating func role(_ r: ComponentRole) { definition.roles.insert(r) }
     public mutating func profile(_ pts: [FamilyPoint]) { definition.profile = pts }
+    /// Records renamed types (old name → new name), for upgrades of existing families.
+    public mutating func renames(_ map: [String: String]) { definition.renamedTypes.merge(map) { _, b in b } }
     public mutating func preset(_ name: String, type: String, values: [String: ParamValue] = [:], alignment: ComponentAlignment? = nil) {
         definition.presets.append(ComponentPreset(name: name, definitionID: definition.id, typeName: type, values: values, alignment: alignment))
     }

@@ -83,8 +83,9 @@ struct LineStylesDialog: View {
         let _ = state.session.changeCounter
         let styles = LineStyles.sorted(state.model)
         let missing = LineStyles.standard.contains { s in !styles.contains { $0.name == s.name } }
-        DialogFrame(title: "Line Styles", subtitle: "Standard styles can be edited; your own styles can also be renamed and deleted. Every change can be undone.",
+        DialogFrameWithActions(title: "Line Styles", icon: "line.3.horizontal", tint: .indigo, size: .large, subtitle: "Standard styles can be edited; your own can also be renamed and deleted.",
                     okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
+            DialogListBox(count: styles.count, rowHeight: 30, minRows: 8, maxRows: 12) {
             Table(styles, selection: $selected) {
                 TableColumn("Name") { e in
                     if renaming == e.id {
@@ -116,9 +117,9 @@ struct LineStylesDialog: View {
                 }.width(150)
                 TableColumn("Lines") { e in Text("\(LineStyles.users(of: e.id, state.model).count)").foregroundStyle(.secondary) }.width(44)
             }
-            .frame(minHeight: 320)
-            if let error { Text(error).font(.callout).foregroundStyle(.red) }
-            HStack {
+            }
+            if let error { DialogNotice(.error, error) }
+        } actions: {
                 Button("New…") {
                     var n = 1
                     while state.model.lineStyle(named: "Line Style \(n)") != nil { n += 1 }
@@ -138,13 +139,10 @@ struct LineStylesDialog: View {
                 }
                 .disabled(selected.map { state.model[$0].map { LineStyles.isStandard($0.name) } ?? true } ?? true)
                 .help("Lines drawn with a deleted style change to Thin Lines.")
-                Spacer()
                 if missing {
                     Button("Add Standard Styles") { run("Add Standard Line Styles") { tx in LineStyles.ensureStandard(in: tx) } }
                         .help("Adds the standard styles this project doesn't have yet (<Hidden>, Dashed, Property Line…).")
                 }
-            }
         }
-        .frame(minWidth: 620, idealWidth: 640)
     }
 }

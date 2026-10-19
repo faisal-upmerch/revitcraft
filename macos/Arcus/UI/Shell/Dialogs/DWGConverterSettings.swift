@@ -132,25 +132,33 @@ struct DWGConverterHelpView: View {
     @State private var found: String?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(DWGStatus.reason).fixedSize(horizontal: false, vertical: true)
-            GroupBox("Option 1: ODA File Converter (free app from the Open Design Alliance)") {
-                Text(DWGConverterHelp.odaSteps).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            GroupBox("Option 2: LibreDWG's dwg2dxf (command-line tool)") {
-                Text(DWGConverterHelp.libreSteps).font(.callout).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Text("The converter you install does the DWG-to-DXF conversion as a separate program on this Mac. Arcus doesn't download, include or update it, and results depend on that tool. DXF files are always supported directly.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) { // DIALOGS: notice, then each option's steps as rows
+            DialogNotice(.warning, title: "No DWG engine or converter on this Mac", "Install a free converter below, or import the drawing as DXF.", detail: DWGStatus.reason)
+            steps("Option 1: ODA File Converter", footnote: "A free app from the Open Design Alliance.", DWGConverterHelp.odaSteps)
+            steps("Option 2: LibreDWG's dwg2dxf", footnote: nil, DWGConverterHelp.libreSteps)
+            DialogCaption("The converter runs as a separate program on this Mac. Arcus doesn't download, include or update it. DXF files are always supported directly.")
             HStack {
                 Button("Check Again") { recheck() }
                 Button("Choose Converter…") { choose() }
-                if let found { Text(found).font(.callout).foregroundStyle(.green) }
+                if let found { Label(found, systemImage: "checkmark.circle.fill").font(.callout).foregroundStyle(.green) }
             }
         }
-        .frame(width: 520, alignment: .leading)
+    }
+
+    /// One option: its numbered steps as rows; lines without a number become the footnote.
+    private func steps(_ title: String, footnote: String?, _ text: String) -> some View {
+        let lines = text.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+        let numbered = lines.filter { $0.first?.isNumber == true }
+        let notes = ([footnote].compactMap { $0 } + lines.filter { $0.first?.isNumber != true }).joined(separator: " ")
+        return DialogSection(title, footnote: notes.isEmpty ? nil : notes) {
+            ForEach(Array(numbered.enumerated()), id: \.offset) { i, line in
+                HStack(alignment: .firstTextBaseline, spacing: 10) {
+                    Text("\(i + 1)").font(.caption.weight(.semibold)).monospacedDigit().foregroundStyle(.white)
+                        .frame(width: 18, height: 18).background(Circle().fill(Color.accentColor))
+                    Text(line.drop { $0.isNumber || $0 == "." || $0 == " " }).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     private func recheck() {

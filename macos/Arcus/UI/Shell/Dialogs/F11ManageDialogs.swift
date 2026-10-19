@@ -65,7 +65,7 @@ struct GlobalParametersDialog: View {
     var groups: [ParameterGroup] { Array(Set(list.map(\.group))).sorted() }
 
     var body: some View {
-        DialogFrame(title: "Global Parameters", subtitle: "Project-wide values that drive element parameters and dimensions. A formula computes a value from other global parameters.", state: state) {
+        DialogFrameWithActions(title: "Global Parameters", icon: "globe", tint: .teal, size: .large, subtitle: "Project-wide values that drive parameters and dimensions.", state: state) {
             let l = list
             if state.f11Perform("Global Parameters", { tx in try GlobalParameters.set(l, in: tx) }) { state.presented = nil }
         } content: {
@@ -76,37 +76,33 @@ struct GlobalParametersDialog: View {
                     Text("Formula").frame(width: 200, alignment: .leading)
                     Text("Type").frame(width: 90, alignment: .leading)
                 }
-                .font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 8).padding(.vertical, 4)
+                .font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 12).padding(.vertical, 6)
                 Divider()
                 ScrollView {
                     LazyVStack(alignment: .leading, spacing: 0) {
                         ForEach(groups, id: \.self) { g in
-                            Text(g.rawValue).font(.caption.weight(.semibold)).padding(.horizontal, 8).padding(.vertical, 3)
-                                .frame(maxWidth: .infinity, alignment: .leading).background(Color.primary.opacity(0.05))
+                            Text(g.rawValue).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.horizontal, 12).padding(.vertical, 4)
+                                .frame(maxWidth: .infinity, alignment: .leading).background(DialogColors.rowHover)
                             ForEach($list) { $p in
                                 if p.group == g { row($p) }
                             }
                         }
                     }
                 }
-                .frame(height: 240)
+                .frame(height: list.isEmpty ? 96 : min(CGFloat(list.count + groups.count) * 26 + 8, 240))
                 .overlay {
-                    if list.isEmpty { Text("No global parameters. Add one below.").font(.callout).foregroundStyle(.secondary) }
+                    if list.isEmpty { DialogEmptyState(icon: "globe", title: "No global parameters", message: "Add one below.") }
                 }
             }
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.separator))
-            HStack {
-                Button("Delete") { list.removeAll { $0.id == selected }; selected = nil }.disabled(selected == nil)
-                Button("Move Up") { move(-1) }.disabled(index(selected).map { $0 == 0 } ?? true)
-                Button("Move Down") { move(1) }.disabled(index(selected).map { $0 + 1 >= list.count } ?? true)
-                Spacer()
-            }
-            GroupBox("New Global Parameter") {
-                HStack {
-                    TextField("Name", text: $newName).frame(width: 160)
-                    Picker("Type", selection: $newType) { ForEach(GlobalParameters.types, id: \.self) { Text($0.displayName).tag($0) } }.frame(width: 160)
-                    Picker("Group", selection: $newGroup) { ForEach(ParameterGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 220)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            DialogSection("New global parameter", footnote: "Associate a parameter with the globe button beside its value in Properties; label a dimension from its Value row.") {
+                HStack(spacing: 8) {
+                    TextField("Name", text: $newName).frame(width: 170)
+                    Picker("", selection: $newType) { ForEach(GlobalParameters.types, id: \.self) { Text($0.displayName).tag($0) } }.labelsHidden().fixedSize()
+                    Picker("", selection: $newGroup) { ForEach(ParameterGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(maxWidth: 200)
+                    Spacer(minLength: 0)
                     Button("Add") {
                         let n = newName.trimmingCharacters(in: .whitespaces)
                         guard !list.contains(where: { $0.name == n }) else { error = "A global parameter with this name already exists."; return }
@@ -115,11 +111,12 @@ struct GlobalParametersDialog: View {
                     }.disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
-            Text("Associate an element parameter with the globe button beside its value in Properties; label a dimension from its Value row.")
-                .font(.caption).foregroundStyle(.secondary)
+            if let error { DialogNotice(.error, error) }
+        } actions: {
+            Button("Delete") { list.removeAll { $0.id == selected }; selected = nil }.disabled(selected == nil)
+            Button("Move Up") { move(-1) }.disabled(index(selected).map { $0 == 0 } ?? true)
+            Button("Move Down") { move(1) }.disabled(index(selected).map { $0 + 1 >= list.count } ?? true)
         }
-        .frame(minWidth: 680, idealWidth: 680)
         .onAppear { list = GlobalParameters.all(state.model) }
     }
 
@@ -141,8 +138,7 @@ struct GlobalParametersDialog: View {
                 .textFieldStyle(.plain).frame(width: 200, alignment: .leading).disabled(g.type == .text)
             Text(g.type.displayName).foregroundStyle(.secondary).frame(width: 90, alignment: .leading)
         }
-        .font(.system(size: 12))
-        .padding(.horizontal, 8).padding(.vertical, 3)
+        .padding(.horizontal, 12).padding(.vertical, 4)
         .background(selected == g.id ? Color.accentColor.opacity(0.15) : Color.clear)
         .contentShape(Rectangle())
         .onTapGesture { selected = g.id }
@@ -182,18 +178,19 @@ struct SpecifyCoordinatesDialog: View {
     @State private var angle = ""
     @State private var error: String?
     var body: some View {
-        DialogFrame(title: "Specify Shared Coordinates", subtitle: "The shared coordinates the picked point should read, and the angle from project north to true north.", state: state) {
+        DialogFrame(title: "Specify Shared Coordinates", icon: "scope", tint: .blue, subtitle: "What the picked point should read in shared coordinates.", state: state) {
             apply()
         } content: {
-            Form {
-                TextField("North/South", text: $ns)
-                TextField("East/West", text: $ew)
-                TextField("Elevation", text: $elev)
-                TextField("Angle from project north to true north (°)", text: $angle)
-                if let error { Text(error).foregroundStyle(.red).font(.caption) }
+            DialogSection("Picked point") {
+                DialogRow("North/South") { TextField("", text: $ns).labelsHidden().frame(width: 160) }
+                DialogRow("East/West") { TextField("", text: $ew).labelsHidden().frame(width: 160) }
+                DialogRow("Elevation") { TextField("", text: $elev).labelsHidden().frame(width: 160) }
             }
+            DialogSection("True north", footnote: "Angle from project north to true north, in degrees.") {
+                DialogRow("Angle") { HStack(spacing: 6) { TextField("", text: $angle).labelsHidden().frame(width: 100); Text("°").foregroundStyle(.secondary) } }
+            }
+            if let error { DialogNotice(.error, error) }
         }
-        .frame(minWidth: 460)
         .onAppear {
             let m = state.model
             let s = SharedCoordinates.shared(point, m.projectInfo)
@@ -229,15 +226,17 @@ struct ProjectTurnDialog: View {
     @State private var pick = 0
     var choices: [String] { mirror ? ["Mirror North/South Axis", "Mirror East/West Axis"] : ["Rotate 90° Clockwise", "Rotate 90° Counterclockwise", "Rotate 180°"] }
     var body: some View {
-        DialogFrame(title: mirror ? "Mirror Project" : "Rotate Project North",
-                    subtitle: mirror ? "The whole project — model, views and their annotations — flips about the internal origin." : "The whole project turns about the internal origin; true north turns back so the site stays where it is.",
+        DialogFrame(title: mirror ? "Mirror Project" : "Rotate Project North", icon: mirror ? "arrow.left.and.right.righttriangle.left.righttriangle.right" : "arrow.clockwise", tint: .blue, size: .small,
+                    subtitle: mirror ? "Model, views and annotations flip about the internal origin." : "The project turns about the internal origin; the site stays put.",
                     state: state) {
             let mirror = mirror, pick = pick
             if state.f11Perform(mirror ? "Mirror Project" : "Rotate Project North", { tx in
                 if mirror { ProjectPosition.mirror(northSouth: pick == 0, in: tx) } else { ProjectPosition.rotate(degrees: [-90, 90, 180][min(pick, 2)], in: tx) }
             }) { state.presented = nil }
         } content: {
-            Picker("", selection: $pick) { ForEach(choices.indices, id: \.self) { Text(choices[$0]).tag($0) } }.pickerStyle(.radioGroup).labelsHidden()
+            DialogSection {
+                Picker("", selection: $pick) { ForEach(choices.indices, id: \.self) { Text(choices[$0]).tag($0) } }.pickerStyle(.radioGroup).labelsHidden()
+            }
         }
     }
 }
@@ -251,21 +250,26 @@ struct AddToSetDialog: View {
     var body: some View {
         let sets = DesignOptionEditing.sets(state.model)
         let options = sets.first { $0.name == setName }?.options ?? []
-        DialogFrame(title: "Add to Design Option Set", subtitle: "The selected main model elements move into the first chosen option; every other chosen option gets its own copy.",
-                    okDisabled: chosen.isEmpty, state: state) {
+        DialogFrame(title: "Add to Design Option Set", icon: "square.stack.3d.up", tint: .indigo,
+                    subtitle: "Elements move into the first chosen option; each other option gets a copy.",
+                    okDisabled: chosen.isEmpty, disabledReason: sets.isEmpty ? "Create an option set first" : "Choose at least one option", state: state) {
             let ids = state.session.selection.ids, opts = options.map(\.id).filter { chosen.contains($0) }
             if state.f11Perform("Add to Set", { tx in try DesignOptionEditing.addToSet(ids, options: opts, in: tx) }) { state.presented = nil }
         } content: {
-            Picker("Design option set", selection: $setName) { ForEach(sets.map(\.name), id: \.self) { Text($0).tag($0) } }
-                .onChange(of: setName) { _, n in chosen = Set(sets.first { $0.name == n }?.options.map(\.id) ?? []) }
-            Text("Add selected elements to:").font(.caption).foregroundStyle(.secondary)
-            VStack(alignment: .leading) {
-                ForEach(options, id: \.id) { o in
-                    Toggle(o.name + (o.designOption?.isPrimary == true ? " (primary)" : ""), isOn: Binding(get: { chosen.contains(o.id) }, set: { if $0 { chosen.insert(o.id) } else { chosen.remove(o.id) } }))
+            if !sets.isEmpty {
+                DialogSection {
+                    DialogRow("Option set") {
+                        Picker("", selection: $setName) { ForEach(sets.map(\.name), id: \.self) { Text($0).tag($0) } }.labelsHidden()
+                            .onChange(of: setName) { _, n in chosen = Set(sets.first { $0.name == n }?.options.map(\.id) ?? []) }
+                    }
                 }
             }
+            DialogSection("Add the selection to", boxed: false) {
+                DialogCheckList(items: options.map { o in DialogCheckItem(id: o.id, title: o.name, icon: o.designOption?.isPrimary == true ? "star.fill" : "square.on.square",
+                                                                         detail: o.designOption?.isPrimary == true ? "Primary" : nil) },
+                                checked: $chosen, maxRows: 6, emptyTitle: "No option sets", emptyMessage: "Create one in Manage ▸ Design Options.", emptyIcon: "square.stack.3d.up")
+            }
         }
-        .frame(minWidth: 420)
         .onAppear { setName = sets.first?.name ?? ""; chosen = Set(sets.first?.options.map(\.id) ?? []) }
     }
 }
@@ -278,16 +282,19 @@ struct StartingViewDialog: View {
     var body: some View {
         let m = state.model
         let views = m.sheets + m.views.sorted { ViewTitles.qualified($0) < ViewTitles.qualified($1) } + m.schedules
-        DialogFrame(title: "Starting View", subtitle: "The view that opens when the project opens.", state: state) {
+        DialogFrame(title: "Starting View", icon: "play.rectangle", tint: .blue, size: .small, subtitle: "The view that opens with the project.", state: state) {
             let id = choice == 0 ? nil : ElementID(choice)
             if state.f11Perform("Starting View", { tx in StartingView.set(id, in: tx) }) { state.presented = nil }
         } content: {
-            Picker("Starting view", selection: $choice) {
-                Text("<Default: the first floor plan>").tag(UInt64(0))
-                ForEach(views, id: \.id) { v in Text(ViewTitles.qualified(v)).tag(v.id.raw) }
+            DialogSection {
+                DialogRow("View") {
+                    Picker("", selection: $choice) {
+                        Text("Default (first floor plan)").tag(UInt64(0))
+                        ForEach(views, id: \.id) { v in Text(ViewTitles.qualified(v)).tag(v.id.raw) }
+                    }.labelsHidden()
+                }
             }
         }
-        .frame(minWidth: 460)
         .onAppear { choice = m.manageData.startingViewID?.raw ?? 0 }
     }
 }
@@ -301,9 +308,9 @@ struct SelectionSetsDialog: View {
     var body: some View {
         let _ = state.session.changeCounter
         let sets = state.model.manageData.selectionSets
-        DialogFrame(title: edit ? "Edit Saved Selections" : "Load Saved Selection",
+        DialogFrame(title: edit ? "Edit Saved Selections" : "Load Saved Selection", icon: "cursorarrow.rays", tint: .blue,
                     subtitle: edit ? "Rename or delete saved selections." : "Choose a saved selection to select its elements.",
-                    okTitle: edit ? "Done" : "Load", okDisabled: !edit && selected == nil, showCancel: !edit, state: state) {
+                    okTitle: edit ? "Done" : "Load", okDisabled: !edit && selected == nil, disabledReason: sets.isEmpty ? nil : "Choose a saved selection", showCancel: !edit, state: state) {
             if !edit, let s = selected {
                 let ids = SavedSelections.elements(of: s, state.model)
                 state.session.selection.select(ids)
@@ -311,22 +318,25 @@ struct SelectionSetsDialog: View {
             }
             state.presented = nil
         } content: {
-            List(sets, id: \.id, selection: $selected) { s in
-                HStack {
-                    if edit {
-                        TextField("", text: Binding(get: { s.name }, set: { n in state.f11Perform("Rename Selection") { tx in try SavedSelections.rename(s.id, to: n, in: tx) } }))
-                    } else { Text(s.name) }
-                    Spacer()
-                    Text("\(SavedSelections.elements(of: s.id, state.model).count) elements").font(.caption).foregroundStyle(.secondary)
-                    if edit {
-                        Button(role: .destructive) { state.f11Perform("Delete Selection") { tx in SavedSelections.delete(s.id, in: tx) } } label: { Image(systemName: "trash") }.buttonStyle(.plain)
-                    }
-                }.tag(s.id)
+            DialogListBox(count: sets.count, rowHeight: 30, minRows: 3, maxRows: 8) {
+                List(sets, id: \.id, selection: $selected) { s in
+                    HStack {
+                        Image(systemName: "cursorarrow.rays").foregroundStyle(.secondary).frame(width: 18)
+                        if edit {
+                            TextField("", text: Binding(get: { s.name }, set: { n in state.f11Perform("Rename Selection") { tx in try SavedSelections.rename(s.id, to: n, in: tx) } })).textFieldStyle(.plain)
+                        } else { Text(s.name) }
+                        Spacer()
+                        Text("\(SavedSelections.elements(of: s.id, state.model).count) elements").foregroundStyle(.secondary).monospacedDigit()
+                        if edit {
+                            Button(role: .destructive) { state.f11Perform("Delete Selection") { tx in SavedSelections.delete(s.id, in: tx) } } label: { Image(systemName: "trash") }
+                                .buttonStyle(.borderless).help("Delete").accessibilityLabel("Delete \(s.name)")
+                        }
+                    }.tag(s.id)
+                }
+            } empty: {
+                DialogEmptyState(icon: "cursorarrow.rays", title: "No saved selections", message: "Select elements and choose Manage ▸ Selection ▸ Save.")
             }
-            .frame(minHeight: 200)
-            .overlay { if sets.isEmpty { Text("No saved selections. Select elements and choose Manage ▸ Selection ▸ Save.").font(.callout).foregroundStyle(.secondary) } }
         }
-        .frame(minWidth: 440)
     }
 }
 
@@ -339,34 +349,33 @@ struct KeynotingSettingsDialog: View {
     var body: some View {
         let _ = state.session.changeCounter
         let data = state.model.manageData
-        DialogFrame(title: "Keynoting Settings", subtitle: "The keynote table keynote tags read from, and what they show.", state: state) {
+        DialogFrame(title: "Keynoting Settings", icon: "key", tint: .orange, subtitle: "The table keynote tags read from, and what they show.", state: state) {
             let d = display, apply = applyToExisting
             if state.f11Perform("Keynoting Settings", { tx in
                 tx.updateManageData { $0.keynoteDisplay = d == .key ? nil : d }
                 if apply { for t in tx.model.elements(.tags) where t.tag?.kind?.isKeynote == true { tx.update(t.id) { $0.tag?.keynoteDisplay = d } } }
             }) { state.presented = nil }
         } content: {
-            GroupBox("Keynote Table") {
-                VStack(alignment: .leading, spacing: 6) {
-                    LabeledContent("Path", value: data.keynoteFile ?? "Built-in keynote table")
-                    Text("\(Keynoting.table(state.model).count) keynotes").font(.caption).foregroundStyle(.secondary)
-                    HStack {
-                        Button("Browse…") { load() }
-                        Button("Use Built-in") { state.f11Perform("Built-in Keynote Table") { tx in tx.updateManageData { $0.keynoteTable = nil; $0.keynoteFile = nil } } }
-                            .disabled(data.keynoteTable == nil)
-                        Button("Export Table…") { export() }
-                    }
-                    Text("A keynote file is plain text: key, tab, keynote text, tab, parent key — one keynote per line.").font(.caption).foregroundStyle(.secondary)
-                }.frame(maxWidth: .infinity, alignment: .leading)
+            DialogSection("Keynote table", footnote: "A keynote file is plain text: key, tab, keynote text, tab, parent key — one keynote per line.") {
+                DialogValueRow(label: "File", value: data.keynoteFile ?? "Built-in keynote table")
+                DialogValueRow(label: "Keynotes", value: "\(Keynoting.table(state.model).count)")
+                HStack {
+                    Button("Browse…") { load() }
+                    Button("Use Built-in") { state.f11Perform("Built-in Keynote Table") { tx in tx.updateManageData { $0.keynoteTable = nil; $0.keynoteFile = nil } } }
+                        .disabled(data.keynoteTable == nil)
+                    Spacer()
+                    Button("Export Table…") { export() }
+                }
             }
-            GroupBox("Keynote Display") {
-                Picker("", selection: $display) {
-                    Text("Keynote Number").tag(KeynoteDisplay.key); Text("Keynote Text").tag(KeynoteDisplay.text); Text("Keynote Number and Text").tag(KeynoteDisplay.keyAndText)
-                }.pickerStyle(.radioGroup).labelsHidden()
+            DialogSection("Display") {
+                DialogRow("Tags show", alignment: .top) {
+                    Picker("", selection: $display) {
+                        Text("Keynote Number").tag(KeynoteDisplay.key); Text("Keynote Text").tag(KeynoteDisplay.text); Text("Keynote Number and Text").tag(KeynoteDisplay.keyAndText)
+                    }.pickerStyle(.radioGroup).labelsHidden()
+                }
                 Toggle("Apply to keynotes already placed", isOn: $applyToExisting)
             }
         }
-        .frame(minWidth: 500)
         .onAppear { display = Keynoting.display(state.model) }
     }
 
