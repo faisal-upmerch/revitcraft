@@ -226,7 +226,7 @@ struct PropertiesView: View {
         case .floor, .floorPickWalls: .floors
         case .ceiling: .ceilings
         case .roofFootprint, .roofPickWalls, .roofExtrusion: .roofs
-        case .stairStraight, .stairL, .stairU: .stairs
+        case .stairStraight, .stairL, .stairU, .stair, .editStair: .stairs // STAIR
         case .ramp: .ramps
         case .railing: .railings
         case .buildingPad: .buildingPads
@@ -240,7 +240,7 @@ struct PropertiesView: View {
         case .wallByFace, .curtainSystemByFace: .walls // F5
         case .floorByFace: .floors // F5
         case .roofByFace: .roofs // F5
-        default: nil
+        default: fm4PropertiesCategory(cmd) ?? fm5PropertiesCategory(cmd) // FM4: furniture parts; FM5: fronts and hardware
         }
     }
 
@@ -395,6 +395,8 @@ struct ParamRow: View {
             options = cat.map { model.types(for: $0) } ?? []
         case .levels: options = model.levels
         case .curtainPanels: options = model.types(for: .curtainPanels) // WP3: panel types
+        case .stairRuns, .stairLandings, .stairSupports: options = model.types(for: c) // STAIR: run, landing and support types
+        case .furnitureHardware: options = model.types(for: .furnitureHardware) // FM5: hardware types (handle, hinge…)
         case .phases: options = model.phases
         default: options = model.elements(c).sorted { $0.name < $1.name }
         }

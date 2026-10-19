@@ -38,11 +38,16 @@ extension FamilyEvaluator {
         for s in solids {
             guard !s.isVoid else { out.append(s); continue }
             var parts = [s]
-            for v in voids where s.bounds.intersects(v.bounds) {
+            for v in voids where s.bounds.intersects(v.bounds) && (v.cuts.map { c in s.sourceID.map(c.contains) ?? false } ?? true) { // FM6: Cut Geometry
                 parts = parts.flatMap { p -> [EvaluatedFamily.Solid] in
                     guard p.bounds.intersects(v.bounds) else { return [p] }
-                    if p.form == .extrusion, v.form == .extrusion, p.mesh == nil, v.mesh == nil { return cut(p, by: v) }
-                    return meshCut(p, by: v)
+                    // FM6: a void cuts at the detail levels it shows at; the solid keeps an uncut copy for the others.
+                    let common = p.visibleAt.intersection(v.visibleAt)
+                    guard !common.isEmpty else { return [p] }
+                    var q = p, uncut: [EvaluatedFamily.Solid] = []
+                    if common != p.visibleAt { var u = p; u.visibleAt = p.visibleAt.subtracting(common); uncut = [u]; q.visibleAt = common }
+                    if q.form == .extrusion, v.form == .extrusion, q.mesh == nil, v.mesh == nil { return uncut + cut(q, by: v) }
+                    return uncut + meshCut(q, by: v)
                 }
             }
             out += parts

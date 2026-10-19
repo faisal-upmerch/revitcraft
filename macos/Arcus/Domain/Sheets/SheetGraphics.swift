@@ -150,6 +150,7 @@ public struct SheetGraphicsBuilder: Sendable {
             let scales = Set(model.owned(byView: sheet.id).compactMap { model[$0.viewport?.viewID]?.view?.scale })
             if scales.count == 1, let s = scales.first { return ViewScales.label(s, imperial: model.units.system == .imperial) }
             return scales.isEmpty ? "" : "As indicated"
+        case "Piece Name", "Piece Category", "Piece Material": return FurnitureShopDrawings.titleBlockValue(name, model) ?? "" // FM7: Furniture Title Block
         default:
             if let pid = Parameters.id(named: name, for: sheet, model), let v = Parameters.value(pid, of: sheet, model) { return v.description }
             return ""

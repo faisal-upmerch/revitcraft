@@ -45,6 +45,12 @@ if let i = args.firstIndex(of: "--two-story-house"), i + 1 < args.count {
     exit(0)
 }
 
+// FM9: `--furniture-library <dir> [--app-version 1.2 --app-build 34]` builds every Furniture Library piece and writes
+// `<dir>/<Room>/<Name>.arcusfurniture` with a 3D thumbnail, plus `<dir>/index.json`, then exits (1 if a piece failed).
+if let i = args.firstIndex(of: "--furniture-library"), i + 1 < args.count {
+    exit(FurnitureLibraryBench.run(dir: URL(fileURLWithPath: args[i + 1]), args: args))
+}
+
 // `--commands-markdown` prints the command catalog (shortcuts and typed aliases) as Markdown tables and exits;
 // Docs/KeyboardShortcuts.md is generated from it so the document never drifts from the code.
 if args.contains("--commands-markdown") {

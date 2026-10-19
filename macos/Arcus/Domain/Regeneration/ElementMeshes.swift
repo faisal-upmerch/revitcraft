@@ -44,6 +44,10 @@ public enum ElementMeshes {
             return LinkedGeometry.meshParts(e, model)
         case .mass: // F5
             return MassGeometry.meshParts(e, model)
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureForm: // FM4: furniture parts
+            return FurniturePartMeshes.meshParts(e, model, detail: detail)
+        case .furnitureFront: // FM5: doors, drawers and flaps
+            return FurnitureFrontSolids.meshParts(e, model, detail: detail)
         default:
             return []
         }
@@ -68,6 +72,9 @@ public enum ElementMeshes {
         case .modelText: true // F1
         case .linkedModel, .pointCloud, .decal: true // F67
         case .mass: true // F5
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail: true // FM4
+        case .furnitureForm(let f): !f.isVoid // FM4: void forms cut parts and show no solid of their own
+        case .furnitureFront: true // FM5
         default: false
         }
     }
@@ -94,6 +101,10 @@ public enum ElementMeshes {
         case .pointClouds: RGBColor(0.36, 0.46, 0.62) // F67
         case .coordinationModels: RGBColor(0.72, 0.74, 0.80, 0.9)
         case .mass: RGBColor(0.72, 0.80, 0.90, 0.5) // F5: masses are translucent, as in RevitCraft
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails: RGBColor(0.85, 0.74, 0.56) // FM4: unfinished wood
+        case .furnitureForms: RGBColor(0.70, 0.72, 0.76) // FM4
+        case .furnitureFronts: RGBColor(0.88, 0.78, 0.60) // FM5
+        case .furnitureHardware: RGBColor(0.62, 0.64, 0.67) // FM5: brushed steel
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }
@@ -215,11 +226,13 @@ public enum DependencyGraph {
         case .stair(let st):
             if let t = st.topLevelID { s.insert(t) }
             if st.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2: every storey's levels
+            for t in StairTypeInfo.componentTypeIDs(model.typeData(of: e)) { s.insert(t) } // STAIR: run, landing and support types
         case .ramp(let r):
             if let t = r.topLevelID { s.insert(t) }
         case .railing:
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
             if model[e.hostID]?.stair?.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2
+            if let h = model[e.hostID], h.stair != nil { for t in StairTypeInfo.componentTypeIDs(model.typeData(of: h)) { s.insert(t) } } // STAIR
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
         case .decal(let d): // F67: the decal type's image
@@ -228,6 +241,10 @@ public enum DependencyGraph {
             for sh in ShaftCuts.shafts(cutting: e, model) { s.insert(sh.id); if let l = sh.levelID { s.insert(l) }; if let t = sh.opening?.shaft?.topLevelID { s.insert(t) } }
         case .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCoupler: // F34: host, bar types, cover
             s.formUnion(Reinforcement.inputs(of: e, model))
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4: edge profiles, void forms
+            s.formUnion(FurniturePartMeshes.inputs(of: e, model))
+        case .furnitureFront: // FM5: its bay, materials and hardware
+            s.formUnion(FurnitureFrontSolids.inputs(of: e, model))
         default:
             break
         }
@@ -258,6 +275,10 @@ public enum DependencyGraph {
                     for w in m.elements(.walls) where w.wall?.topLevelID == id { out.insert(w.id) }
                 case .type:
                     for x in m.instances(ofType: id) { out.insert(x.id) }
+                    for x in m.instances(ofType: id) where x.stair != nil { for r in m.hosted(by: x.id) { out.insert(r.id) } } // STAIR: their railings
+                    for st in m.types(for: .stairs) where StairTypeInfo.componentTypeIDs(st.typeData).contains(id) { // STAIR: run, landing, support types
+                        for x in m.instances(ofType: st.id) { out.insert(x.id); for r in m.hosted(by: x.id) { out.insert(r.id) } }
+                    }
                     for t in m.types(for: .walls) where StackedWalls.partTypes(t.typeData).contains(id) { for x in m.instances(ofType: t.id) { out.insert(x.id) } } // F2
                 case .family:
                     for t in m.elements(.elementTypes) where t.typeData?.familyID == id { for x in m.instances(ofType: t.id) { out.insert(x.id) } }
@@ -271,6 +292,12 @@ public enum DependencyGraph {
                     for r in m.hosted(by: id) { out.insert(r.id) }
                 case .wallReveal: // F1: the host wall's solid has the groove
                     if let h = e.hostID { out.insert(h) }
+                case .furnitureEdgeProfile: // FM4: the host part's solid has the profile
+                    if let h = e.hostID { out.insert(h) }
+                case .furnitureBay: // FM5: fronts and sub-bays follow their bay
+                    for x in m.hosted(by: id) { out.insert(x.id); for y in m.hosted(by: x.id) { out.insert(y.id) } }
+                case .furnitureForm(let f) where f.isVoid: // FM4: a void form cuts every part it reaches
+                    for c in Category.furnitureParts { for x in m.elements(c) { out.insert(x.id) } }
                 case .opening: // WP3
                     if let h = e.hostID { out.insert(h) }
                     for x in ShaftCuts.cutElements(by: e, m) { out.insert(x.id) }
@@ -279,6 +306,7 @@ public enum DependencyGraph {
                 for t in m.tags(of: id) { out.insert(t.id) }
                 out.formUnion(Reinforcement.affected(by: e, m)) // F34
                 out.formUnion(SolidJoins.partners(of: id, m))
+                out.formUnion(FurnitureJoints.affected(by: e, m)) // FM6: joint partners, joint elements, Joint Rules
                 if e.typeData?.instanceCategory == .curtainPanels { for w in CurtainWallGeometry.walls(usingPanelType: id, m) { out.insert(w.id) } } // WP3
             }
         }

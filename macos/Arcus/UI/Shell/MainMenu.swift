@@ -14,22 +14,23 @@ enum MainMenuBuilder {
         main.addItem(submenu("Edit", editItems()))
         main.addItem(submenu("View", viewItems()))
         CameraMenus.addNavigationItems(to: main.items.last?.submenu) // W2-CAM
-        // The menu bar follows the ribbon tabs: Architecture, Structure, Insert, Annotate, (View above), Manage.
+        // The menu bar follows the ribbon tabs: Architecture, Structure, Furniture, Insert, Annotate, (View above), Manage.
         let byFace = submenu("Model by Face", commands([.curtainSystemByFace, .roofByFace, .wallByFace, .floorByFace])) // F5
         let architecture = submenu("Architecture", commands([.wall, .stackedWall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .modelInPlace, .column, nil, // F1: Wall: Reveal; F2: Stacked; F5: In-place
                                                       .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
-                                                      .stairStraight, .stairL, .stairU, .connectLevels, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, .space, .spaceSeparator, nil, // F5: spaces
-                                                      .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
+                                                      .stair, .connectLevels, .ramp, .railing, .stairRailingEditPath, .stairRailingReset, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, .space, .spaceSeparator, nil, // F5: spaces
+                                                      .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .shaftPickStair, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
                                                       .level, .grid, .gridMultiSegment, .referencePlane, .workPlaneSet, .workPlaneShow, .workPlaneViewer, nil, // F2
                                                       .showMass, .inPlaceMass, nil, .toposurface, .buildingPad, .propertyLine]) + [byFace]) // F5
         main.addItem(architecture)
         main.addItem(submenu("Structure", commands([.structuralColumn, .verticalColumn, .slantedColumn, .columnsAtGrids, .columnsAtColumns, .beam, // F2 .structuralWall, .structuralFloor, .truss, .brace, .beamSystem, nil,
                                                     .foundationIsolated, .foundationWall, .foundationSlab, nil, // F34
                                                     .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCover, .couplerOnBarEnd, .couplerBetweenBars])))
+        main.addItem(furnitureMenu()) // FM4: Furniture mode
         main.addItem(submenu("Insert", commands([.linkModel, .linkIFC, .linkCAD, .linkTopography, .dwfMarkup, .placeDecal, .decalTypes, .pointCloud, .coordinationModel, .linkPDF, .linkImage, nil, // F67
                                                  .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
                                                  .importCAD, .importGbXML, .importPDF, .importImage, .importIFC, .importRevit, nil,
-                                                 .loadFamily, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
+                                                 .loadFamily, .loadFurniture, .loadAsGroup, .insertViewsFromFile, .insert2DElementsFromFile, .reloadFamily, .typeCatalog, .componentLibrary, .siteLibrary])))
         main.addItem(submenu("Annotate", commands([.alignedDimension, .linearDimension, .angularDimension, .radialDimension, .diameterDimension, .arcLengthDimension, nil,
                                                    .spotElevation, .spotCoordinate, .spotSlope, nil, .detailLine, .filledRegion, .maskingRegion, .detailComponent, .insulation, nil,
                                                    .textNote, .tagByCategory, .tagAll, .roomTag, .spaceTag, .colorFillLegend, // F5 .symbol, .northArrow, nil, .revisionCloud, nil,
@@ -142,7 +143,7 @@ enum MainMenuBuilder {
         let importMenu = submenu("Import", commands([.importCAD, .importIFC, .importRevit, .importScheduleCSV])) // BL-SCHED
         let pageSetup = command(.printSetup) // F13: Print Setup (paper, zoom, hidden items) replaces the generic Page Setup
         pageSetup.keyEquivalent = "p"; pageSetup.keyEquivalentModifierMask = [.command, .shift]
-        return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
+        return [command(.home), newMenu(), open, recent, .separator(), close, save, dup, saveAs, command(.saveAsTemplate), command(.saveAsFurnitureTemplate), revert, command(.exportRecoveryCopy), .separator(), // BL-SCHED: New ▸
                 importMenu, export, .separator(), pageSetup, command(.printPreview), command(.print)]
     }
 

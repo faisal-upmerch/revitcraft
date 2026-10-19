@@ -1,4 +1,5 @@
 import Foundation
+import ArcusDomain
 
 // HOME: the furniture pieces Home ▸ Furniture offers as starting points (Docs/FurnitureMode.md §3 Library, §4).
 
@@ -12,7 +13,8 @@ public enum FurnitureLibraryCatalog {
     /// Room name for user templates saved straight into the templates folder.
     public static let myTemplatesRoom = "My Templates"
 
-    /// One library piece.
+    /// One library piece, as listed under one room (FM9: a bundled piece listed under several rooms is one Item per
+    /// room, all with the same file).
     public struct Item: Identifiable, Hashable, Sendable {
         public var url: URL
         /// Display name (the file name without its extension).
@@ -21,9 +23,27 @@ public enum FurnitureLibraryCatalog {
         public var room: String
         /// True for the user's own templates (Application Support), false for bundled pieces.
         public var isUser: Bool
-        public var id: URL { url }
+        /// FM9: from the library's index.json: every room the piece is listed under, search words, its types' names
+        /// and sizes, category ("Furniture"/"Casework"), detail ("high"/"simple") and description.
+        public var rooms: [String] = []
+        public var keywords: [String] = []
+        public var types: [FurnitureLibraryIndex.TypeSize] = []
+        public var category: String?
+        public var detail: String?
+        public var summary: String = ""
+        /// The room and the file (a piece listed under two rooms is two items).
+        public var id: String { room + "|" + url.path }
         public init(url: URL, name: String, room: String, isUser: Bool) {
             self.url = url; self.name = name; self.room = room; self.isUser = isUser
+        }
+
+        /// "3 types" (empty when the count isn't known).
+        public var typeCountText: String { types.isEmpty ? "" : "\(types.count) type\(types.count == 1 ? "" : "s")" }
+
+        /// True when the name, a room or a keyword contains `q` (case- and diacritic-insensitive).
+        public func matches(_ q: String) -> Bool {
+            func has(_ s: String) -> Bool { s.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil }
+            return has(name) || has(room) || rooms.contains(where: has) || keywords.contains(where: has) || (category.map(has) ?? false)
         }
     }
 
@@ -58,14 +78,11 @@ public enum FurnitureLibraryCatalog {
         }
     }
 
-    /// The pieces whose name or room contains `query` (case- and diacritic-insensitive), grouped by room. User rooms
+    /// The pieces whose name, room or keywords contain `query` (case- and diacritic-insensitive), grouped by room. User rooms
     /// come after the bundled ones, and My Templates last.
     public static func rooms(_ items: [Item], matching query: String = "") -> [Room] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let matched = q.isEmpty ? items : items.filter {
-            $0.name.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-                || $0.room.range(of: q, options: [.caseInsensitive, .diacriticInsensitive]) != nil
-        }
+        let matched = q.isEmpty ? items : items.filter { $0.matches(q) } // FM9: names, rooms and keywords
         var order: [String] = []
         var byRoom: [String: [Item]] = [:]
         for item in matched {
@@ -83,6 +100,8 @@ public enum FurnitureLibraryCatalog {
 
     private static func scanRoot(_ root: URL, isUser: Bool, looseRoom: String?) -> [Item] {
         let fm = FileManager.default
+        // FM9: a library with an index lists each piece under every room it names; the file lives once.
+        if let index = FurnitureLibraryIndex.read(in: root) { return indexedItems(index, root: root, isUser: isUser) }
         guard let entries = try? fm.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]) else { return [] }
         var items: [Item] = []
         for entry in entries {
@@ -95,6 +114,26 @@ public enum FurnitureLibraryCatalog {
             }
         }
         return items
+    }
+
+    /// The pieces of an indexed library, one item per piece and room (files that aren't there are skipped).
+    static func indexedItems(_ index: FurnitureLibraryIndex, root: URL, isUser: Bool) -> [Item] {
+        var out: [Item] = []
+        for p in index.pieces {
+            let url = root.appending(path: p.file, directoryHint: .notDirectory)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            for room in p.rooms.isEmpty ? [url.deletingLastPathComponent().lastPathComponent] : p.rooms {
+                var item = Item(url: url, name: p.name, room: room, isUser: isUser)
+                item.rooms = p.rooms
+                item.keywords = p.keywords
+                item.types = p.types
+                item.category = p.category
+                item.detail = p.detail
+                item.summary = p.description
+                out.append(item)
+            }
+        }
+        return out
     }
 
     private static func item(_ url: URL, room: String, isUser: Bool) -> Item {

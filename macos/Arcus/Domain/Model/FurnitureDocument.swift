@@ -33,6 +33,10 @@ public struct FurnitureSetupData: Hashable, Codable, Sendable {
     public var family: FamilyDefinition
     /// The type whose values drive the planes (Family Types ▸ Type).
     public var currentType: String
+    /// FM6: Manage ▸ Joint Rules (nil = the category's defaults).
+    public var jointRules: FurnitureJointRules? = nil
+    /// FM7: Manage ▸ Stock Sheets (nil = the defaults: 4' x 8', 5' x 5' Baltic Birch).
+    public var stockSheets: FurnitureStockSheets? = nil
 
     public init(family: FamilyDefinition, currentType: String? = nil) {
         self.family = family

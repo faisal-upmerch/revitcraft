@@ -28,6 +28,8 @@ public struct EvaluatedFamily: Sendable {
         public var visibleInLeftRight: Bool
         /// Id of the `FamilySolid` this came from (nil for solids of nested families). // W4-FAMED
         public var sourceID: String? = nil
+        /// FM6: a void's Cut Geometry (the `FamilySolid` ids it cuts; nil = every solid it reaches).
+        public var cuts: [String]? = nil
 
         /// Closed mesh in family coordinates.
         public var familyMesh: Mesh { mesh ?? MeshBuilder.extrude(profile, bottom: zMin, top: zMax) }
@@ -235,9 +237,11 @@ public enum FamilyEvaluator {
         var solids: [EvaluatedFamily.Solid] = []
         for s in family.solids where visible(s.visibilityParameter) {
             func make(_ form: EvaluatedFamily.Form, _ profile: Profile2, _ z0: Double, _ z1: Double, mesh: Mesh? = nil) -> EvaluatedFamily.Solid {
-                .init(name: s.name, form: form, profile: profile, zMin: z0, zMax: z1, mesh: mesh, materialParameter: s.materialParameter,
+                var r: EvaluatedFamily.Solid = .init(name: s.name, form: form, profile: profile, zMin: z0, zMax: z1, mesh: mesh, materialParameter: s.materialParameter,
                       resolvedMaterial: nil, subcategory: s.subcategory, isVoid: s.isVoid, visibleAt: s.visibleAt, visibleInPlan: s.visibleInPlan,
                       visibleIn3D: s.visibleIn3D, visibleInFrontBack: s.visibleInFrontBack, visibleInLeftRight: s.visibleInLeftRight, sourceID: s.id) // W4-FAMED
+                r.cuts = s.cuts // FM6
+                return r
             }
             switch s.profile {
             case .rectangle, .polygon, .circle:

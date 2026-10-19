@@ -34,6 +34,7 @@ struct NewScheduleDialog: View {
             fs[1].total = .total; fs[2].total = .total
             return fs
         }
+        if category == .furniture || category == .casework { return FurnitureScheduleFields.defaults() } // FM8: Width, Depth, Height, Material, Cost
         var fs = [ScheduleTemplates.field("familyAndType", "Family and Type", width: 0.05), ScheduleTemplates.field("level", "Level", width: 0.03)]
         switch category {
         case .walls: fs += [ScheduleTemplates.field("q.length", "Length", total: .total, align: .right), ScheduleTemplates.field("q.area", "Area", total: .total, align: .right)]
@@ -96,6 +97,7 @@ struct SchedulePropertiesDialog: View {
             let m = state.model
             sample = m.elements(def.categories).first(where: { !$0.isType }) ?? m.elements(def.categories).first
             if let sample { available = Parameters.allEntries(sample, m) }
+            if def.kind.isFabrication || def.kind == .materialTakeoff { available = FabricationSchedules.availableEntries(def.kind) + (def.kind.isFabrication ? [] : available) } // FM7
             var seen = Set<ParameterID>()
             available = available.filter { seen.insert($0.id).inserted }
         }
@@ -104,11 +106,12 @@ struct SchedulePropertiesDialog: View {
     // MARK: Fields
 
     var unscheduled: [ParameterEntry] {
-        available.filter { e in !def.fields.contains { if case .parameter(let p) = $0.source { return p == e.id }; return false } }
+        available.filter { e in !def.fields.contains { if case .parameter(let p) = $0.source { return p == e.id }; return false } && !FabricationSchedules.schedules(def, e) } // FM7
     }
 
     func add(_ e: ParameterEntry) {
-        let f = ScheduleField(source: .parameter(e.id), heading: e.name, width: e.type.isNumeric ? 0.022 : 0.03, alignment: e.type.isNumeric ? .right : .left)
+        let f = FabricationSchedules.field(for: e, def.kind) // FM7: fabrication and material fields
+            ?? ScheduleField(source: .parameter(e.id), heading: e.name, width: e.type.isNumeric ? 0.022 : 0.03, alignment: e.type.isNumeric ? .right : .left)
         def.insertField(f, before: nil)
         selectedField = f.id
         selectedAvailable = nil

@@ -62,11 +62,16 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FES categories:
     // FM3 categories:
     // FM4 categories:
+    case furniturePanels, furnitureShelves, furnitureLegs, furnitureRails, furnitureEdgeProfiles, furnitureForms // FM4
     // FM5 categories:
+    case furnitureBays, furnitureFronts, furnitureBaySeparators, furnitureHardware // FM5
     // FM6 categories:
+    case furnitureJoints // FM6
     // FM7 categories:
     // FM8 categories:
     // FM9 categories:
+    // STAIR categories:
+    case stairRuns, stairLandings, stairSupports // STAIR: run, landing and support types of stair types
 
 
 
@@ -108,6 +113,10 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: return .annotation // F810: view-specific reshaping of a wall's cut
         case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
         case .renderings: return .internal_ // F810: Render Gallery images
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
+        case .furnitureBays, .furnitureFronts, .furnitureBaySeparators, .furnitureHardware: return .model // FM5: bays like rooms, separators like room separators
+        case .furnitureJoints: return .internal_ // FM6: user-set joints have no graphics of their own
+        case .stairRuns, .stairLandings, .stairSupports: return .internal_ // STAIR: types only (their pieces draw as the stair)
         }
     }
 
@@ -124,6 +133,8 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, // W2-LIB
         .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, // F34
         .spaces, .mass, // F5
+        .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
+        .furnitureBays, .furnitureFronts, .furnitureHardware, // FM5
     ]
     /// Categories whose instances can be tagged.
     public static let taggable: [Category] = [
@@ -131,6 +142,8 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .structuralColumns, .structuralFraming, .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .ramps,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking, // W2-LIB
         .spaces, // F5
+        .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
+        .furnitureBays, .furnitureFronts, .furnitureHardware, // FM5
     ]
 
     public var displayName: String {
@@ -240,6 +253,20 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: "Cut Profiles" // F810
         case .matchlines: "Matchline"
         case .renderings: "Renderings"
+        case .furniturePanels: "Panels" // FM4
+        case .furnitureShelves: "Shelves"
+        case .furnitureLegs: "Legs"
+        case .furnitureRails: "Rails"
+        case .furnitureEdgeProfiles: "Edge Profiles"
+        case .furnitureForms: "Forms"
+        case .furnitureBays: "Bays" // FM5
+        case .furnitureFronts: "Doors and Drawers"
+        case .furnitureBaySeparators: "Bay Separation Lines"
+        case .furnitureHardware: "Furniture Hardware"
+        case .furnitureJoints: "Joints" // FM6
+        case .stairRuns: "Stair Runs" // STAIR
+        case .stairLandings: "Stair Landings"
+        case .stairSupports: "Stair Supports"
         }
     }
 
@@ -351,6 +378,20 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .cutProfiles: "Cut Profile" // F810
         case .matchlines: "Matchline"
         case .renderings: "Rendering"
+        case .furniturePanels: "Panel" // FM4
+        case .furnitureShelves: "Shelf"
+        case .furnitureLegs: "Leg"
+        case .furnitureRails: "Rail"
+        case .furnitureEdgeProfiles: "Edge Profile"
+        case .furnitureForms: "Form"
+        case .furnitureBays: "Bay" // FM5
+        case .furnitureFronts: "Front"
+        case .furnitureBaySeparators: "Bay Separation Line"
+        case .furnitureHardware: "Furniture Hardware"
+        case .furnitureJoints: "Joint" // FM6
+        case .stairRuns: "Run" // STAIR
+        case .stairLandings: "Landing"
+        case .stairSupports: "Support"
         }
     }
 
@@ -368,6 +409,8 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .walls, .floors, .ceilings, .roofs, .stairs, .railings, .columns, .structuralColumns, .structuralFraming,
              .doors, .windows, .topography, .buildingPads, .genericModels, .casework, .ramps:
             true
+        case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms: true // FM4
+        case .furnitureFronts: true // FM5
         default: false
         }
     }
@@ -383,6 +426,7 @@ extension Category {
     public static let componentCategories: [Category] = [
         .furniture, .casework, .plumbingFixtures, .genericModels, .specialtyEquipment,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking,
+        .furnitureHardware, // FM5: hinges, slides, handles… placed with Component
     ]
     public var isComponentCategory: Bool { Category.componentCategories.contains(self) }
 }

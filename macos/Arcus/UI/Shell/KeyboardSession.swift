@@ -108,6 +108,11 @@ extension DocumentState {
         let sel = session.selection.ids.compactMap { model[$0] }
         let inserts = sel.filter { $0.insert != nil }.map(\.id)
         let walls = sel.filter { $0.wall != nil }.map(\.id)
+        let doors = sel.filter { $0.furnitureFront?.kind == .door }.map(\.id) // FM5: Space flips a cabinet door's hinge side
+        if inserts.isEmpty, walls.isEmpty, !doors.isEmpty {
+            session.perform("Flip Hinge") { tx in for id in doors { tx.update(id) { $0.furnitureFront?.hingeFlipped.toggle() } } }
+            return true
+        }
         guard !inserts.isEmpty || !walls.isEmpty else { return false }
         session.perform(inserts.isEmpty ? "Flip Wall" : "Flip Facing") { tx in
             for id in inserts { tx.update(id) { $0.insert?.facingFlipped.toggle() } }

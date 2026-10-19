@@ -152,7 +152,7 @@ struct HomeFurniturePane: View {
                 HomeSectionHeader(title: "Start From")
                 Spacer()
                 if !model.library.isEmpty {
-                    TextField("Search pieces or rooms", text: $model.furnitureSearch)
+                    TextField("Search pieces, rooms or materials", text: $model.furnitureSearch)
                         .textFieldStyle(.roundedBorder)
                         .frame(width: 216)
                         .accessibilityLabel("Search the furniture library")
@@ -171,27 +171,33 @@ struct HomeFurniturePane: View {
                     HomeBlankThumbnail()
                 } action: { model.furnitureTemplate = nil }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             if model.library.isEmpty {
                 HomeEmptyState(symbol: "books.vertical", title: "No library pieces yet",
                                message: "Start from Blank. Pieces you save as furniture templates appear here.",
                                actionTitle: "Open Furniture Templates Folder") { model.openFurnitureTemplatesFolder() }
             } else if rooms.isEmpty {
-                HomeEmptyState(symbol: "magnifyingglass", title: "No pieces match “\(model.furnitureSearch)”", message: "Try another name or room.")
+                HomeEmptyState(symbol: "magnifyingglass", title: "No pieces match “\(model.furnitureSearch)”", message: "Try another name, room or material.")
             } else {
                 ForEach(rooms) { room in
                     VStack(alignment: .leading, spacing: 8) {
-                        HomeSectionHeader(title: room.name)
+                        HomeSectionHeader(title: "\(room.name) · \(room.items.count)")
                         LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 12) {
                             ForEach(room.items) { item in
-                                HomeGalleryTile(title: item.name, subtitle: item.isUser ? "My template" : nil, selected: model.furnitureTemplate == item.url) {
-                                    RecentThumbnail(url: item.url, placeholder: .furniture)
+                                // FM9: type counts under the names; the grid fills the pane's width.
+                                HomeGalleryTile(title: item.name, subtitle: item.isUser ? "My template" : (item.typeCountText.isEmpty ? nil : item.typeCountText),
+                                                selected: model.furnitureTemplate == item.url) {
+                                    FurnitureFileThumbnail(url: item.url, size: CGSize(width: 148, height: 80)) // FM9: the piece's own preview
                                 } action: {
                                     model.furnitureTemplate = item.url
                                     if model.furnitureName == "Untitled Furniture" { model.furnitureName = item.name }
                                 }
+                                .help(item.summary.isEmpty ? item.name : item.summary)
                             }
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
         }
@@ -364,6 +370,7 @@ struct HomeCategoryTile: View {
         case .entourage: "figure.stand"
         case .parking: "car.side"
         case .site: "mountain.2"
+        case .furnitureHardware: "gearshape.2" // FM5
         }
     }
 }

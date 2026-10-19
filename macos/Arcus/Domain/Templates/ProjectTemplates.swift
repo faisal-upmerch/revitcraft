@@ -244,6 +244,10 @@ public enum ProjectTemplates {
         LineStyles.ensureStandard(in: tx)
         for (name, id) in AnnotationTypes.ensureStandard(in: tx, units: units) where AnnotationTypes.textSpecs(units).contains(where: { $0.name == name }) { ids.systemTypes["Text " + name] = id }
         AnnotationLibrary.ensureAll(in: tx)
+        // STAIR: run, landing, support and stair types, and stair settings of the railing types (last, so the ids of the
+        // rest of the template stay as they were).
+        StairDefaults.populate(tx, imperial: units.system == .imperial, stairType: ids.systemTypes["Stair"],
+                               railingTypes: [ids.systemTypes["Railing"], ids.systemTypes["Handrail"]].compactMap { $0 })
         return ids
     }
 }

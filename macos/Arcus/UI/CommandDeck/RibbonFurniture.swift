@@ -28,7 +28,7 @@ extension RibbonContent {
         case .fabricate: return furnitureFabricatePanels
         case .view: return withoutArchitecture(tabPanels(.view))
         case .manage: return furnitureManagePanels
-        case .modify: return tabPanels(.modify) + [familyEditorPanel]
+        case .modify: return fm6ModifyPanels(tabPanels(.modify)) + [familyEditorPanel] // FM6: Joint on Modify ▸ Geometry
         default: return withoutArchitecture(tabPanels(tab))
         }
     }
@@ -47,8 +47,8 @@ extension RibbonContent {
 
     static let furniturePropertiesPanel = RibbonPanel(title: "Properties", items: [.large(.furnitureFamilyTypes), .large(.furnitureCategory), .small(.toggleProperties)], tint: furniture)
 
-    /// Forms: free shapes. The project's in-place form tool until the Furniture forms arrive.
-    static let furnitureFormsPanel = RibbonPanel(title: "Forms", items: [.large(.modelInPlace)] + fm4FormItems, tint: build)
+    /// Forms: free shapes (FM4: Extrusion, Blend, Revolve, Sweep, Swept Blend, Cushion, Void Forms).
+    static let furnitureFormsPanel = RibbonPanel(title: "Forms", items: fm4FormItems, tint: build)
 
     static var furnitureModelPanel: RibbonPanel {
         RibbonPanel(title: "Model", items: [.large(.component, [.component, .componentLibrary])] + fm5ModelItems + [.small(.modelLine), .small(.modelText)], tint: build)
@@ -58,7 +58,8 @@ extension RibbonContent {
     static let furnitureWorkPlaneItems: [RibbonItem] = [.large(.workPlaneSet), .small(.workPlaneShow), .small(.workPlaneViewer)]
 
     /// Load into Project, Load into Project and Close, Flex (on Create and Modify, as in the Family Editor).
-    static let familyEditorPanel = RibbonPanel(title: "Family Editor", items: [.large(.furnitureLoadIntoProject), .large(.furnitureLoadAndClose), .small(.furnitureFlex)], tint: furniture)
+    static let familyEditorPanel = RibbonPanel(title: "Family Editor", items: [.large(.furnitureLoadIntoProject), .large(.furnitureLoadAndClose), .small(.furnitureFlex),
+                                                                             .small(.saveAsFurnitureTemplate)], tint: furniture) // FM8: Save as Furniture Template
 
     // MARK: Insert
 
@@ -71,7 +72,7 @@ extension RibbonContent {
 
     static var furnitureFabricatePanels: [RibbonPanel] {
         fm6FabricatePanels + fm7FabricatePanels
-            + [RibbonPanel(title: "Schedules", items: [.large(.materialTakeoff), .large(.schedule)], tint: view),
+            + [RibbonPanel(title: "Schedules", items: [.large(.schedule)], tint: view), // FM7: Material Takeoff opens the piece's takeoff (Part List panel)
                RibbonPanel(title: "Export", items: [.large(.exportPDF), .small(.exportDXF), .small(.exportDWG), .small(.exportImage)], tint: sheet)]
     }
 
@@ -102,29 +103,113 @@ extension RibbonContent {
     // MARK: Slots for later milestones
 
     // FM4 panels: Parts (Panel, Shelf, Top, Back, Divider, Leg, Rail, Plinth, Edge Profile) on Create, after Properties.
-    static var fm4CreatePanels: [RibbonPanel] { [] }
+    static var fm4CreatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Parts", items: [.large(.furniturePanel), .large(.furnitureShelf), .large(.furnitureTop),
+                                             .small(.furnitureBack), .small(.furnitureDivider), .small(.furniturePlinth),
+                                             .large(.furnitureLeg, [.furnitureLeg, .furnitureLegsAtCorners]), .large(.furnitureRail, [.furnitureRail, .furnitureSlats]),
+                                             .large(.furnitureEdgeProfile, [.furnitureEdgeProfile, .furnitureGroove])], tint: furniture)]
+    }
 
     // FM4 panels: Furniture forms (Extrusion, Blend, Revolve, Sweep, Swept Blend, Cushion, Void Forms) on Create ▸ Forms.
-    static var fm4FormItems: [RibbonItem] { [] }
+    static var fm4FormItems: [RibbonItem] {
+        [.large(.furnitureExtrusion), .large(.furnitureBlend), .large(.furnitureRevolve), .small(.furnitureSweep), .small(.furnitureSweptBlend), .small(.furnitureCushion),
+         .large(.furnitureVoidExtrusion, [.furnitureVoidExtrusion, .furnitureVoidBlend, .furnitureVoidRevolve, .furnitureVoidSweep, .furnitureVoidSweptBlend])]
+    }
+
+    // FM4 panels: the contextual Modify | Panels, Legs… panel (Edit Profile, Opening, Attach Top/Base, Detach, Flip).
+    static func fm4SelectionItems(_ sel: [Element], _ m: BIMModel) -> (title: String?, items: [RibbonItem]) {
+        let parts = sel.filter { $0.category.isFurniturePart }
+        guard !parts.isEmpty else { return (nil, []) }
+        var items: [RibbonItem] = []
+        if parts.contains(where: { $0.furniturePanel != nil }) {
+            items += [.large(.furnitureEditProfile), .small(.furnitureResetProfile), .small(.furniturePanelOpening), .small(.furnitureFlipPanel)]
+        }
+        if parts.contains(where: { $0.furniturePanel?.plane == .xy || $0.furnitureLeg != nil }) { items += [.large(.furnitureAttach), .small(.furnitureDetach)] }
+        if parts.count == 1, parts[0].furnitureShelf != nil { items += [.large(.furnitureLegsAtCorners)] }
+        let title = parts.allSatisfy({ $0.furniturePanel != nil }) ? "Modify Panel" : parts.allSatisfy({ $0.furnitureLeg != nil }) ? "Modify Leg" : "Modify Part"
+        return items.isEmpty ? (nil, []) : (title, items)
+    }
 
     // FM5 panels: Openings (Bay, Bay Divide, Door, Drawer, Flap) on Create, after Parts.
-    static var fm5CreatePanels: [RibbonPanel] { [] }
+    static var fm5CreatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Openings", items: [.large(.furnitureBay), .small(.furnitureBaySeparator), .small(.furnitureBayDivide), .small(.furnitureBayTag),
+                                                .large(.furnitureDoor), .large(.furnitureDrawer), .large(.furnitureFlap)], tint: furniture)]
+    }
 
     // FM5 panels: Hardware on Create ▸ Model, after Component.
-    static var fm5ModelItems: [RibbonItem] { [] }
+    static var fm5ModelItems: [RibbonItem] { [.large(.furnitureHardware)] }
+
+    // FM5 panels: the contextual Modify | Doors, Drawers, Flaps and Bays panel.
+    static func fm5SelectionItems(_ sel: [Element], _ m: BIMModel) -> (title: String?, items: [RibbonItem]) {
+        let fronts = sel.filter { $0.furnitureFront != nil }, bays = sel.filter { $0.furnitureBay != nil }
+        if !fronts.isEmpty {
+            var items: [RibbonItem] = []
+            if fronts.contains(where: { $0.furnitureFront?.kind == .door }) { items.append(.large(.furnitureFlipHinge)) }
+            items += [.large(.furniturePickNewHost), .small(.furnitureSelectHardware)]
+            let kinds = Set(fronts.compactMap { $0.furnitureFront?.kind })
+            return (kinds.count == 1 ? "Modify \(kinds.first!.rawValue)" : "Modify Front", items)
+        }
+        if !bays.isEmpty {
+            var items: [RibbonItem] = [.large(.furnitureBayDivide)]
+            if bays.contains(where: { $0.furnitureBay?.division != nil }) { items.append(.small(.furnitureRemoveDivide)) }
+            items.append(.small(.furnitureBayTag))
+            return ("Modify Bay", items)
+        }
+        return (nil, [])
+    }
+
+    /// FM5: the contextual tab's name for selected fronts, as Revit names it by category: Doors, Drawers, Flaps.
+    static func fm5SelectionTitle(_ sel: [Element]) -> String? {
+        guard !sel.isEmpty, sel.allSatisfy({ $0.furnitureFront != nil }) else { return nil }
+        let kinds = Set(sel.compactMap { $0.furnitureFront?.kind })
+        guard kinds.count == 1, let k = kinds.first else { return "Doors and Drawers" }
+        return k.rawValue + "s"
+    }
 
     // FM6 panels: Joint and Joint Rules on Fabricate.
-    static var fm6FabricatePanels: [RibbonPanel] { [] }
+    static var fm6FabricatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Joints", items: [.large(.furnitureJoint), .large(.furnitureJointRules), .small(.furnitureAllowJoin), .small(.furnitureDisallowJoin)], tint: furniture)]
+    }
 
     // FM6 panels: Joint Rules on Manage.
-    static var fm6ManagePanels: [RibbonPanel] { [] }
+    static var fm6ManagePanels: [RibbonPanel] { [RibbonPanel(title: "Joints", items: [.large(.furnitureJointRules)], tint: manage)] }
+
+    /// FM6: Modify ▸ Geometry in Furniture documents has Joint and Allow/Disallow Join for parts where projects have the
+    /// walls' Allow/Disallow Join (as Wall Joins sits there in Revit).
+    static func fm6ModifyPanels(_ panels: [RibbonPanel]) -> [RibbonPanel] {
+        panels.map { p in
+            guard p.title == "Geometry" else { return p }
+            var items = p.items.filter { $0.id != .joinGeometry }
+            items.insert(.large(.furnitureJoint), at: 0)
+            items.append(.small(.furnitureAllowJoin, [.furnitureAllowJoin, .furnitureDisallowJoin]))
+            return RibbonPanel(title: p.title, items: items, tint: p.tint)
+        }
+    }
+
+    /// FM6: the contextual tab's joint items for selected parts.
+    static func fm6SelectionItems(_ sel: [Element]) -> [RibbonItem] {
+        sel.contains(where: { $0.category.isFurniturePart && $0.furnitureEdgeProfile == nil && $0.furnitureForm == nil })
+            ? [.large(.furnitureJoint), .small(.furnitureAllowJoin), .small(.furnitureDisallowJoin)] : []
+    }
+
+    /// FM6: the contextual Modify | Joints tab's panel while the Joint tool runs.
+    static func fm6ToolPanels(_ tool: any InteractiveTool) -> [RibbonPanel] {
+        tool is FurnitureJointTool ? [RibbonPanel(title: "Joints", items: [.large(.furnitureJointRules)], tint: furniture)] : []
+    }
 
     // FM7 panels: Part List, Hardware Schedule, Material Takeoff, Nesting, CNC Export, Check Parts on Fabricate.
-    static var fm7FabricatePanels: [RibbonPanel] { [] }
+    static var fm7FabricatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Part List", items: [.large(.furniturePartList), .large(.furnitureHardwareSchedule), .small(.furnitureMaterialTakeoff),
+                                                 .small(.furnitureEdgeBanding), .small(.furnitureCost)], tint: view),
+         RibbonPanel(title: "Nesting", items: [.large(.furnitureNesting), .large(.furnitureStockSheets)], tint: furniture),
+         RibbonPanel(title: "Output", items: [.large(.furnitureCNCExport), .large(.furnitureShopDrawings), .large(.furnitureCheckParts)], tint: sheet)]
+    }
 
     // FM7 panels: Stock Sheets and Hardware Catalog on Manage.
-    static var fm7ManagePanels: [RibbonPanel] { [] }
+    static var fm7ManagePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Fabrication", items: [.large(.furnitureStockSheets), .large(.furnitureHardwareCatalog), .small(.furnitureCheckParts)], tint: manage)]
+    }
 
     // FM9 panels: Load Furniture on Insert ▸ Load from Library.
-    static var fm9InsertItems: [RibbonItem] { [] }
+    static var fm9InsertItems: [RibbonItem] { [.large(.loadFurniture)] } // FM8: the Load Furniture command (FM9 fills the library)
 }

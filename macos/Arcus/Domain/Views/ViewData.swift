@@ -12,10 +12,11 @@ public enum ViewKind: String, Codable, Sendable, CaseIterable {
     case drafting = "Drafting View"
     case legend = "Legend"
     case threeD = "3D View"
+    case nesting = "Nesting" // FM7: parts laid out on stock sheets (Furniture mode)
 
     public var isPlan: Bool { self == .floorPlan || self == .ceilingPlan || self == .structuralPlan || self == .areaPlan }
     public var isVerticalCut: Bool { self == .elevation || self == .section || self == .detail }
-    public var isModelView: Bool { self != .drafting && self != .legend }
+    public var isModelView: Bool { self != .drafting && self != .legend && self != .nesting }
     /// Heading used in the Project Browser.
     public var navigatorGroup: String {
         switch self {
@@ -29,6 +30,7 @@ public enum ViewKind: String, Codable, Sendable, CaseIterable {
         case .drafting: "Drafting Views"
         case .legend: "Legends"
         case .threeD: "3D Views"
+        case .nesting: "Nesting" // FM7
         }
     }
     public var symbolName: String {
@@ -41,6 +43,7 @@ public enum ViewKind: String, Codable, Sendable, CaseIterable {
         case .drafting: "pencil.and.ruler"
         case .legend: "list.bullet.rectangle"
         case .threeD: "cube"
+        case .nesting: "square.grid.3x3.square" // FM7
         }
     }
 }

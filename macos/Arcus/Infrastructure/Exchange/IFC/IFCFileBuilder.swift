@@ -364,13 +364,18 @@ final class IFCFileBuilder {
         case .beam:
             ent = product(e, "IfcBeam", placement: placement, shape: shp, tail: is4 ? [.e("BEAM")] : [])
         case .stair:
-            let t: String
-            switch e.stair?.shape ?? .straight {
-            case .straight: t = "STRAIGHT_RUN_STAIR"
-            case .lShaped: t = "QUARTER_TURN_STAIR"
-            case .uShaped: t = "HALF_TURN_STAIR"
+            // STAIR: flights and landings are the stair's parts (IfcStairFlight, IfcSlab LANDING); its own body keeps the
+            // supports (IFCFileBuilder+STAIR.swift).
+            let pieces = StairMeshes.pieces(e, model)
+            if pieces.contains(where: { if case .support = $0.kind { return false }; return true }) {
+                let supports = pieces.filter { if case .support = $0.kind { return true }; return false }.flatMap(\.parts)
+                let body = meshItems(supports, toLocal: toLocal, category: e.category)
+                    .map { shape([writer.add("IfcShapeRepresentation", [.r(bodyContext), .s("Body"), .s($0.type), .refs($0.items)])]) } ?? nil
+                ent = product(e, "IfcStair", placement: placement, shape: body, tail: [.e(stairShapeType(e))])
+                exportStairParts(e, stair: ent, placement: placement, toLocal: toLocal)
+            } else {
+                ent = product(e, "IfcStair", placement: placement, shape: shp, tail: [.e(stairShapeType(e))])
             }
-            ent = product(e, "IfcStair", placement: placement, shape: shp, tail: [.e(t)])
         case .ramp:
             ent = product(e, "IfcRamp", placement: placement, shape: shp, tail: [.e(Self.rampShapeType(e.ramp?.path ?? []))])
         case .railing:

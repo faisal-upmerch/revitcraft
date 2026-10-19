@@ -154,6 +154,10 @@ public enum QuantityEngine {
             if case .success(let p) = f.boundary.profile() { q.area = p.area; q.perimeter = p.perimeter }
         case .mass: // F5: gross surface area and volume
             MassGeometry.quantities(e, model, &q)
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4: nominal size, area, volume
+            FurniturePartMeshes.quantities(e, model, &q)
+        case .furnitureFront: // FM5: front size, area, volume
+            FurnitureFrontSolids.quantities(e, model, &q)
         default:
             break
         }
