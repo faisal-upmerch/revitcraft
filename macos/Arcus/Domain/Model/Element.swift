@@ -283,6 +283,7 @@ public enum ElementData: Hashable, Codable, Sendable {
     // FM7 element data:
     // FM8 element data:
     // FM9 element data:
+    // STAIR element data:
 
 
 

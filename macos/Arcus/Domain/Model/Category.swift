@@ -69,6 +69,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FM7 categories:
     // FM8 categories:
     // FM9 categories:
+    // STAIR categories:
 
 
 
