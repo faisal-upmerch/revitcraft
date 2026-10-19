@@ -204,6 +204,8 @@ public enum ElementTransform {
             c.region = c.region.map(t.apply)
             if mirror { c.region.reverse() }
             e.data = .cutProfile(c)
+        case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4
+            return FurniturePartTransform.apply(t, to: &e)
         default:
             return false
         }

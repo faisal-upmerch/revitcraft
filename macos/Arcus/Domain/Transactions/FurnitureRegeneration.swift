@@ -18,10 +18,11 @@ public enum FurnitureRegeneration {
             guard let e = tx.model[id] ?? tx.originalElement(id) else { return false }
             return e.category == .projectInfo || e.category == .referencePlanes || e.category == .dimensions
         }
-        guard relevant else { return }
-        backSolveMovedPlanes(tx, touched)
-        placePlanes(tx)
-        // FM4 parts: regenerate bound parts here (after the planes).
+        if relevant {
+            backSolveMovedPlanes(tx, touched)
+            placePlanes(tx)
+        }
+        FurniturePartRegeneration.regenerate(tx, touched) // FM4: parts follow their planes (after the planes)
     }
 
     /// Gives axis-aligned reference planes drawn in a Furniture document their axis, so dimensions can drive them.

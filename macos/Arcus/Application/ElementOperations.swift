@@ -24,8 +24,10 @@ public enum ElementOperations {
         let pinned = set.filter { tx.model[$0]?.pinned == true }
         if !pinned.isEmpty { throw TransactionError("Pinned elements can't be moved. Unpin them first.", elements: Array(pinned)) }
         let before = tx.model
+        let partMove = FurniturePartTransform.viewTranslation(t, view: tx.model[viewID]?.view) // FM4: parts move in an elevation's plane
         for id in set.sorted() {
             guard let e = tx.model[id], ElementTransform.isTransformable(e) else { continue }
+            if let d = partMove, e.category.isFurniturePart { tx.update(id) { FurniturePartTransform.translate(&$0, by: d) }; continue } // FM4
             tx.update(id) { ElementTransform.apply(t, to: &$0) }
         }
         if disjoin { try rehostMovedInserts(set, in: tx) } else { keepWallJoins(moved: set, before: before, in: tx) }
@@ -85,7 +87,8 @@ public enum ElementOperations {
                 remapTopConstraint(&e, from: sl, to: tl, in: src)
             }
             if let tv = targetView, e.ownerViewID != nil { e.ownerViewID = tv }
-            ElementTransform.apply(t, to: &e)
+            if let d = FurniturePartTransform.viewTranslation(t, view: src[viewID]?.view), e.category.isFurniturePart { FurniturePartTransform.translate(&e, by: d) } // FM4
+            else { ElementTransform.apply(t, to: &e) }
             let data = e.data
             let newID = tx.create(e.category, name: e.name, data: data, typeID: e.typeID, levelID: e.levelID, hostID: e.hostID, ownerViewID: e.ownerViewID) { ne in
                 ne.params = e.params
