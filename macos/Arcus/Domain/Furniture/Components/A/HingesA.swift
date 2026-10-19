@@ -258,7 +258,7 @@ extension GroupA {
         g.b.tags("flap", "drop down", "desk flap", "180")
         g.b.aliases("drop flap hinge", "desk flap hinge", "bar flap hinge", "180 degree hinge", "fall flap hinge")
         g.b.choice("Orientation", ["Drop Down", "Lift Up"], "Drop Down", instance: true, group: .placement)
-        g.b.host([.flap], faces: [.inside], align: .bottom, alignments: [.bottom, .top], count: ComponentCountRule(steps: [.init(upTo: inch(24), count: 2)], maximumCount: 3, inset: inch(3)))
+        g.b.host([.flap, .lid], faces: [.inside], align: .bottom, alignments: [.bottom, .top], count: ComponentCountRule(steps: [.init(upTo: inch(24), count: 2)], maximumCount: 3, inset: inch(3)))
         concealed(&g, ConcealedStyle(straightArm: true))
         g.b.type("Flap Hinge - 180°", ["Opening Angle": .pi], flags: ["Top Edge": false, "Bottom Edge": true, "Back Edge": false], cost: 5.25, model: "FLH-180",
                  description: "Flap hinge, 35 mm cup, opens to 180° flush", isDefault: true)

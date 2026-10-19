@@ -644,7 +644,8 @@ extension GroupA {
         g.b.aliases("push latch", "push opener", "tip opener", "push-open", "touch opener", "drill-in push latch", "10 mm push latch")
         g.b.number("Force", 25, unit: "N", group: .data); g.b.length("Stroke", mm(10)); g.b.length("Position", inch(2), instance: true, group: .placement)
         g.b.length("Body Length", mm(36)); g.b.length("Hole Diameter", mm(10), group: .manufacturing)
-        g.b.host([.sidePanel, .top, .bottom, .divider, .shelf], faces: [.frontEdge], align: .top, alignments: [.top, .bottom, .center], offsetY: inch(2))
+        g.b.host([.sidePanel, .top, .bottom, .divider, .shelf] + ComponentHostKind.fronts, faces: [.frontEdge, .inside], align: .top,
+                 alignments: [.top, .bottom, .center, .outside], offsetY: inch(2))
         g.b.drill("Push latch bore", x: CX.zero, y: CX.zero, diameter: "Hole Diameter", depth: "Body Length + 0.002 m")
         g.b.requires(.hostThickness(min: "Hole Diameter + 0.004 m", max: nil))
         g.b.requires(.note("Fronts on push openers need no handle and a 1/8\" gap to the latch."))
@@ -657,6 +658,8 @@ extension GroupA {
         g.b.symbol(.face, [.coarse], .circle((CX.zero, CX.zero), "Hole Diameter * 0.65"))
         g.b.symbol(.top, [.coarse], .rect(("-Hole Diameter / 2", "-Body Length"), ("Hole Diameter / 2", "Stroke + 0.003 m")))
         g.b.type("Push-to-Open - Standard", [:], cost: 6.50, model: "PO-10S", description: "Drill-in push latch, 10 mm bore, 10 mm (3/8\") stroke", isDefault: true)
+        g.b.type("Push-to-Open - Door Mounted", ["Stroke": mm(8), "Body Length": mm(8)], numbers: ["Force": 20], cost: 5.95, model: "PO-10D",
+                 description: "Short push latch drilled into the door's back over the carcass edge, 8 mm stroke")
         g.b.type("Push-to-Open - Long Stroke", ["Stroke": mm(20), "Body Length": mm(50)], numbers: ["Force": 35], cost: 8.75, model: "PO-10L",
                  description: "Drill-in push latch, 10 mm bore, 20 mm (13/16\") stroke, for tall doors")
         return g.build()

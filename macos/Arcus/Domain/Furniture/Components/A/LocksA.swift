@@ -499,7 +499,7 @@ extension GroupA {
         let rodC = "-Front Thickness - Setback"
         g.using("Rod Material")
         g.box("Rod", a: ("-Rod Width / 2", "Rod Width / 2"), b: ("-Rod Length", CX.mm(10)), c: ("\(rodC) - 0.002 m", rodC))
-        g.box("Cam Link", a: (CX.mm(-5), CX.mm(5)), b: (CX.mm(-5), CX.mm(10)), c: (rodC, "-Front Thickness - 0.022 m"))
+        g.box("Cam Link", a: (CX.mm(-5), CX.mm(5)), b: (CX.mm(-5), CX.mm(10)), c: (rodC, "-Cylinder Length"))
         g.using(finish)
         g.box("Catch 1", a: ("-Rod Width / 2", "Rod Width / 2 + 0.01 m"), b: (CX.mm(-30), CX.mm(-18)), c: ("\(rodC) - 0.008 m", "\(rodC) - 0.002 m"))
         for k in 2...6 {
