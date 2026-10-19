@@ -78,7 +78,9 @@ public struct SheetGraphicsBuilder: Sendable {
             }
             guard let g = graphics else { continue }
             // Clip view content to the viewport region (crop or model extents plus an annotation margin).
-            let region = SheetGraphicsBuilder.viewRegion(g).expanded(by: Double(layout.scale) * SheetGraphicsBuilder.annotationMargin)
+            // POLISH: a view whose annotation crop reaches further (Part Tags beside a shop drawing) shows that far.
+            let reach = max(SheetGraphicsBuilder.annotationMargin, v.view?.cropActive == true && v.view?.annotationCropActive == true ? (v.view?.annotationCropOffset ?? 0) + 0.002 : 0)
+            let region = SheetGraphicsBuilder.viewRegion(g).expanded(by: Double(layout.scale) * reach)
             var first = true
             for item in g.items where item.layer != .overlay {
                 guard region.intersects(item.bounds) || item.bounds.isEmpty else { continue }

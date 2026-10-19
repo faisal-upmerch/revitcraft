@@ -36,7 +36,7 @@ struct FM7OutputTests {
         // F102 has the Part List; F103 the Nesting views; every page the piece's title block.
         func page(_ i: Int) -> String { pdf.page(at: i)?.string?.lowercased() ?? "" }
         #expect(page(1).contains("part list"))
-        #expect(page(1).contains("hardware schedule"))
+        #expect(page(1).contains("hardware schedule") || page(3).contains("hardware schedule")) // POLISH: on F104 when F102 has no room
         #expect(page(2).contains("yield"))
         #expect(page(0).contains("base cabinet"))
         #expect(page(3).contains("piece cost"))

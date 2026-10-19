@@ -478,6 +478,7 @@ enum QAHarness {
             await fm7Screenshots(suffix) // FM7: Part List, Hardware Schedule, Cost, Nesting, sheets F101–F104, fabrication dialogs
             await fm8Screenshots(suffix) // FM8: pieces in a project at Coarse/Fine, Load Furniture, Edit Family, the reload prompt
             await fm9Screenshots(suffix) // FM9: every essential in 3D, Home ▸ Furniture, Load Furniture, the Component Library's Furniture Library
+            await polishScreenshots(s, w, suffix) // POLISH: no ribbon panel clipped at 1280 and at the minimum size (project, Furniture, Family Editor)
             await mcpScreenshots(suffix) // MCP: Home's Design with Claude card, the Set Up window, the bottom bar pill
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true

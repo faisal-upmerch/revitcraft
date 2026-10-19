@@ -233,7 +233,7 @@ public enum CommandCatalog {
         CommandInfo(.stairStraight, "Stair – Straight", .build, "stairs", help: "Place a straight stair by picking start and direction."), // BL-KEYS
         CommandInfo(.stairL, "Stair – L-Shaped", .build, "arrow.turn.up.right", help: "Place an L-shaped stair with a landing."),
         CommandInfo(.stairU, "Stair – U-Shaped", .build, "arrow.uturn.up", help: "Place a U-shaped stair with a landing."),
-        CommandInfo(.railing, "Railing", .build, "fence", aliases: ["RA"], help: "Sketch a railing path."),
+        CommandInfo(.railing, "Railing", .build, "rectangle.split.3x1", aliases: ["RA"], help: "Sketch a railing path."), // POLISH: balusters ("fence" is no SF Symbol)
         CommandInfo(.room, "Room", .build, "square.dashed.inset.filled", aliases: ["RM"], help: "Place rooms in enclosed regions."),
         CommandInfo(.roomSeparator, "Room Separator", .build, "line.diagonal.arrow", aliases: ["RS"], help: "Draw lines that divide rooms without walls."),
         CommandInfo(.area, "Area", .build, "square.dashed", help: "Place areas in an area plan."),

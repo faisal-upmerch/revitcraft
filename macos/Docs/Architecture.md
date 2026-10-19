@@ -98,6 +98,6 @@ The 3D view (`ArcusViewport3D`) builds per-element meshes (`ElementMeshes.parts`
 
 ## Testing
 
-- Unit and integration tests live per module (`Arcus/Tests/*`). They use generated fixtures (Courtyard House, the stress grid and the template projects) and checked-in golden files (IFC goldens, DXF samples, damaged packages). No test touches the network or user paths.
+- Unit and integration tests live per module (`Arcus/Tests/*`). `LibraryTests` holds the slow Furniture Library suites (FM9, FM9B, FM9C and the shop drawing check), so `DomainTests` stays under a minute; run it with `swift test --filter "LibraryTests\."`. They use generated fixtures (Courtyard House, the stress grid and the template projects) and checked-in golden files (IFC goldens, DXF samples, damaged packages). No test touches the network or user paths.
 - `QAHarness` (`--qa workflow|screenshots|all`) drives the real app end to end and writes `results.json` plus screenshots. `script/qa_capture.sh` wraps it. See [Arcus/UITests/README.md](../Arcus/UITests/README.md).
 - `arcus-bench` measures engine performance. See [Performance.md](Performance.md).
