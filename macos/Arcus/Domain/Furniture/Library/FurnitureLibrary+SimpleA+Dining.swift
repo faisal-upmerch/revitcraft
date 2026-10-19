@@ -66,19 +66,22 @@ extension FurnitureLibrary {
                                door: SA.shakerDoor, drawer: SA.slabDrawer, backOverhang: 11))
     }
 
-    /// A corner hutch: a square base cabinet with a door, and open triangular shelves on it between two backs (the
-    /// corner at the back left).
+    /// A corner hutch: a base cabinet whose front is canted at 45° between two short returns, with an inset Shaker
+    /// door on the cant (FMG3: a bay on the canted face), and open triangular shelves on it between two backs (the corner
+    /// at the back left).
     static var cornerCabinet: SA.Piece {
         let planes = [SA.Plane("Base Top", .z, "Height * 0.42")] + (1...2).map { SA.Plane("Hutch Shelf \($0)", .z, "Height * 0.42 + (Height * 0.58) * \($0) / 3") }
         return SA.Piece("Corner Cabinet", rooms: ["Dining Room"], .casework, material: "Solid Oak", sizes: [SA.Size(24, 24, 72), SA.Size(28, 28, 78)], planes: planes, steps: [{ b in
-            let t = 0.75, top = SA.p("Base Top")
-            // The base: sides, bottom on a kick, top, back.
+            let t = 0.75, a = 6.0, top = SA.p("Base Top")
+            // The base: a side and a back on the walls, short returns at the front and the right, a bottom and a top
+            // canted between the returns.
             try b.sideX(SA.L, toward: 1, y: (SA.F, SA.B), z: (SA.Z, top - 1), SA.oak)
-            try b.sideX(SA.R, toward: -1, y: (SA.F, SA.B), z: (SA.Z, top - 1), SA.oak)
-            try b.board(x: (SA.L + t, SA.R - t), y: (SA.F, SA.B - 0.25), top: SA.Z + 4.75, "3/4\" Solid Oak Shelf", role: .bottom)
-            try b.sideY(SA.F + 3, toward: 1, x: (SA.L + t, SA.R - t), z: (SA.Z, SA.Z + 4), SA.oak, role: .plinth)
-            try b.sideY(SA.B, toward: -1, x: (SA.L + t, SA.R - t), z: (SA.Z + 4, top - 1), SA.hardboard, role: .back)
-            try b.board(x: (SA.L, SA.R), y: (SA.F, SA.B), top: top, SA.oakTop, role: .top)
+            try b.sideY(SA.B, toward: -1, x: (SA.L + t, SA.R), z: (SA.Z, top - 1), SA.oak)
+            try b.sideY(SA.F, toward: 1, x: (SA.L + t, SA.L + a), z: (SA.Z, top - 1), SA.oak)
+            try b.sideX(SA.R, toward: -1, y: (SA.B - a, SA.B - t), z: (SA.Z, top - 1), SA.oak)
+            try b.polygon([(SA.L + t, SA.F + t), (SA.L + a, SA.F + t), (SA.R - t, SA.B - a), (SA.R - t, SA.B - t), (SA.L + t, SA.B - t)], top: SA.Z + 4,
+                          "3/4\" Solid Oak Shelf", role: .bottom)
+            try b.polygon([(SA.L, SA.F), (SA.L + a, SA.F), (SA.R, SA.B - a), (SA.R, SA.B), (SA.L, SA.B)], top: top, SA.oakTop, role: .top)
             // The hutch: two backs in the corner and triangular shelves.
             try b.sideY(SA.B, toward: -1, x: (SA.L + t, SA.R), z: (top, SA.T), SA.oak, role: .back)
             try b.sideX(SA.L, toward: 1, y: (SA.F + 4, SA.B), z: (top, SA.T), SA.oak)
@@ -86,7 +89,8 @@ extension FurnitureLibrary {
                 try b.polygon([(SA.L + t, SA.F + 4), (SA.R, SA.B - t), (SA.L + t, SA.B - t)], top: z, "3/4\" Solid Oak Shelf")
             }
         }, { b in
-            try b.door(SA.CX, SA.p("Base Top") - 12, SA.shakerDoor, material: "Solid Oak")
+            // The door on the cant: a bay seen from the canted face (a section looking at it), hinged on its left.
+            try b.faceDoor(x: (SA.L + 6, SA.R), y: (SA.F, SA.B - 6), z: SA.Z + 16, facing: .pi / 4, "Shaker - Inset", material: "Solid Oak")
         }])
     }
 }

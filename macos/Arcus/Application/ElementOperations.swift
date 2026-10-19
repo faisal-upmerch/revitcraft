@@ -21,6 +21,7 @@ public enum ElementOperations {
                                  disjoin: Bool = false) throws(TransactionError) {
         var set = dependentsToCarry(Set(ids), tx.model, viewID: viewID)
         for id in set { for h in tx.model.hosted(by: id) where h.cutProfile != nil { set.insert(h.id) } } // F810: cut profiles move with their wall
+        set.formUnion(FurnitureBays.movedBays(set, tx.model)) // FMG3: a cell moves its divided bay
         let pinned = set.filter { tx.model[$0]?.pinned == true }
         if !pinned.isEmpty { throw TransactionError("Pinned elements can't be moved. Unpin them first.", elements: Array(pinned)) }
         let before = tx.model
@@ -28,6 +29,7 @@ public enum ElementOperations {
         for id in set.sorted() {
             guard let e = tx.model[id], ElementTransform.isTransformable(e) else { continue }
             if let d = partMove, e.category.isFurniturePart { tx.update(id) { FurniturePartTransform.translate(&$0, by: d) }; continue } // FM4
+            if let d = partMove, e.furnitureBay != nil || e.furnitureBaySeparator != nil { tx.update(id) { _ = FurnitureBays.translate3D(&$0, by: d) }; continue } // FMG3
             tx.update(id) { ElementTransform.apply(t, to: &$0) }
         }
         if disjoin { try rehostMovedInserts(set, in: tx) } else { keepWallJoins(moved: set, before: before, in: tx) }
@@ -88,6 +90,7 @@ public enum ElementOperations {
             }
             if let tv = targetView, e.ownerViewID != nil { e.ownerViewID = tv }
             if let d = FurniturePartTransform.viewTranslation(t, view: src[viewID]?.view), e.category.isFurniturePart { FurniturePartTransform.translate(&e, by: d) } // FM4
+            else if let d = FurniturePartTransform.viewTranslation(t, view: src[viewID]?.view), FurnitureBays.translate3D(&e, by: d) {} // FMG3
             else { ElementTransform.apply(t, to: &e) }
             let data = e.data
             let newID = tx.create(e.category, name: e.name, data: data, typeID: e.typeID, levelID: e.levelID, hostID: e.hostID, ownerViewID: e.ownerViewID) { ne in

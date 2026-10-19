@@ -20,16 +20,16 @@ extension CommandRouter {
     func fm5DisabledReason(_ id: CommandID) -> String? {
         guard Self.fm5IDs.contains(id) else { return nil }
         guard state.mode == .furniture else { return "Only in Furniture documents." }
-        let plane = fm5Map?.plane
-        let openingView = plane == .xz || plane == .xy
+        let face = FurnitureFaceMap.of(model[state.editingViewID]?.view)?.face // FMG3: any elevation or section looks at a face
+        let openingView = face != nil
         switch id {
         case .furnitureBay, .furnitureBaySeparator, .furnitureBayDivide, .furnitureBayTag, .furnitureDoor, .furnitureFlap, .furniturePickNewHost:
             if id == .furniturePickNewHost, fm5SelectedFronts.count != 1 { return "Select one door, drawer or flap." }
-            return openingView ? nil : "Open the Front or Back elevation (or a plan, for top-access bays)."
+            return openingView ? nil : "Open an elevation or section looking at the face (or a plan, for top-access bays)."
         case .furnitureDrawer:
-            return plane == .xz ? nil : "Open the Front or Back elevation."
+            return face == .front ? nil : "Open an elevation or section looking at the face."
         case .furnitureHardware:
-            return plane == .xz || plane == .xy ? nil : "Open a plan or the Front/Back elevation."
+            return openingView ? nil : "Open a plan, or an elevation or section looking at the face."
         case .furnitureFlipHinge:
             return fm5SelectedFronts.contains { $0.furnitureFront?.kind == .door } ? nil : "Select doors."
         case .furnitureSelectHardware:

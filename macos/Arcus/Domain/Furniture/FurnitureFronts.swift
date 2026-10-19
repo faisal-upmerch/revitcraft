@@ -31,6 +31,8 @@ public struct FrontGeometry: Sendable {
     public var opening: BayOpening
     public var leaves: [FrontLeaf]
     public var thickness: Double
+    /// FMG3: the frame of the bay's face; leaves (and the opening) are in it (the identity for the front and lids).
+    public var frame: BayFrame = .front
     /// The face the front is seen on: front face y (seen from the front) or top face z (lid).
     public var outerFace: Double { face == .front ? (leaves.first?.w.0.value ?? 0) : (leaves.first?.w.1.value ?? 0) }
     /// The back face (front) or underside (lid), where hinge cups are bored.
@@ -56,6 +58,8 @@ public struct HardwarePlacement: Sendable {
     public var values: [String: ParamValue]
     /// The part it's screwed to besides the front (side panel, top), for machining.
     public var carcassPartID: ElementID?
+    /// FMG3: the instance's rotation (radians): its bay's face frame.
+    public var rotation: Double = 0
     public var origin: Vec3 { Vec3(at.x.value, at.y.value, at.z.value) }
 }
 
@@ -104,10 +108,12 @@ public enum FurnitureFronts {
     /// The front's leaves in its bay (nil when the bay isn't enclosed).
     public static func geometry(_ e: Element, _ m: BIMModel) -> FrontGeometry? {
         guard let f = e.furnitureFront, let bay = m[e.hostID]?.furnitureBay, let o = bay.opening else { return nil }
-        return geometry(f, type: FurnitureFrontTypes.values(of: e, m), bay: bay, opening: o)
+        let pair: Bool? = f.leafCount != nil || f.leafCountParameter != nil ? leafCount(e, m) >= 2 : nil // FMG3
+        return geometry(f, type: FurnitureFrontTypes.values(of: e, m), bay: bay, opening: o, pair: pair)
     }
 
-    public static func geometry(_ f: FrontData, type tv: FurnitureFrontTypes.Values, bay: BayData, opening o: BayOpening) -> FrontGeometry? {
+    /// `pair` overrides the type's Leaf Count (FMG3: an instance's, or its family parameter's).
+    public static func geometry(_ f: FrontData, type tv: FurnitureFrontTypes.Values, bay: BayData, opening o: BayOpening, pair: Bool? = nil) -> FrontGeometry? {
         let t = tv.thickness, r = tv.reveal, er = tv.edgeReveal, ov = tv.overlay
         let front = bay.face == .front
         let u0 = edge(inner: o.value("x0"), outer: o.value("outer0"), shared: o.sharedLeft, sign: -1, overlay: ov, reveal: r, edgeReveal: er)
@@ -135,7 +141,7 @@ public enum FurnitureFronts {
         case .door:
             if !front {
                 leaves = [FrontLeaf(u: (u0, u1), v: (v0, v1), w: w, hinge: .back)]
-            } else if tv.isPair {
+            } else if pair ?? tv.isPair {
                 let c = mid(u0, u1)
                 leaves = [FrontLeaf(u: (u0, c.shifted(-r / 2)), v: (v0, v1), w: w, hinge: .left),
                           FrontLeaf(u: (c.shifted(r / 2), u1), v: (v0, v1), w: w, hinge: .right)]
@@ -143,7 +149,7 @@ public enum FurnitureFronts {
                 leaves = [FrontLeaf(u: (u0, u1), v: (v0, v1), w: w, hinge: f.hingeFlipped ? .right : .left)]
             }
         }
-        return FrontGeometry(kind: f.kind, face: bay.face, opening: o, leaves: leaves, thickness: t)
+        return FrontGeometry(kind: f.kind, face: bay.face, opening: o, leaves: leaves, thickness: t, frame: BayFrame(bay)) // FMG3
     }
 
     /// The slide type a drawer uses: the type's slide family at the longest length that fits the bay's depth.
@@ -181,8 +187,16 @@ public enum FurnitureFronts {
         return FurnitureHardware.Values(m[t]?.typeData).kind == .handle ? t : nil
     }
 
-    /// The hardware a front places, by slot ("hinge.<leaf>.<k>", "handle.<leaf>", "slides", "stay.<k>").
+    /// The hardware a front places, by slot ("hinge.<leaf>.<k>", "handle.<leaf>", "slides", "stay.<k>"), in the model
+    /// (FMG3: turned with the bay's face).
     public static func hardware(_ e: Element, _ m: BIMModel) -> [HardwarePlacement] {
+        let local = localHardware(e, m)
+        guard let bay = m[e.hostID]?.furnitureBay, case let fr = BayFrame(bay), !fr.isIdentity else { return local }
+        return local.map { var p = $0; p.at = fr.world(p.at); p.rotation = fr.angle; return p }
+    }
+
+    /// The hardware a front places, in its bay's frame (as if its face were the front).
+    public static func localHardware(_ e: Element, _ m: BIMModel) -> [HardwarePlacement] {
         guard let f = e.furnitureFront, let g = geometry(e, m) else { return [] }
         let tv = FurnitureFrontTypes.values(of: e, m)
         let o = g.opening
@@ -277,6 +291,7 @@ public enum FurnitureFronts {
                 out.append(HardwarePlacement(slot: "stay.1", typeID: st, at: (o.value("x1"), o.value("y0"), z), mirrored: true, values: [:], carcassPartID: o.right))
             }
         }
+        out += lidStays(e, g, tv, m) // FMG3
         return out
     }
 
@@ -386,7 +401,7 @@ public enum FurnitureFronts {
                 bySlot[s] = h
             }
             for w in wanted {
-                let data = ComponentData(location: w.origin.xy, rotation: 0, offset: w.origin.z - levelZ, mirrored: w.mirrored)
+                let data = ComponentData(location: w.origin.xy, rotation: w.rotation, offset: w.origin.z - levelZ, mirrored: w.mirrored) // FMG3: turned with its face
                 if let h = bySlot[w.slot] {
                     keep.insert(h.id)
                     var e = h

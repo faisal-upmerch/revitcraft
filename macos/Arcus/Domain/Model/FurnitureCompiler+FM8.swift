@@ -131,46 +131,64 @@ extension FurnitureCompiler {
 
 extension FurnitureCompiler {
     /// A compiled hinge instance: where it is in `f.nestedInstances`, its front and its slot ("hinge.<leaf>.<k>").
-    struct HingeRecord { var index: Int; var front: ElementID; var slot: String }
+    struct HingeRecord {
+        var index: Int; var front: ElementID; var slot: String
+        /// FMG3: a Leaf Count variant's model and its yes/no parameter (nil: the document's, always shown).
+        var model: BIMModel? = nil
+        var visibility: String? = nil
+    }
 
     /// Hinges per door height, as the document's rule places them (2 up to 40", 3 up to 60", 4 up to 80", then 5):
     /// each hinged leaf gets a "<Mark> Hinge Count" parameter calculated from its hinge edge, and a set of instances
     /// for each count, shown by a "<Mark> Hinges <n>" yes/no parameter, so a loaded door that flexes taller gains its
     /// hinges as it does in the Furniture document. A leaf whose hinge edge doesn't follow formula planes keeps the
-    /// instances the document placed. Machining at Fine keeps the document's count.
+    /// instances the document placed. FMG3: each concealed hinge bores its cup at Fine (so the machining follows the
+    /// count), and "Hinges" totals the hinges of the type for schedules.
     static func expandHingeSets(_ records: [HingeRecord], _ m: BIMModel, to f: inout FamilyDefinition) {
         let stable = stablePlanes(f)
         var replace: [Int: [NestedFamilyInstance]] = [:]
         let groups = Dictionary(grouping: records) { r -> String in
             let parts = r.slot.split(separator: ".")
-            return "\(r.front.raw)|\(parts.count > 1 ? String(parts[1]) : "0")"
+            return "\(r.front.raw)|\(r.visibility ?? "")|\(parts.count > 1 ? String(parts[1]) : "0")" // FMG3: per Leaf Count variant
         }
         var params: [FamilyParameter] = []
+        var totals: [String: String] = [:] // FMG3: the hinge count of each group, as a formula
         for key in groups.keys.sorted() {
-            guard let group = groups[key]?.sorted(by: { $0.index < $1.index }), let first = group.first, let front = m[first.front],
+            if let group = groups[key], let first = group.first { // FMG3: groups kept as placed count as placed
+                totals[key] = first.visibility.map { "if(\($0), \(group.count), 0)" } ?? "\(group.count)"
+            }
+            guard let group = groups[key]?.sorted(by: { $0.index < $1.index }), let first = group.first, case let m = first.model ?? m, let front = m[first.front],
                   let g = FurnitureFronts.geometry(front, m), let li = Int(key.split(separator: "|").last ?? ""), g.leaves.indices.contains(li),
                   let hinge = g.leaves[li].hinge, let ht = FurnitureFronts.hingeType(front, m), !FurnitureHardware.Values(m[ht]?.typeData).isPiano else { continue }
             let leaf = g.leaves[li]
             let vertical = hinge == .left || hinge == .right
-            let ends = vertical ? leaf.v : leaf.u
+            // FMG3: hinges along u on a turned face run along its model axis (the set is the same either way round).
+            let fr = g.frame
+            if !vertical, !fr.isSquare { continue }
+            let along = vertical ? (axis: FamilyAxis.z, sign: 1.0) : (fr.uAxis ?? (.x, 1))
+            var ends = vertical ? leaf.v : leaf.u
+            ends = (ends.0.scaled(along.sign), ends.1.scaled(along.sign))
+            if ends.0.value > ends.1.value { ends = (ends.1, ends.0) }
             guard let lo = stableExpression(ends.0, f, stable), let hi = stableExpression(ends.1, f, stable) else { continue }
             let inset = FurnitureFrontTypes.values(of: front, m).hingeInset
-            let mark = front.mark.isEmpty ? "Front \(front.id.raw)" : front.mark
+            let mark = first.visibility ?? (front.mark.isEmpty ? "Front \(front.id.raw)" : front.mark) // FMG3: "D1 Single", "D1 Pair"
             let label = g.leaves.count > 1 ? "\(mark) Leaf \(li + 1)" : mark
             let length = "((\(hi)) - (\(lo)))"
             let countName = "\(label) Hinge Count"
+            totals[key] = first.visibility.map { "if(\($0), \(countName), 0)" } ?? countName // FMG3
             params.append(FamilyParameter(name: countName, type: .integer, group: .other,
                                           formula: "if(\(length) <= 40.001\", 2, if(\(length) <= 60.001\", 3, if(\(length) <= 80.001\", 4, 5)))"))
             let a = "(\(lo)) + min(\(PartSolidContext.number(inset)) m, \(length) / 4)", b = "(\(hi)) - min(\(PartSolidContext.number(inset)) m, \(length) / 4)"
             var set: [NestedFamilyInstance] = []
             for n in 2...5 {
                 let shown = "\(label) Hinges \(n)"
-                params.append(FamilyParameter(name: shown, type: .bool, group: .other, formula: "\(countName) = \(n)"))
+                params.append(FamilyParameter(name: shown, type: .bool, group: .other,
+                                              formula: first.visibility.map { "and(\($0), \(countName) = \(n))" } ?? "\(countName) = \(n)")) // FMG3
                 for k in 0..<n {
                     var inst = f.nestedInstances[first.index]
                     inst.id = UUID().uuidString
                     let at: FamilyBound = .expr("(\(a)) + ((\(b)) - (\(a))) * \(k) / \(n - 1)")
-                    if vertical { inst.z = at } else { inst.x = at }
+                    switch along.axis { case .z: inst.z = at; case .y: inst.y = at; case .x: inst.x = at } // FMG3
                     inst.visibilityParameter = shown
                     set.append(inst)
                 }
@@ -178,11 +196,14 @@ extension FurnitureCompiler {
             replace[first.index] = set
             for r in group.dropFirst() { replace[r.index] = [] }
         }
+        if !totals.isEmpty, f.parameter(named: "Hinges") == nil { // FMG3: the piece's hinges for the current height, for schedules
+            params.append(FamilyParameter(name: "Hinges", type: .integer, group: .other, formula: totals.keys.sorted().compactMap { totals[$0] }.joined(separator: " + ")))
+        }
+        for p in params where f.parameter(named: p.name) == nil { f.parameters.append(p) }
         guard !replace.isEmpty else { return }
         var out: [NestedFamilyInstance] = []
         for (i, inst) in f.nestedInstances.enumerated() { out += replace[i] ?? [inst] }
         f.nestedInstances = out
-        for p in params where f.parameter(named: p.name) == nil { f.parameters.append(p) }
     }
 }
 
@@ -193,7 +214,7 @@ extension FurnitureCompiler {
     /// standard length that fits with its rear clearance), so a loaded cabinet made shallower or deeper gets the slides
     /// and drawer boxes that fit. nil when the bay's depth doesn't follow formula planes.
     static func slideLengthFormula(_ front: Element, _ m: BIMModel, _ f: FamilyDefinition) -> (formula: String, start: String)? {
-        guard let g = FurnitureFronts.geometry(front, m), let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil }
+        guard let g = FurnitureFronts.geometry(front, m), g.frame.isIdentity, let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil } // FMG3: front faces
         let sv = FurnitureHardware.Values(m[st]?.typeData)
         let tv = FurnitureFrontTypes.values(of: front, m)
         let stable = stablePlanes(f)
@@ -233,16 +254,18 @@ extension FurnitureCompiler {
     static func anchorHandles(_ records: [HingeRecord], _ m: BIMModel, to f: inout FamilyDefinition) {
         let stable = stablePlanes(f)
         for r in records {
+            let m = r.model ?? m // FMG3
             guard let front = m[r.front], let g = FurnitureFronts.geometry(front, m), let li = Int(r.slot.split(separator: ".").last ?? ""),
-                  g.leaves.indices.contains(li), let p = FurnitureFronts.hardware(front, m).first(where: { $0.slot == r.slot }) else { continue }
+                  g.leaves.indices.contains(li), g.frame.isSquare, let p = FurnitureFronts.localHardware(front, m).first(where: { $0.slot == r.slot }) else { continue } // FMG3
             let leaf = g.leaves[li]
-            func share(_ c: PartValue, _ ends: (PartValue, PartValue)) -> FamilyBound? {
+            let along = g.frame.uAxis ?? (.x, 1)
+            func share(_ c: PartValue, _ ends: (PartValue, PartValue), sign: Double = 1) -> FamilyBound? {
                 guard c.plane == nil, ends.1.value - ends.0.value > Tolerance.length,
-                      let lo = stableExpression(ends.0, f, stable), let hi = stableExpression(ends.1, f, stable) else { return nil }
+                      let lo = stableExpression(ends.0.scaled(sign), f, stable), let hi = stableExpression(ends.1.scaled(sign), f, stable) else { return nil }
                 let k = PartSolidContext.number((c.value - ends.0.value) / (ends.1.value - ends.0.value))
                 return .expr("(\(lo)) + ((\(hi)) - (\(lo))) * \(k)")
             }
-            if let x = share(p.at.x, leaf.u) { f.nestedInstances[r.index].x = x }
+            if let x = share(p.at.x, leaf.u, sign: along.sign) { if along.axis == .y { f.nestedInstances[r.index].y = x } else { f.nestedInstances[r.index].x = x } }
             if g.face == .front { if let z = share(p.at.z, leaf.v) { f.nestedInstances[r.index].z = z } }
             else if let y = share(p.at.y, leaf.v) { f.nestedInstances[r.index].y = y }
         }

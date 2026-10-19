@@ -23,18 +23,23 @@ extension FurnitureCompiler {
         for bay in m.elements(.furnitureBays).sorted(by: { $0.id < $1.id }) {
             guard let d = bay.furnitureBay, let div = d.division, div.layout == .equal, div.count > 1, let o = d.opening else { continue }
             let rows = div.direction == .rows
+            let frame = BayFrame(d) // FMG3: columns on a turned face are planes along its u in the model; canted ones aren't planes
+            if !rows, !frame.isSquare { continue }
             let (kLo, kHi) = rows ? (d.face == .front ? ("z0", "z1") : ("y0", "y1")) : ("x0", "x1")
-            let axis: FamilyAxis = rows ? (d.face == .front ? .z : .y) : .x
-            let lo = lengthExpression(o.value(kLo), f), hi = lengthExpression(o.value(kHi), f)
-            let cells = FurnitureBays.cells(o, d.face, div, number: d.number)
+            let axis: FamilyAxis = rows ? (d.face == .front ? .z : .y) : (frame.uAxis?.axis ?? .x)
+            let sign = rows ? 1 : (frame.uAxis?.sign ?? 1)
+            let lo = lengthExpression(o.value(kLo).scaled(sign), f), hi = lengthExpression(o.value(kHi).scaled(sign), f)
+            let cells = FurnitureBays.cells(o, d.face, div, number: d.number, frame: frame)
             for k in 1..<cells.count {
                 let name = FurnitureBays.lineName(d.number, k)
-                eqPlanes.append((name, axis, rows ? (d.face == .front ? cells[k].z0 : cells[k].y0) : cells[k].x0))
+                eqPlanes.append((name, axis, sign * (rows ? (d.face == .front ? cells[k].z0 : cells[k].y0) : cells[k].x0)))
                 eqFormulas[name] = "(\(lo)) + ((\(hi)) - (\(lo))) * \(k) / \(cells.count)"
             }
         }
         for p in eqPlanes { known.insert(p.name) }
         ctx.knownPlanes = known
+        let planeOffsets = Dictionary(f.referencePlanes.map { ($0.name, $0.offset) }, uniquingKeysWith: { a, _ in a }).merging(eqFormulas) { a, _ in a }
+        ctx.planeFormula = { planeOffsets[$0] } // FMG3: canted faces write their coordinates as formulas of these planes
 
         var materialParams: [String: String] = [:]
         func materialParameter(_ id: ElementID?, label: String) -> String? {
@@ -50,11 +55,20 @@ extension FurnitureCompiler {
             return name
         }
 
-        var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
+        // FMG3: doors whose Leaf Count follows a family parameter are compiled single and as a pair, each shown by a
+        // yes/no parameter of that value (FurnitureCompiler+FMG3).
+        let variants = leafCountVariants(source, to: &f)
+        var work: [(front: Element, model: BIMModel, visibility: String?)] = []
         for front in fronts {
-            var ps = FurnitureFrontSolids.solids(front, m, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
-            let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(m.type(of: front)?.name ?? "")"
-            if let (length, start) = slideLengthFormula(front, m, f), let box = FurnitureFronts.drawerBox(front, m) { // FM8
+            if let vs = variants[front.id] { for v in vs { if let e = v.model[front.id] { work.append((e, v.model, v.visibility)) } } } else { work.append((front, m, nil)) }
+        }
+
+        var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
+        var frontSolidIDs: [String] = [] // FMG3: what hinge cups bore
+        for (front, mm, visibility) in work {
+            var ps = FurnitureFrontSolids.solids(front, mm, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
+            let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(mm.type(of: front)?.name ?? "")"
+            if let (length, start) = slideLengthFormula(front, mm, f), let box = FurnitureFronts.drawerBox(front, mm) { // FM8
                 slideLengths[front.id] = length
                 flexDrawerBox(&ps.solids, mark: front.mark.isEmpty ? (front.furnitureFront?.kind.rawValue ?? "Front") : front.mark, length: length, start: start, back: box.back)
             }
@@ -62,6 +76,8 @@ extension FurnitureCompiler {
                 s.visibleAt = s.visibleAt.intersection([.medium, .fine])
                 guard !s.visibleAt.isEmpty else { continue }
                 if !s.isVoid { s.materialParameter = materialParameter(ps.materials[s.id] ?? nil, label: label) }
+                if let visibility { s.visibilityParameter = visibility } // FMG3
+                if !s.isVoid { frontSolidIDs.append(s.id) } // FMG3
                 f.solids.append(s)
             }
             for p in ps.placed {
@@ -75,34 +91,68 @@ extension FurnitureCompiler {
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
                 if let span = p.span, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" } // FM9: lengths on both sides
                 inst.visibleAt = [.medium, .fine]
+                inst.visibilityParameter = visibility // FMG3
                 f.nestedInstances.append(inst)
             }
-            f.planLines += planSwings(front, m)
-            f.modelLines += elevationSwings(front, m)
+            f.planLines += planSwings(front, mm).map { var l = $0; l.visibilityParameter = visibility; return l } // FMG3
+            addElevationSwings(front, mm, to: &f, visibility: visibility) // FMG3: on every face
         }
 
         // Hardware: nested families, owned instances on the front's planes, the others where they are.
         var hinges: [HingeRecord] = [], handles: [HingeRecord] = [] // FM8: hinge sets by door height, centred handles (FurnitureCompiler+FM8)
-        let placements: [String: HardwarePlacement] = Dictionary(fronts.flatMap { fr in FurnitureFronts.hardware(fr, m).map { ("\(fr.id.raw)|\($0.slot)", $0) } },
-                                                                 uniquingKeysWith: { a, _ in a })
-        for h in hardware {
-            guard let c = h.component, let t = m[h.typeID], let td = t.typeData, let nested = m[td.familyID]?.family else { continue }
+        // FMG3: the varied doors' hardware comes from each of their variants.
+        var hardwareWork: [(h: Element, model: BIMModel, visibility: String?)] = hardware.compactMap { h in
+            guard let owner = h.params[FurnitureHardware.ownerParam]?.refValue, variants[owner] != nil else { return (h, m, nil) }
+            return nil
+        }
+        for (owner, vs) in variants.sorted(by: { $0.key < $1.key }) {
+            for v in vs {
+                for h in v.model.elements(.furnitureHardware).sorted(by: { $0.id < $1.id }) where h.params[FurnitureHardware.ownerParam]?.refValue == owner {
+                    hardwareWork.append((h, v.model, v.visibility))
+                }
+            }
+        }
+        var placementsByModel: [String: [String: HardwarePlacement]] = [:]
+        var cantedByModel: [String: [String: (FamilyBound, FamilyBound)]] = [:]
+        func placements(_ mm: BIMModel, _ key: String) -> [String: HardwarePlacement] {
+            if let p = placementsByModel[key] { return p }
+            let fr = mm.elements(.furnitureFronts)
+            let p = Dictionary(fr.flatMap { e in FurnitureFronts.hardware(e, mm).map { ("\(e.id.raw)|\($0.slot)", $0) } }, uniquingKeysWith: { a, _ in a })
+            placementsByModel[key] = p
+            return p
+        }
+        // FMG3: hardware of fronts on canted faces stays between the face's corners (CantAnchors).
+        func canted(_ mm: BIMModel, _ key: String) -> [String: (FamilyBound, FamilyBound)] {
+            if let c = cantedByModel[key] { return c }
+            var c: [String: (FamilyBound, FamilyBound)] = [:]
+            for fr in mm.elements(.furnitureFronts) {
+                guard let g = FurnitureFronts.geometry(fr, mm), let a = CantAnchors(g.opening, g.frame) else { continue }
+                for p in FurnitureFronts.localHardware(fr, mm) { c["\(fr.id.raw)|\(p.slot)"] = a.point(p.at.x.value, p.at.y.value, ctx) }
+            }
+            cantedByModel[key] = c
+            return c
+        }
+        for (h, mm, visibility) in hardwareWork {
+            guard let c = h.component, let t = mm[h.typeID], let td = t.typeData, let nested = mm[td.familyID]?.family else { continue }
             if f.nestedFamily(named: nested.name) == nil {
                 var copy = nested
                 copy.furnitureSource = nil
+                addCupBores(to: &copy, cutting: frontSolidIDs) // FMG3: Fine machining follows the hinges shown
                 for i in copy.types.indices {
-                    guard let pt = m.types(for: .furnitureHardware).first(where: { $0.typeData?.familyID == td.familyID && $0.name == copy.types[i].name })?.typeData else { continue }
+                    guard let pt = mm.types(for: .furnitureHardware).first(where: { $0.typeData?.familyID == td.familyID && $0.name == copy.types[i].name })?.typeData else { continue }
                     for (k, v) in pt.params where k.key.hasPrefix(Parameters.familyParamID("").key) {
                         copy.types[i].values[String(k.key.dropFirst(Parameters.familyParamID("").key.count))] = v
                     }
                 }
                 f.nestedFamilies.append(copy)
             }
+            let key = visibility ?? ""
             var x: FamilyBound = .expr(PartSolidContext.number(c.location.x)), y: FamilyBound = .expr(PartSolidContext.number(c.location.y))
-            var z: FamilyBound = .expr(PartSolidContext.number(m.baseElevation(of: h)))
+            var z: FamilyBound = .expr(PartSolidContext.number(mm.baseElevation(of: h)))
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue,
-               let p = placements["\(owner.raw)|\(slot)"] {
+               let p = placements(mm, key)["\(owner.raw)|\(slot)"] {
                 x = ctx.bound(p.at.x); y = ctx.bound(p.at.y); z = ctx.bound(p.at.z)
+                if let c = canted(mm, key)["\(owner.raw)|\(slot)"] { x = c.0; y = c.1 } // FMG3
             }
             var inst = NestedFamilyInstance(familyName: nested.name, typeName: t.name, x: x, y: y, z: z, rotation: PartSolidContext.number(c.rotation * 180 / .pi), mirrored: c.mirrored)
             for (k, v) in Parameters.familyInstanceValues(h) {
@@ -114,15 +164,17 @@ extension FurnitureCompiler {
                 }
             }
             // A slide pair spans its opening: its width follows the bay's sides.
-            if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = m[owner], let o = m[front.hostID]?.furnitureBay?.opening,
+            if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = mm[owner], let o = mm[front.hostID]?.furnitureBay?.opening,
                nested.parameter(named: "Opening Width") != nil {
-                inst.bindings["Opening Width"] = "(\(lengthExpression(o.value("x1"), f))) - (\(lengthExpression(o.value("x0"), f)))" // FM9: lengths on both sides
+                inst.bindings["Opening Width"] = "(\(sumExpression(o.value("x1"), f, planeOffsets))) - (\(sumExpression(o.value("x0"), f, planeOffsets)))" // FM9: lengths on both sides; FMG3: any face
                 if let length = slideLengths[owner], nested.parameter(named: "Slide Length") != nil { inst.bindings["Slide Length"] = length } // FM8
             }
             inst.visibleAt = [.medium, .fine]
+            inst.visibilityParameter = visibility // FMG3
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue { // FM8
-                if slot.hasPrefix("hinge.") { hinges.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
-                if slot.hasPrefix("handle.") { handles.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot)) }
+                let varied = visibility.map { _ in mm } // FMG3: a variant's records read its model
+                if slot.hasPrefix("hinge.") { hinges.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot, model: varied, visibility: visibility)) }
+                if slot.hasPrefix("handle.") { handles.append(HingeRecord(index: f.nestedInstances.count, front: owner, slot: slot, model: varied, visibility: visibility)) }
             }
             f.nestedInstances.append(inst)
         }
@@ -159,9 +211,14 @@ extension FurnitureCompiler {
                                                                      ("outer1", o.right, o.outer1, .x), ("z0", o.bottom, o.z0, .z), ("outerLow", o.bottom, o.outerLow, .z),
                                                                      ("z1", o.top, o.z1, .z), ("outerHigh", o.top, o.outerHigh, .z)]
             var changed = false
+            let frame = BayFrame(d)
             for (key, part, value, axis) in faces where o.bounds[key] == nil {
-                guard let id = part, let c = centres[id], c.axis == axis, d.face == .front else { continue }
-                o.bounds[key] = .plane(c.name, offset: value - c.at)
+                guard let id = part, let c = centres[id], d.face == .front else { continue }
+                // FMG3: on a turned face, u runs along the model axis `uAxis` (negated when it runs against it).
+                let along: (axis: FamilyAxis, sign: Double)? = axis == .z ? (.z, 1) : frame.uAxis
+                guard let along, c.axis == along.axis else { continue }
+                let local = PartValue(along.sign * value, plane: c.name, offset: along.sign * value - c.at).scaled(along.sign)
+                o.bounds[key] = local.plane.map { .plane($0, offset: local.offset) }
                 changed = true
             }
             guard changed else { continue }
@@ -222,7 +279,7 @@ extension FurnitureCompiler {
 
     /// Elevation swings: the dashed hinge triangles on the front face (model lines on the front's plane).
     static func elevationSwings(_ front: Element, _ m: BIMModel) -> [FamilyModelLine] {
-        guard let g = FurnitureFronts.geometry(front, m), g.face == .front else { return [] }
+        guard let g = FurnitureFronts.geometry(front, m), g.face == .front, g.frame.isIdentity else { return [] }
         return FurnitureSwings.elevation(front, m).map { seg in
             var l = FamilyModelLine(plane: .xz, offset: .expr(PartSolidContext.number(g.outerFace - 0.0005)),
                                     start: FamilyPoint(PartSolidContext.number(seg.start.x), PartSolidContext.number(seg.start.y)),
@@ -251,7 +308,14 @@ public enum FurnitureSwings {
             let start: Double = h == .left ? -.pi / 2 : .pi
             out.append(.arc(Arc2(center: hinge, radius: w, startAngle: start, sweep: .pi / 2)))
         }
-        return out
+        return out.map(g.frame.worldCurve) // FMG3: turned with the bay's face
+    }
+
+    /// FMG3: the elevation swing as model segments on the front face (its leaves' face, a hair in front of it).
+    public static func elevationLines(_ front: Element, _ m: BIMModel) -> [(Vec3, Vec3)] {
+        guard let g = FurnitureFronts.geometry(front, m), g.face == .front else { return [] }
+        let y = g.outerFace - 0.0005
+        return elevation(front, m).map { (g.frame.world(Vec3($0.start.x, y, $0.start.y)), g.frame.world(Vec3($0.end.x, y, $0.end.y))) }
     }
 
     /// The elevation swing of each leaf (model x, z, on the front face): the two dashed lines from the far corners to

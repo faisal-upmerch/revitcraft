@@ -14,17 +14,19 @@ extension FurnitureMachining {
             guard let g = FurnitureFronts.geometry(front, m) else { continue }
             let hardware = Dictionary(m.hosted(by: front.id).compactMap { h in h.params[FurnitureHardware.slotParam]?.textValue.map { ($0, h) } },
                                       uniquingKeysWith: { a, _ in a })
-            for p in FurnitureFronts.hardware(front, m) {
+            var mine: [MachiningEntry] = []
+            for p in FurnitureFronts.localHardware(front, m) { // FMG3: worked out in the bay's frame, turned at the end
                 let hv = FurnitureHardware.Values(m[p.typeID]?.typeData)
                 let src: MachiningSource = hardware[p.slot].map { .hardware($0.id) } ?? .front(front.id)
                 switch hv.kind {
-                case .hinge?: out += hinge(p, hv, g, front, src)
-                case .handle?: out += handle(p, hv, g, front, src)
-                case .slide?: out += slides(p, hv, g, src)
-                case .stay?: out += stay(p, hv, g, src)
+                case .hinge?: mine += hinge(p, hv, g, front, src)
+                case .handle?: mine += handle(p, hv, g, front, src)
+                case .slide?: mine += slides(p, hv, g, src)
+                case .stay?: mine += stay(p, hv, g, src)
                 default: break
                 }
             }
+            out += g.frame.isIdentity ? mine : mine.map { fmg3World($0, g.frame) }
         }
         return out
     }
@@ -128,7 +130,7 @@ extension FurnitureMachining {
             let tv = FurnitureFrontTypes.values(of: front, m)
             let key = "\(front.id.raw)"
             let label = front.mark.isEmpty ? g.kind.rawValue : front.mark
-            let style: FrontStyle = g.face == .front ? tv.style : .slab
+            let style = FurnitureFrontSolids.lidStyle(tv.style, g.face) // FMG3
             for (li, leaf) in g.leaves.enumerated() {
                 let lk = g.leaves.count > 1 ? "\(key)/leaf\(li + 1)" : key
                 let ln = g.leaves.count > 1 ? "\(label) Leaf \(li + 1)" : label
@@ -169,6 +171,19 @@ extension FurnitureMachining {
                                    thickness: b.back, grain: .length))
             out.append(DerivedPart(key: "\(key)/box-bottom", sourceID: front.id, name: "\(label) Box Bottom", materialID: tv.bottomMaterial ?? tv.boxMaterial,
                                    length: b.depth - 2 * b.back + 2 * groove, width: between + 2 * groove, thickness: b.bottom, grain: .length))
+        }
+        return out
+    }
+}
+
+extension FurnitureMachining {
+    /// FMG3: a machining operation worked out in a bay's frame, in the model.
+    static func fmg3World(_ e: MachiningEntry, _ f: BayFrame) -> MachiningEntry {
+        var out = e
+        switch e.op {
+        case .drill(let c, let a, let d, let depth): out.op = .drill(center: f.world(c), axis: f.world(a), diameter: d, depth: depth)
+        case .groove(let s, let t, let a, let w, let depth): out.op = .groove(start: f.world(s), end: f.world(t), axis: f.world(a), width: w, depth: depth)
+        case .pocket(let o, let a, let depth): out.op = .pocket(outline: o.map(f.world), axis: f.world(a), depth: depth)
         }
         return out
     }

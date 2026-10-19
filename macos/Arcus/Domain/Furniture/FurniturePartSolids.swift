@@ -52,6 +52,13 @@ public final class PartSolidContext {
     public internal(set) var parameters: [FamilyParameter] = []
 
     public init(symbolic: Bool, knownPlanes: Set<String> = []) { self.symbolic = symbolic; self.knownPlanes = knownPlanes }
+    /// FMG3: the frame of the bay whose front is being written (boxes and prisms are given in it); nil = the model's.
+    public var frame: BayFrame?
+    /// FMG3: a plane's offset formula in the family being compiled, for coordinates that follow a sum of planes (a
+    /// canted face's): written as formulas.
+    public var planeFormula: ((String) -> String?)?
+    /// FMG3: compiling a canted front: its face's front corners (see CantAnchors).
+    public var cantAnchors: CantAnchors?
 
     /// FMG1: a coordinate as a length formula, when compiling with plane formulas and its plane has one.
     public func formula(_ v: PartValue) -> String? {
@@ -74,6 +81,7 @@ public final class PartSolidContext {
     /// The family bound of a coordinate.
     public func bound(_ v: PartValue) -> FamilyBound {
         if symbolic, let f = v.formula { return .expr(f) } // FMG1
+        if symbolic, PlaneTerms.isSum(v.plane), let p = v.plane, let f = planeFormula, let e = PlaneTerms.expression(p, offset: v.offset, f) { return .expr(e) } // FMG3
         guard symbolic, let p = v.plane, knownPlanes.contains(p) else { return .expr(Self.number(v.value)) }
         if abs(v.offset) < 1e-7 { return .plane(p) }
         let o = (v.offset * 1e6).rounded() / 1e6
@@ -184,6 +192,11 @@ public enum FurniturePartSolids {
     /// A box on `plane`: rectangle (u, v) extruded along the plane's normal (w).
     static func box(_ name: String, plane: FamilySketchPlane, u: (PartValue, PartValue), v: (PartValue, PartValue), w: (PartValue, PartValue),
                     _ ctx: PartSolidContext, void isVoid: Bool = false) -> FamilySolid {
+        if let fr = ctx.frame, !fr.isIdentity { // FMG3: a front on a turned face, given in its bay's frame
+            var c: [FamilyAxis: (PartValue, PartValue)] = [:]
+            c[plane.axes.u] = u; c[plane.axes.v] = v; c[plane.axes.w] = w
+            return fr.solid(name, x: c[.x] ?? u, y: c[.y] ?? v, z: c[.z] ?? w, ctx, void: isVoid)
+        }
         let (u0, u1) = range(u.0, u.1), (v0, v1) = range(v.0, v.1), (w0, w1) = range(w.0, w.1)
         var s = FamilySolid(name: name, profile: .rectangle(xMin: ctx.bound(u0), xMax: ctx.bound(u1), yMin: ctx.bound(v0), yMax: ctx.bound(v1)),
                             zMin: ctx.bound(w0), zMax: ctx.bound(w1), materialParameter: nil, isVoid: isVoid)
@@ -193,6 +206,7 @@ public enum FurniturePartSolids {
 
     /// A polygon on `plane` (numbers) extruded along its normal.
     static func prism(_ name: String, plane: FamilySketchPlane, _ pts: [Vec2], w: (PartValue, PartValue), _ ctx: PartSolidContext, void isVoid: Bool = false) -> FamilySolid {
+        if let fr = ctx.frame, !fr.isIdentity { return fr.prism(name, plane: plane, pts, w: w, ctx, void: isVoid) } // FMG3
         let (w0, w1) = range(w.0, w.1)
         let poly = Polygon2(pts).counterClockwise
         var s = FamilySolid(name: name, profile: .polygon(poly.points.map(ctx.point)), zMin: ctx.bound(w0), zMax: ctx.bound(w1), isVoid: isVoid)

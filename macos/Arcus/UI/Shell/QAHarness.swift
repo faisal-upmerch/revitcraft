@@ -482,6 +482,7 @@ enum QAHarness {
             await fmg2Screenshots(suffix) // FMG2: shaped side's joints, joints in Properties, Explode Parts, F104 exploded
             await fmg1Screenshots(suffix) // FMG1: locked part-face dimensions, Blend Edit Top, Sweep in an elevation, pieces that flex fully
             await mcpScreenshots(suffix) // MCP: Home's Design with Claude card, the Set Up window, the bottom bar pill
+            await fmg3Screenshots(suffix) // FMG3: fronts on the back, sides and canted faces, lids, Leaf Count, swings in a project elevation
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)

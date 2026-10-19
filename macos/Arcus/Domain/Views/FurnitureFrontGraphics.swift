@@ -22,8 +22,7 @@ extension ViewGraphicsBuilder {
         guard !visible.isEmpty else { return [] }
         if data.kind.isPlan { return frontPlanItems(visible) }
         if data.kind.isVerticalCut, let fr = VerticalGraphics.frame(data) {
-            // Fronts and front-face bays are seen from the front (views looking toward +Y).
-            guard fr.forward.y > 0.99 else { return [] }
+            // Fronts and bays are seen in the views looking at their face (FMG3: any face, canted ones too).
             return frontElevationItems(visible, fr)
         }
         return []
@@ -40,24 +39,38 @@ extension ViewGraphicsBuilder {
 
     func frontElevationItems(_ visible: [(Element, GraphicOverride)], _ fr: VerticalGraphics.Frame) -> [GItem] {
         var items: [GItem] = []
-        func view(_ x: Double, _ z: Double, y: Double) -> Vec2 { Vec2(fr.u(Vec2(x, y)), z) }
+        var face = BayFrame.front
+        // FMG3: a point of the face being drawn (u, z at depth y in its frame) in the view.
+        func view(_ x: Double, _ z: Double, y: Double) -> Vec2 { Vec2(fr.u(face.world(Vec2(x, y))), z) }
         for (e, o) in visible {
             switch e.data {
             case .furnitureBay(let b):
-                guard b.face == .front, let op = b.opening, b.division == nil else { continue }
+                face = BayFrame(b)
+                guard b.face == .front, face.faces(fr.forward), let op = b.opening, b.division == nil else { continue }
                 let r = Rect2(points: [view(op.x0, op.z0, y: op.y0), view(op.x1, op.z1, y: op.y0)])
                 var prims: [GPrimitive] = []
                 if let sf = surfaceFill(o) { prims.append(.fill([.rectangle(r)], sf)) }
                 items.append(GItem(elementID: e.id, category: e.category, layer: .fills, primitives: prims, hitPolygons: [.rectangle(r)]))
             case .furnitureBaySeparator(let s):
-                guard s.face == .front else { continue }
+                face = BayFrame(angle: s.facing ?? 0)
+                guard s.face == .front, face.faces(fr.forward) else { continue }
                 let y = model.elements(.furnitureBays).compactMap { $0.furnitureBay?.opening?.y0 }.min() ?? 0
                 let a = view(s.start.x, s.start.y, y: y), c = view(s.end.x, s.end.y, y: y)
                 items.append(lineItem(e, a, c, stroke(e.category, cut: false, o)))
             case .furnitureFront:
                 guard detailLevel(e.category) != .coarse else { continue }
+                // FMG3: a lid's swing shows in the side elevations (looking along its hinge).
+                let lid = FurnitureSwings.lidElevation(e, model)
+                if !lid.isEmpty {
+                    guard abs(fr.forward.normalized.x) > 0.99 else { continue }
+                    let st = swingStroke(e, o)
+                    items.append(GItem(elementID: e.id, category: e.category, layer: .model,
+                                       primitives: lid.map { .polyline($0.map { Vec2(fr.u($0.xy), $0.z) }, closed: false, st) }, hitPolygons: []))
+                    continue
+                }
                 let segs = FurnitureSwings.elevation(e, model)
-                guard !segs.isEmpty, let g = FurnitureFronts.geometry(e, model) else { continue }
+                guard !segs.isEmpty, let g = FurnitureFronts.geometry(e, model), g.frame.faces(fr.forward) else { continue }
+                face = g.frame
                 let st = swingStroke(e, o)
                 let y = g.outerFace
                 items.append(GItem(elementID: e.id, category: e.category, layer: .model,
@@ -114,8 +127,8 @@ extension ViewGraphicsBuilder {
                     st.pattern = .hidden
                     let outer = Rect2(min: Vec2(b.x0, b.y0), max: Vec2(b.x0 + b.width, b.y0 + b.depth))
                     let inner = Rect2(min: Vec2(b.x0 + b.side, b.y0 + b.back), max: Vec2(b.x0 + b.width - b.side, b.y0 + b.depth - b.back))
-                    prims.append(.polyline(outer.corners, closed: true, st))
-                    if inner.width > 0, inner.height > 0 { prims.append(.polyline(inner.corners, closed: true, st)) }
+                    prims.append(.polyline(outer.corners.map(g.frame.world), closed: true, st)) // FMG3: turned with the face
+                    if inner.width > 0, inner.height > 0 { prims.append(.polyline(inner.corners.map(g.frame.world), closed: true, st)) }
                 }
                 if !prims.isEmpty { items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: [])) }
             default: break

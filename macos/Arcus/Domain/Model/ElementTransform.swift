@@ -202,6 +202,8 @@ public enum ElementTransform {
             e.data = .cutProfile(c)
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4
             return FurniturePartTransform.apply(t, to: &e)
+        case .furnitureBay, .furnitureBaySeparator: // FMG3: bays move their point, as rooms do
+            return FurnitureBays.apply(t, to: &e)
         default:
             return false
         }

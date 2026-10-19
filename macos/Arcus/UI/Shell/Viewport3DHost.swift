@@ -64,6 +64,8 @@ final class Viewport3DHost: NSView {
             return ContextMenuBuilder(state: self.state, viewID: self.viewID, canvas: nil).menu(for: id)
         }
         tools = Viewport3DToolController(state: state, viewID: viewID, viewport: viewport, host: self) // W2-3D
+        viewport.dropHandler = tools // FMG3: furniture and families dropped from Finder
+        viewport.registerForDraggedTypes([.fileURL])
         changeToken = state.session.onChange { [weak self] _ in self?.rebuild() }
         observeSelection()
         rebuild()

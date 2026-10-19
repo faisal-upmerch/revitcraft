@@ -81,6 +81,8 @@ import ArcusDomain
     public var onContextMenu: ((ElementID?, NSEvent) -> NSMenu?)?
     /// Gets left-button and editing-key events first (tools and selection drags on a work plane). // W2-3D
     public weak var pointerHandler: (any Viewport3DPointerHandler)? // W2-3D
+    /// Gets files dropped on the view (Viewport3DView+Drops). // FMG3
+    public weak var dropHandler: (any Viewport3DDropHandler)?
 
     public var statistics: ViewportStatistics {
         var s = stats

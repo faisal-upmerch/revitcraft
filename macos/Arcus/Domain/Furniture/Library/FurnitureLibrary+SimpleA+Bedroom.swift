@@ -40,39 +40,53 @@ extension FurnitureLibrary {
     }
 
     /// A low bed: a solid frame on recessed feet, slats on cleats, the mattress inside the frame, and a headboard
-    /// standing on the floor. The storage bed's frame is taller with two drawers in its foot end.
+    /// standing on the floor. The storage bed stands on two drawer boxes, one along each side, each with three drawers
+    /// that open to the side (FMG3: bays on the Left and Right faces), the slats between them.
     static func platformBed(_ name: String, rooms: [String], storage: Bool) -> SA.Piece {
         let frameTop = storage ? 18.0 : 12.0
         return SA.Piece(name, rooms: rooms, material: "Solid Oak", sizes: [SA.Size(64, 86, 40, "Queen"), SA.Size(80, 86, 40, "King")], steps: [{ b in
             let t = 1.0, panel = "1\" Solid Oak", foot = 3.0
-            let top = SA.Z + frameTop, base = SA.Z + (storage ? 2 : foot)
-            // Headboard on the floor across the back; the frame's sides and foot in front of it.
-            try b.sideY(SA.B, toward: -1, x: (SA.L, SA.R), z: (SA.Z, SA.T), panel)
-            try b.sideX(SA.L, toward: 1, y: (SA.F, SA.B - t), z: (base, top), panel)
-            try b.sideX(SA.R, toward: -1, y: (SA.F, SA.B - t), z: (base, top), panel)
+            let top = SA.Z + frameTop, base = SA.Z + (storage ? 3 : foot)
             let slatTop = top - 2.5
+            // Headboard on the floor across the back; the foot in front of it.
+            try b.sideY(SA.B, toward: -1, x: (SA.L, SA.R), z: (SA.Z, SA.T), panel)
             if storage {
-                // The drawer box under the foot: a bottom, a top the mattress rests on, the drawers' bay between them.
-                try b.board(x: (SA.L + t, SA.R - t), y: (SA.F, SA.F + 26), top: base + 0.75, SA.plyShelf, role: .bottom)
-                try b.board(x: (SA.L + t, SA.R - t), y: (SA.F, SA.F + 26), top: slatTop, SA.plyShelf, role: .shelf)
-                try b.sideY(SA.F + 26, toward: 1, x: (SA.L + t, SA.R - t), z: (base, slatTop - 0.75), SA.ply, role: .divider)
+                // Two drawer boxes along the sides, 20" deep: a kick, a bottom, a deck, an inside wall, and a rail above
+                // the drawers; the foot runs across between the boxes' ends.
+                try b.sideY(SA.F, toward: 1, x: (SA.L, SA.R), z: (SA.Z, top), panel)
+                let deep = 20.0, ply = 0.75
+                for (side, dir) in [(SA.L, 1.0), (SA.R, -1.0)] {
+                    let outer = side, inner = side + dir * deep
+                    let xs = dir > 0 ? (outer, inner) : (inner, outer)
+                    try b.sideX(side + dir * 2, toward: dir, y: (SA.F + t, SA.B - t), z: (SA.Z, base), SA.ply, role: .plinth)
+                    try b.board(x: xs, y: (SA.F + t, SA.B - t), top: base + ply, SA.plyShelf, role: .bottom)
+                    try b.board(x: xs, y: (SA.F + t, SA.B - t), top: slatTop, SA.plyShelf, role: .shelf)
+                    try b.sideX(inner, toward: dir, y: (SA.F + t, SA.B - t), z: (base + ply, slatTop - ply), SA.ply, role: .divider)
+                    try b.sideX(side, toward: dir, y: (SA.F + t, SA.B - t), z: (slatTop, top), panel)
+                }
             } else {
+                try b.sideX(SA.L, toward: 1, y: (SA.F, SA.B - t), z: (base, top), panel)
+                try b.sideX(SA.R, toward: -1, y: (SA.F, SA.B - t), z: (base, top), panel)
                 try b.sideY(SA.F, toward: 1, x: (SA.L + t, SA.R - t), z: (base, top), panel)
                 for (x, y) in [(SA.L + 4, SA.F + 4), (SA.R - 4, SA.F + 4), (SA.L + 4, SA.B - 6), (SA.R - 4, SA.B - 6)] {
                     try b.leg(x, y, z: (SA.Z, base), SA.block)
                 }
             }
-            // Cleats on the sides, slats across, the mattress.
-            let front = storage ? SA.F + 26.75 : SA.F + t
-            for (x, dir) in [(SA.L + t, 1.0), (SA.R - t, -1.0)] {
+            // Cleats on the sides (the storage boxes' inside walls), slats across, the mattress.
+            let front = SA.F + t
+            let edges: [(SA.LP, Double)] = storage ? [(SA.L + 20.75, 1.0), (SA.R - 20.75, -1.0)] : [(SA.L + t, 1.0), (SA.R - t, -1.0)]
+            for (x, dir) in edges {
                 try b.railY((front, SA.B - t), x: x + dir * 0.375, top: slatTop - 1, SA.cleat)
             }
-            try b.slats(alongX: true, run: (SA.L + t, SA.R - t), first: front + 2, last: SA.B - (t + 2), count: 13, top: slatTop, SA.bedSlat) // FMG1: Slats
+            let run = storage ? (SA.L + 20.75, SA.R - 20.75) : (SA.L + t, SA.R - t) // FMG3: clear of the side drawer boxes
+            try b.slats(alongX: true, run: run, first: front + 2, last: SA.B - (t + 2), count: 13, top: slatTop, SA.bedSlat) // FMG1: Slats
             try b.board(x: (SA.L + (t + 0.25), SA.R - (t + 0.25)), y: (SA.F + (t + 0.25), SA.B - (t + 0.25)), top: slatTop + 10, "10\" Mattress", role: .top)
         }, { b in
-            // Two drawers side by side in the foot (EQ), between the bottom and the top of the box.
+            // Three drawers along each side (EQ), seen from the Left and Right.
             guard storage else { return }
-            try b.drawerColumns(SA.CX, SA.Z + (frameTop - 0.5) / 2, count: 2, material: "Solid Oak")
+            let z = SA.Z + (3.75 + frameTop - 3.25) / 2
+            try b.faceDrawers(x: (SA.L, SA.L + 20), y: (SA.F, SA.B), z: z, facing: -.pi / 2, count: 3, material: "Solid Oak")
+            try b.faceDrawers(x: (SA.R - 20, SA.R), y: (SA.F, SA.B), z: z, facing: .pi / 2, count: 3, material: "Solid Oak")
         }])
     }
 

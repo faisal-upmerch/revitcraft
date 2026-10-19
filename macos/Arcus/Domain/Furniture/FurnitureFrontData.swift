@@ -60,6 +60,10 @@ public struct BayOpening: Hashable, Codable, Sendable {
     /// Which edges are shared with a neighbouring bay (a divider, a fixed shelf, a separator or a Bay Divide line): fronts
     /// stop at the middle of a shared part instead of covering it.
     public var sharedLeft: Bool, sharedRight: Bool, sharedLow: Bool, sharedHigh: Bool
+    /// FMG3: a canted face's two front corners (u, v in its frame: the left part's at its inside face, the right
+    /// part's), with their planes in `bounds` ("cant.u0", "cant.v0", "cant.u1", "cant.v1"). A loaded piece keeps its
+    /// fronts between them when it flexes out of square.
+    public var cant: [Double]?
 
     public init(x0: Double, x1: Double, y0: Double, y1: Double, z0: Double, z1: Double) {
         self.x0 = x0; self.x1 = x1; self.y0 = y0; self.y1 = y1; self.z0 = z0; self.z1 = z1
@@ -82,6 +86,10 @@ public struct BayOpening: Hashable, Codable, Sendable {
         case "outer0": outer0
         case "outer1": outer1
         case "outerLow": outerLow
+        case "cant.u0": cant?[0] ?? x0 // FMG3
+        case "cant.v0": cant?[1] ?? y0
+        case "cant.u1": cant?[2] ?? x1
+        case "cant.v1": cant?[3] ?? y0
         default: outerHigh
         }
         return PartValue(v, bounds[key])
@@ -107,6 +115,9 @@ public struct BayData: Hashable, Codable, Sendable {
     public var division: BayDivision?
     /// The opening found at the last regeneration (nil = not enclosed).
     public var opening: BayOpening?
+    /// FMG3: bays seen from a side: the angle of the face's frame (radians; nil = the front, π the back, -π/2 the
+    /// left, π/2 the right, others a canted face). The seed and the opening are in that frame (see BayFrame).
+    public var facing: Double?
 
     public init(face: BayFace = .front, seed: Vec2, elevation: Double? = nil, number: String) {
         self.face = face; self.seed = seed; self.elevation = elevation; self.number = number
@@ -119,6 +130,8 @@ public struct BaySeparatorData: Hashable, Codable, Sendable {
     public var face: BayFace
     public var start: Vec2
     public var end: Vec2
+    /// FMG3: separators seen from a side: their face's frame angle (as `BayData.facing`; the ends are in that frame).
+    public var facing: Double?
     public init(face: BayFace = .front, start: Vec2, end: Vec2) { self.face = face; self.start = start; self.end = end }
     public var isVertical: Bool { abs(end.x - start.x) <= abs(end.y - start.y) }
 }
@@ -172,6 +185,11 @@ public struct FrontData: Hashable, Codable, Sendable {
     /// Instance overrides of the type's hardware (nil = the type's).
     public var handleTypeID: ElementID?
     public var hingeTypeID: ElementID?
+    /// FMG3: doors: Leaf Count by instance (1 single, 2 a pair; nil = the type's), or set by an integer (or yes/no)
+    /// family parameter so each family type is single or a pair, as a nested door's Leaf Count associated with the
+    /// host family's parameter.
+    public var leafCount: Int?
+    public var leafCountParameter: String?
     public init(kind: FrontKind, hingeFlipped: Bool = false, handlePosition: HandlePosition? = nil) {
         self.kind = kind; self.hingeFlipped = hingeFlipped; self.handlePosition = handlePosition ?? HandlePosition.defaultFor(kind)
     }
