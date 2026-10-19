@@ -10,6 +10,8 @@ import ArcusDomain
 /// (add points, set elevations, split lines) or Excavate.
 @MainActor
 public final class ToposolidSketchTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public enum Mode: String, CaseIterable { case line = "Line", rectangle = "Rectangle", pick = "Pick Lines" }
     public let commandID: CommandID
     public let title: String

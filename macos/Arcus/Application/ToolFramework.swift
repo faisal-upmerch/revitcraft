@@ -208,6 +208,9 @@ public protocol InteractiveTool: AnyObject {
     func spaceBar()
     /// The reference point used for perpendicular/angle snapping.
     var snapFrom: Vec2? { get }
+    /// The tool's geometry placed so far but not yet in the model (a sketch's lines, a path's segments): it snaps and
+    /// offers alignment like drawn lines, as in Revit. Excludes the rubber band.
+    var snapCurves: [Curve2] { get }
 }
 
 extension InteractiveTool {
@@ -222,6 +225,7 @@ extension InteractiveTool {
     public func cancelSketch() {}
     public func spaceBar() {}
     public var snapFrom: Vec2? { nil }
+    public var snapCurves: [Curve2] { [] }
 }
 
 /// Common helpers for tools.

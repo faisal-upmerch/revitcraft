@@ -142,6 +142,8 @@ public final class FramingElevationTool: BaseTool, InteractiveTool {
 /// Click the camera positions in plan, then Finish Walkthrough (Enter) (RevitCraft `ToolKind::Walkthrough`).
 @MainActor
 public final class WalkthroughTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.walkthrough
     public let title = "Walkthrough"
     public private(set) var points: [Vec2] = []

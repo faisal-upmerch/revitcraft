@@ -215,7 +215,13 @@ extension ToolContext {
             var r = SnapResult(point: b.p, kind: .intersection, elementIDs: on.flatMap(\.ids))
             r.label = "INTERSECTION of " + parts.joined(separator: " AND ")
             var shorts: [String] = []
-            for g in on where !shorts.contains(g.short) { shorts.append(g.short) }
+            // A perpendicular or parallel guide lying on the horizontal or vertical through the start point is the same
+            // line: name it once, as Revit does.
+            let axes = on.filter { $0.throughStart && $0.kind == .angle }
+            let named = on.filter { g in !((g.kind == .perpendicular || g.kind == .parallel) && g.throughStart && axes.contains { abs($0.direction.cross(g.direction)) < 1e-6 }) }
+            for g in named where !shorts.contains(g.short) { shorts.append(g.short) }
+            // The drawing direction crossing another point's alignment reads "Vertical and Extension", as in Revit.
+            if shorts.contains(where: { $0 == "Horizontal" || $0 == "Vertical" }) { shorts = shorts.map { $0 == "Alignment" ? "Extension" : $0 } }
             r.shortLabel = shorts.count == 1 ? "Intersection of \(shorts[0])s" : shorts.joined(separator: " and ")
             r.guides = on.compactMap { guideSegment($0, to: b.p) }
             return (b.p, r)

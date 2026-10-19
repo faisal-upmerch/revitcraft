@@ -62,7 +62,7 @@ struct SnapEngineTests {
         let r = try #require(s)
         #expect(p.distance(to: Vec2(3, 5)) < 1e-9, "\(p)")
         #expect(r.description.contains("VERTICAL") && r.description.contains("ALIGNMENT with END of"), "\(r.description)")
-        #expect(r.shortLabel == "Vertical and Alignment" && r.guides.count == 2, "\(r.shortLabel ?? "") \(r.guides.count)")
+        #expect(r.shortLabel == "Vertical and Extension" && r.guides.count == 2, "\(r.shortLabel ?? "") \(r.guides.count)")
         // Away from the end there is no alignment.
         let (_, s2) = ctx.snap(Vec2(3.01, 4.2), from: Vec2(3, 0))
         #expect(s2?.description == "VERTICAL")

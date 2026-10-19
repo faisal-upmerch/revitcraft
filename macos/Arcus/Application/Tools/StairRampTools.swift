@@ -95,6 +95,8 @@ public final class StairTool: BaseTool, InteractiveTool {
 /// Health.
 @MainActor
 public final class RampTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.ramp
     public let title = "Ramp"
     public var isSketchMode: Bool { true }

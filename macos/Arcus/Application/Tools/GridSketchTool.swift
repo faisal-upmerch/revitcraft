@@ -8,6 +8,8 @@ import ArcusDomain
 /// creates one grid through the chain, Cancel discards it. With `editing`, the sketch edits that grid's path.
 @MainActor
 public final class GridSketchTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID: CommandID
     public let editingID: ElementID?
     /// The chain's points so far.

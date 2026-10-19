@@ -124,6 +124,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
     }
     public var numericLabel: String? { drawMode == .line && start != nil ? "Length" : drawNumericLabel }
     public var snapFrom: Vec2? { start }
+    /// The sketch's lines so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { curves }
 
     public var options: [ToolOption] {
         var o = [ToolOption(id: "mode", label: "Draw", kind: .choice(availableModes.map(\.rawValue)), value: .text(drawMode.rawValue))]

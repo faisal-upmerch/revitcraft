@@ -111,6 +111,8 @@ public final class WallOpeningTool: BaseTool, InteractiveTool {
 /// ceiling and roof between its base (this level plus Base Offset) and its top.
 @MainActor
 public final class ShaftOpeningTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public enum Mode: String, CaseIterable { case line = "Line", rectangle = "Rectangle", circle = "Circle" }
     public let commandID = CommandID.shaftOpening
     public let title = "Shaft"

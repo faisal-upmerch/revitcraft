@@ -26,6 +26,8 @@ enum SitePick {
 
 @MainActor
 public final class ParkingLayoutTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.parkingLayout
     public let title = "Parking Layout"
     public enum Mode: String, CaseIterable { case rectangle = "Rectangle", polygon = "Sketch", pick = "Pick Boundary" }
@@ -181,6 +183,8 @@ public final class ParkingLayoutTool: BaseTool, InteractiveTool {
 
 @MainActor
 public final class SubregionTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.subregion
     public let title = "Sub-Region"
     public var isSketchMode: Bool { true }
@@ -230,6 +234,8 @@ public final class SubregionTool: BaseTool, InteractiveTool {
 
 @MainActor
 public final class SplitSurfaceTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.splitSurface
     public let title = "Split Surface"
     public var isSketchMode: Bool { true }

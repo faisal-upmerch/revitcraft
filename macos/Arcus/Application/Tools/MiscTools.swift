@@ -72,6 +72,8 @@ public final class PickHostTool: BaseTool, InteractiveTool {
 /// Edit a wall's elevation profile in an elevation or section view parallel to the wall.
 @MainActor
 public final class WallProfileTool: BaseTool, InteractiveTool {
+    /// The points placed so far snap and align, as in Revit.
+    public var snapCurves: [Curve2] { SnapIndex.chain(points) }
     public let commandID = CommandID.editProfile
     public let title = "Edit Wall Profile"
     let wallID: ElementID

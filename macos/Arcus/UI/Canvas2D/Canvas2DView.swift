@@ -940,6 +940,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         let sp = convert(event.locationInWindow, from: nil)
         let raw = toView(sp)
         let ctx = toolContext
+        ctx.snapIndex.setTransient(state.activeTool?.snapCurves ?? []) // the sketch or path in progress snaps too, as in Revit
         var (pt, s) = ctx.snap(raw, from: snapFrom ?? state.activeTool?.snapFrom, orthoOnly: orthoOnly, constrainOrtho: state.activeTool != nil && event.modifierFlags.contains(.shift))
         if let t = tabSnap {
             // A snap picked with Tab holds until the pointer moves away from where Tab was pressed.

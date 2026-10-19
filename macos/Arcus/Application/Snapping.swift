@@ -94,8 +94,38 @@ public struct SnapIndex: Sendable {
     var segGrid = SpatialGrid<Int>(cellSize: 2)
     var arcGrid = SpatialGrid<Int>(cellSize: 4)
     var ptGrid = SpatialGrid<Int>(cellSize: 2)
+    /// The geometry of the tool in progress (a sketch's lines, a path's points so far), which isn't in the view's
+    /// display list yet. It snaps and offers alignment like drawn lines, as in Revit. Few items: scanned directly.
+    var transientSegs: [Seg] = []
+    var transientArcs: [ArcItem] = []
 
     public init() {}
+
+    /// Replaces the in-progress tool geometry (`InteractiveTool.snapCurves`).
+    public mutating func setTransient(_ curves: [Curve2]) {
+        transientSegs.removeAll(keepingCapacity: true); transientArcs.removeAll(keepingCapacity: true)
+        for c in curves {
+            switch c {
+            case .line(let s) where s.length > 1e-9: transientSegs.append(Seg(s: s, id: nil, isGrid: false, category: .detailLines))
+            case .arc(let a): transientArcs.append(ArcItem(a: a, id: nil))
+            default: break
+            }
+        }
+    }
+    /// Segments in `box`: the view's (spatial grid) and the tool's in-progress ones.
+    func segments(in box: Rect2) -> [Seg] {
+        segGrid.query(box).map { segs[$0] } + transientSegs.filter { $0.s.bounds.intersects(box) }
+    }
+    func arcItems(in box: Rect2) -> [ArcItem] {
+        arcGrid.query(box).map { arcs[$0] } + transientArcs.filter { $0.a.bounds.intersects(box) }
+    }
+    /// A chain of points as line curves (for tools that collect clicked points).
+    public static func chain(_ points: [Vec2], closed: Bool = false) -> [Curve2] {
+        guard points.count >= 2 else { return [] }
+        var out = zip(points, points.dropFirst()).map { Curve2.line(Segment2($0, $1)) }
+        if closed, points.count > 2 { out.append(.line(Segment2(points[points.count - 1], points[0]))) }
+        return out
+    }
 
     public init(graphics: ViewGraphics, model: BIMModel, view: Element) {
         let scale = Double(max(graphics.scale, 1))
@@ -103,8 +133,16 @@ public struct SnapIndex: Sendable {
         arcGrid = SpatialGrid(cellSize: max(1, scale / 25))
         ptGrid = SpatialGrid(cellSize: max(0.5, scale / 50))
         var budget = 400_000
-        for item in graphics.items where (item.selectable || item.category == .importedCAD) && !Self.nonSnappable.contains(item.category) {
+        // Snappable: everything selectable, CAD imports, the halftone underlay, title blocks and point clouds (as Revit);
+        // annotation that describes the model (dimensions, text, tags, spots, symbols) never snaps.
+        for item in graphics.items where (item.selectable || item.category == .importedCAD || item.layer == .underlay || item.category == .titleBlocks)
+            && !Self.nonSnappable.contains(item.category) {
             let isGrid = item.category == .grids
+            if item.category == .pointClouds {
+                // Each dot is a small square: snap to its centre.
+                for case .fill(let polys, _) in item.primitives { for poly in polys where budget > 0 { addPoint(Rect2(points: poly.points).center, item.elementID, .endpoint); budget -= 1 } }
+                continue
+            }
             for p in item.primitives {
                 guard budget > 0 else { break }
                 switch p {
@@ -166,8 +204,8 @@ public struct SnapIndex: Sendable {
         let horizontal = Rect2(min: Vec2(raw.x - reach, raw.y - tolerance), max: Vec2(raw.x + reach, raw.y + tolerance))
         for box in [vertical, horizontal] {
             for i in ptGrid.query(box) { consider(points[i].p, points[i].id, points[i].kind) }
-            for i in segGrid.query(box) where !segs[i].isReference && !Self.nonSnappable.contains(segs[i].category ?? .walls) {
-                consider(segs[i].s.start, segs[i].id, .endpoint); consider(segs[i].s.end, segs[i].id, .endpoint)
+            for sg in segments(in: box) where !sg.isReference && !Self.nonSnappable.contains(sg.category ?? .walls) {
+                consider(sg.s.start, sg.id, .endpoint); consider(sg.s.end, sg.id, .endpoint)
             }
         }
         return best.map { ($0.value.p, $0.value.id, $0.value.kind, $0.key) }
@@ -189,8 +227,8 @@ public struct SnapIndex: Sendable {
         var refCands: [SnapResult] = []
         let en = settings.enabled
         func keep(_ id: ElementID?) -> Bool { id.map { !exclude.contains($0) } ?? true }
-        let nearSegs = segGrid.query(box).map { segs[$0] }.filter { keep($0.id) }
-        let nearArcs = arcGrid.query(box).map { arcs[$0] }.filter { keep($0.id) }
+        let nearSegs = segments(in: box).filter { keep($0.id) }
+        let nearArcs = arcItems(in: box).filter { keep($0.id) }
         func consider(_ q: Vec2, _ k: SnapKind, _ ids: [ElementID?], reference: Bool = false) {
             guard en.contains(k), q.distance(to: p) <= radius else { return }
             let r = SnapResult(point: q, kind: k, elementIDs: ids.compactMap { $0 })
@@ -254,8 +292,7 @@ public struct SnapIndex: Sendable {
         var out: [(dir: Vec2, id: ElementID?)] = []
         for c in points {
             let box = Rect2(center: c, halfSize: Vec2(radius, radius))
-            for i in segGrid.query(box) {
-                let s = segs[i]
+            for s in segments(in: box) {
                 guard !s.isReference, s.id.map({ !exclude.contains($0) }) ?? true, s.s.length > radius * 0.05, s.s.distance(to: c) <= radius else { continue }
                 let d = (s.s.end - s.s.start).normalized
                 if out.contains(where: { abs($0.dir.x * d.y - $0.dir.y * d.x) < 1e-6 }) { continue }
@@ -278,8 +315,7 @@ public struct SnapIndex: Sendable {
         let box = Rect2(center: p, halfSize: Vec2(radius, radius))
         var out: [(seg: Segment2, id: ElementID?, end: Vec2, distance: Double)] = []
         var seenLines: [(Vec2, Vec2)] = []
-        for i in segGrid.query(box) {
-            let s = segs[i]
+        for s in segments(in: box) {
             guard !s.isReference, let c = s.category, Self.extensionCategories.contains(c), s.id.map({ !exclude.contains($0) }) ?? true,
                   s.s.length >= minimumLength else { continue }
             let d = s.s.direction
@@ -299,8 +335,7 @@ public struct SnapIndex: Sendable {
 
     /// Visible straight lines of building elements and drafting lines within `rect` (for reference dimensions).
     public func visibleLines(in rect: Rect2, minimumLength: Double, exclude: Set<ElementID> = []) -> [(seg: Segment2, id: ElementID?)] {
-        segGrid.query(rect).compactMap { i in
-            let s = segs[i]
+        segments(in: rect).compactMap { s in
             guard !s.isReference, let c = s.category, Self.extensionCategories.contains(c), s.s.length >= minimumLength,
                   s.id.map({ !exclude.contains($0) }) ?? true else { return nil }
             return (s.s, s.id)
@@ -311,8 +346,7 @@ public struct SnapIndex: Sendable {
     public func nearestSegment(_ p: Vec2, radius: Double, visibleOnly: Bool = false) -> (Segment2, ElementID?)? {
         let box = Rect2(center: p, halfSize: Vec2(radius, radius))
         var best: (Segment2, ElementID?, Double)?
-        for i in segGrid.query(box) {
-            let s = segs[i]
+        for s in segments(in: box) {
             if visibleOnly && s.isReference { continue }
             let d = s.s.distance(to: p)
             if d <= radius, d < (best?.2 ?? .infinity) { best = (s.s, s.id, d) }
