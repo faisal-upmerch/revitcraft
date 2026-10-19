@@ -591,7 +591,7 @@ struct ModelHealthDialog: View {
 struct DWGUnavailableDialog: View {
     let state: DocumentState
     var body: some View {
-        DialogFrame(title: "DWG Import Not Available", icon: "exclamationmark.triangle", tint: .orange, subtitle: "Install a DWG converter, or import DXF.", okTitle: "Import DXF Instead…", scrolls: true, state: state) {
+        DialogFrame(title: "DWG Import Not Available", icon: "exclamationmark.triangle", tint: .orange, size: .large, subtitle: "Install a DWG converter, or import DXF.", okTitle: "Import DXF Instead…", state: state) {
             state.presented = nil
             CommandRouter(state: state).run(.importDXF)
         } content: {

@@ -64,7 +64,7 @@ struct StackedWallEditor: View {
             }
             .controlSize(.small)
             Text("One part is Variable: it takes the wall height the fixed parts leave.").font(.caption).foregroundStyle(.secondary)
-            if let error { Text(error).font(.caption).foregroundStyle(.red) }
+            if let error { DialogNotice(.error, error) } // DIALOGS
         }
     }
 

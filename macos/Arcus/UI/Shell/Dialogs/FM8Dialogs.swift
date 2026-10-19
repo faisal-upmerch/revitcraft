@@ -32,14 +32,14 @@ struct SaveFurnitureTemplateDialog: View {
     @State private var preview: CGImage?
 
     var body: some View {
-        DialogFrame(title: "Save as Furniture Template", subtitle: "Saves a copy with a preview in your Furniture Templates. It appears on Home ▸ Furniture and in Load Furniture.",
-                    okTitle: "Save", okDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty, state: state, onOK: save) {
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 10) {
-                    FormRow(label: "Name") { TextField("", text: $name).textFieldStyle(.roundedBorder).frame(width: 220) }
-                    FormRow(label: "Room") {
+        DialogFrame(title: "Save as Furniture Template", icon: "doc.badge.gearshape", tint: .brown, subtitle: "A copy with a preview, shown on Home ▸ Furniture and in Load Furniture.",
+                    okTitle: "Save", okDisabled: name.trimmingCharacters(in: .whitespaces).isEmpty, disabledReason: "Enter a name", labelWidth: 60, state: state, onOK: save) {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                DialogSection(footnote: destinationText) {
+                    DialogRow("Name") { TextField("", text: $name).labelsHidden() }
+                    DialogRow("Room") {
                         HStack(spacing: 4) {
-                            TextField("", text: $room).textFieldStyle(.roundedBorder).frame(width: 190)
+                            TextField("", text: $room).labelsHidden()
                             Menu {
                                 ForEach(rooms, id: \.self) { r in Button(r) { room = r } }
                             } label: { Image(systemName: "chevron.down") }
@@ -47,10 +47,10 @@ struct SaveFurnitureTemplateDialog: View {
                             .accessibilityLabel("Choose a room")
                         }
                     }
-                    Text(destinationText).font(.system(size: 11)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).frame(width: 300, alignment: .leading)
                 }
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.05))
+                    RoundedRectangle(cornerRadius: Tokens.radiusSection, style: .continuous).fill(DialogColors.sectionFill)
+                    RoundedRectangle(cornerRadius: Tokens.radiusSection, style: .continuous).strokeBorder(DialogColors.sectionStroke)
                     if let preview { Image(decorative: preview, scale: 2).resizable().aspectRatio(contentMode: .fit).padding(8) }
                     else { ProgressView().controlSize(.small) }
                 }
@@ -58,7 +58,6 @@ struct SaveFurnitureTemplateDialog: View {
                 .accessibilityLabel("Preview")
             }
         }
-        .frame(width: 560)
         .onAppear {
             name = state.model.furnitureSetup?.name ?? state.documentName
             rooms = FurnitureLibraryCatalog.templateRooms(FurnitureLibraryCatalog.all())

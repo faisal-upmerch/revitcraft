@@ -38,18 +38,21 @@ struct ExportPDFDialog: View {
 
     var body: some View {
         let list = items
-        DialogFrameWithActions(title: "Export PDF", icon: "doc.richtext", tint: .red, subtitle: "Vector PDF with live text, bookmarks and linked view markers.", okTitle: "Export…",
-                               okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", scrolls: true, labelWidth: 120, state: state) {
+        DialogFrameWithActions(title: "Export PDF", icon: "doc.richtext", tint: .red, size: .wide, subtitle: "Vector PDF with live text, bookmarks and linked view markers.", okTitle: "Export…",
+                               okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", labelWidth: 90, state: state) {
             chooseFolder()
         } content: {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
             DialogSection(includeViews ? "Sheets and views" : "Sheets", boxed: false) {
                 DialogCheckList(items: list.map { e in
                     DialogCheckItem(id: e.id, title: e.sheet.map { "\($0.number) – \(e.name)" } ?? e.name, subtitle: e.sheet == nil ? e.view?.kind.rawValue : nil,
                                     icon: e.sheet == nil ? "rectangle.on.rectangle" : "doc.richtext")
-                }, checked: $chosen, maxRows: 6, noun: includeViews ? "items" : "sheets", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
+                }, checked: $chosen, minRows: 13, maxRows: 13, noun: includeViews ? "items" : "sheets", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
             } accessory: {
                 Toggle("Include views", isOn: $includeViews)
             }
+            .frame(width: 400)
+            VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
             DialogSection("Output") {
                 DialogRow("Files") {
                     Picker("", selection: $combined) { Text("One combined PDF").tag(true); Text("Separate files").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize()
@@ -73,6 +76,8 @@ struct ExportPDFDialog: View {
                         Toggle("Unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
                     }
                 }
+            }
+            }
             }
         } actions: {
             Button("Select All") { chosen = Set(list.map(\.id)) }.disabled(list.isEmpty)

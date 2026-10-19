@@ -14,8 +14,10 @@ enum DialogSize: Equatable, Sendable {
     case medium
     /// Master-detail and table dialogs (Design Options, Model Health, Revisions).
     case large
-    /// Editors with several panes (Visibility/Graphics, Materials, Type Properties, Component Library).
+    /// Editors with several panes (Materials, Type Properties, Filters, Schedule Properties).
     case wide
+    /// Override tables with many columns (Visibility/Graphics).
+    case extraWide
 
     var width: CGFloat {
         switch self {
@@ -23,19 +25,20 @@ enum DialogSize: Equatable, Sendable {
         case .medium: 560
         case .large: 720
         case .wide: 900
+        case .extraWide: 1120
         }
     }
     /// Narrowest the dialog may get when a window-like dialog is resized.
     var minWidth: CGFloat { width }
     /// Widest a resizable dialog may get.
-    var maxWidth: CGFloat { self == .wide ? 1400 : width * 1.5 }
+    var maxWidth: CGFloat { self == .wide || self == .extraWide ? 1600 : width * 1.5 }
     /// Tallest the content area gets before it scrolls.
     var maxContentHeight: CGFloat {
         switch self {
         case .small: 420
         case .medium: 520
         case .large: 580
-        case .wide: 640
+        case .wide, .extraWide: 640
         }
     }
     /// Default width of the label column of `DialogRow`s.
@@ -43,7 +46,7 @@ enum DialogSize: Equatable, Sendable {
         switch self {
         case .small: 110
         case .medium: 150
-        case .large, .wide: 170
+        case .large, .wide, .extraWide: 170
         }
     }
 }

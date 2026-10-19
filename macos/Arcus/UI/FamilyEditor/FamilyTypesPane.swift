@@ -21,15 +21,19 @@ struct FamilyTypesDialog: View {
     var sorted: [FamilyParameter] { model.family.parameters.sorted { ($0.group, $0.name) < ($1.group, $1.name) } }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        ArcusDialog(icon: "square.grid.2x2", tint: .purple, title: "Family Types", subtitle: model.family.name, size: .wide, height: 600,
+                    onCancel: { // F1415
+                        if let o = opened, o.family != model.family {
+                            model.edit("Cancel Family Types") { $0 = o.family }
+                            model.currentType = model.family.type(named: o.type) != nil ? o.type : (model.family.types.first?.name ?? "")
+                        }
+                        dismiss()
+                    }, onOK: { dismiss() }) {
+            DialogSection {
             HStack {
-                Text("Family Types").font(.title3.weight(.semibold))
-                Spacer()
-                Text(model.family.name).foregroundStyle(.secondary)
-            }
-            HStack {
-                Picker("Type", selection: $model.currentType) { ForEach(model.family.types) { Text($0.name).tag($0.name) } }
-                    .frame(maxWidth: 300)
+                Text("Type name").frame(width: 80, alignment: .leading)
+                Picker("", selection: $model.currentType) { ForEach(model.family.types) { Text($0.name).tag($0.name) } }
+                    .labelsHidden().frame(maxWidth: 300)
                 Button("New…") { model.newType(copying: false) }.help("Create a type with the current type's values.")
                 Button("Duplicate…") { model.newType(copying: true) }
                 Button("Rename…") { model.renameType() }
@@ -37,6 +41,8 @@ struct FamilyTypesDialog: View {
                 Spacer()
                 Button { model.undo.undo() } label: { Image(systemName: "arrow.uturn.backward") }.disabled(!model.undo.canUndo).help("Undo")
                 Button { model.undo.redo() } label: { Image(systemName: "arrow.uturn.forward") }.disabled(!model.undo.canRedo).help("Redo")
+            }
+            .controlSize(.small)
             }
             Table(sorted, selection: $tableSelection) {
                 TableColumn("Parameter") { p in
@@ -82,9 +88,14 @@ struct FamilyTypesDialog: View {
                     Button("Delete", role: .destructive) { model.deleteParameter(p) }.disabled(p.isBuiltIn)
                 }
             }
-            .frame(minHeight: 220)
+            .scrollContentBackground(.hidden)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            .frame(minHeight: 220, maxHeight: .infinity)
+            DialogSection("New parameter", footnote: "Formulas use parameter names, units (600 mm, 2'), + − × ÷, if(), and(), not(), sin() in degrees, sqrt() and more; cycles are reported. A formula-driven parameter can't be set per type. Renaming a parameter updates the formulas, labels and bindings that use it. Every change is undoable (⌘Z).") {
             HStack {
-                TextField("New parameter", text: $newParamName).textFieldStyle(.roundedBorder).frame(minWidth: 120, maxWidth: 200)
+                TextField("Name", text: $newParamName).textFieldStyle(.roundedBorder).frame(minWidth: 120, maxWidth: 200)
                 Picker("", selection: $newParamType) { ForEach(ParamType.userCreatable, id: \.self) { Text($0.displayName).tag($0) } }.labelsHidden().fixedSize()
                 Picker("", selection: $newParamGroup) { ForEach(ParameterGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize()
                 Toggle("Instance", isOn: $newParamInstance)
@@ -94,32 +105,18 @@ struct FamilyTypesDialog: View {
                 }
                 .disabled(!FamilyEditing.isValidName(newParamName) || model.family.parameter(named: newParamName.trimmingCharacters(in: .whitespaces)) != nil)
                 Spacer()
-                if let sel = tableSelection, let p = model.family.parameter(named: sel) {
-                    Button("Rename…") { if let v = FamilyEditorModel.ask("Rename Parameter", "Name", p.name) { model.renameParameter(p.name, to: v) } }.disabled(p.isBuiltIn)
-                    Button("Delete", role: .destructive) { model.deleteParameter(p) }.disabled(p.isBuiltIn)
-                }
             }
-            Text("Formulas use parameter names, units (600 mm, 2'), + − × ÷, if(), and(), not(), sin() in degrees, sqrt() and more; cycles are reported. A parameter driven by a formula can't be set per type. Renaming a parameter updates the formulas, labels and bindings that use it. Every change here is undoable (⌘Z).")
-                .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                if let m = model.message { Text(m).font(.caption).foregroundStyle(.secondary).lineLimit(2) }
-                Spacer()
-                Button("Flex Test") { model.flex() }
-                Button("Cancel") { // F1415
-                    if let o = opened, o.family != model.family {
-                        model.edit("Cancel Family Types") { $0 = o.family }
-                        model.currentType = model.family.type(named: o.type) != nil ? o.type : (model.family.types.first?.name ?? "")
-                    }
-                    dismiss()
-                }
-                .keyboardShortcut(.cancelAction)
-                .help("Discard the changes made since Family Types opened.")
-                Button("OK") { dismiss() }.keyboardShortcut(.defaultAction)
+            }
+            if let m = model.message { DialogNotice(.info, m) }
+        } leading: {
+            Button("Flex Test") { model.flex() }
+            if let sel = tableSelection, let p = model.family.parameter(named: sel) {
+                Button("Rename…") { if let v = FamilyEditorModel.ask("Rename Parameter", "Name", p.name) { model.renameParameter(p.name, to: v) } }.disabled(p.isBuiltIn)
+                Button("Delete", role: .destructive) { model.deleteParameter(p) }.disabled(p.isBuiltIn)
             }
         }
+        .opaqueDialogBackground()
         .onAppear { if opened == nil { opened = (model.family, model.currentType) } }
-        .padding(16)
-        .frame(minWidth: 820, idealWidth: 940, minHeight: 480, idealHeight: 560)
     }
 }
 
@@ -129,43 +126,33 @@ struct FamilyCategoryDialog: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Family Category and Parameters").font(.title3.weight(.semibold))
-            Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 8) {
-                GridRow {
-                    Text("Family Category").foregroundStyle(.secondary)
+        ArcusDialog(icon: "cube", tint: .purple, title: "Family Category and Parameters", subtitle: model.family.name, labelWidth: 120, okTitle: "Done", showCancel: false,
+                    onCancel: { dismiss() }, onOK: { dismiss() }) {
+            DialogSection("Family category", footnote: model.family.template.is3D ? "Only 3D categories are offered; the geometry stays as it is. Hosted templates (door, window) keep the wall opening."
+                                                                                : "Only 2D (annotation) categories are offered.") {
+                DialogRow("Category") {
                     Picker("", selection: Binding(get: { model.family.template }, set: { t in model.edit("Change Category") { $0.template = t } })) {
                         ForEach(FamilyTemplate.allCases.filter { $0.is3D == model.family.template.is3D }, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .labelsHidden().frame(maxWidth: 260)
                 }
-                GridRow {
-                    Text("").gridCellUnsizedAxes(.horizontal)
-                    Text(model.family.template.is3D ? "Only 3D categories are offered; the geometry stays as it is. Hosted templates (door, window) keep the wall opening."
-                                                     : "Only 2D (annotation) categories are offered.")
-                        .font(.caption).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
-                }
-                GridRow {
-                    Text("Shared").foregroundStyle(.secondary)
-                    Toggle("", isOn: Binding(get: { model.family.isShared }, set: { v in model.edit(v ? "Make Shared" : "Make Not Shared") { $0.isShared = v } })).labelsHidden()
-                }
                 if model.family.template == .tag {
-                    GridRow(alignment: .top) {
-                        Text("Tags categories").foregroundStyle(.secondary)
-                        Text(model.family.taggedCategories.map(\.rawValue).joined(separator: ", ")).fixedSize(horizontal: false, vertical: true)
-                    }
-                }
-                GridRow {
-                    Text("Description").foregroundStyle(.secondary)
-                    TextField("", text: Binding(get: { model.family.description }, set: { v in model.edit("Edit Description") { $0.description = v } })).textFieldStyle(.roundedBorder)
-                }
-                GridRow {
-                    Text("Manufacturer").foregroundStyle(.secondary)
-                    TextField("", text: Binding(get: { model.family.manufacturer }, set: { v in model.edit("Edit Manufacturer") { $0.manufacturer = v } })).textFieldStyle(.roundedBorder)
+                    DialogValueRow(label: "Tags categories", value: model.family.taggedCategories.map(\.rawValue).joined(separator: ", "))
                 }
             }
-            Divider()
-            Text("Family Parameters").font(.headline)
+            DialogSection("Identity") {
+                DialogRow("Shared") {
+                    Toggle("", isOn: Binding(get: { model.family.isShared }, set: { v in model.edit(v ? "Make Shared" : "Make Not Shared") { $0.isShared = v } })).labelsHidden()
+                }
+                DialogRow("Description") {
+                    TextField("", text: Binding(get: { model.family.description }, set: { v in model.edit("Edit Description") { $0.description = v } })).labelsHidden()
+                }
+                DialogRow("Manufacturer") {
+                    TextField("", text: Binding(get: { model.family.manufacturer }, set: { v in model.edit("Edit Manufacturer") { $0.manufacturer = v } })).labelsHidden()
+                }
+            }
+            DialogSection("Family parameters", footnote: "Add, rename and delete parameters in Family Types.", boxed: false) {
+            DialogListBox(count: model.family.parameters.count, rowHeight: 30, minRows: 2, maxRows: 6) {
             List(model.family.parameters) { p in
                 HStack {
                     Text(p.name)
@@ -175,17 +162,12 @@ struct FamilyCategoryDialog: View {
                     Text(p.group.rawValue).font(.caption).foregroundStyle(.tertiary)
                     Button("Edit") { model.select(.parameter(p.name)); dismiss() }.controlSize(.small)
                 }
-                .font(.callout)
             }
-            .frame(minHeight: 160)
-            HStack {
-                Text("Add, rename and delete parameters in Family Types.").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Family Types…") { model.sheet = .familyTypes }
-                Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
+            }
+        } leading: {
+            Button("Family Types…") { model.sheet = .familyTypes }
         }
-        .padding(16)
-        .frame(minWidth: 560, idealWidth: 640, minHeight: 440)
+        .opaqueDialogBackground()
     }
 }

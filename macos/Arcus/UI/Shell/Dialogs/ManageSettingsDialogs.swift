@@ -294,7 +294,7 @@ struct AdditionalSettingsDialog: View {
 
     var body: some View {
         ArcusDialog(icon: "gearshape", tint: .gray, title: "Additional Settings", subtitle: "Line weights, patterns, arrowheads and temporary dimensions.",
-                    size: .wide, okTitle: "Done", showCancel: false, height: 620, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
+                    size: .wide, okTitle: "Done", showCancel: false, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
             Picker("", selection: $tab) { ForEach(AdditionalSettingsTab.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden()
                 .fixedSize().frame(maxWidth: .infinity)
             Group {
@@ -306,7 +306,7 @@ struct AdditionalSettingsDialog: View {
                 case .temporaryDimensions: temporaryDimensions
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
         } leading: {
             Button("Line Styles…") { state.presented = .lineStyles }.help("Open Manage ▸ Line Styles")
         }

@@ -250,3 +250,45 @@ struct DialogBadge: View {
             .foregroundStyle(tint)
     }
 }
+
+/// A titled pane of a master-detail dialog: a rounded box holding a list (or any content) that fills the height it
+/// is given, with an optional bar of small buttons along its bottom edge (+ / −, Duplicate, Check All).
+struct DialogPane<Content: View, Bar: View>: View {
+    var title: String?
+    @ViewBuilder let content: Content
+    @ViewBuilder let bar: Bar
+
+    init(_ title: String? = nil, @ViewBuilder content: () -> Content, @ViewBuilder bar: () -> Bar) {
+        self.title = title; self.content = content(); self.bar = bar()
+    }
+
+    var body: some View {
+        let shape = RoundedRectangle(cornerRadius: Tokens.radiusSection, style: .continuous)
+        VStack(alignment: .leading, spacing: 6) {
+            if let title { Text(title).font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4).lineLimit(1) }
+            VStack(spacing: 0) {
+                content
+                    .listStyle(.inset)
+                    .scrollContentBackground(.hidden)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                if Bar.self != EmptyView.self {
+                    Divider()
+                    HStack(spacing: 8) { bar }
+                        .controlSize(.small)
+                        .padding(.horizontal, 8)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .frame(height: 30)
+                }
+            }
+            .background(DialogColors.sectionFill, in: shape)
+            .clipShape(shape)
+            .overlay(shape.strokeBorder(DialogColors.sectionStroke, lineWidth: 1))
+        }
+    }
+}
+
+extension DialogPane where Bar == EmptyView {
+    init(_ title: String? = nil, @ViewBuilder content: () -> Content) {
+        self.init(title, content: content, bar: { EmptyView() })
+    }
+}

@@ -29,6 +29,8 @@ struct ArcusDialog<Content: View, Leading: View, Trailing: View>: View {
     var cancelTitle = "Cancel"
     /// The default button is destructive (Purge, Delete): it keeps Return but reads as a warning.
     var destructive = false
+    /// The default button's key: Return, ⌘Return in editors whose fields take Return, nil while a field takes it.
+    var okShortcut: KeyboardShortcut? = .defaultAction
     /// Wrap the content in a scroll view that grows with the content up to the size class's maximum height.
     var scrolls = false
     /// Window-like editors: the content fills the dialog, which starts at this height (and the class's width).
@@ -51,7 +53,7 @@ struct ArcusDialog<Content: View, Leading: View, Trailing: View>: View {
                 .padding(.bottom, DialogStyle.sectionSpacing)
             contentArea
             DialogFooter(okTitle: okTitle, okDisabled: okDisabled, disabledReason: disabledReason, showCancel: showCancel,
-                         cancelTitle: cancelTitle, destructive: destructive, onCancel: onCancel, onOK: onOK) {
+                         cancelTitle: cancelTitle, destructive: destructive, okShortcut: okShortcut, onCancel: onCancel, onOK: onOK) {
                 leading
             } trailing: {
                 trailing
@@ -87,6 +89,13 @@ struct ArcusDialog<Content: View, Leading: View, Trailing: View>: View {
     }
 }
 
+extension ArcusDialog {
+    /// Whether Return presses the default button (off while a field in the dialog takes Return itself).
+    func returnKeyEnabled(_ on: Bool) -> Self { var d = self; d.okShortcut = on ? .defaultAction : nil; return d }
+    /// The default button's keyboard shortcut (⌘Return in editors whose fields take Return).
+    func okKeyboardShortcut(_ s: KeyboardShortcut?) -> Self { var d = self; d.okShortcut = s; return d }
+}
+
 extension ArcusDialog where Leading == EmptyView, Trailing == EmptyView {
     init(icon: String, tint: Color = .accentColor, title: String, subtitle: String = "", file: URL? = nil, size: DialogSize = .medium, labelWidth: CGFloat? = nil,
          okTitle: String = "OK", okDisabled: Bool = false, disabledReason: String? = nil, showCancel: Bool = true, cancelTitle: String = "Cancel",
@@ -106,6 +115,17 @@ extension ArcusDialog where Trailing == EmptyView {
         self.init(icon: icon, tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth, okTitle: okTitle, okDisabled: okDisabled,
                   disabledReason: disabledReason, showCancel: showCancel, cancelTitle: cancelTitle, destructive: destructive, scrolls: scrolls,
                   height: height, padded: padded, onCancel: onCancel, onOK: onOK, content: content, leading: leading, trailing: { EmptyView() })
+    }
+}
+
+extension ArcusDialog where Leading == EmptyView {
+    init(icon: String, tint: Color = .accentColor, title: String, subtitle: String = "", file: URL? = nil, size: DialogSize = .medium, labelWidth: CGFloat? = nil,
+         okTitle: String = "OK", okDisabled: Bool = false, disabledReason: String? = nil, showCancel: Bool = true, cancelTitle: String = "Cancel",
+         destructive: Bool = false, scrolls: Bool = false, height: CGFloat? = nil, padded: Bool = true,
+         onCancel: @escaping () -> Void, onOK: @escaping () -> Void, @ViewBuilder content: () -> Content, @ViewBuilder trailing: () -> Trailing) {
+        self.init(icon: icon, tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth, okTitle: okTitle, okDisabled: okDisabled,
+                  disabledReason: disabledReason, showCancel: showCancel, cancelTitle: cancelTitle, destructive: destructive, scrolls: scrolls,
+                  height: height, padded: padded, onCancel: onCancel, onOK: onOK, content: content, leading: { EmptyView() }, trailing: trailing)
     }
 }
 
@@ -171,6 +191,7 @@ struct DialogFooter<Leading: View, Trailing: View>: View {
     var showCancel = true
     var cancelTitle = "Cancel"
     var destructive = false
+    var okShortcut: KeyboardShortcut? = .defaultAction
     let onCancel: () -> Void
     let onOK: () -> Void
     @ViewBuilder let leading: Leading
@@ -198,7 +219,7 @@ struct DialogFooter<Leading: View, Trailing: View>: View {
                 Button(okTitle, role: destructive ? .destructive : nil, action: onOK)
                     .buttonStyle(.borderedProminent)
                     .tint(destructive ? .red : .accentColor)
-                    .keyboardShortcut(.defaultAction)
+                    .keyboardShortcut(okShortcut)
                     .disabled(okDisabled)
                     .help(okDisabled ? (disabledReason ?? "") : "")
                     .dialogButton()
