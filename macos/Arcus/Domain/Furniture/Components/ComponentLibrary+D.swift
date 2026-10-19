@@ -7,5 +7,5 @@ import ArcusGeometry
 
 extension ComponentLibrary {
     /// Group D's component definitions, in browser order.
-    static var groupD: [ComponentDefinition] { [] }
+    static var groupD: [ComponentDefinition] { groupDLighting + groupDGlass + groupDEdges + groupDMotion + groupDDecorative }
 }
