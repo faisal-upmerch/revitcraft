@@ -14,6 +14,7 @@ extension FurnitureCompiler {
         guard !parts.isEmpty else { return }
         var known = Set(f.referencePlanes.map(\.name))
         let ctx = PartSolidContext(symbolic: true, knownPlanes: known)
+        ctx.planeFormulas = FurniturePartFlex.planeFormulas(f) // FMG1: angled parts, EQ rails, slats and revolves as formulas
         var materialParams: [String: String] = [:] // material key → parameter name
         func materialParameter(_ id: ElementID?, label: String) -> String? {
             guard let id, m[id]?.material != nil else { return nil }
@@ -141,6 +142,7 @@ extension FurnitureCompiler {
         }
         for p in eqPlanes { f.referencePlanes.append(FamilyReferencePlane(name: p.name, axis: p.axis, offset: eqFormulas[p.name] ?? PartSolidContext.number(p.at), strength: .weak)) }
         f.dimensions += eqDims
+        for p in ctx.parameters where f.parameter(named: p.name) == nil { f.parameters.append(p) } // FMG1: slat counts
     }
 
     /// A coordinate as an expression of the family's parameters (its plane's formula plus its offset), for bindings.

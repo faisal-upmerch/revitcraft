@@ -30,9 +30,10 @@ extension CommandRouter {
         switch id {
         case .furniturePanel, .furnitureRail, .furnitureEdgeProfile, .furnitureGroove, .furnitureExtrusion, .furnitureVoidExtrusion:
             return map == nil ? "Open a plan, or an elevation or section square to the piece." : nil
-        case .furnitureShelf, .furnitureTop, .furnitureLeg, .furnitureLegsAtCorners, .furnitureSlats, .furnitureBlend, .furnitureVoidBlend,
-             .furnitureSweep, .furnitureVoidSweep, .furnitureSweptBlend, .furnitureVoidSweptBlend, .furnitureCushion:
+        case .furnitureShelf, .furnitureTop, .furnitureLeg, .furnitureLegsAtCorners, .furnitureSlats, .furnitureBlend, .furnitureVoidBlend, .furnitureCushion:
             return plan ? nil : "Open a plan view to use this tool."
+        case .furnitureSweep, .furnitureVoidSweep, .furnitureSweptBlend, .furnitureVoidSweptBlend: // FMG1: paths on any work plane
+            return map == nil ? "Open a plan, or an elevation or section square to the piece." : nil
         case .furnitureBack, .furnitureDivider:
             return front ? nil : "Open the Front or Back elevation (or a section parallel to it)."
         case .furnitureRevolve, .furnitureVoidRevolve:

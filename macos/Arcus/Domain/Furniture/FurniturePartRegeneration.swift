@@ -27,12 +27,15 @@ public enum FurniturePartCoordinates {
             return [.init(key: "start.u", axis: a.u, value: r.start.x), .init(key: "start.v", axis: a.v, value: r.start.y),
                     .init(key: "end.u", axis: a.u, value: r.end.x), .init(key: "end.v", axis: a.v, value: r.end.y),
                     .init(key: "w", axis: a.w, value: r.w)]
+                + (FurniturePartFlex.slatsFar(r).map { [PartCoordinate(key: "far", axis: $0.axis, value: $0.value)] } ?? []) // FMG1: Slats' far side
         case .furnitureShelf(let s):
             return s.boundary.enumerated().flatMap { i, p in [PartCoordinate(key: "p\(i).x", axis: .x, value: p.x), PartCoordinate(key: "p\(i).y", axis: .y, value: p.y)] }
                 + [.init(key: "z", axis: .z, value: s.elevation)]
         case .furnitureLeg(let l):
             return [.init(key: "x", axis: .x, value: l.location.x), .init(key: "y", axis: .y, value: l.location.y),
                     .init(key: "base", axis: .z, value: l.base), .init(key: "top", axis: .z, value: l.top)]
+        case .furnitureForm(let f):
+            return FurniturePartFlex.revolveCoordinates(f) // FMG1: a revolve's axis and profile points
         default:
             return []
         }
@@ -51,7 +54,8 @@ public enum FurniturePartCoordinates {
             }
             e.data = .furniturePanel(p)
         case .furnitureRail(var r):
-            if key == "w" { r.w = v } else if parts.count == 2 { if parts[0] == "start" { pt(&r.start, parts[1]) } else { pt(&r.end, parts[1]) } }
+            if key == "w" { r.w = v } else if key == "far" { FurniturePartFlex.setSlatsFar(v, &r) } // FMG1
+            else if parts.count == 2 { if parts[0] == "start" { pt(&r.start, parts[1]) } else { pt(&r.end, parts[1]) } }
             e.data = .furnitureRail(r)
         case .furnitureShelf(var s):
             if key == "z" { s.elevation = v }
@@ -66,6 +70,9 @@ public enum FurniturePartCoordinates {
             default: break
             }
             e.data = .furnitureLeg(l)
+        case .furnitureForm(var f):
+            FurniturePartFlex.setRevolve(key, v, &f) // FMG1
+            e.data = .furnitureForm(f)
         default: break
         }
     }
@@ -170,6 +177,7 @@ public enum FurniturePartRegeneration {
         }
         followAttachments(tx)
         spaceDividers(tx, resolver)
+        FurniturePartFlex.regenerate(tx, resolver) // FMG1: EQ rails
         numberMarks(tx)
     }
 

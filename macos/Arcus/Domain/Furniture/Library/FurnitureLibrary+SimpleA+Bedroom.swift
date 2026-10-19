@@ -67,13 +67,7 @@ extension FurnitureLibrary {
             for (x, dir) in [(SA.L + t, 1.0), (SA.R - t, -1.0)] {
                 try b.railY((front, SA.B - t), x: x + dir * 0.375, top: slatTop - 1, SA.cleat)
             }
-            let n = 13
-            let y0 = front + 2, y1 = SA.B - (t + 2)
-            let length = b.v(y1) - b.v(y0)
-            for k in 0..<n {
-                let d = length * Double(k) / Double(n - 1) / SA.inch
-                try b.railX((SA.L + t, SA.R - t), y: k < n / 2 ? y0 + d : y1 - (length / SA.inch - d), top: slatTop, SA.bedSlat)
-            }
+            try b.slats(alongX: true, run: (SA.L + t, SA.R - t), first: front + 2, last: SA.B - (t + 2), count: 13, top: slatTop, SA.bedSlat) // FMG1: Slats
             try b.board(x: (SA.L + (t + 0.25), SA.R - (t + 0.25)), y: (SA.F + (t + 0.25), SA.B - (t + 0.25)), top: slatTop + 10, "10\" Mattress", role: .top)
         }, { b in
             // Two drawers side by side in the foot (EQ), between the bottom and the top of the box.

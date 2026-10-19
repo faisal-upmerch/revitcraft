@@ -33,6 +33,7 @@ public enum AnnotationGeometry {
     public static func resolve(_ r: GeometryReference, _ model: BIMModel, view: Element?) -> (point: Vec2, direction: Vec2?)? {
         guard let f = verticalFrame(view) else { return DimensionQueries.resolve(r, model) }
         if r.kind == .point { return r.point.map { ($0, nil) } }
+        if r.kind == .partFace, r.face?.axis == .z { return FurniturePartFaces.resolveLevel(r, model) } // FMG1: a part's top or bottom face
         guard let e = model[r.elementID] else { return r.point.map { ($0, nil) } }
         if case .level(let l) = e.data { return (Vec2(0, l.elevation), Vec2(1, 0)) }
         if let rp = e.referencePlane, FurniturePlanes.isHorizontal(rp), let z = FurniturePlanes.position(rp) { return (Vec2(0, z), Vec2(1, 0)) } // FM3

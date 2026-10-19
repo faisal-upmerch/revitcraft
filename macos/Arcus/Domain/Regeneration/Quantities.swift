@@ -169,6 +169,7 @@ public enum DimensionQueries {
     /// Resolves a geometry reference to a line (for faces/centerlines) or a point, in plan coordinates.
     public static func resolve(_ r: GeometryReference, _ model: BIMModel) -> (point: Vec2, direction: Vec2?)? {
         if r.kind == .point { return r.point.map { ($0, nil) } }
+        if r.kind == .partFace { return FurniturePartFaces.resolvePlan(r, model) } // FMG1: furniture part faces
         guard let e = model[r.elementID] else { return r.point.map { ($0, nil) } }
         switch e.data {
         case .wall:

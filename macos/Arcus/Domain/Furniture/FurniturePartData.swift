@@ -189,7 +189,12 @@ public enum RailJustification: String, Codable, Sendable, CaseIterable { case to
 
 /// Slats: rails repeated across a width at a spacing, as a beam system lays out its beams.
 public struct SlatLayout: Hashable, Codable, Sendable {
-    public enum Rule: String, Codable, Sendable, CaseIterable { case fixedDistance = "Fixed Distance", fixedNumber = "Fixed Number" }
+    public enum Rule: String, Codable, Sendable, CaseIterable {
+        case fixedDistance = "Fixed Distance", fixedNumber = "Fixed Number"
+        /// FMG1: as a beam system's Maximum Spacing: the first and last slats at the sides, as few between as keep the
+        /// spacing at most `spacing`.
+        case maximumSpacing = "Maximum Spacing"
+    }
     public var rule: Rule
     /// Centre-to-centre spacing (Fixed Distance).
     public var spacing: Double
@@ -208,6 +213,10 @@ public struct SlatLayout: Hashable, Codable, Sendable {
         case .fixedNumber:
             let n = max(1, number)
             return n == 1 ? [e / 2] : (0..<n).map { e * Double($0) / Double(n - 1) }
+        case .maximumSpacing:
+            guard spacing > 1e-6, e > 1e-9 else { return [0] }
+            let n = max(1, Int((e / spacing - 1e-9).rounded(.up))) + 1
+            return (0..<n).map { e * Double($0) / Double(n - 1) }
         case .fixedDistance:
             guard spacing > 1e-6 else { return [0] }
             let n = Int((e / spacing + 1e-9).rounded(.down)) + 1
@@ -234,6 +243,16 @@ public struct RailData: Hashable, Codable, Sendable {
     public var slats: SlatLayout?
     /// Plane bindings: "start.u", "start.v", "end.u", "end.v", "w", and "far" (the last slat's line, across).
     public var bounds: [String: FurnitureBound]
+    /// FMG1: coordinates kept at a share of the space between two bounds (EQ), by coordinate key: slats of a raked back
+    /// stay evenly spaced up its struts as the piece flexes.
+    public var eq: [String: EqualSpacing]? = nil
+    /// FMG1: how the ends of a rail drawn at an angle in an elevation are cut (as a slanted column's Base and Top Cut
+    /// Style); nil = square to the rail.
+    public var startCut: RailEndCut? = nil
+    public var endCut: RailEndCut? = nil
+    /// FMG1: where the rail lies across its line in the sketch plane (a beam's y Justification): to its left, centred
+    /// (nil) or to its right. Lines in elevations that run across the view use Z Justification instead.
+    public var yJustification: RailYJustification? = nil
     public init(plane: FamilySketchPlane = .xy, start: Vec2, end: Vec2, w: Double, justification: RailJustification = .top,
                 bounds: [String: FurnitureBound] = [:]) {
         self.plane = plane; self.start = start; self.end = end; self.w = w; self.justification = justification
@@ -241,6 +260,15 @@ public struct RailData: Hashable, Codable, Sendable {
     }
     public var length: Double { start.distance(to: end) + startExtension + endExtension }
 }
+
+/// FMG1: the cut at an end of a rail drawn at an angle in an elevation (a slanted column's cut styles): square to the
+/// rail, level (a raked leg standing flat on the floor), or plumb.
+public enum RailEndCut: String, Codable, Sendable, CaseIterable {
+    case perpendicular = "Perpendicular", horizontal = "Horizontal", vertical = "Vertical"
+}
+
+/// FMG1: a rail's y Justification: to the left of its line (seen along it, in its sketch), centred or to the right.
+public enum RailYJustification: String, Codable, Sendable, CaseIterable { case left = "Left", center = "Center", right = "Right" }
 
 /// One edge of a box-shaped part: the edge runs along `axis`, at the min or max side of each of the other two axes
 /// (in x, y, z order).
@@ -312,7 +340,9 @@ public struct CushionSpec: Hashable, Codable, Sendable {
 /// - Extrusion: `profile` loops on `plane`, from `w0` to `w1` along its normal.
 /// - Blend: `profile` (bottom loop, at z `w0`) to `topProfile` (at z `w1`), in plan.
 /// - Revolve: `profile` in (distance from the axis, height above `w0`), about the vertical axis at `axis`.
-/// - Sweep: `profile` (x left of the path, y up) along the plan `path` at z `w0`; Swept Blend adds `endProfile`.
+/// - Sweep: `profile` (x left of the path, y up) along the plan `path` at z `w0`; Swept Blend adds `endProfile`. FMG1:
+///   a path on an elevation work plane (`plane` .xz or .yz) is in that plane's (u, v) at `w0` along its normal, the
+///   profile's y along the normal.
 /// - Cushion: `cushion`, standing on z `w0`.
 public struct FurnitureFormData: Hashable, Codable, Sendable {
     public var kind: FurnitureFormKind
@@ -333,6 +363,10 @@ public struct FurnitureFormData: Hashable, Codable, Sendable {
     public var visibleAt: Set<DetailLevel>
     /// FM9: the planes the form follows (nil = it stays where it was drawn).
     public var lock: FormLock? = nil
+    /// FMG1: plane bindings of a revolve's sketch, as locked sketch lines: "axis.x", "axis.y", "w0" (its base), and per
+    /// profile point "p<i>.r" (where the point is across the axis, on the sketch plane's horizontal axis) and "p<i>.h"
+    /// (its elevation). Revolves with a `lock` follow it instead.
+    public var bounds: [String: FurnitureBound]? = nil
     public init(kind: FurnitureFormKind, isVoid: Bool = false, plane: FamilySketchPlane = .xy, profile: [Vec2], w0: Double, w1: Double) {
         self.kind = kind; self.isVoid = isVoid; self.plane = plane; self.profile = profile; holes = []; topProfile = nil; endProfile = nil
         path = nil; axis = nil; startAngle = 0; endAngle = 2 * .pi; self.w0 = w0; self.w1 = w1; cushion = nil; materialID = nil

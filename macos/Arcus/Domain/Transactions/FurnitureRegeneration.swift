@@ -23,6 +23,7 @@ public enum FurnitureRegeneration {
             placePlanes(tx)
         }
         FurniturePartRegeneration.regenerate(tx, touched) // FM4: parts follow their planes (after the planes)
+        FurnitureDimensionLocks.regenerate(tx) // FMG1: locked dimensions to part faces keep their parts
         FurnitureOpeningsRegeneration.regenerate(tx, touched) // FM5: bays follow the parts; fronts and their hardware follow the bays
         FurnitureJointOperations.regenerate(tx) // FM6: joint elements whose parts are gone
     }

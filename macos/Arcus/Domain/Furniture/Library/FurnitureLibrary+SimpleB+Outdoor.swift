@@ -101,43 +101,47 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A teak sun lounger: a slatted frame on four legs, a raised slatted back on struts and a pad.
+    /// A teak sun lounger: a slatted frame on four legs, a raised slatted back on struts and a pad. FMG1: the struts run
+    /// from the hinge to the Top (cut level there) and the back slats stay evenly spaced up them as the piece flexes.
     static func sunLounger() throws -> BIMModel {
-        let p = try SBBuilder("Sun Lounger", .furniture, [SBSize(28, 78, 36)], material: "Solid Teak")
+        let p = try SBBuilder("Sun Lounger", .furniture, [SBSize(28, 78, 36), SBSize(30, 84, 38)], material: "Solid Teak")
         try p.step("Frame, Back and Pad") { s in
             let rail = "1\" x 3\" Teak Rail", deck = 13.0
             try s.legs(x: (s.l + 0.5, s.r - 0.5), y: (s.f + 2, s.b - 2), z: (0, deck - 1), "Square 2\" Teak")
             for x in [s.l + 1, s.r - 1] { try s.rail((x, s.f), (x, s.b), z: deck - 0.75, rail) }
             try s.slats(x: (s.l + 1.5, s.r - 1.5), y: (s.f + 1, s.b - 30), alongX: true, spacing: 3.5, top: deck, "3/4\" x 2\" Teak Slat")
-            // The back: slats on the incline from the hinge to the top, on two struts.
-            let (y0, z0, y1, z1) = (s.b - 29, deck, s.b - 6, s.h - 1)
-            for x in [s.l + 2.5, s.r - 2.5] { try s.railYZ((y0, z0), (y1, z1), x: x, rail) }
-            let (ym, zm) = (y0 + (y1 - y0) * 0.6, z0 + (z1 - z0) * 0.6 - 2)
-            for x in [s.l + 4, s.r - 4] { try s.railYZ((s.b - 2, deck), (ym, zm), x: x, rail) }
-            for k in 0..<10 {
-                let t = (Double(k) + 0.5) / 10
-                try s.rail((s.l + 1.5, y0 + (y1 - y0) * t), (s.r - 1.5, y0 + (y1 - y0) * t), z: z0 + (z1 - z0) * t + 1.5, "3/4\" x 2\" Teak Slat")
+            // The back: two struts from the hinge up to the Top, slats evenly up them (EQ), propped at 60% by two struts.
+            let (y0, z0, y1, z1) = (s.b - 29, deck, s.b - 6, s.h)
+            for x in [s.l + 2.5, s.r - 2.5] { try s.railYZ((y0, z0), (y1, z1), x: x, rail, cuts: (nil, .horizontal)) }
+            for x in [s.l + 4, s.r - 4] {
+                let prop = try s.railYZ((s.b - 2, deck), (y0 + (y1 - y0) * 0.6, z0 + (z1 - z0) * 0.6 - 2), x: x, rail)
+                s.keep(prop, ["end.u": (y0, y1, .y), "end.v": (z0 - 2, z1 - 2, .z)], index: 3, count: 5)
             }
+            try s.raked(x: (s.l + 1.5, s.r - 1.5), from: (y0, z0), to: (y1, z1), count: 10, of: 12, lift: 1.5, "3/4\" x 2\" Teak Slat")
             try s.cushion(x: (s.l + 2, s.r - 2), y: (s.f + 1, s.b - 30), z0: deck, height: 2, "Outdoor Fabric", crown: 0.25, radius: 1)
         }
         return try p.finish()
     }
 
     /// A hammock on a steel stand: a base beam and feet, two raked uprights, a canvas bed hung between spreader bars on
-    /// ropes (the bed is an extrusion, the stand and ropes are rails).
+    /// ropes (the bed is an extrusion, the stand and ropes are rails). FMG1: the uprights' outer edges run to the Left
+    /// and Right, cut level top and bottom; the bed and its pillow hang from the spreader bars, which follow the Top.
     static func hammock() throws -> BIMModel {
-        let p = try SBBuilder("Hammock", .furniture, [SBSize(120, 40, 46)], material: "Canvas")
+        let p = try SBBuilder("Hammock", .furniture, [SBSize(120, 40, 46), SBSize(132, 44, 48)], material: "Canvas")
         try p.step("Stand, Ropes and Bed") { s in
             let tube = "1 1/2\" x 1 1/2\" Steel Tube"
             try s.rail((s.l + 8, 0), (s.r - 8, 0), z: 1.5, tube)
             for x in [s.l + 8, s.r - 8] { try s.rail((x, s.f), (x, s.b), z: 1.5, tube) }
-            try s.railXZ((s.l + 10, 1.5), (s.l + 1, s.h - 1), y: 0, tube)
-            try s.railXZ((s.r - 10, 1.5), (s.r - 1, s.h - 1), y: 0, tube)
+            let left = try s.railXZ((s.l + 9, 1.5), (s.l, s.h - 1), y: 0, tube, cuts: (.horizontal, .horizontal))
+            let right = try s.railXZ((s.r - 9, 1.5), (s.r, s.h - 1), y: 0, tube, cuts: (.horizontal, .horizontal))
+            s.tx.update(left) { $0.furnitureRail?.yJustification = .right }
+            s.tx.update(right) { $0.furnitureRail?.yJustification = .left }
             let (e0, e1, zEnd, sag) = (s.l + 22, s.r - 22, 34.0, 18.0)
             for x in [e0, e1] { try s.rail((x, s.b - 4), (x, s.f + 4), z: zEnd, "1 1/4\" Round Maple Dowel", just: .center) }
             try s.railXZ((e0, zEnd), (s.l + 3, s.h - 3), y: 0, "1/2\" Cotton Rope")
             try s.railXZ((e1, zEnd), (s.r - 3, s.h - 3), y: 0, "1/2\" Cotton Rope")
-            // The bed: a sagging band (a catenary-like curve) extruded across the hammock's width.
+            // The bed: a sagging band (a catenary-like curve) extruded across the hammock's width; each half follows its
+            // spreader bar, and the whole bed hangs from the Top with the bars.
             let n = 16
             var top: [(Double, Double)] = [], bottom: [(Double, Double)] = []
             for k in 0...n {
@@ -146,26 +150,32 @@ extension SimpleB {
                 let z = sag + (zEnd - sag) * pow(2 * t - 1, 2)
                 top.append((x, z + 0.5)); bottom.append((x, z - 0.5))
             }
-            try s.extrusion(top + bottom.reversed(), plane: .xz, w: (s.f + 5, s.b - 5), "Canvas")
-            try s.cushion(x: (e0 + 4, e0 + 18), y: (s.f + 8, s.b - 8), z0: 26, height: 4, "Outdoor Fabric", crown: 1)
+            try s.extrusion(top + bottom.reversed(), plane: .xz, w: (s.f + 5, s.b - 5), "Canvas", lock: .axes(.span, .stretch, .high))
+            try s.cushion(x: (e0 + 4, e0 + 18), y: (s.f + 8, s.b - 8), z0: 26, height: 4, "Outdoor Fabric", crown: 1, lock: .axes(.low, .stretch, .high))
         }
         return try p.finish()
     }
 
-    /// A hanging egg chair on a stand: a round base, a pole with an arm over the chair, a chain and a rattan basket
-    /// (a revolve open at the front) with a seat cushion.
+    /// A hanging egg chair on a stand: a cross base under a round base plate, a pole with an arm over the chair, a
+    /// chain and a rattan basket (a revolve open at the front) with a seat cushion. FMG1: the base plate's sketch is
+    /// locked to the planes (its edge keeps its distance in from the Right); the basket grows with Width and hangs from
+    /// the Top.
     static func hangingChair() throws -> BIMModel {
-        let p = try SBBuilder("Hanging Chair", .furniture, [SBSize(40, 40, 78)], material: "Rattan")
+        let p = try SBBuilder("Hanging Chair", .furniture, [SBSize(40, 40, 78), SBSize(36, 36, 74)], material: "Rattan")
         try p.step("Stand, Basket and Cushion") { s in
-            try s.revolve([(0, 0), (s.w / 2 - 2, 0), (s.w / 2 - 2, 0.5), (s.w / 2 - 6, 1.5), (0, 1.5)], z0: 0, "Steel")
+            let tube = "1 1/2\" x 1 1/2\" Steel Tube"
+            try s.rail((s.l, 0), (s.r, 0), z: 1.5, tube)
+            try s.rail((0, s.f), (0, -0.75), z: 1.5, tube)
+            try s.rail((0, 0.75), (0, s.b), z: 1.5, tube)
+            try s.revolve([(0, 0), (s.r - 4, 0), (s.r - 4, 0.5), (s.r - 5, 2), (0, 2)], z0: 1.5, "Steel", radiiTo: "Right")
             try s.leg(0, s.b - 3, z: (1.5, s.h - 1), "Round 1 1/4\" Steel")
-            try s.rail((0, s.b - 3), (0, 0), z: s.h - 1, "1 1/2\" x 1 1/2\" Steel Tube")
+            try s.rail((0, s.b - 3), (0, 0), z: s.h - 1, tube)
             try s.spindle(0, 0, z: (54, s.h - 2.5), "1/2\" Round Steel Rod")
             // The basket: a shell revolved from -45° to 225°, open toward the front.
             let shell: [(Double, Double)] = [(0, 0), (8, 0.5), (14, 5), (16.5, 14), (15.5, 26), (11, 34), (6, 37), (5.2, 35.8), (9.8, 33),
                                              (14, 25.5), (15, 14), (12.8, 6), (7.5, 1.6), (0, 1.2)]
-            try s.revolve(shell, at: (0, 0), z0: 18, "Rattan", angles: (-45, 225))
-            try s.cushion(x: (-11, 11), y: (-9, 10), z0: 19.5, height: 4, "Outdoor Fabric", crown: 1, radius: 4)
+            try s.revolve(shell, at: (0, 0), z0: 18, "Rattan", angles: (-45, 225), lock: .revolveProfile(.scale, nil, .high))
+            try s.cushion(x: (-11, 11), y: (-9, 10), z0: 19.5, height: 4, "Outdoor Fabric", crown: 1, radius: 4, lock: .axes(.scale, .scale, .high))
         }
         return try p.finish()
     }
@@ -192,7 +202,8 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A cedar picnic table with attached benches on A-frame legs.
+    /// A cedar picnic table with attached benches on A-frame legs. FMG1: the legs stand level on the floor and meet the
+    /// top's cleats level; the top and seat planks are Slats.
     static func picnicTable() throws -> BIMModel {
         let p = try SBBuilder("Picnic Table", .furniture, [SBSize(72, 60, 30), SBSize(96, 60, 30)], material: "Western Red Cedar")
         try p.step("Frame, Top and Seats") { s in
@@ -205,8 +216,8 @@ extension SimpleB {
                 try s.rail((xc, s.b - 1), (xc, s.f + 1), z: 15.5, rail)
                 for side in [-1.0, 1.0] {
                     let x = xc + side * 1.5
-                    try s.railYZ((s.f + 9, 0), (-4, s.h - 1.5), x: x, rail)
-                    try s.railYZ((s.b - 9, 0), (4, s.h - 1.5), x: x, rail)
+                    try s.railYZ((s.f + 9, 0), (-4, s.h - 1.5), x: x, rail, cuts: (.horizontal, .horizontal))
+                    try s.railYZ((s.b - 9, 0), (4, s.h - 1.5), x: x, rail, cuts: (.horizontal, .horizontal))
                 }
             }
         }
@@ -238,15 +249,22 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A wooden slat folding chair: long front legs that become the back posts, short rear legs under the seat.
+    /// A wooden slat folding chair: long front legs that become the back posts, short rear legs under the seat. FMG1:
+    /// the legs' outer edges run from the Front and Back at the floor, cut level; the front legs reach the Top.
     static func foldingChair() throws -> BIMModel {
-        let p = try SBBuilder("Folding Chair", .furniture, [SBSize(18, 21, 32)], material: "Solid Teak")
+        let p = try SBBuilder("Folding Chair", .furniture, [SBSize(18, 21, 32), SBSize(19, 22, 34)], material: "Solid Teak")
         try p.step("Frame") { s in
             let rail = "1\" x 3\" Teak Rail", seat = 17.5
-            for x in [s.l + 0.5, s.r - 0.5] { try s.railYZ((s.f + 1.5, 0), (s.b - 1.5, s.h), x: x, rail) }
-            for x in [s.l + 1.5, s.r - 1.5] { try s.railYZ((s.b - 1.5, 0), (s.f + 4, seat - 0.75), x: x, rail) }
+            for x in [s.l + 0.5, s.r - 0.5] {
+                let id = try s.railYZ((s.f, 0), (s.b - 6, s.h), x: x, rail, cuts: (.horizontal, .horizontal))
+                s.tx.update(id) { $0.furnitureRail?.yJustification = .right }
+            }
+            for x in [s.l + 1.5, s.r - 1.5] {
+                let id = try s.railYZ((s.b, 0), (s.f + 5.5, seat - 0.75), x: x, rail, cuts: (.horizontal, .horizontal))
+                s.tx.update(id) { $0.furnitureRail?.yJustification = .left }
+            }
             try s.slats(x: (s.l + 2, s.r - 2), y: (s.f + 2, s.b - 6), alongX: true, count: 5, top: seat, "3/4\" x 2\" Teak Slat")
-            for z in [s.h - 1, s.h - 6.5] { try s.rail((s.l + 1, s.b - 2.2), (s.r - 1, s.b - 2.2), z: z, rail) }
+            for z in [s.h - 1, s.h - 6.5] { try s.rail((s.l + 1, s.b - 4.5), (s.r - 1, s.b - 4.5), z: z, rail) }
             try s.rail((s.l + 1, s.f + 4.5), (s.r - 1, s.f + 4.5), z: 6, "1\" Round Steel Tube", just: .center)
         }
         return try p.finish()
@@ -268,15 +286,18 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A porch swing on an A-frame: a beam on raked legs, a slatted bench with arms hung on rods.
+    /// A porch swing on an A-frame: a beam on raked legs, a slatted bench with arms hung on rods. FMG1: the legs' outer
+    /// edges run from the Front and Back at the floor to the beam, cut level; the seat is Slats.
     static func swingBench() throws -> BIMModel {
-        let p = try SBBuilder("Swing Bench", .furniture, [SBSize(84, 56, 80)], material: "Western Red Cedar")
+        let p = try SBBuilder("Swing Bench", .furniture, [SBSize(84, 56, 80), SBSize(72, 52, 78)], material: "Western Red Cedar")
         try p.step("Frame and Bench") { s in
             let rail = "1 1/2\" x 3 1/2\" Cedar Rail", slat = "3/4\" x 3 1/2\" Cedar Slat"
             try s.rail((s.l, 0), (s.r, 0), z: s.h, "3 1/2\" x 5 1/2\" Cedar Beam")
             for x in [s.l + 2, s.r - 2] {
-                try s.railYZ((s.f + 2, 0), (-2, s.h - 5.5), x: x, rail)
-                try s.railYZ((s.b - 2, 0), (2, s.h - 5.5), x: x, rail)
+                let front = try s.railYZ((s.f, 0), (-3.75, s.h - 5.5), x: x, rail, cuts: (.horizontal, .horizontal))
+                let back = try s.railYZ((s.b, 0), (3.75, s.h - 5.5), x: x, rail, cuts: (.horizontal, .horizontal))
+                s.tx.update(front) { $0.furnitureRail?.yJustification = .right }
+                s.tx.update(back) { $0.furnitureRail?.yJustification = .left }
                 try s.rail((x, s.f + 9), (x, s.b - 9), z: 18, rail)
             }
             let (bx, seat) = (25.0, 22.0)
@@ -293,24 +314,25 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A cedar Adirondack chair: a sloping slatted seat on stringers, a raked slatted back and wide flat arms.
+    /// A cedar Adirondack chair: a sloping slatted seat on stringers, a raked slatted back and wide flat arms. FMG1: the
+    /// stringers run from the front, cut plumb, down to the Back on the floor; the seat slats stay evenly spaced down
+    /// the slope (EQ); the back slats rise to the Top, cut level.
     static func adirondackChair() throws -> BIMModel {
-        let p = try SBBuilder("Adirondack Chair", .furniture, [SBSize(30, 35, 38)], material: "Western Red Cedar")
+        let p = try SBBuilder("Adirondack Chair", .furniture, [SBSize(30, 35, 38), SBSize(32, 37, 40)], material: "Western Red Cedar")
         try p.step("Frame, Seat, Back and Arms") { s in
             let rail = "1 1/2\" x 3 1/2\" Cedar Rail", slat = "3/4\" x 3 1/2\" Cedar Slat"
             for x in [s.l + 5, s.r - 5] {
-                try s.leg(x, s.f + 4, z: (0, 22), "Square 1 1/2\" Cedar")
-                try s.railYZ((s.f + 1, 16), (s.b - 3, 0), x: x + (x < 0 ? 1.5 : -1.5), rail)
+                try s.leg(x + (x < 0 ? -2 : 2), s.f + 4, z: (0, 22), "Square 1 1/2\" Cedar")
+                let stringer = try s.railYZ((s.f + 1, 12.5), (s.b, 0), x: x + (x < 0 ? 1.5 : -1.5), rail, cuts: (.vertical, .vertical))
+                s.tx.update(stringer) { $0.furnitureRail?.yJustification = .left }
+                s.lock(stringer, ["start.u": "Front", "end.u": "Back", "end.v": "Bottom"])
             }
             let (ys, zs, ye, ze) = (s.f + 2.5, 17.0, s.b - 15, 11.5)
-            for k in 0..<6 {
-                let t = Double(k) / 5
-                try s.rail((s.l + 4, ys + (ye - ys) * t), (s.r - 4, ys + (ye - ys) * t), z: zs + (ze - zs) * t, slat)
-            }
+            try s.raked(x: (s.l + 4, s.r - 4), from: (ys, zs), to: (ye, ze), count: 6, inclusive: true, slat)
             try s.rail((s.l + 4, s.b - 14), (s.r - 4, s.b - 14), z: 22, rail)
             for (k, x) in [-8.0, -4, 0, 4, 8].enumerated() {
                 let top = s.h - [3.0, 1, 0, 1, 3][k]
-                try s.railYZ((s.b - 15.5, 9), (s.b - 2, top), x: x, "3/4\" x 3 1/2\" Cedar Slat")
+                try s.railYZ((s.b - 15.5, 9), (s.b - 2, top), x: x, slat, cuts: (nil, .horizontal))
             }
             for (x0, x1) in [(s.l, s.l + 5.5), (s.r - 5.5, s.r)] { try s.board(x: (x0, x1), y: (s.f + 1, s.b - 12), top: 23, "3/4\" Cedar Shelf") }
         }

@@ -86,6 +86,7 @@ public final class DimensionTool: BaseTool, InteractiveTool {
 
     /// Converts a click into a geometry reference.
     func reference(for i: ToolInput) -> (GeometryReference, Vec2)? {
+        if let r = fmg1PartFaceReference(i) { return r } // FMG1: furniture part faces
         if let id = i.hit, let e = ctx.model[id] {
             switch e.data {
             case .wall:

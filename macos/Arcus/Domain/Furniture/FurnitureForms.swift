@@ -33,6 +33,7 @@ public enum FurnitureForms {
                                     zMin: .expr(n(f.w0)), zMax: .expr(n(f.w1)), isVoid: f.isVoid))
         case .revolve:
             guard f.profile.count >= 3 else { return out }
+            if let s = FurniturePartFlex.revolveSolid(name, f, ctx) { list.append(s); break } // FMG1: a sketch locked to planes
             let axis = f.axis ?? .zero
             list.append(FamilySolid(name: name, profile: .revolve(FamilyRevolve(profile: pts(f.profile), axis: FamilyPoint(n(axis.x), n(axis.y)),
                                                                                 startDegrees: n(f.startAngle * 180 / .pi), endDegrees: n(f.endAngle * 180 / .pi))),
@@ -40,8 +41,10 @@ public enum FurnitureForms {
         case .sweep, .sweptBlend:
             guard let path = f.path, path.count >= 2, f.profile.count >= 3 else { return out }
             let end = f.kind == .sweptBlend ? f.endProfile.map(pts) : nil
-            list.append(FamilySolid(name: name, profile: .sweep(FamilySweep(path: pts(path), profile: pts(f.profile), endProfile: end)),
-                                    zMin: .expr(n(f.w0)), zMax: .expr(n(f.w0)), isVoid: f.isVoid))
+            var s = FamilySolid(name: name, profile: .sweep(FamilySweep(path: pts(path), profile: pts(f.profile), endProfile: end)),
+                                zMin: .expr(n(f.w0)), zMax: .expr(n(f.w0)), isVoid: f.isVoid)
+            if f.plane != .xy { s.workPlane = f.plane } // FMG1: a path sketched in an elevation or section
+            list.append(s)
         case .cushion:
             guard let c = f.cushion else { return out }
             list = cushion(name, c, z0: f.w0)

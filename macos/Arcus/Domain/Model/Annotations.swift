@@ -20,10 +20,14 @@ public struct GeometryReference: Hashable, Codable, Sendable {
         case levelPlane
         /// A fixed point in plan (no element); uses `point`.
         case point
+        /// FMG1: a face of a furniture part; uses `face`.
+        case partFace
     }
     public var elementID: ElementID?
     public var kind: Kind
     public var point: Vec2?
+    /// FMG1: the part face a `.partFace` reference names.
+    public var face: PartFaceRef? = nil
 
     public init(_ elementID: ElementID?, _ kind: Kind, point: Vec2? = nil) { self.elementID = elementID; self.kind = kind; self.point = point }
     public static func fixed(_ p: Vec2) -> GeometryReference { GeometryReference(nil, .point, point: p) }

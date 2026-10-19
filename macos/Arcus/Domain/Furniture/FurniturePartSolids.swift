@@ -13,6 +13,11 @@ public struct PartValue: Hashable, Sendable {
     public var plane: String?
     public var offset: Double
 
+    /// FMG1: the coordinate as a length formula of the piece's parameters, when it follows planes in a way a single plane
+    /// can't express (an angled part's corner, an EQ slat, a revolve's profile point). Compiling writes it as an
+    /// expression; nil = the plane and offset above.
+    public var formula: String? = nil
+
     public init(_ value: Double, plane: String? = nil, offset: Double = 0) { self.value = value; self.plane = plane; self.offset = offset }
 
     /// The coordinate of `bound` at `value` (bounds to a fixed value don't follow a plane).
@@ -21,7 +26,14 @@ public struct PartValue: Hashable, Sendable {
         if case .plane(let n, let o)? = bound { plane = n; offset = o } else { plane = nil; offset = 0 }
     }
 
-    public func shifted(_ d: Double) -> PartValue { PartValue(value + d, plane: plane, offset: offset + d) }
+    /// FMG1: a coordinate given by a formula (and its value now).
+    public init(_ value: Double, formula: String?) { self.value = value; plane = nil; offset = 0; self.formula = formula }
+
+    public func shifted(_ d: Double) -> PartValue {
+        var p = PartValue(value + d, plane: plane, offset: offset + d)
+        p.formula = formula.map { abs(d) < 1e-12 ? $0 : "(\($0)) \(FurnitureCompiler.lengthTerm(d))" } // FMG1
+        return p
+    }
 }
 
 /// How solids are written: with numbers (display) or bound to planes (compile). Collects the helper planes a compile
@@ -33,7 +45,25 @@ public final class PartSolidContext {
     /// Planes that may be named directly (the document's furniture planes and the compile's own planes).
     public var knownPlanes: Set<String>
 
+    /// FMG1: each plane's position as a length formula of the parameters (planes that never move as a number), set by
+    /// the compiler; nil = coordinates are written only as planes and offsets (display, joints).
+    public var planeFormulas: [String: String]?
+    /// FMG1: parameters the parts need in the compiled family (slat counts and their visibility).
+    public internal(set) var parameters: [FamilyParameter] = []
+
     public init(symbolic: Bool, knownPlanes: Set<String> = []) { self.symbolic = symbolic; self.knownPlanes = knownPlanes }
+
+    /// FMG1: a coordinate as a length formula, when compiling with plane formulas and its plane has one.
+    public func formula(_ v: PartValue) -> String? {
+        guard symbolic, let formulas = planeFormulas else { return nil }
+        if let f = v.formula { return f }
+        guard let p = v.plane else { return "\(FurnitureFormLocks.num(v.value)) m" }
+        guard let f = formulas[p] else { return nil }
+        return abs(v.offset) < 1e-12 ? "(\(f))" : "(\(f)) \(FurnitureCompiler.lengthTerm(v.offset))"
+    }
+
+    /// FMG1: adds a parameter the compiled family needs (once per name).
+    func addParameter(_ p: FamilyParameter) { if !parameters.contains(where: { $0.name == p.name }) { parameters.append(p) } }
 
     static func number(_ v: Double) -> String {
         guard v.isFinite else { return "0" }
@@ -43,6 +73,7 @@ public final class PartSolidContext {
 
     /// The family bound of a coordinate.
     public func bound(_ v: PartValue) -> FamilyBound {
+        if symbolic, let f = v.formula { return .expr(f) } // FMG1
         guard symbolic, let p = v.plane, knownPlanes.contains(p) else { return .expr(Self.number(v.value)) }
         if abs(v.offset) < 1e-7 { return .plane(p) }
         let o = (v.offset * 1e6).rounded() / 1e6
@@ -206,10 +237,9 @@ public enum FurniturePartSolids {
                 }
             }
         } else {
-            // A line at an angle: the outline in the sketch plane, by numbers.
-            let d = (p.end - p.start).normalized, n = d.perpendicular
-            let pts = [p.start + n * fo, p.end + n * fo, p.end + n * fi, p.start + n * fi]
-            out.solids.append(prism(name, plane: p.plane, pts, w: w, ctx))
+            // A line at an angle: the outline in the sketch plane. FMG1: its corners follow the planes its ends follow.
+            let ends = FurniturePartFlex.LineEnds(su: su, sv: sv, eu: eu, ev: ev)
+            out.solids.append(FurniturePartFlex.prism(name, plane: p.plane, FurniturePartFlex.outline(ends, a: fo, b: fi, ctx), w: w, ctx))
         }
         for s in out.solids where !s.isVoid { out.materials[s.id] = tv.material }
         return out
@@ -246,14 +276,19 @@ public enum FurniturePartSolids {
 
     /// A rail's cross offsets (in-plane, across its line) and its extent across the sketch plane.
     static func railSection(_ r: RailData, width W: Double, height H: Double) -> (a: Double, b: Double, w0: Double, w1: Double) {
+        // FMG1: y Justification puts the section to the left or right of the line in its sketch.
+        func across(_ size: Double) -> (Double, Double) {
+            switch r.yJustification ?? .center { case .left: (0, size); case .center: (-size / 2, size / 2); case .right: (-size, 0) }
+        }
         if r.plane == .xy {
             let (z0, z1): (Double, Double) = switch r.justification { case .top: (r.w - H, r.w); case .center: (r.w - H / 2, r.w + H / 2); case .bottom: (r.w, r.w + H) }
-            return (-W / 2, W / 2, z0, z1)
+            let (a, b) = across(W)
+            return (a, b, z0, z1)
         }
         // Drawn in an elevation: Z justification applies to lines that run across the view (horizontal).
         let d = r.end - r.start
         let horizontal = abs(d.y) <= 1e-7 * max(1, d.length)
-        var (a, b) = (-H / 2, H / 2)
+        var (a, b) = across(H)
         if horizontal {
             // The left normal of a horizontal line points up (+v) when it runs toward +u.
             let up: Double = d.x > 0 ? 1 : -1
@@ -273,17 +308,19 @@ public enum FurniturePartSolids {
         guard r.start.distance(to: r.end) > Tolerance.length, W > Tolerance.length, H > Tolerance.length else { return out }
         let sec = railSection(r, width: W, height: H)
         let base = e.mark.isEmpty ? "Rail" : e.mark
-        let offsets = r.slats?.offsets ?? [0]
-        let d = (r.end - r.start).normalized
-        let n = d.perpendicular
-        let wb = pv(e, r.w, "w")
+        let slats = FurniturePartFlex.slats(e, r, ctx) // FMG1: slats laid out between the first line and the far side
+        func rv(_ key: String, _ v: Double) -> PartValue { FurniturePartFlex.railValue(e, r, key, v, ctx) } // FMG1: EQ coordinates
+        let wb = rv("w", r.w)
         let wv = (wb.shiftedTo(sec.w0, from: r.w), wb.shiftedTo(sec.w1, from: r.w))
-        for (k, off) in offsets.enumerated() {
-            let name = offsets.count == 1 ? base : "\(base) Slat \(k + 1)"
-            let s0 = r.start + n * off - d * r.startExtension, e0 = r.end + n * off + d * r.endExtension
+        let su = rv("start.u", r.start.x), sv = rv("start.v", r.start.y), eu = rv("end.u", r.end.x), ev = rv("end.v", r.end.y)
+        for (k, slat) in slats.enumerated() {
+            let off = slat.offset
+            let name = slats.count == 1 ? base : "\(base) Slat \(k + 1)"
+            let before = out.solids.count
+            defer { for i in before..<out.solids.count { out.solids[i].visibilityParameter = slat.visibility } }
             if let f = linearFrame(r.plane, r.start, r.end) {
-                let su = pv(e, r.start.x, "start.u"), sv = pv(e, r.start.y, "start.v"), eu = pv(e, r.end.x, "end.u"), ev = pv(e, r.end.y, "end.v")
-                let acrossBase = (f.lineAlongU ? sv : su).shifted(f.across * off)
+                var acrossBase = (f.lineAlongU ? sv : su).shifted(f.across * off)
+                if let a = slat.across { acrossBase.formula = a }
                 let along = f.lineAlongU ? (su.shifted(-f.along * r.startExtension), eu.shifted(f.along * r.endExtension))
                                          : (sv.shifted(-f.along * r.startExtension), ev.shifted(f.along * r.endExtension))
                 if tv.railProfile == .round {
@@ -302,8 +339,11 @@ public enum FurniturePartSolids {
                                                    : box(name, plane: r.plane, u: (a0, a1), v: along, w: wv, ctx))
                 }
             } else {
-                let pts = [s0 + n * sec.a, e0 + n * sec.a, e0 + n * sec.b, s0 + n * sec.b]
-                out.solids.append(prism(name, plane: r.plane, pts, w: (PartValue(sec.w0), PartValue(sec.w1)), ctx))
+                // FMG1: a rail at an angle follows the planes its ends follow, cut square, level or plumb at each end.
+                let ends = FurniturePartFlex.LineEnds(su: su, sv: sv, eu: eu, ev: ev)
+                let cuts = r.plane == .xy ? (RailEndCut.perpendicular, RailEndCut.perpendicular) : (r.startCut ?? .perpendicular, r.endCut ?? .perpendicular)
+                let pts = FurniturePartFlex.outline(ends, a: off + sec.a, b: off + sec.b, extensions: (r.startExtension, r.endExtension), cuts: cuts, ctx)
+                out.solids.append(FurniturePartFlex.prism(name, plane: r.plane, pts, w: wv, ctx))
             }
         }
         for s in out.solids { out.materials[s.id] = tv.material }
@@ -420,7 +460,7 @@ public enum FurniturePartSolids {
 
 extension PartValue {
     /// A coordinate `to` derived from a bound coordinate at `from` (shifts the offset by the difference).
-    func shiftedTo(_ to: Double, from: Double) -> PartValue { PartValue(to, plane: plane, offset: offset + (to - from)) }
+    func shiftedTo(_ to: Double, from: Double) -> PartValue { var p = shifted(to - from); p.value = to; return p } // FMG1: keeps a formula
 }
 
 // MARK: - Bounds access
@@ -433,6 +473,7 @@ public enum FurniturePartBounds {
         case .furnitureShelf(let s): s.bounds
         case .furnitureLeg(let l): l.bounds
         case .furnitureRail(let r): r.bounds
+        case .furnitureForm(let f): f.bounds ?? [:] // FMG1: revolves locked to planes
         default: [:]
         }
     }
@@ -443,6 +484,7 @@ public enum FurniturePartBounds {
         case .furnitureShelf(var s): s.bounds = b; e.data = .furnitureShelf(s)
         case .furnitureLeg(var l): l.bounds = b; e.data = .furnitureLeg(l)
         case .furnitureRail(var r): r.bounds = b; e.data = .furnitureRail(r)
+        case .furnitureForm(var f): f.bounds = b.isEmpty ? nil : b; e.data = .furnitureForm(f) // FMG1
         default: break
         }
     }

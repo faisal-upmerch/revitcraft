@@ -110,7 +110,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
         case .f34(let t): t.title // F34
         case .f5(let t): t.title // F5
         case .f810(let t): t.title // F810
-        case .fm4(let t): t.title // FM4
+        case .fm4(let t): fmg1Title ?? t.title // FM4; FMG1: Blend Base / Top Boundary
         }
     }
     public var prompt: String {
@@ -210,6 +210,7 @@ public final class SketchTool: BaseTool, InteractiveTool {
             }
         }
         f2RebuildArrows() // F2: roof slope arrows, Align Eaves picks
+        fmg1RebuildBlend() // FMG1: Blend's other sketch, dimmed
         if let a = slopeArrow {
             preview.primitives.append(ctx.line(a.tail, a.head, heavy: true))
             let d = (a.head - a.tail).normalized
@@ -385,6 +386,8 @@ public final class SketchTool: BaseTool, InteractiveTool {
             guard f34FinishPath(t) else { return false }
         case .fm4(let t) where t.allowsOpenCurves: // FM4: revolve axes and sweep paths are open
             guard fm4FinishForm(t) else { return false }
+        case .fm4(.form(.blend, _)): // FMG1: Blend's base and top sketches
+            guard fmg1FinishBlend() else { return false }
         default:
             let loops = splitLoops(curves)
             if let issue = SketchValidation.validate(curves, loops: loops) { // BL-CANVAS: ARCUS-050

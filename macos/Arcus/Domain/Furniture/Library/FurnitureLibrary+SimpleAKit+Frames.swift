@@ -67,12 +67,8 @@ extension SA {
 
         func build() throws {
             if let n = s.slats {
-                // Slats 2 1/2" wide, the outer ones on the Front and Back, the rest spaced between them.
-                let depth = (b.v(SA.B) - b.v(SA.F)) / SA.inch - 2.5
-                for k in 0..<n {
-                    let d = 1.25 + depth * Double(k) / Double(max(1, n - 1))
-                    try b.railX((SA.L, SA.R), y: k < n / 2 ? SA.F + d : SA.B - (depth + 2.5 - d), top: topZ, SA.slat)
-                }
+                // Slats 2 1/2" wide, the outer ones on the Front and Back, the rest spaced between them (FMG1: one Slats part).
+                try b.slats(alongX: true, run: (SA.L, SA.R), first: SA.F + 1.25, last: SA.B - 1.25, count: n, top: topZ, SA.slat)
             } else {
                 try b.board(x: (SA.L, SA.R), y: (SA.F, SA.B), top: topZ, s.top, role: .top)
             }
@@ -317,24 +313,12 @@ extension SA {
             if s.slatsAlongX {
                 try b.railY((SA.F + p, SA.B - p), x: inL + 0.375, top: slatTop - 1, SA.cleat)
                 try b.railY((SA.F + p, SA.B - p), x: inR - 0.375, top: slatTop - 1, SA.cleat)
-                let y0 = inF + 2.5, y1 = inB - 2.5
-                let length = b.v(y1) - b.v(y0)
-                for k in 0..<n {
-                    // The first half follows the foot, the rest the head (a fixed spacing at the default length).
-                    let d = length * Double(k) / Double(n - 1) / SA.inch
-                    let yy = k < n / 2 ? y0 + d : y1 - (length / SA.inch - d)
-                    try b.railX((inL, inR), y: yy, top: slatTop, SA.bedSlat)
-                }
+                // FMG1: one Slats part, the first slat by the foot and the last by the head.
+                try b.slats(alongX: true, run: (inL, inR), first: inF + 2.5, last: inB - 2.5, count: n, top: slatTop, SA.bedSlat)
             } else {
                 try b.railX((SA.L + p, SA.R - p), y: inF + 0.375, top: slatTop - 1, SA.cleat)
                 try b.railX((SA.L + p, SA.R - p), y: inB - 0.375, top: slatTop - 1, SA.cleat)
-                let x0 = inL + 2.5, x1 = inR - 2.5
-                let length = b.v(x1) - b.v(x0)
-                for k in 0..<n {
-                    let d = length * Double(k) / Double(n - 1) / SA.inch
-                    let xx = k < n / 2 ? x0 + d : x1 - (length / SA.inch - d)
-                    try b.railY((inF, inB), x: xx, top: slatTop, SA.bedSlat)
-                }
+                try b.slats(alongX: false, run: (inF, inB), first: inL + 2.5, last: inR - 2.5, count: n, top: slatTop, SA.bedSlat) // FMG1
             }
             let mT = try b.shelfThickness(s.mattress)
             let my = s.slatsAlongX ? (SA.F + (p + 0.25), SA.B - (p + 0.25)) : (inF + 0.25, inB - 0.25)

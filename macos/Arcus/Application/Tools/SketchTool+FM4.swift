@@ -32,6 +32,9 @@ public enum FM4SketchTarget: Sendable, Equatable {
         }
     }
 
+    /// FMG1: Sweep and Swept Blend (Pick Path, paths on any work plane).
+    var isSweep: Bool { if case .form(let k, _) = self { return k == .sweep || k == .sweptBlend }; return false }
+
     /// Revolve axes and sweep paths are open curves next to the closed profiles.
     var allowsOpenCurves: Bool {
         if case .form(let k, _) = self { return k == .revolve || k == .sweep || k == .sweptBlend }
@@ -50,6 +53,9 @@ public struct FM4SketchState: Sendable {
     public var start = 0.0
     public var end = 12 * 0.0254
     public var endAngle = 2 * Double.pi
+    /// FMG1: Blend's two sketches (Edit Base / Edit Top): which one is being sketched, and the other one's lines.
+    public var editingTop = false
+    var otherSketch: [Curve2] = []
     public init() {}
 }
 
@@ -90,6 +96,11 @@ extension SketchTool {
             var x = opt
             x.kind = .choice(modes.map { $0 == DrawMode.pickWalls.rawValue ? "Pick Panels" : $0 })
             if x.value.textValue == DrawMode.pickWalls.rawValue { x.value = .text("Pick Panels") }
+            // FMG1: a sweep's path is picked from lines and edges in the view (Pick Path).
+            if t.isSweep {
+                x.kind = .choice(modes.map { $0 == DrawMode.pickLines.rawValue ? "Pick Path" : $0 }.filter { $0 != "Pick Panels" })
+                if x.value.textValue == DrawMode.pickLines.rawValue { x.value = .text("Pick Path") }
+            }
             return x
         }
         switch t {
@@ -112,7 +123,8 @@ extension SketchTool {
             case .revolve:
                 o.append(ToolOption(id: "fm4.angle", label: "End Angle", kind: .angle, value: .double(fm4.endAngle)))
             case .sweep, .sweptBlend:
-                o.append(ToolOption(id: "fm4.start", label: "Elevation", kind: .length, value: .double(fm4.start)))
+                // FMG1: in a plan the path's height above the level; in an elevation its offset from the work plane.
+                o.append(ToolOption(id: "fm4.start", label: ctx.isPlan ? "Elevation" : "Offset from Work Plane", kind: .length, value: .double(fm4.start)))
             case .cushion:
                 break
             }
@@ -125,6 +137,8 @@ extension SketchTool {
         switch id {
         case "mode" where v.textValue == "Pick Panels":
             drawMode = .pickWalls; start = nil; arcEnd = nil; filletPicks = []
+        case "mode" where v.textValue == "Pick Path": // FMG1
+            drawMode = .pickLines; start = nil; arcEnd = nil; filletPicks = []
         case "fm4.plane": fm4.plane = v.textValue
         case "fm4.offset": fm4.heightOffset = v.doubleValue ?? 0
         case "fm4.extend": fm4.extendIntoPanel = v.boolValue ?? false
@@ -328,14 +342,23 @@ extension SketchTool {
             f.axis = map.plane == .xz ? Vec2(au, w) : Vec2(w, au)
             f.endAngle = fm4.endAngle
         case .sweep, .sweptBlend:
-            guard ctx.isPlan, let pathCurves = open.first, let prof = loops.first, k == .sweep || loops.count >= 2 else {
-                message(k == .sweep ? "Sketch a path (open lines) and a closed profile in a plan." : "Sketch a path and two closed profiles in a plan.")
+            guard let pathCurves = open.first, let prof = loops.first, k == .sweep || loops.count >= 2 else {
+                message(k == .sweep ? "Sketch or pick a path (open lines) and a closed profile." : "Sketch or pick a path and two closed profiles.")
                 return false
             }
+            // FMG1: the path lies on the view's work plane: the level in a plan, the view side's plane in an elevation or
+            // section; the profile stands up from a plan path, or reaches into the view from an elevation path.
             var path: [Vec2] = []
-            for c in orderedChain(pathCurves) { for p in c.tessellate(chordTolerance: 0.002) where path.last.map({ !$0.isAlmostEqual(p) }) ?? true { path.append(p) } }
-            func local(_ poly: Polygon2) -> [Vec2] { let b = poly.bounds; return poly.points.map { Vec2($0.x - b.center.x, $0.y - b.min.y) } }
-            f = FurnitureFormData(kind: k, isVoid: isVoid, profile: local(prof), w0: ctx.levelElevation + fm4.start, w1: 0)
+            for c in orderedChain(pathCurves) {
+                for p in c.tessellate(chordTolerance: 0.002) {
+                    let q = ctx.isPlan ? p : map.toSketch(p)
+                    if path.last.map({ !$0.isAlmostEqual(q) }) ?? true { path.append(q) }
+                }
+            }
+            let into: Double = ctx.isPlan ? 1 : ((map.plane == .xz ? map.forward.y : map.forward.x) > 0 ? 1 : -1)
+            func local(_ poly: Polygon2) -> [Vec2] { let b = poly.bounds; return poly.points.map { Vec2($0.x - b.center.x, into * ($0.y - b.min.y)) } }
+            let w0 = ctx.isPlan ? ctx.levelElevation + fm4.start : fm4WorkPlane + into * fm4.start
+            f = FurnitureFormData(kind: k, isVoid: isVoid, plane: ctx.isPlan ? .xy : map.plane, profile: local(prof), w0: w0, w1: 0)
             f.path = path
             if k == .sweptBlend { f.endProfile = local(loops[1]) }
         default:

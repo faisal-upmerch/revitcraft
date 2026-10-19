@@ -295,8 +295,14 @@ public enum FamilyEvaluator {
                         errors.append("Swept Blend “\(s.name)” needs two closed profiles with area for this type.")
                         continue
                     }
-                    let mesh = FamilyFormGeometry.sweptBlendMesh(path: path, z0: z0, start: p1, end: p2)
+                    var mesh = FamilyFormGeometry.sweptBlendMesh(path: path, z0: z0, start: p1, end: p2)
                     let us = (p1.points + p2.points).map(\.x)
+                    if let wp = s.workPlane, wp != .xy, !mesh.isEmpty, let foot = FamilyFormGeometry.boxFootprint(mesh.transformed(wp.transform)) { // FMG1: a path on any work plane
+                        mesh = mesh.transformed(wp.transform)
+                        let b = mesh.bounds
+                        solids.append(make(.sweep, foot, b.min.z, b.max.z, mesh: mesh))
+                        continue
+                    }
                     guard !mesh.isEmpty, let foot = FamilyFormGeometry.sweepFootprint(path: path, uMin: us.min() ?? 0, uMax: us.max() ?? 0) else {
                         errors.append("Swept Blend “\(s.name)” can't be built for this type.")
                         continue
@@ -323,6 +329,14 @@ public enum FamilyEvaluator {
                 }
                 let mesh = MeshBuilder.sweep(profile: profile, along: path.map { $0.at(z: z0) })
                 let us = profile.points.map(\.x)
+                // FMG1: a path sketched on an elevation work plane: built in the sketch's (u, v, w) and turned onto it, the
+                // profile's x to the left of the path in the sketch and its y along the plane's normal.
+                if let wp = s.workPlane, wp != .xy, !mesh.isEmpty, let foot = FamilyFormGeometry.boxFootprint(mesh.transformed(wp.transform)) {
+                    let placed = mesh.transformed(wp.transform)
+                    let b = placed.bounds
+                    solids.append(make(.sweep, foot, b.min.z, b.max.z, mesh: placed))
+                    continue
+                }
                 guard !mesh.isEmpty, let foot = FamilyFormGeometry.sweepFootprint(path: path, uMin: us.min() ?? 0, uMax: us.max() ?? 0) else {
                     errors.append("Sweep “\(s.name)” can't be built for this type.")
                     continue
