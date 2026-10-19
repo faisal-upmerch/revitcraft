@@ -16,6 +16,14 @@ struct POLISHShopDrawingTests {
         var out: [String] = []
         guard let f101 = m.sheets.first(where: { $0.sheet?.number == FurnitureShopDrawings.shopDrawing }) else { return ["\(name): no F101"] }
         let layouts = SheetGraphicsBuilder(model: m, sheet: f101).layouts().map(\.0)
+        // Every view and its title inside the drawing area (the title runs on past a narrow view).
+        for l in layouts {
+            guard let v = m[l.viewID] else { continue }
+            let title = v.name.uppercased()
+            let titleEnd = l.box.min.x + 0.0101 + max(0.04, Double(title.count) * 0.0024 + 0.02)
+            if titleEnd > FurnitureShopDrawings.drawingArea.max.x + 1e-6 { out.append("\(name): the \(v.name) title runs into the title block") }
+            if !FurnitureShopDrawings.drawingArea.expanded(by: 1e-6).contains(l.box) { out.append("\(name): \(v.name) runs off the drawing area") }
+        }
         for viewName in ["Front", FurnitureShopDrawings.sectionName] {
             guard let v = m.views.first(where: { $0.name == viewName && $0.view?.kind != .nesting }), let vd = v.view else { continue }
             let tags = m.owned(byView: v.id).filter { $0.tag != nil }

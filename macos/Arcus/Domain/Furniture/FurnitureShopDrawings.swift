@@ -374,7 +374,11 @@ public enum FurnitureShopDrawings {
                 return (NestingLayout(groups.first { $0.key == key }, scale: s).sheetBounds, .zero)
             }
             let m = measured(id, v), d = Double(s)
-            let r = Rect2(min: m.base.min - Vec2(m.reach.l, m.reach.b) * d, max: m.base.max + Vec2(m.reach.r, m.reach.t) * d)
+            var r = Rect2(min: m.base.min - Vec2(m.reach.l, m.reach.b) * d, max: m.base.max + Vec2(m.reach.r, m.reach.t) * d)
+            // The view title starts under the view's left edge and runs on past a narrow view (SheetGraphicsBuilder.viewTitle).
+            let title = (v.view?.titleOnSheet.isEmpty == false ? v.view!.titleOnSheet : v.name).uppercased()
+            let titleWidth = 0.0101 + max(0.04, Double(title.count) * 0.0024 + 0.02) + 0.003
+            r.max.x = max(r.max.x, m.base.min.x + titleWidth * d)
             return (r, (r.center - m.base.center) / d)
         }
         func layout(_ s: Int) -> (regions: [(rect: Rect2, offset: Vec2)], colW: [Double], rowH: [Double]) {
