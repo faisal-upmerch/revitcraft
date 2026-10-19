@@ -368,8 +368,8 @@ public enum CommandCatalog {
         CommandInfo(.highlightInModel, "Highlight in Model", .view, "scope", help: "Select the elements of the selected schedule rows in a model view and zoom to them (also Option-double-click a row)."), // BL-SCHED
         CommandInfo(.print, "Print…", .file, "printer", shortcut: "⌘P", help: "Print sheets or views."),
         CommandInfo(.home, "Home", .file, "house", help: "Show the Home screen: start a project, open one, or pick a recent project.", keywords: ["start", "recent", "hub"]),
-        CommandInfo(.newProject, "New Project…", .file, "doc.badge.plus", shortcut: "⌘N", help: "Create a project from a template."),
-        CommandInfo(.openProject, "Open…", .file, "folder", shortcut: "⌘O", help: "Open an Arcus project."),
+        CommandInfo(.newProject, "New Project…", .file, "doc.badge.plus", shortcut: "⌘N", help: "Start a project, furniture or family from Home."),
+        CommandInfo(.openProject, "Open…", .file, "folder", shortcut: "⌘O", help: "Open a project, furniture or family."),
         CommandInfo(.save, "Save", .file, "square.and.arrow.down", shortcut: "⌘S", help: "Save the project."),
         CommandInfo(.saveAs, "Save As…", .file, "square.and.arrow.down.on.square", shortcut: "⇧⌘S", help: "Save a copy under a new name."),
         CommandInfo(.duplicateDocument, "Duplicate", .file, "plus.rectangle.on.rectangle", help: "Duplicate the project document."),
