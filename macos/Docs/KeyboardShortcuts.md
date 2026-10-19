@@ -175,6 +175,9 @@ sheets open the Sheet Title dialog for number and name), and `⇧`/`⌘`-click s
 sheet (on the canvas or on the sheet's row) to place them: the viewport follows the pointer and a click places it.
 `⌃⇥` and `⌃⇧⇥` (Window menu) show the next and previous view tab.
 
+**Snapping in 3D views.** While a tool is active in a 3D view, `Tab` steps through the snaps under the pointer (3D
+corners, edge midpoints, centres, crossings, nearest, and the work plane's own snaps), as in plan views.
+
 **Family Editor.** In the plan and elevation views, snapping works as in project views. While a tool is active,
 `Tab` cycles the snaps under the pointer, and the typed snap overrides `SE` `SM` `SI` `SN` `SC` `SP` `ST` `SQ` `SX`
 `SR` `SZ` `SO` `SS` apply to the next pick. `Return` finishes a sketch, `Delete` removes its last point, and `Esc` ends
