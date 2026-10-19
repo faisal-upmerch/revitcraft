@@ -11,14 +11,15 @@ import ArcusGeometry
 extension ComponentLibrary {
     static var groupBShelving: [ComponentDefinition] {
         [shelfPinUpgrade(), shelfBracket(), floatingShelfBracket(), concealedShelfSupport(), adjustableShelfRail(), shelfStandard(),
-         glassShelfSupport(), shelfClip(), shelfDivider(), shelfStop(), shelfRetainer(), pullOutShelf(), slidingShelf(), rotatingShelf(),
+         glassShelfSupportPin(), shelfClip(), shelfDivider(), shelfStop(), shelfRetainer(), pullOutShelf(), slidingShelf(), rotatingShelf(),
          cornerShelfSystem(), heavyDutyShelfBracket(), foldDownShelfBracket()]
     }
 
     /// The opening-frame parameters every bay item has: the bay's width and depth and the height it's mounted at.
     static func openingParams(_ b: inout ComponentBuilder, width: Double = ComponentKit.inch(22.5), depth: Double = ComponentKit.inch(22), mount: Double = 0) {
-        // Placed in a bay on its left inside face: mounting x runs into the depth and y up from the bay's bottom.
-        b.host([.bay], faces: [.left], align: .full)
+        // Placed in a bay; its side screws (x into the depth, y up from the bay's bottom, target: the side) are drilled
+        // in both sides by ComponentLibrary+B+Machining.swift.
+        b.host([.bay], faces: [.inside], align: .full)
         b.length("Opening Width", width, instance: true, group: .placement, min: ComponentKit.inch(6), max: ComponentKit.inch(60))
         b.length("Opening Depth", depth, instance: true, group: .placement, min: ComponentKit.inch(6), max: ComponentKit.inch(30))
         b.length("Mount Height", mount, instance: true, group: .placement)
@@ -128,7 +129,7 @@ extension ComponentLibrary {
     }
 
     /// A glass shelf support: a pin with a clear cup (or a clamp) that grips the glass.
-    static func glassShelfSupport() -> ComponentDefinition {
+    static func glassShelfSupportPin() -> ComponentDefinition {
         var b = ComponentBuilder("Glass Shelf Support", .shelving, "Shelf Supports", "Glass shelf support: a 5 mm pin with a clear rubber cup, or a clamp that grips the glass from above and below.")
         b.tags("glass shelf support", "glass", "shelf pin", "clamp", "5 mm", "6 mm glass", "8 mm glass")
         b.aliases("glass shelf pin", "glass clamp", "glass shelf clip", "suction pin", "glass rest")

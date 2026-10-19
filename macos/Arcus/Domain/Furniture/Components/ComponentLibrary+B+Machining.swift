@@ -2,14 +2,32 @@ import Foundation
 import ArcusGeometry
 
 // COMPB: machining of Group B's bay items (rods, rails, pull-outs, baskets, turntables, towers, carousels) that the
-// kit's mounting data can't say on its own. They're placed on a bay's left inside face, so their side screws (mounting
-// x along the depth, y up from the bay's bottom, target: the part across, i.e. the side) are drilled in the left side by
-// the kit (ComponentFabrication); here the same screws go in the right side too, mirrored (except one-sided racks),
-// and the items that screw into the bay's bottom or top get those holes.
+// kit's mounting data (family x, y on the mount face) can't say: screws into the bay's sides at a depth and a height.
+// The definitions write them as counterpart drills (x along the depth, y up from the bay's bottom); they're taken out
+// of the definitions' mounting (`withoutBaySideDrills`) and drilled here in the left side and, mirrored, the right
+// side (one-sided racks: the left only), with the bottom and top screws of the items that have them.
 
 extension ComponentLibrary {
     /// Group B's family names (cached).
     static let groupBNames: Set<String> = Set(groupB.map(\.name))
+
+    /// The side screws of each bay item (its counterpart drills as written), by family name.
+    static let baySideDrills: [String: [ComponentMountOp]] = {
+        var out: [String: [ComponentMountOp]] = [:]
+        for d in groupBRaw where d.frame == .legacyOpening {
+            let ops = d.mounting.filter { if case .drill(_, _, _, _, _, _, .counterpart) = $0 { return true }; return false }
+            if !ops.isEmpty { out[d.name] = ops }
+        }
+        return out
+    }()
+
+    /// A bay item without its side screws in the kit's mounting data (they're drilled by `compbMachining`).
+    static func withoutBaySideDrills(_ d: ComponentDefinition) -> ComponentDefinition {
+        guard d.frame == .legacyOpening else { return d }
+        var out = d
+        out.mounting = d.mounting.filter { if case .drill(_, _, _, _, _, _, .counterpart) = $0 { return false }; return true }
+        return out
+    }
 
     /// Bay items mounted on the left side only.
     static let oneSidedBayItems: Set<String> = ["Pull-Out Trouser Rack", "Pull-Out Tie Rack", "Belt Organizer", "Scarf Organizer", "Bag Organizer", "Corner Shelf System"]
@@ -52,7 +70,7 @@ extension ComponentLibrary {
 }
 
 extension FurnitureMachining {
-    /// COMPB: right-side and bottom/top holes of Group B's bay items.
+    /// COMPB: side, bottom and top holes of Group B's bay items.
     static func compbMachining(_ m: BIMModel) -> [MachiningEntry] {
         var out: [MachiningEntry] = []
         for e in ComponentChecks.placed(m) {
@@ -62,11 +80,13 @@ extension FurnitureMachining {
             func v(_ x: String) -> Double { ComponentChecks.value(x, ev) ?? 0 }
             let fr = BayFrame(bay)
             let lift = ComponentSettings(e)?.offsetY ?? 0
-            if !ComponentLibrary.oneSidedBayItems.contains(d.name), let right = o.right {
-                for op in d.mounting {
-                    guard case .drill(let label, let x, let y, let dia, let depth, _, let target) = op, target == .counterpart else { continue }
-                    let c = fr.world(Vec3(o.x1, o.y0 + v(x), o.z0 + lift + v(y)))
-                    out.append(MachiningEntry(partID: right, op: .drill(center: c, axis: fr.world(Vec3(1, 0, 0)), diameter: v(dia), depth: v(depth)), source: .hardware(e.id), label: label))
+            let sides: [(ElementID?, Double, Double)] = ComponentLibrary.oneSidedBayItems.contains(d.name) ? [(o.left, o.x0, -1)] : [(o.left, o.x0, -1), (o.right, o.x1, 1)]
+            for op in ComponentLibrary.baySideDrills[d.name] ?? [] {
+                guard case .drill(let label, let x, let y, let dia, let depth, _, _) = op else { continue }
+                for (part, sx, dir) in sides {
+                    guard let part else { continue }
+                    let c = fr.world(Vec3(sx, o.y0 + v(x), o.z0 + lift + v(y)))
+                    out.append(MachiningEntry(partID: part, op: .drill(center: c, axis: fr.world(Vec3(dir, 0, 0)), diameter: v(dia), depth: v(depth)), source: .hardware(e.id), label: label))
                 }
             }
             for s in ComponentLibrary.baySurfaceDrills[d.name] ?? [] {

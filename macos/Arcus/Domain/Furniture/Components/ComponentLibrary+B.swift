@@ -7,5 +7,8 @@ import ArcusGeometry
 
 extension ComponentLibrary {
     /// Group B's component definitions, in browser order.
-    static var groupB: [ComponentDefinition] { groupBConnectors + groupBLegs + groupBShelving + groupBWardrobe + groupBMobility }
+    static var groupB: [ComponentDefinition] { groupBRaw.map(withoutBaySideDrills) }
+
+    /// Group B as written: bay items still carry their side screws as counterpart drills (moved to the bay machining).
+    static var groupBRaw: [ComponentDefinition] { groupBConnectors + groupBLegs + groupBShelving + groupBWardrobe + groupBMobility }
 }
