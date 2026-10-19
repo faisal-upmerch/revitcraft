@@ -31,62 +31,6 @@ enum FamilyTemplates {
     }
 }
 
-// W4-FAMED: document-style window (sidebar · canvas · inspector) with a persisted frame and split positions.
-@MainActor
-final class FamilyEditorWindowController: NSWindowController, NSWindowDelegate {
-    static var open: [FamilyEditorWindowController] = []
-    let model: FamilyEditorModel
-    private var toolbarDelegate: FamilyEditorToolbar!
-
-    static func open(familyID: ElementID, state: DocumentState) {
-        if let existing = open.first(where: { $0.model.familyID == familyID && $0.model.state === state }) { existing.window?.makeKeyAndOrderFront(nil); return }
-        guard let fam = state.model[familyID]?.family else { return }
-        present(FamilyEditorModel(family: fam, state: state, familyID: familyID))
-    }
-    static func open(new family: FamilyDefinition, state: DocumentState) {
-        present(FamilyEditorModel(family: family, state: state, familyID: nil))
-    }
-    @discardableResult
-    private static func present(_ m: FamilyEditorModel) -> FamilyEditorWindowController {
-        let wc = FamilyEditorWindowController(model: m)
-        open.append(wc)
-        wc.showWindow(nil)
-        return wc
-    }
-
-    init(model: FamilyEditorModel) {
-        self.model = model
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1440, height: 900), styleMask: [.titled, .closable, .resizable, .miniaturizable], backing: .buffered, defer: false)
-        w.minSize = NSSize(width: 1000, height: 640)
-        w.toolbarStyle = .unified
-        w.tabbingMode = .disallowed
-        w.contentViewController = FamilyEditorSplitController(model: model)
-        w.setFrameAutosaveName("ArcusFamilyEditor")
-        if w.frame.width < 1000 || w.frame.height < 640 { w.setContentSize(NSSize(width: 1440, height: 900)); w.center() }
-        super.init(window: w)
-        w.delegate = self
-        toolbarDelegate = FamilyEditorToolbar(model: model, controller: self)
-        let tb = NSToolbar(identifier: "ArcusFamilyEditorToolbar")
-        tb.delegate = toolbarDelegate
-        tb.displayMode = .iconOnly // W4-AUDIT: labels truncated at 1280 pt; the titles stay in the tooltips
-        tb.allowsUserCustomization = false
-        w.toolbar = tb
-        updateTitle()
-        model.onRename = { [weak self] _ in self?.updateTitle() }
-        model.onClose = { [weak self] in self?.close() } // F1415: Load into Project and Close
-    }
-    required init?(coder: NSCoder) { fatalError() }
-
-    func updateTitle() {
-        window?.title = "Family Editor – \(model.family.name)"
-        window?.subtitle = "\(model.family.template.rawValue) family" + (model.familyID == nil ? " · not loaded" : "")
-    }
-
-    func windowWillClose(_ notification: Notification) { FamilyEditorWindowController.open.removeAll { $0 === self } }
-    /// Edit ▸ Undo/Redo and ⌘Z in the window use the family's own undo stack.
-    func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undo }
-}
-
 /// Tools sketched on the family canvas (the ribbon's Create and Annotate tabs).
 enum FamilyCanvasTool: Equatable {
     /// A reference plane drawn vertically (true) or horizontally in the current view.
@@ -190,6 +134,8 @@ final class FamilyEditorModel {
     var showWorkPlane = false { didSet { drawingRevision += 1 } }
     /// Closes the window (Load into Project and Close).
     @ObservationIgnored var onClose: (() -> Void)?
+    /// FES: the window shell's ribbon, dock and status state.
+    let chrome = FamilyEditorChrome()
 
     init(family: FamilyDefinition, state: DocumentState, familyID: ElementID?) {
         self.family = family
