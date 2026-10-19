@@ -18,21 +18,22 @@ struct SheetTitleDialog: View {
     var problem: String? { BrowserNaming.sheetTitleProblem(sheetID, number: number, name: name, in: state.model) }
 
     var body: some View {
-        DialogFrame(title: "Sheet Title", okDisabled: problem != nil, state: state) {
+        DialogFrame(title: "Sheet Title", icon: "doc.richtext", tint: .blue, size: .small, subtitle: "Number and name of the sheet.", okDisabled: problem != nil,
+                    disabledReason: problem, labelWidth: 70, state: state) {
             guard problem == nil else { return }
             let n = BrowserNaming.normalized(number), nm = BrowserNaming.normalized(name), id = sheetID
             state.session.perform("Rename Sheet") { tx in tx.update(id) { $0.sheet?.number = n; $0.name = nm } }
             state.presented = nil
             state.updateWindowSubtitle()
         } content: {
-            FormRow(label: "Number") {
-                TextField("A101", text: $number).textFieldStyle(.roundedBorder).frame(width: 120).focused($focus, equals: .number)
+            DialogSection {
+                DialogRow("Number") {
+                    TextField("A101", text: $number).labelsHidden().frame(width: 120).focused($focus, equals: .number)
+                }
+                DialogRow("Name") {
+                    TextField("Name", text: $name).labelsHidden().focused($focus, equals: .name)
+                }
             }
-            FormRow(label: "Name") {
-                TextField("Name", text: $name).textFieldStyle(.roundedBorder).frame(width: 260).focused($focus, equals: .name)
-            }
-            Text(problem ?? " ").font(.caption).foregroundStyle(.red).frame(maxWidth: .infinity, alignment: .leading).padding(.leading, 158)
-                .accessibilityHidden(problem == nil)
         }
         .onAppear {
             number = state.model[sheetID]?.sheet?.number ?? ""
@@ -55,36 +56,22 @@ struct PlaceViewDialog: View {
         let m = state.model
         let candidates = PlaceViewCandidates.list(forSheet: sheetID, m, search: search)
         let hidden = m.views.filter { $0.view != nil && $0.view?.kind != .legend && !m.viewports(showing: $0.id).isEmpty }.count
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Views").font(.title3.weight(.semibold))
-                Text("Choose one or more views, then place them with the pointer. You can also drag views from the Project Browser onto the sheet.")
-                    .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        ArcusDialog(icon: "rectangle.on.rectangle", tint: .blue, title: "Views", subtitle: "Choose views, then place them with the pointer. You can also drag views from the Project Browser.",
+                    okTitle: "Add View to Sheet", okDisabled: chosen.isEmpty, disabledReason: "Choose a view", onCancel: { state.presented = nil }, onOK: { place(chosen) }) {
+            TextField("Search", text: $search).textFieldStyle(.roundedBorder).focused($searchFocused).accessibilityLabel("Search views")
+            DialogSection(footnote: hidden > 0 ? "\(hidden) view\(hidden == 1 ? " is" : "s are") already on a sheet and not listed. Legends and schedules can go on several sheets." : nil, boxed: false) {
+                DialogListBox(count: candidates.count, rowHeight: 28, minRows: 6, maxRows: 10, isEmpty: candidates.isEmpty) {
+                    List(candidates, selection: $chosen) { c in
+                        Label(c.title, systemImage: c.symbol).tag(c.id)
+                    }
+                    .contextMenu(forSelectionType: ElementID.self) { _ in } primaryAction: { ids in place(ids) }
+                } empty: {
+                    DialogEmptyState(icon: "rectangle.on.rectangle", title: search.isEmpty ? "No views to place" : "No matches", message: search.isEmpty ? "Every view is already on a sheet." : "")
+                }
             }
-            HStack(spacing: 4) {
-                Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search", text: $search).textFieldStyle(.plain).focused($searchFocused).accessibilityLabel("Search views")
-            }
-            .padding(6)
-            .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 6))
-            List(candidates, selection: $chosen) { c in
-                Label(c.title, systemImage: c.symbol).tag(c.id)
-            }
-            .frame(minHeight: 280)
-            .contextMenu(forSelectionType: ElementID.self) { _ in } primaryAction: { ids in place(ids) }
-            if hidden > 0 {
-                Text("\(hidden) view\(hidden == 1 ? " is" : "s are") already on a sheet and not listed. Legends and schedules can be placed on several sheets.")
-                    .font(.caption).foregroundStyle(.secondary)
-            }
-            HStack {
-                Text(chosen.isEmpty ? "No view selected" : "\(chosen.count) selected").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("Add View to Sheet") { place(chosen) }.keyboardShortcut(.defaultAction).disabled(chosen.isEmpty)
-            }
+        } leading: {
+            Text(chosen.isEmpty ? "No view selected" : "\(chosen.count) selected").font(.callout).foregroundStyle(.secondary)
         }
-        .padding(20)
-        .frame(width: 460)
         .onAppear { searchFocused = true }
     }
 
@@ -117,38 +104,28 @@ struct ViewRangeDialog: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("View Range").font(.title3.weight(.semibold))
-                Text(view.map(ViewTitles.qualified) ?? "").font(.callout).foregroundStyle(.secondary)
-            }
-            HStack(alignment: .top, spacing: 18) {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Primary Range").font(.headline)
-                    row(.top); row(.cut); row(.bottom)
-                    Text("View Depth").font(.headline).padding(.top, 6)
-                    row(.depth)
+        ArcusDialog(icon: "square.3.layers.3d.middle.filled", tint: .blue, title: "View Range", subtitle: view.map(ViewTitles.qualified) ?? "", size: showDiagram ? .large : .medium,
+                    onCancel: { state.presented = nil }, onOK: { if templateLock != nil || apply() { state.presented = nil } }) {
+            if let t = templateLock { DialogNotice(.info, t) }
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+                    DialogSection("Primary range") { row(.top); row(.cut); row(.bottom) }
+                    DialogSection("View depth") { row(.depth) }
                 }
                 .disabled(templateLock != nil)
                 if showDiagram {
                     ViewRangeDiagram(model: m, viewLevel: viewLevel, range: draft ?? view?.view?.viewRange ?? .floorPlanDefault)
-                        .frame(width: 230, height: 250)
+                        .frame(width: 200, height: 250)
                         .accessibilityLabel("View range diagram")
                 }
             }
-            if let t = templateLock { Text(t).font(.caption).foregroundStyle(.secondary) }
-            Text(problem ?? " ").font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true)
-            HStack {
-                Button(showDiagram ? "Hide <<" : "Show >>") { showDiagram.toggle() }
-                    .help("Show or hide the view range diagram")
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("Apply") { _ = apply() }.disabled(templateLock != nil)
-                Button("OK") { if templateLock != nil || apply() { state.presented = nil } }.keyboardShortcut(.defaultAction)
-            }
+            if let problem { DialogNotice(.error, problem) }
+        } leading: {
+            Button(showDiagram ? "Hide Diagram" : "Show Diagram") { showDiagram.toggle() }
+                .help("Show or hide the view range diagram")
+        } trailing: {
+            Button("Apply") { _ = apply() }.disabled(templateLock != nil).dialogButton()
         }
-        .padding(20)
-        .frame(minWidth: showDiagram ? 720 : 480)
         .onAppear(perform: load)
         .onChange(of: levels) { _, _ in problem = draftProblem }
         .onChange(of: offsets) { _, _ in problem = draftProblem }
@@ -157,7 +134,7 @@ struct ViewRangeDialog: View {
     @ViewBuilder func row(_ p: ViewRange.Plane) -> some View {
         let choice = levels[p] ?? .associated
         HStack(spacing: 8) {
-            Text(p.rawValue).frame(width: 78, alignment: .trailing).foregroundStyle(.secondary)
+            Text(p.rawValue).frame(width: 70, alignment: .leading)
             Picker("", selection: Binding(get: { choice }, set: { levels[p] = $0 })) {
                 ForEach(ViewRange.choices(for: p, m), id: \.self) { c in Text(c.title(m)).tag(c) }
             }
@@ -166,7 +143,7 @@ struct ViewRangeDialog: View {
             .accessibilityLabel("\(p.rawValue) level")
             Text("Offset").foregroundStyle(.secondary)
             TextField("", text: Binding(get: { offsets[p] ?? "" }, set: { offsets[p] = $0 }))
-                .textFieldStyle(.roundedBorder).frame(width: 100)
+                .textFieldStyle(.roundedBorder).multilineTextAlignment(.trailing).frame(width: 100)
                 .disabled(choice == .unlimited)
                 .accessibilityLabel("\(p.rawValue) offset")
         }
@@ -247,7 +224,7 @@ struct ViewRangeDiagram: View {
                          at: CGPoint(x: left + 24, y: yy + (plane == .depth ? 7 : -7)), anchor: .leading)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .textBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color(nsColor: .separatorColor)))
+        .background(RoundedRectangle(cornerRadius: Tokens.radiusSection).fill(DialogColors.sectionFill))
+        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
     }
 }

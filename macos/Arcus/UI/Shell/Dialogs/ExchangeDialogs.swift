@@ -42,11 +42,11 @@ struct ExportPDFDialog: View {
                                okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", scrolls: true, labelWidth: 120, state: state) {
             chooseFolder()
         } content: {
-            DialogSection(includeViews ? "Sheets and views" : "Sheets", rows: false) {
+            DialogSection(includeViews ? "Sheets and views" : "Sheets", boxed: false) {
                 DialogCheckList(items: list.map { e in
                     DialogCheckItem(id: e.id, title: e.sheet.map { "\($0.number) – \(e.name)" } ?? e.name, subtitle: e.sheet == nil ? e.view?.kind.rawValue : nil,
                                     icon: e.sheet == nil ? "rectangle.on.rectangle" : "doc.richtext")
-                }, checked: $chosen, maxRows: 7, noun: includeViews ? "items" : "sheets", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
+                }, checked: $chosen, maxRows: 6, noun: includeViews ? "items" : "sheets", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
             } accessory: {
                 Toggle("Include views", isOn: $includeViews)
             }
@@ -231,7 +231,7 @@ struct ImportCADDialog: View {
             if let error { DialogNotice(.error, title: "The file can't be read", error) }
             if let doc {
                 HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
-                    DialogSection("Layers", rows: false) {
+                    DialogSection("Layers", boxed: false) {
                         DialogCheckList(items: doc.layers.map { l in
                             DialogCheckItem(id: l.name, title: l.name, detail: !l.isOn || l.isFrozen ? "off" : nil, swatch: l.color.color)
                         }, checked: $layers, minRows: 7, maxRows: 7, noun: "layers", emptyTitle: "No layers")
@@ -303,7 +303,7 @@ struct ImportCADDialog: View {
             layers = Set(d.layers.filter { $0.isOn && !$0.isFrozen }.map(\.name))
             dependencies = CADDependencies.scan(d, parentURL: u, userResolved: resolved)
         } catch {
-            self.error = "\(error)"
+            self.error = DialogErrorText.describe(error)
         }
     }
 

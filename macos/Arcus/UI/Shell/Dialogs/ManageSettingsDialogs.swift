@@ -33,12 +33,10 @@ struct ObjectStylesDialog: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Object Styles").font(.title3.weight(.semibold))
-            Text("Line weights, colours, patterns and materials every view starts from. View, filter and element overrides still apply on top.")
-                .font(.callout).foregroundStyle(.secondary)
+        ArcusDialog(icon: "paintbrush", tint: .indigo, title: "Object Styles", subtitle: "Line weights, colours, patterns and materials every view starts from.",
+                    size: .wide, height: 640, onCancel: { state.presented = nil }, onOK: { save(); state.presented = nil }) {
             Picker("", selection: $tab) { Text("Model Objects").tag(0); Text("Annotation Objects").tag(1); Text("Imported Objects").tag(2) }
-                .pickerStyle(.segmented).labelsHidden()
+                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
             Table(rows, children: \.children, selection: $selection) {
                 TableColumn("Category") { r in Text(r.name).fontWeight(overridden(r) ? .semibold : .regular) }.width(min: 180, ideal: 220)
                 TableColumn("Projection") { r in weightPicker(r, cut: false) }.width(90)
@@ -47,19 +45,18 @@ struct ObjectStylesDialog: View {
                 TableColumn("Line Pattern") { r in patternPicker(r) }.width(130)
                 TableColumn("Material") { r in if tab == 0, r.isCategory { materialPicker(r) } }.width(min: 140, ideal: 180)
             }
-            .frame(minHeight: 400)
-            HStack {
-                Button("Reset to Default") { if let r = selectedRow { set(r) { $0 = ObjectStyleOverride() } } }.disabled(selectedRow.map { !overridden($0) } ?? true)
-                    .help("Return the selected category or subcategory to the built-in style")
-                Text("Bold rows differ from the built-in defaults.").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("Apply") { save() }.disabled(!dirty)
-                Button("OK") { save(); state.presented = nil }.keyboardShortcut(.defaultAction)
-            }
+            .scrollContentBackground(.hidden)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            .frame(maxHeight: .infinity)
+            DialogCaption("Bold rows differ from the built-in defaults. View, filter and element overrides still apply on top.")
+        } leading: {
+            Button("Reset to Default") { if let r = selectedRow { set(r) { $0 = ObjectStyleOverride() } } }.disabled(selectedRow.map { !overridden($0) } ?? true)
+                .help("Return the selected category or subcategory to the built-in style")
+        } trailing: {
+            Button("Apply") { save() }.disabled(!dirty).dialogButton()
         }
-        .padding(20)
-        .frame(minWidth: 860, minHeight: 600)
         .onAppear { draft = stored }
     }
 
@@ -149,9 +146,12 @@ struct WarningsDialog: View {
 
     var body: some View {
         let m = state.model
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Warnings").font(.title3.weight(.semibold))
-            Text("\(state.healthWarnings.count) warning(s). Expand a warning to see its elements; check elements to delete them.").font(.callout).foregroundStyle(.secondary)
+        let n = state.healthWarnings.count
+        let counts = Dictionary(grouping: state.healthWarnings, by: { DialogSeverity($0.severity) }).mapValues(\.count)
+        ArcusDialog(icon: "exclamationmark.triangle", tint: .orange, title: "Warnings",
+                    subtitle: n == 0 ? "The model has no warnings." : "\(n) warning\(n == 1 ? "" : "s"). Expand one to see its elements; check elements to delete them.",
+                    size: .large, okTitle: "Close", showCancel: false, height: 560, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
+            DialogSummaryTiles(tiles: DialogSummaryTiles.severities(counts))
             List(nodes, children: \.children, selection: $selection) { n in
                 switch n.kind {
                 case .group(let g):
@@ -165,23 +165,24 @@ struct WarningsDialog: View {
                     .toggleStyle(.checkbox)
                 }
             }
-            .frame(minHeight: 340)
+            .listStyle(.inset)
+            .scrollContentBackground(.hidden)
+            .opacity(state.healthWarnings.isEmpty ? 0 : 1)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
             .overlay {
                 if state.healthWarnings.isEmpty {
-                    ContentUnavailableView("No Warnings", systemImage: "checkmark.seal", description: Text("The model has no warnings."))
+                    DialogEmptyState(icon: "checkmark.seal", title: "No Warnings", message: "The model has no warnings.")
                 }
             }
-            HStack {
-                Button("Show") { show() }.disabled(elements(for: selection).isEmpty).help("Select the elements and zoom to them")
-                Button("Delete Checked") { deleteChecked() }.disabled(checked.isEmpty)
-                Button("Export…") { export() }.disabled(state.healthWarnings.isEmpty).help("Save the warnings as an HTML report")
-                Button("Re-check") { state.scheduleHealthCheck() }
-                Spacer()
-                Button("Close") { state.presented = nil }.keyboardShortcut(.defaultAction)
-            }
+            .frame(maxHeight: .infinity)
+        } leading: {
+            Button("Show") { show() }.disabled(elements(for: selection).isEmpty).help("Select the elements and zoom to them")
+            Button("Delete Checked") { deleteChecked() }.disabled(checked.isEmpty)
+            Button("Export…") { export() }.disabled(state.healthWarnings.isEmpty).help("Save the warnings as an HTML report")
+            Button("Check Again") { state.scheduleHealthCheck() }
         }
-        .padding(20)
-        .frame(minWidth: 720, minHeight: 520)
     }
 
     func severityIcon(_ s: ModelWarning.Severity) -> some View {
@@ -239,20 +240,20 @@ struct SelectByIDDialog: View {
 
     var body: some View {
         let p = parsed
-        DialogFrame(title: "Select by ID", subtitle: "Separate ids with semicolons, commas or spaces.", okDisabled: p.found.isEmpty, state: state) {
+        DialogFrameWithActions(title: "Select by ID", icon: "number", size: .small, subtitle: "Separate ids with semicolons, commas or spaces.",
+                               okDisabled: p.found.isEmpty, disabledReason: "Enter the id of an element", labelWidth: 60, state: state) {
             let ids = p.found
             state.presented = nil
             state.session.selection.select(ids)
             state.show("\(ids.count) element\(ids.count == 1 ? "" : "s") selected.")
         } content: {
-            TextField("e.g. 1204; 1210", text: $text).textFieldStyle(.roundedBorder).frame(width: 360).accessibilityLabel("Element ids")
-            if !p.missing.isEmpty { Text("Not found: \(p.missing.joined(separator: ", "))").font(.caption).foregroundStyle(.orange) }
-            HStack {
-                Text("\(p.found.count) element\(p.found.count == 1 ? "" : "s") found").font(.caption).foregroundStyle(.secondary)
-                Spacer()
-                Button("Show") { let ids = p.found; state.presented = nil; Self.showElements(ids, state: state) }.disabled(p.found.isEmpty)
-                    .help("Select the elements and open a view that shows them")
+            DialogSection(footnote: "\(p.found.count) element\(p.found.count == 1 ? "" : "s") found") {
+                DialogRow("IDs") { TextField("1204; 1210", text: $text).labelsHidden().accessibilityLabel("Element ids") }
             }
+            if !p.missing.isEmpty { DialogNotice(.warning, "Not found: \(p.missing.joined(separator: ", "))") }
+        } actions: {
+            Button("Show") { let ids = p.found; state.presented = nil; Self.showElements(ids, state: state) }.disabled(p.found.isEmpty)
+                .help("Select the elements and open a view that shows them")
         }
         .onAppear { text = ElementIDList.format(state.session.selection.ids) }
     }
@@ -292,13 +293,10 @@ struct AdditionalSettingsDialog: View {
     static let scales = [10, 20, 50, 100, 200, 500]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Text("Additional Settings").font(.title3.weight(.semibold))
-                Spacer()
-                Button("Line Styles…") { state.presented = .lineStyles }.help("Open Manage ▸ Line Styles")
-            }
+        ArcusDialog(icon: "gearshape", tint: .gray, title: "Additional Settings", subtitle: "Line weights, patterns, arrowheads and temporary dimensions.",
+                    size: .wide, okTitle: "Done", showCancel: false, height: 620, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
             Picker("", selection: $tab) { ForEach(AdditionalSettingsTab.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden()
+                .fixedSize().frame(maxWidth: .infinity)
             Group {
                 switch tab {
                 case .lineWeights: lineWeights
@@ -308,34 +306,37 @@ struct AdditionalSettingsDialog: View {
                 case .temporaryDimensions: temporaryDimensions
                 }
             }
-            .frame(minHeight: 360, alignment: .top)
-            HStack { Spacer(); Button("Done") { state.presented = nil }.keyboardShortcut(.defaultAction) }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        } leading: {
+            Button("Line Styles…") { state.presented = .lineStyles }.help("Open Manage ▸ Line Styles")
         }
-        .padding(20)
-        .frame(minWidth: 720, minHeight: 500)
     }
 
     var lineWeights: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Printed pen width (mm) of each line weight at common view scales. Weights 1–16 are fixed in this version of Arcus.")
-                .font(.caption).foregroundStyle(.secondary)
-            Grid(alignment: .trailing, horizontalSpacing: 18, verticalSpacing: 3) {
-                GridRow {
-                    Text("Weight").font(.caption.weight(.semibold))
-                    ForEach(Self.scales, id: \.self) { Text("1 : \($0)").font(.caption.weight(.semibold)) }
-                }
-                Divider().gridCellColumns(Self.scales.count + 1)
-                ForEach(1...16, id: \.self) { w in
+        DialogSection("Model line weights", footnote: "Printed pen width (mm) of each weight at common view scales. Weights 1–16 are fixed in this version of Arcus.", rows: false) {
+            ScrollView {
+                Grid(alignment: .trailing, horizontalSpacing: 28, verticalSpacing: 4) {
                     GridRow {
-                        Text("\(w)")
-                        ForEach(Self.scales, id: \.self) { s in Text(String(format: "%.2f", LineWeights.paperWidth(w, scale: s))).monospacedDigit() }
+                        Text("Weight").font(DialogStyle.sectionTitle).foregroundStyle(.secondary)
+                        ForEach(Self.scales, id: \.self) { Text("1 : \($0)").font(DialogStyle.sectionTitle).foregroundStyle(.secondary) }
+                    }
+                    Divider().gridCellColumns(Self.scales.count + 1)
+                    ForEach(1...16, id: \.self) { w in
+                        GridRow {
+                            Text("\(w)").fontWeight(.medium)
+                            ForEach(Self.scales, id: \.self) { s in Text(String(format: "%.2f", LineWeights.paperWidth(w, scale: s))).monospacedDigit() }
+                        }
                     }
                 }
+                .padding(14)
+                .frame(maxWidth: .infinity)
             }
+            .frame(maxHeight: 420)
         }
     }
 
     var linePatterns: some View {
+        DialogListBox(count: LinePatternKind.allCases.count, rowHeight: 30, minRows: 6, maxRows: 13) {
         List(LinePatternKind.allCases, id: \.self) { p in
             HStack {
                 Text(p.rawValue).frame(width: 140, alignment: .leading)
@@ -348,6 +349,7 @@ struct AdditionalSettingsDialog: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
+        }
     }
 
     var fillPatterns: some View {
@@ -358,32 +360,34 @@ struct AdditionalSettingsDialog: View {
         let m = state.model
         let dimTypes = m.types(for: .dimensions)
         let textTypes = m.types(for: .textNotes)
-        return Form {
-            Section("Dimension terminators") {
-                ForEach(DimensionTickMark.allCases, id: \.self) { t in
-                    LabeledContent(t.rawValue, value: "\(dimTypes.filter { $0.typeData?.params[AnnotationParams.dimensionTick]?.textValue == t.rawValue }.count) dimension type(s)")
+        return ScrollView {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                DialogSection("Dimension terminators") {
+                    ForEach(DimensionTickMark.allCases, id: \.self) { t in
+                        let n = dimTypes.filter { $0.typeData?.params[AnnotationParams.dimensionTick]?.textValue == t.rawValue }.count
+                        DialogValueRow(label: t.rawValue, value: "\(n) dimension type\(n == 1 ? "" : "s")")
+                    }
+                }
+                DialogSection("Leader arrowheads", footnote: "Choose a type's terminator or arrowhead in its Type Properties.") {
+                    ForEach(LeaderArrowhead.allCases, id: \.self) { a in
+                        let n = textTypes.filter { $0.typeData?.params[AnnotationParams.textArrowhead]?.textValue == a.rawValue }.count
+                        DialogValueRow(label: a.rawValue, value: "\(n) text type\(n == 1 ? "" : "s")")
+                    }
                 }
             }
-            Section("Leader arrowheads") {
-                ForEach(LeaderArrowhead.allCases, id: \.self) { a in
-                    LabeledContent(a.rawValue, value: "\(textTypes.filter { $0.typeData?.params[AnnotationParams.textArrowhead]?.textValue == a.rawValue }.count) text type(s)")
-                }
-            }
-            Text("Choose a type's terminator or arrowhead in its Type Properties.").font(.caption).foregroundStyle(.secondary)
         }
-        .formStyle(.grouped)
     }
 
     var temporaryDimensions: some View {
-        Form {
-            Picker("Walls", selection: $wallReference) { ForEach(TemporaryDimensionSettings.WallReference.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.radioGroup)
-                .onChange(of: wallReference) { _, v in TemporaryDimensionSettings.walls = v; state.toolChangedState() }
-            LabeledContent("Doors and Windows", value: "Openings")
-            Text("Temporary dimensions of a selected wall measure to the nearest parallel wall, grid or reference plane on each side.")
-                .font(.caption).foregroundStyle(.secondary)
+        DialogSection("Temporary dimensions measure from", footnote: "A selected wall's temporary dimensions measure to the nearest parallel wall, grid or reference plane on each side.") {
+            DialogRow("Walls", alignment: .top) {
+                Picker("", selection: $wallReference) { ForEach(TemporaryDimensionSettings.WallReference.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
+                    .pickerStyle(.radioGroup).labelsHidden()
+                    .onChange(of: wallReference) { _, v in TemporaryDimensionSettings.walls = v; state.toolChangedState() }
+            }
+            DialogValueRow(label: "Doors and Windows", value: "Openings")
         }
-        .formStyle(.grouped)
+        .frame(maxWidth: 560)
     }
 }
 
@@ -394,11 +398,13 @@ struct UserInterfaceDialog: View {
     @AppStorage("statusBar.visible") private var statusBar = true
     @AppStorage("navigationBar.visible") private var navigationBar = true
     var body: some View {
-        DialogFrame(title: "User Interface", okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
-            Toggle("Properties", isOn: Binding(get: { state.showProperties }, set: { state.showProperties = $0; state.onWorkspaceChange?() }))
-            Toggle("Project Browser", isOn: Binding(get: { state.showNavigator }, set: { state.showNavigator = $0; state.onWorkspaceChange?() }))
-            Toggle("Status Bar", isOn: $statusBar)
-            Toggle("Navigation Bar", isOn: $navigationBar)
+        DialogFrame(title: "User Interface", icon: "macwindow", tint: .gray, size: .small, subtitle: "Panels and bars shown in this window.", okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
+            DialogSection {
+                Toggle("Properties", isOn: Binding(get: { state.showProperties }, set: { state.showProperties = $0; state.onWorkspaceChange?() }))
+                Toggle("Project Browser", isOn: Binding(get: { state.showNavigator }, set: { state.showNavigator = $0; state.onWorkspaceChange?() }))
+                Toggle("Status Bar", isOn: $statusBar)
+                Toggle("Navigation Bar", isOn: $navigationBar)
+            }
         }
     }
 }

@@ -33,7 +33,8 @@ struct DialogListBox<Content: View, Empty: View>: View {
             .scrollContentBackground(.hidden)
             .environment(\.defaultMinListRowHeight, rowHeight)
             .opacity(blank ? 0 : 1)
-            .frame(height: Self.height(count: count, rowHeight: rowHeight, minRows: minRows, maxRows: maxRows))
+            .frame(height: blank ? max(Self.height(count: count, rowHeight: rowHeight, minRows: minRows, maxRows: maxRows), 120)
+                                 : Self.height(count: count, rowHeight: rowHeight, minRows: minRows, maxRows: maxRows))
             .frame(maxWidth: .infinity)
             .background(DialogColors.sectionFill, in: shape)
             .clipShape(shape)
@@ -116,7 +117,8 @@ struct DialogCheckList<ID: Hashable, Empty: View>: View {
         self.totalOfDetails = totalOfDetails; self.empty = empty()
     }
 
-    static var rowHeight: CGFloat { 30 }
+    /// 30 pt rows, 40 pt when any item has a second line.
+    var rowHeight: CGFloat { items.contains { !($0.subtitle ?? "").isEmpty } ? 40 : 30 }
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: Tokens.radiusSection, style: .continuous)
@@ -131,7 +133,7 @@ struct DialogCheckList<ID: Hashable, Empty: View>: View {
                 .padding(.vertical, 4)
             }
             .scrollBounceBehavior(.basedOnSize)
-            .frame(height: CGFloat(items.isEmpty ? max(minRows, 3) : min(max(items.count, minRows), maxRows)) * Self.rowHeight + 8)
+            .frame(height: items.isEmpty ? 120 : CGFloat(min(max(items.count, minRows), maxRows)) * rowHeight + 8)
             .frame(maxWidth: .infinity)
             .background(DialogColors.sectionFill, in: shape)
             .clipShape(shape)
@@ -166,7 +168,7 @@ struct DialogCheckList<ID: Hashable, Empty: View>: View {
             if let d = item.detail { Text(d).foregroundStyle(.secondary).monospacedDigit() }
         }
         .padding(.horizontal, 12)
-        .frame(height: Self.rowHeight)
+        .frame(height: rowHeight)
         .contentShape(Rectangle())
         .onTapGesture { on.wrappedValue.toggle() }
         .accessibilityElement(children: .combine)

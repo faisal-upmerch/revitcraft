@@ -78,3 +78,14 @@ enum DialogFileInfo {
         return " · " + ByteCountFormatter.string(fromByteCount: Int64(n), countStyle: .file)
     }
 }
+
+/// Readable text for an error shown in a dialog: Foundation and localized errors by their description (not the raw
+/// `Error Domain=… UserInfo=…` dump), others by their own description.
+enum DialogErrorText {
+    static func describe(_ error: any Error) -> String {
+        if error is any LocalizedError { return error.localizedDescription }
+        let ns = error as NSError
+        if ns.domain == NSCocoaErrorDomain || ns.domain == NSPOSIXErrorDomain || ns.domain == NSURLErrorDomain { return ns.localizedDescription }
+        return "\(error)"
+    }
+}

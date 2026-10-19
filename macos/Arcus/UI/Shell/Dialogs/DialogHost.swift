@@ -129,6 +129,9 @@ struct DialogFrame<Content: View>: View {
     var destructive = false
     var scrolls = false
     var labelWidth: CGFloat? = nil
+    /// Window-like editors: the content fills the dialog, which starts this tall.
+    var height: CGFloat? = nil
+    var padded = true
     let state: DocumentState
     let onOK: () -> Void
     @ViewBuilder let content: Content
@@ -136,7 +139,7 @@ struct DialogFrame<Content: View>: View {
     var body: some View {
         ArcusDialog(icon: icon ?? DialogIcons.symbol(for: title), tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth,
                     okTitle: okTitle, okDisabled: okDisabled, disabledReason: disabledReason, showCancel: showCancel, destructive: destructive,
-                    scrolls: scrolls, onCancel: { state.presented = nil }, onOK: onOK) { content }
+                    scrolls: scrolls, height: height, padded: padded, onCancel: { state.presented = nil }, onOK: onOK) { content }
     }
 }
 
@@ -155,6 +158,9 @@ struct DialogFrameWithActions<Content: View, Actions: View>: View {
     var destructive = false
     var scrolls = false
     var labelWidth: CGFloat? = nil
+    /// Window-like editors: the content fills the dialog, which starts this tall.
+    var height: CGFloat? = nil
+    var padded = true
     let state: DocumentState
     let onOK: () -> Void
     @ViewBuilder let content: Content
@@ -163,7 +169,7 @@ struct DialogFrameWithActions<Content: View, Actions: View>: View {
     var body: some View {
         ArcusDialog(icon: icon ?? DialogIcons.symbol(for: title), tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth,
                     okTitle: okTitle, okDisabled: okDisabled, disabledReason: disabledReason, showCancel: showCancel, destructive: destructive,
-                    scrolls: scrolls, onCancel: { state.presented = nil }, onOK: onOK) { content } leading: { actions }
+                    scrolls: scrolls, height: height, padded: padded, onCancel: { state.presented = nil }, onOK: onOK) { content } leading: { actions }
     }
 }
 

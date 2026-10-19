@@ -38,31 +38,34 @@ struct SelectTitleBlockDialog: View {
         let m = state.model
         let current = m[sheetID]?.sheet?.titleBlockTypeID
         let selected = choice ?? current
-        DialogFrame(title: "Select Title Block", subtitle: "The title block sets the sheet size.", state: state) {
+        let types = SheetTitleBlocks.types(m)
+        DialogFrame(title: "Select Title Block", icon: "doc.richtext", tint: .blue, subtitle: "The title block sets the sheet size.", state: state) {
             let sheet = sheetID, type = selected
             state.session.perform("Title Block") { tx in try SheetTitleBlocks.setTitleBlock(type, on: sheet, in: tx) }
             state.presented = nil
         } content: {
-            List {
-                ForEach(SheetTitleBlocks.types(m), id: \.id) { t in row(t.name + paper(t.id, m), family: t.typeData?.familyName ?? "", id: t.id, selected: selected) }
-                row("None", family: "Plain border", id: nil, selected: selected)
+            DialogListBox(count: types.count + 1, rowHeight: 42, minRows: 2, maxRows: 7) {
+                List {
+                    ForEach(types, id: \.id) { t in row(t.name, detail: paper(t.id, m), family: t.typeData?.familyName ?? "", id: t.id, selected: selected) }
+                    row("None", detail: "", family: "Plain border", id: nil, selected: selected)
+                }
             }
-            .frame(minWidth: 380, minHeight: 240)
         }
     }
 
     func paper(_ id: ElementID, _ m: BIMModel) -> String {
-        SheetTitleBlocks.paper(forTitleBlockType: id, m).map { "  (\($0.rawValue), \(Int(($0.landscapeSize.x * 1000).rounded())) × \(Int(($0.landscapeSize.y * 1000).rounded())) mm)" } ?? ""
+        SheetTitleBlocks.paper(forTitleBlockType: id, m).map { "\($0.rawValue) · \(Int(($0.landscapeSize.x * 1000).rounded())) × \(Int(($0.landscapeSize.y * 1000).rounded())) mm" } ?? ""
     }
 
-    func row(_ title: String, family: String, id: ElementID?, selected: ElementID?) -> some View {
-        HStack {
-            Image(systemName: id == selected ? "checkmark" : "").frame(width: 14)
+    func row(_ title: String, detail: String, family: String, id: ElementID?, selected: ElementID?) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: id == selected ? "checkmark.circle.fill" : "circle").foregroundStyle(id == selected ? Color.accentColor : Color.secondary.opacity(0.5)).frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
                 Text(family).font(.caption).foregroundStyle(.secondary)
             }
             Spacer()
+            Text(detail).foregroundStyle(.secondary).monospacedDigit()
         }
         .contentShape(Rectangle())
         .onTapGesture { choice = .some(id) }
@@ -81,17 +84,21 @@ struct GuideGridDialog: View {
     @State private var loaded = false
 
     var body: some View {
-        DialogFrame(title: "Assign Guide Grid", subtitle: "Viewports snap to the guide grid when they are moved.", state: state) {
+        DialogFrame(title: "Assign Guide Grid", icon: "grid", tint: .blue, size: .small, subtitle: "Viewports snap to the guide grid when moved.", state: state) {
             let spacing: Double? = show ? max(GuideGrids.spacingRange.lowerBound, min(GuideGrids.spacingRange.upperBound, spacingMM / 1000)) : nil
             let sheet = sheetID
             state.session.perform("Guide Grid") { tx in tx.update(sheet) { $0.sheet?.guideGridSpacing = spacing } }
             state.presented = nil
         } content: {
-            Toggle("Show guide grid on this sheet", isOn: $show)
-            FormRow(label: "Guide Spacing:") {
-                TextField("", value: $spacingMM, format: .number.precision(.fractionLength(0...2))).frame(width: 80).disabled(!show)
-                Text("mm").foregroundStyle(.secondary)
-                Stepper("", value: $spacingMM, in: 5...200, step: 5).labelsHidden().disabled(!show)
+            DialogSection {
+                Toggle("Show guide grid on this sheet", isOn: $show)
+                DialogRow("Guide spacing") {
+                    HStack(spacing: 6) {
+                        TextField("", value: $spacingMM, format: .number.precision(.fractionLength(0...2))).labelsHidden().frame(width: 80).disabled(!show)
+                        Stepper("", value: $spacingMM, in: 5...200, step: 5).labelsHidden().disabled(!show)
+                        Text("mm on paper").foregroundStyle(.secondary)
+                    }
+                }
             }
         }
         .onAppear {
@@ -119,49 +126,47 @@ struct RenderingDialog: View {
 
     var body: some View {
         let size = RenderEngine.size(s, aspect: host.map(RenderEngine.aspect) ?? 0.625)
-        DialogFrame(title: "Rendering", subtitle: "Renders \(state.model[viewID]?.name ?? "the 3D view") on this Mac with realistic materials, sun and sky.", okTitle: "Done", showCancel: false, state: state) {
+        DialogFrameWithActions(title: "Rendering", icon: "camera.aperture", tint: .orange, size: .wide, subtitle: "\(state.model[viewID]?.name ?? "The 3D view") with realistic materials, sun and sky.",
+                               okTitle: "Done", showCancel: false, labelWidth: 90, state: state) {
             state.presented = nil
         } content: {
-            HStack(alignment: .top, spacing: 18) {
-                Form {
-                    Section("Quality") {
-                        Picker("Setting:", selection: $s.quality) { ForEach(RenderEngine.Quality.allCases) { Text($0.rawValue).tag($0) } }
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+                    DialogSection("Quality") {
+                        DialogRow("Setting") { Picker("", selection: $s.quality) { ForEach(RenderEngine.Quality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden() }
                     }
-                    Section("Output Settings") {
-                        Picker("Resolution:", selection: $s.printer) { Text("Screen").tag(false); Text("Printer").tag(true) }.pickerStyle(.radioGroup)
-                        Picker("DPI:", selection: $s.dpi) { ForEach(RenderEngine.dpiChoices, id: \.self) { Text("\($0) DPI").tag($0) } }.disabled(!s.printer)
-                        Text("Width: \(size.width) pixels    Height: \(size.height) pixels").font(.caption).foregroundStyle(.secondary)
+                    DialogSection("Output", footnote: "\(size.width) × \(size.height) pixels") {
+                        DialogRow("Resolution") { Picker("", selection: $s.printer) { Text("Screen").tag(false); Text("Printer").tag(true) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                        DialogRow("DPI") { Picker("", selection: $s.dpi) { ForEach(RenderEngine.dpiChoices, id: \.self) { Text("\($0) DPI").tag($0) } }.labelsHidden().disabled(!s.printer) }
                     }
-                    Section("Lighting") {
-                        Picker("Scheme:", selection: $s.sun) { Text("Exterior: Sun and shadows").tag(true); Text("Exterior: Sun, no shadows").tag(false) }
-                        Text(sunText).font(.caption).foregroundStyle(.secondary)
+                    DialogSection("Lighting", footnote: sunText) {
+                        DialogRow("Scheme") { Picker("", selection: $s.sun) { Text("Sun and shadows").tag(true); Text("Sun, no shadows").tag(false) }.labelsHidden() }
                     }
-                    Section("Background") {
-                        Picker("Style:", selection: $s.sky) { Text("Sky").tag(true); Text("Plain").tag(false) }
+                    DialogSection("Background") {
+                        DialogRow("Style") { Picker("", selection: $s.sky) { Text("Sky").tag(true); Text("Plain").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
                     }
                 }
-                .formStyle(.grouped)
-                .frame(width: 330)
-                VStack(alignment: .leading, spacing: 10) {
-                    HStack {
-                        Button("Render") { render() }
-                        Spacer()
-                        Button("Save to Project") { save() }.disabled(image == nil || saved)
-                        Button("Export…") { export() }.disabled(image == nil)
-                    }
+                .frame(width: 320)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Image").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
                     Group {
                         if let image {
                             Image(decorative: image, scale: 1).resizable().aspectRatio(contentMode: .fit)
                         } else {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.08))
-                                Text(host == nil ? "Open the 3D view to render it." : "Choose Render.").foregroundStyle(.secondary)
-                            }
+                            DialogEmptyState(icon: "camera.aperture", title: host == nil ? "Open the 3D view to render it" : "Not rendered yet",
+                                             message: host == nil ? "" : "Choose Render to make the image.", actionTitle: host == nil ? nil : "Render", action: host == nil ? nil : { render() })
                         }
                     }
-                    .frame(width: 420, height: 300)
+                    .frame(maxWidth: .infinity).frame(height: 360)
+                    .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
                 }
             }
+        } actions: {
+            Button("Render") { render() }.disabled(host == nil)
+            Button("Save to Project") { save() }.disabled(image == nil || saved)
+            Button("Export…") { export() }.disabled(image == nil)
         }
         .onChange(of: s) { _, _ in saved = false }
     }
@@ -207,19 +212,18 @@ struct RenderGalleryDialog: View {
 
     var body: some View {
         let renders = Renderings.all(state.model)
-        DialogFrame(title: "Render Gallery", subtitle: "Renderings saved in this project.", okTitle: "Done", showCancel: false, state: state) {
+        DialogFrame(title: "Render Gallery", icon: "photo.stack", tint: .orange, size: renders.isEmpty ? .medium : .large, subtitle: "Renderings saved in this project.",
+                    okTitle: "Done", showCancel: false, scrolls: !renders.isEmpty, state: state) {
             state.presented = nil
         } content: {
             if renders.isEmpty {
-                Text("No renderings yet. Use View ▸ Render (RR) in a 3D view, then Save to Project.")
-                    .foregroundStyle(.secondary).frame(minWidth: 520, minHeight: 120)
-            } else {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ForEach(renders, id: \.id) { e in row(e) }
-                    }
+                DialogSection(rows: false) {
+                    DialogEmptyState(icon: "photo.stack", title: "No renderings yet", message: "Use View ▸ Render (RR) in a 3D view, then Save to Project.").padding(24)
                 }
-                .frame(minWidth: 620, minHeight: 360)
+            } else {
+                DialogSection {
+                    ForEach(renders, id: \.id) { e in row(e) }
+                }
             }
         }
     }
@@ -228,7 +232,8 @@ struct RenderGalleryDialog: View {
         if let r = e.rendering {
             HStack(alignment: .top, spacing: 12) {
                 if let img = NSImage(data: r.png) {
-                    Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(width: 180, height: 120).background(Color.secondary.opacity(0.06))
+                    Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(width: 180, height: 120)
+                        .background(Color.secondary.opacity(0.06)).clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 VStack(alignment: .leading, spacing: 4) {
                     Text(e.name).font(.headline)
@@ -239,9 +244,10 @@ struct RenderGalleryDialog: View {
                         Button("Export as PNG…") { Self.exportPNG(image: nil, png: r.png, name: e.name, state: state) }
                         Button("Delete", role: .destructive) { state.session.delete([e.id]) }
                     }
+                    .controlSize(.small)
+                    .padding(.top, 4)
                 }
             }
-            Divider()
         }
     }
 

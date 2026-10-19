@@ -180,7 +180,7 @@ struct DialogFooter<Leading: View, Trailing: View>: View {
         VStack(spacing: 0) {
             Divider()
             HStack(spacing: DialogStyle.itemSpacing) {
-                leading
+                HStack(spacing: DialogStyle.itemSpacing) { leading }.fixedSize()
                 Spacer(minLength: 12)
                 if okDisabled, let disabledReason, !disabledReason.isEmpty {
                     Label(disabledReason, systemImage: "info.circle")
@@ -189,10 +189,9 @@ struct DialogFooter<Leading: View, Trailing: View>: View {
                         .lineLimit(2)
                         .multilineTextAlignment(.trailing)
                         .fixedSize(horizontal: false, vertical: true)
-                        .layoutPriority(1)
                         .accessibilityLabel("\(okTitle) is unavailable: \(disabledReason)")
                 }
-                trailing
+                HStack(spacing: DialogStyle.itemSpacing) { trailing }.fixedSize()
                 if showCancel {
                     Button(cancelTitle, action: onCancel).keyboardShortcut(.cancelAction).dialogButton()
                 }

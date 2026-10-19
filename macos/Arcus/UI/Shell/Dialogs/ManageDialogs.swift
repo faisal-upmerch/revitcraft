@@ -73,10 +73,13 @@ struct ProjectUnitsDialog: View {
                 }
                 DialogRow("Volume") { Picker("", selection: $units.volume) { ForEach(VolumeDisplay.allCases, id: \.self) { Text($0.symbol).tag($0) } }.labelsHidden().fixedSize() }
                 DialogRow("Angle") { Stepper("\(units.angleDecimals) decimals", value: $units.angleDecimals, in: 0...4).monospacedDigit() }
-                DialogRow("Slope") { Picker("", selection: $units.slope) { ForEach(SlopeDisplay.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Slope") { Picker("", selection: $units.slope) { ForEach(SlopeDisplay.allCases, id: \.self) { Text(slopeLabel($0)).tag($0) } }.labelsHidden().fixedSize() }
             }
         }
         .onAppear { units = state.model.units }
+    }
+    func slopeLabel(_ d: SlopeDisplay) -> String {
+        switch d { case .degrees: "Degrees"; case .risePer12Inches: "Rise per 12\""; case .percent: "Percent"; case .ratio: "Ratio (1:n)" }
     }
     func label(_ d: LengthDisplay) -> String {
         switch d {
@@ -168,7 +171,7 @@ struct PhasesDialog: View {
         let _ = state.session.changeCounter
         let phases = state.model.phases
         DialogFrameWithActions(title: "Phases", icon: "clock.arrow.circlepath", tint: .teal, subtitle: "Earliest first. Views show elements by phase and phase filter.", okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
-            DialogListBox(count: phases.count, rowHeight: 34, minRows: 3, maxRows: 8) {
+            DialogListBox(count: phases.count, rowHeight: 34, minRows: 2, maxRows: 8) {
                 List {
                     ForEach(phases, id: \.id) { p in
                         HStack(spacing: 10) {
@@ -407,31 +410,37 @@ struct LocationDialog: View {
     @State private var info = ProjectInfoData()
     @State private var northDegrees = 0.0
     var body: some View {
-        DialogFrame(title: "Location", icon: "location", tint: .blue, subtitle: "True north and the survey point set shared coordinates.", scrolls: true, labelWidth: 170, state: state) {
+        DialogFrame(title: "Location", icon: "location", tint: .blue, size: .wide, subtitle: "True north and the survey point set shared coordinates.", labelWidth: 120, state: state) {
             var i = info
             i.trueNorthAngle = Angle.radians(northDegrees)
             guard let pid = state.model.projectInfoElement?.id else { return }
             state.session.perform("Location") { tx in tx.update(pid) { $0.projectInfo = i } }
             state.presented = nil
         } content: {
-            DialogSection("Site") {
-                DialogRow("Site name") { TextField("", text: $info.siteName).labelsHidden() }
-                DialogRow("Latitude") { unitField($info.latitude, "°", digits: 6) }
-                DialogRow("Longitude") { unitField($info.longitude, "°", digits: 6) }
-                DialogRow("Elevation above sea") { unitField($info.elevationAboveSeaLevel, "m") }
-            }
-            DialogSection("North", footnote: "Project north is up in plan views. Angles are counter-clockwise.") {
-                DialogRow("Angle to true north") { unitField($northDegrees, "°", digits: 4) }
-            }
-            DialogSection("Survey point") {
-                DialogRow("Easting") { unitField($info.surveyEasting, "m") }
-                DialogRow("Northing") { unitField($info.surveyNorthing, "m") }
-                DialogRow("Elevation") { unitField($info.surveyElevation, "m") }
-            }
-            DialogSection("Project base point", footnote: "Internal coordinates.") {
-                DialogRow("X") { unitField($info.projectBasePoint.x, "m") }
-                DialogRow("Y") { unitField($info.projectBasePoint.y, "m") }
-                DialogRow("Z") { unitField($info.projectBasePoint.z, "m") }
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+                    DialogSection("Site") {
+                        DialogRow("Site name") { TextField("", text: $info.siteName).labelsHidden() }
+                        DialogRow("Latitude") { unitField($info.latitude, "°", digits: 6) }
+                        DialogRow("Longitude") { unitField($info.longitude, "°", digits: 6) }
+                        DialogRow("Elevation") { unitField($info.elevationAboveSeaLevel, "m") }
+                    }
+                    DialogSection("North", footnote: "Project north is up in plan views. Counter-clockwise from project north.") {
+                        DialogRow("Angle to true north") { unitField($northDegrees, "°", digits: 4) }
+                    }
+                }
+                VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+                    DialogSection("Survey point") {
+                        DialogRow("Easting") { unitField($info.surveyEasting, "m") }
+                        DialogRow("Northing") { unitField($info.surveyNorthing, "m") }
+                        DialogRow("Elevation") { unitField($info.surveyElevation, "m") }
+                    }
+                    DialogSection("Project base point", footnote: "Internal coordinates.") {
+                        DialogRow("X") { unitField($info.projectBasePoint.x, "m") }
+                        DialogRow("Y") { unitField($info.projectBasePoint.y, "m") }
+                        DialogRow("Z") { unitField($info.projectBasePoint.z, "m") }
+                    }
+                }
             }
         }
         .onAppear { info = state.model.projectInfo; northDegrees = Angle.degrees(info.trueNorthAngle) }
@@ -440,7 +449,7 @@ struct LocationDialog: View {
     /// A number field with its unit after it.
     private func unitField(_ value: Binding<Double>, _ unit: String, digits: Int = 3) -> some View {
         HStack(spacing: 6) {
-            TextField("", value: value, format: .number.precision(.fractionLength(0...digits))).labelsHidden().multilineTextAlignment(.trailing).frame(width: 140)
+            TextField("", value: value, format: .number.precision(.fractionLength(0...digits))).labelsHidden().multilineTextAlignment(.trailing).frame(width: 130)
             Text(unit).foregroundStyle(.secondary)
         }
     }
@@ -475,7 +484,8 @@ struct PurgeDialog: View {
             state.presented = nil
         } content: {
             DialogCheckList(items: items.map { e in
-                DialogCheckItem(id: e.id, title: "\(e.typeData.map { "\($0.familyName): " } ?? "")\(e.name)", subtitle: e.category.singularName)
+                DialogCheckItem(id: e.id, title: "\(e.typeData.map { "\($0.familyName): " } ?? "")\(e.name)",
+                                detail: e.typeData.map { $0.instanceCategory.displayName } ?? e.category.singularName)
             }, checked: $chosen, maxRows: 10, noun: "items", emptyTitle: "Nothing to purge", emptyMessage: "Every type, family and material is in use.", emptyIcon: "checkmark.seal")
         } actions: {
             Button("Check All") { chosen = Set(items.map(\.id)) }.disabled(items.isEmpty)

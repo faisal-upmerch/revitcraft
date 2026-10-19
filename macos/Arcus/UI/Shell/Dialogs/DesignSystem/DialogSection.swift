@@ -8,13 +8,15 @@ import SwiftUI
 struct DialogSection<Content: View, Accessory: View>: View {
     var title: String?
     var footnote: String?
-    /// Pad and separate each child as a row (false: the child brings its own layout, e.g. a list or a preview).
+    /// Pad and separate each child as a row (false: the child brings its own layout, e.g. a preview or a progress view).
     var rows = true
+    /// Draw the rounded box (false: only the title, accessory and footnote around a child with its own box, e.g. a list).
+    var boxed = true
     @ViewBuilder let content: Content
     @ViewBuilder let accessory: Accessory
 
-    init(_ title: String? = nil, footnote: String? = nil, rows: Bool = true, @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
-        self.title = title; self.footnote = footnote; self.rows = rows
+    init(_ title: String? = nil, footnote: String? = nil, rows: Bool = true, boxed: Bool = true, @ViewBuilder content: () -> Content, @ViewBuilder accessory: () -> Accessory) {
+        self.title = title; self.footnote = footnote; self.rows = rows; self.boxed = boxed
         self.content = content(); self.accessory = accessory()
     }
 
@@ -28,7 +30,7 @@ struct DialogSection<Content: View, Accessory: View>: View {
                 }
                 .padding(.horizontal, 4)
             }
-            box
+            if boxed { box } else { content }
             if let footnote, !footnote.isEmpty {
                 Text(footnote).font(DialogStyle.footnote).foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -65,8 +67,8 @@ struct DialogSection<Content: View, Accessory: View>: View {
 }
 
 extension DialogSection where Accessory == EmptyView {
-    init(_ title: String? = nil, footnote: String? = nil, rows: Bool = true, @ViewBuilder content: () -> Content) {
-        self.init(title, footnote: footnote, rows: rows, content: content, accessory: { EmptyView() })
+    init(_ title: String? = nil, footnote: String? = nil, rows: Bool = true, boxed: Bool = true, @ViewBuilder content: () -> Content) {
+        self.init(title, footnote: footnote, rows: rows, boxed: boxed, content: content, accessory: { EmptyView() })
     }
 }
 

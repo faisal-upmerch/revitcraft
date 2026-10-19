@@ -99,5 +99,37 @@ struct DialogRenderTests {
             }
         }
         try? sizes.joined(separator: "\n").write(to: Self.out.appendingPathComponent("_sizes.txt"), atomically: true, encoding: .utf8)
+        try Self.contactSheets()
+    }
+
+    /// Review sheets: the renders four to a page (2 × 2, at 1×), light and dark, as `_sheet-<appearance>-<n>.png`.
+    static func contactSheets() throws {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: out.path)) ?? []
+        for look in ["light", "dark"] {
+            let names = files.filter { $0.hasSuffix("-\(look).png") && !$0.hasPrefix("_") }.sorted()
+            for (page, start) in stride(from: 0, to: names.count, by: 4).enumerated() {
+                let group = names[start..<min(names.count, start + 4)].compactMap { n -> (String, CGImage)? in
+                    guard let img = NSImage(contentsOf: out.appendingPathComponent(n))?.cgImage(forProposedRect: nil, context: nil, hints: nil) else { return nil }
+                    return (String(n.dropLast(look.count + 5)), img)
+                }
+                let cell = CGSize(width: 920, height: 760)
+                let ctx = try #require(CGContext(data: nil, width: Int(cell.width) * 2, height: Int(cell.height) * 2, bitsPerComponent: 8, bytesPerRow: 0,
+                                                 space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+                ctx.setFillColor(CGColor(gray: look == "light" ? 0.8 : 0.3, alpha: 1))
+                ctx.fill(CGRect(x: 0, y: 0, width: cell.width * 2, height: cell.height * 2))
+                for (i, (name, img)) in group.enumerated() {
+                    let w = CGFloat(img.width) / 2, h = CGFloat(img.height) / 2
+                    let k = min(1, (cell.width - 20) / w, (cell.height - 40) / h)
+                    let x = CGFloat(i % 2) * cell.width + 10, top = cell.height * 2 - CGFloat(i / 2) * cell.height - 30
+                    ctx.draw(img, in: CGRect(x: x, y: top - h * k, width: w * k, height: h * k))
+                    let g = NSGraphicsContext(cgContext: ctx, flipped: false)
+                    NSGraphicsContext.saveGraphicsState(); NSGraphicsContext.current = g
+                    ("\(name)  \(Int(w))×\(Int(h))" as NSString).draw(at: NSPoint(x: x, y: top + 6), withAttributes: [.font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: NSColor.black])
+                    NSGraphicsContext.restoreGraphicsState()
+                }
+                let sheet = try #require(ctx.makeImage())
+                try NSBitmapImageRep(cgImage: sheet).representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(String(format: "_sheet-%@-%02d.png", look, page + 1)))
+            }
+        }
     }
 }

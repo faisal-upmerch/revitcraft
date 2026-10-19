@@ -175,11 +175,13 @@ struct OverrideGraphicsDialog: View {
     var body: some View {
         let m = state.model
         let count = elementIDs.count
-        DialogFrameWithActions(title: "Override Graphics in View", icon: "paintbrush.pointed", tint: .orange,
+        DialogFrameWithActions(title: "Override Graphics in View", icon: "paintbrush.pointed", tint: .orange, size: .large,
                     subtitle: "\(count == 1 ? (m[elementIDs[0]].map { $0.category.singularName } ?? "1 element") : "\(count) elements") in “\(m[viewID]?.name ?? "")”. Only this view changes.",
-                    scrolls: true, labelWidth: 120, state: state) {
+                    labelWidth: 96, state: state) {
             apply(o, name: "Override Graphics in View")
         } content: {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+            VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
             DialogSection {
                 Toggle("Halftone", isOn: Binding(get: { o.halftone ?? false }, set: { o.halftone = $0 ? true : nil }))
             }
@@ -201,6 +203,8 @@ struct OverrideGraphicsDialog: View {
                     }
                 }
             }
+            }
+            VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
             DialogSection("Cut Lines") {
                 DialogRow("Pattern") { linePattern($o.cutLinePattern) }
                 OptionalColorRow(label: "Color", color: $o.cutLineColor)
@@ -209,6 +213,8 @@ struct OverrideGraphicsDialog: View {
             DialogSection("Cut Patterns") {
                 DialogRow("Pattern") { FillPatternMenu(state: state, selection: $o.cutPatternID, noneLabel: o.cutPattern?.rawValue ?? "By Category") } // W4-HATCH
                 OptionalColorRow(label: "Color", color: $o.cutPatternColor)
+            }
+            }
             }
         } actions: {
             Button("Reset") { o = GraphicOverride() }
