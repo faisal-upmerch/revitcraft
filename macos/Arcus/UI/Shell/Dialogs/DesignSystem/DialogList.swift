@@ -235,7 +235,7 @@ struct DialogAddRemoveBar: View {
         }
         .buttonStyle(.borderless)
         .padding(.horizontal, 4)
-        .frame(height: 24)
+        .frame(height: 30)
     }
 }
 

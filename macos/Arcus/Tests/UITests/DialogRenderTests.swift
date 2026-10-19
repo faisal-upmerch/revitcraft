@@ -87,7 +87,16 @@ struct DialogRenderTests {
                 #expect(size.height >= 120, "\(entry.name) is \(size.height) pt tall")
             }
         }
-        // Sheets outside DialogKind: the Family Editor's own dialogs.
+        // Design Options with sets (the master-detail state; the catalog shows the empty state).
+        if only == nil || only!.contains("design-options-populated") {
+            project.session.perform("Options") { tx in
+                tx.create(.designOptions, name: "Option 1", data: .designOption(DesignOptionData(setName: "Kitchen", isPrimary: true)))
+                tx.create(.designOptions, name: "Island", data: .designOption(DesignOptionData(setName: "Kitchen", isPrimary: false)))
+                tx.create(.designOptions, name: "Option 1", data: .designOption(DesignOptionData(setName: "Entrance Canopy", isPrimary: true)))
+            }
+            for dark in [false, true] { try await Self.render(DialogHost(state: project, dialog: .designOptions), "design-options-populated", dark: dark) }
+        }
+                // Sheets outside DialogKind: the Family Editor's own dialogs.
         if only == nil || only!.contains("family-editor") {
             var f = FamilyTemplates.make(.furniture)
             f.name = "Side Table"

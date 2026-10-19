@@ -326,7 +326,7 @@ struct DesignOptionsDialog: View {
                 }
                 .controlSize(.small)
                 .padding(.horizontal, 6)
-                .frame(height: 28)
+                .frame(height: 30)
             }
             .background(DialogColors.sectionFill, in: shape)
             .clipShape(shape)
