@@ -79,4 +79,73 @@ extension SBStep {
         if let apron { try railRing(x: lx, y: ly, legWidth: lw, top: zt - tt, apron) }
         return (topID, lx, ly, lw, zt - tt)
     }
+
+    /// A chair or stool frame: front legs up to the seat, back legs up to `backTop` (Height by default; the seat when
+    /// nil), aprons under the seat, the seat (a board, or slats along x), and `backRails` rails between the back legs
+    /// (or vertical slats between a low and a top rail). Returns the leg width.
+    @discardableResult
+    func chair(seat z: Double, leg: String, seatType: String, apron: String, seatSlats: Int = 0, backTop: Double? = nil, backRails: Int = 2,
+               backRail: String? = nil, backSlats: Int = 0, backSlat: String = "3/4\" x 1 1/2\" Maple Rail", backFrom: Double? = nil, stretcherAt: Double? = nil, stretcher: String? = nil,
+               x: (Double, Double)? = nil, y: (Double, Double)? = nil) throws -> Double {
+        let (x0, x1) = x ?? (l, r), (y0, y1) = y ?? (f, b)
+        let lw = try thickness(.furnitureLegs, leg)
+        let st = seatSlats > 0 ? try railHeight(seatType) : try thickness(.furnitureShelves, seatType)
+        let top = backTop ?? h
+        let under = z - st
+        for px in [x0 + lw / 2, x1 - lw / 2] {
+            try self.leg(px, y0 + lw / 2, z: (0, under), leg)
+            try self.leg(px, y1 - lw / 2, z: (0, backRails > 0 || backSlats > 0 ? top : under), leg)
+        }
+        try railRing(x: (x0, x1), y: (y0, y1), legWidth: lw, top: under, apron)
+        if let s = stretcherAt, let t = stretcher {
+            try railRing(x: (x0, x1), y: (y0, y1), legWidth: lw, top: s, t, sides: (false, false, true, true))
+        }
+        if seatSlats > 0 {
+            try slats(x: (x0, x1), y: (y0, y1 - lw), alongX: true, count: seatSlats, top: z, seatType)
+        } else {
+            try board(x: (x0, x1), y: (y0, y1 - lw), top: z, seatType)
+        }
+        let br = backRail ?? apron
+        let rh = try railHeight(br)
+        let yb = y1 - lw / 2
+        let low = backFrom ?? (z + (top - z) * 0.35)
+        if backSlats > 0 {
+            try rail((x0 + lw, yb), (x1 - lw, yb), z: low, br)
+            try rail((x0 + lw, yb), (x1 - lw, yb), z: top, br)
+            for k in 0..<backSlats {
+                let px = x0 + lw + (x1 - x0 - 2 * lw) * (Double(k) + 1) / Double(backSlats + 1)
+                try railXZ((px, low), (px, top - rh), y: yb, backSlat)
+            }
+        } else if backRails > 0 {
+            for k in 0..<backRails {
+                let zt = backRails == 1 ? top : low + (top - low) * Double(k) / Double(backRails - 1)
+                try rail((x0 + lw, yb), (x1 - lw, yb), z: max(zt, low), br)
+            }
+        }
+        return lw
+    }
+
+    /// A bed: posts in the corners (Height at the head, `foot` at the foot), a headboard and a footboard panel between
+    /// them, side rails with their tops at `rail`, slats under the mattress and the mattress (head at the back).
+    func bed(post: String, rail railType: String, rail top: Double, foot: Double, panel: String, mattress: String, slat: String = "1\" x 3\" Bed Slat",
+             slatCount: Int = 12, headFrom: Double? = nil) throws {
+        let pw = try thickness(.furnitureLegs, post)
+        let rw = try thickness(.furnitureRails, railType)
+        let pt = try thickness(.furniturePanels, panel)
+        let mt = try thickness(.furnitureShelves, mattress)
+        for (py, ztop) in [(f + pw / 2, foot), (b - pw / 2, h)] {
+            try leg(l + pw / 2, py, z: (0, ztop), post)
+            try leg(r - pw / 2, py, z: (0, ztop), post)
+        }
+        let rh = try railHeight(railType)
+        let lowPanel = top - rh
+        try panelY(b - pw / 2 + pt / 2, inward: -1, x: (l + pw, r - pw), z: (headFrom ?? lowPanel, h - 2), panel)
+        try panelY(f + pw / 2 - pt / 2, inward: 1, x: (l + pw, r - pw), z: (lowPanel, foot - 2), panel)
+        try rail((l + pw / 2, b - pw), (l + pw / 2, f + pw), z: top, railType)
+        try rail((r - pw / 2, f + pw), (r - pw / 2, b - pw), z: top, railType)
+        let deck = top - rh + 2.5
+        let ix = (l + pw / 2 + rw / 2, r - pw / 2 - rw / 2)
+        try slats(x: ix, y: (f + pw, b - pw), alongX: true, count: slatCount, top: deck, slat)
+        try board(x: ix, y: (f + pw / 2 + pt / 2, b - pw / 2 - pt / 2), top: deck + mt, mattress)
+    }
 }
