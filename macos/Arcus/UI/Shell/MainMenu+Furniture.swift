@@ -8,7 +8,7 @@ extension MainMenuBuilder {
     static func furnitureMenu() -> NSMenuItem {
         let voids = submenu("Void Forms", commands([.furnitureVoidExtrusion, .furnitureVoidBlend, .furnitureVoidRevolve, .furnitureVoidSweep, .furnitureVoidSweptBlend]))
         let forms = submenu("Forms", commands([.furnitureExtrusion, .furnitureBlend, .furnitureRevolve, .furnitureSweep, .furnitureSweptBlend, .furnitureCushion]) + [voids])
-        let modify = submenu("Modify Parts", commands([.furnitureEditProfile, .furnitureResetProfile, .furniturePanelOpening, .furnitureAttach, .furnitureDetach, .furnitureFlipPanel]))
+        let modify = submenu("Modify Parts", commands([.furnitureEditProfile, .furnitureResetProfile, .furnitureBlendEditTop, .furnitureBlendEditBase, .furniturePanelOpening, .furnitureAttach, .furnitureDetach, .furnitureFlipPanel]))
         return submenu("Furniture", commands([.furniturePanel, .furnitureShelf, .furnitureTop, .furnitureBack, .furnitureDivider, .furnitureLeg, .furnitureLegsAtCorners,
                                               .furnitureRail, .furnitureSlats, .furniturePlinth, .furnitureEdgeProfile, .furnitureGroove]) // FM4
                        + [forms, modify]

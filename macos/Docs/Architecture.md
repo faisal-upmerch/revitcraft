@@ -1,6 +1,6 @@
 # Architecture
 
-Arcus is a single SwiftPM package that builds one executable (`Arcus`, staged into `build/Arcus.app` by `script/build_and_run.sh`), a benchmark executable (`arcus-bench`) and seven test targets. It uses Swift 6 language mode with strict concurrency. UI targets default to `MainActor` isolation, and the engine targets are `Sendable` value types that can be used from any thread.
+Arcus is a single SwiftPM package that builds one executable (`Arcus`, staged into `build/Arcus.app` by `script/build_and_run.sh`), a benchmark executable (`arcus-bench`), the local MCP server (`arcus-mcp`) and fourteen test targets. It uses Swift 6 language mode with strict concurrency. UI targets default to `MainActor` isolation, and the engine targets are `Sendable` value types that can be used from any thread.
 
 ```
                 ┌──────────────────────────────────────────────────────────────┐
