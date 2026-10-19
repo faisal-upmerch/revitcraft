@@ -274,6 +274,9 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Detach Top/Base |  |  | Detaches the selected panels and legs from their shelf or top. |
 | Opening |  |  | Cuts a rectangular opening in a panel: pick two corners on its face in an elevation. |
 | Flip Panel |  |  | Swaps the outside and inside faces of the selected panels. |
+| Joint |  | `JT` | Shows a marker at every joint; pick one to set its type (butt, miter, dado, dowel, cam lock…), which part runs through, and its sizes. |
+| Allow Join |  |  | Lets the selected parts join at their ends again. |
+| Disallow Join |  |  | Stops the selected parts joining at their ends: they stay as drawn. |
 
 ### Architecture
 
@@ -753,6 +756,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Flex |  |  | Tries every type, and each length parameter at 50% and 150%, and reports what breaks. |
 | Load into Project |  |  | Loads this piece into an open project as a family (reloads it when it is already there). |
 | Load into Project and Close |  |  | Loads this piece into an open project, then closes it. |
+| Joint Rules |  |  | Sets the joint each kind of pair gets (side–top, shelf–side, rail–leg…) and its sizes. |
 
 ### File
 

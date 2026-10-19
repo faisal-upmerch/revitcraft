@@ -16,5 +16,7 @@ extension MainMenuBuilder {
     }
 
     /// Openings, joints and fabrication items added by later milestones (FM5–FM7).
-    static func furnitureMenuAdditions() -> [NSMenuItem] { [] }
+    static func furnitureMenuAdditions() -> [NSMenuItem] {
+        [.separator()] + commands([.furnitureJoint, .furnitureJointRules, .furnitureAllowJoin, .furnitureDisallowJoin]) // FM6
+    }
 }

@@ -97,7 +97,10 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 - `JointSolver` runs at regeneration over every pair of touching or overlapping parts and applies the rule for the pair (Joint Rules), unless the user has set the joint.
 - It decides which part runs through, trims the other, and adds machining: dado/rabbet grooves (voids), dowel/cam/pocket holes and mortises.
 - The **cut size** of each part (length × width × thickness, with groove allowances and tenons) is the base of the Part List and CNC.
-- Joint tool: click a joint marker to cycle types (like Wall Joins' Next/Previous), or pick from the Options Bar. Joint markers are drawn in plan and elevation while the tool is active.
+- Joint tool (JT) works like Wall Joins: markers at every joint while it runs (round = by rule, square = set by you); pick one, set its type or use Previous/Next (Space); By Rule clears it.
+- Joint Rules: one row per pair kind (Side – Top … Other) with joint, runs through and sizes, stored with the furniture setup.
+- Drawn touching, a corner keeps the part drawn through; drawn overlapping, the rule decides.
+- Voids cut only the solids they list, at the detail levels they show (families too).
 
 ### Fabrication outputs
 - **Part List:** schedule kind `partList`. Fields: Mark, Part, Type, Material, Length, Width, Thickness, Grain, Edge Banding (L1 L2 W1 W2), Qty, Area, Cost. Grouped by material and thickness.
@@ -155,7 +158,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM3 | ✅ Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project (port/FM3). Open: labelling a new dimension from the UI; Forms use the in-place tool until FM4 | — |
 | FM4 | ✅ Parts: Panel (PA: PN is Revit's Pin), Shelf (SH), Top (TP), Back, Divider, Leg + At Corners, Rail + Slats, Plinth, Edge Profile, Groove; Forms + Cushion; types, constraints, grips, graphics, Properties, compile (port/FM4). Open: dimensions to part faces don't follow moved parts; Blend has no separate Edit Top; Sweep paths are plan-only | FM3 |
 | FM5 | Bays, Bay Divide, Doors/Drawers/Flaps, hardware families and auto-placement | FM4 |
-| FM6 | Joints: solver, Joint Rules, Joint tool, machining geometry, cut sizes | FM4 |
+| FM6 | ✅ Joints: solver, Joint Rules, Joint tool (JT), machining geometry, cut sizes (port/FM6). Open: Properties shows only joints you set; panels with Edit Profile or openings, round rails and slats aren't joined; a back grooved on four sides leaves its 3D corners open | FM4 |
 | FM7 | Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Stock Sheets, nesting engine and views, CNC Export, shop drawing sheet | FM5, FM6 |
 | FM8 | Full compile, Edit Family round trip, projects load `.arcusfurniture` | FM5, FM6 |
 | FM9 | Library: Top 25 high detail + the rest simple, bundled, on Home and in Load Furniture | FM8 |
