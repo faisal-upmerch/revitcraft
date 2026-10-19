@@ -112,4 +112,20 @@ extension FurnitureCompiler {
         }
         return out
     }
+
+    /// Concealed hinges bore their cup at Fine: a void the shape of each Cup (per mounting), cutting the fronts only. A
+    /// loaded piece's doors show a bore for every hinge its height shows (FurnitureCompiler+FM8's hinge sets).
+    static func addCupBores(to f: inout FamilyDefinition, cutting fronts: [String]) {
+        guard FurnitureHardware.kinds[f.name] == .hinge, !fronts.isEmpty, !f.solids.contains(where: { $0.name.hasPrefix("Cup Bore") }) else { return }
+        for s in f.solids where (s.name == "Cup" || s.name.hasPrefix("Cup (")) && !s.isVoid {
+            var v = s
+            v.id = UUID().uuidString
+            v.name = "Cup Bore"
+            v.isVoid = true
+            v.visibleAt = [.fine]
+            v.materialParameter = nil
+            v.cuts = fronts
+            f.solids.append(v)
+        }
+    }
 }

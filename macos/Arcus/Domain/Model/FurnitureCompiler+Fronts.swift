@@ -64,6 +64,7 @@ extension FurnitureCompiler {
         }
 
         var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
+        var frontSolidIDs: [String] = [] // FMG3: what hinge cups bore
         for (front, mm, visibility) in work {
             var ps = FurnitureFrontSolids.solids(front, mm, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
             let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(mm.type(of: front)?.name ?? "")"
@@ -76,6 +77,7 @@ extension FurnitureCompiler {
                 guard !s.visibleAt.isEmpty else { continue }
                 if !s.isVoid { s.materialParameter = materialParameter(ps.materials[s.id] ?? nil, label: label) }
                 if let visibility { s.visibilityParameter = visibility } // FMG3
+                if !s.isVoid { frontSolidIDs.append(s.id) } // FMG3
                 f.solids.append(s)
             }
             for p in ps.placed {
@@ -135,6 +137,7 @@ extension FurnitureCompiler {
             if f.nestedFamily(named: nested.name) == nil {
                 var copy = nested
                 copy.furnitureSource = nil
+                addCupBores(to: &copy, cutting: frontSolidIDs) // FMG3: Fine machining follows the hinges shown
                 for i in copy.types.indices {
                     guard let pt = mm.types(for: .furnitureHardware).first(where: { $0.typeData?.familyID == td.familyID && $0.name == copy.types[i].name })?.typeData else { continue }
                     for (k, v) in pt.params where k.key.hasPrefix(Parameters.familyParamID("").key) {

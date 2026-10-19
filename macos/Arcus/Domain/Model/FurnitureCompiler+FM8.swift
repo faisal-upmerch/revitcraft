@@ -142,7 +142,8 @@ extension FurnitureCompiler {
     /// each hinged leaf gets a "<Mark> Hinge Count" parameter calculated from its hinge edge, and a set of instances
     /// for each count, shown by a "<Mark> Hinges <n>" yes/no parameter, so a loaded door that flexes taller gains its
     /// hinges as it does in the Furniture document. A leaf whose hinge edge doesn't follow formula planes keeps the
-    /// instances the document placed. Machining at Fine keeps the document's count.
+    /// instances the document placed. FMG3: each concealed hinge bores its cup at Fine (so the machining follows the
+    /// count), and "Hinges" totals the hinges of the type for schedules.
     static func expandHingeSets(_ records: [HingeRecord], _ m: BIMModel, to f: inout FamilyDefinition) {
         let stable = stablePlanes(f)
         var replace: [Int: [NestedFamilyInstance]] = [:]
@@ -151,7 +152,11 @@ extension FurnitureCompiler {
             return "\(r.front.raw)|\(r.visibility ?? "")|\(parts.count > 1 ? String(parts[1]) : "0")" // FMG3: per Leaf Count variant
         }
         var params: [FamilyParameter] = []
+        var totals: [String: String] = [:] // FMG3: the hinge count of each group, as a formula
         for key in groups.keys.sorted() {
+            if let group = groups[key], let first = group.first { // FMG3: groups kept as placed count as placed
+                totals[key] = first.visibility.map { "if(\($0), \(group.count), 0)" } ?? "\(group.count)"
+            }
             guard let group = groups[key]?.sorted(by: { $0.index < $1.index }), let first = group.first, case let m = first.model ?? m, let front = m[first.front],
                   let g = FurnitureFronts.geometry(front, m), let li = Int(key.split(separator: "|").last ?? ""), g.leaves.indices.contains(li),
                   let hinge = g.leaves[li].hinge, let ht = FurnitureFronts.hingeType(front, m), !FurnitureHardware.Values(m[ht]?.typeData).isPiano else { continue }
@@ -170,6 +175,7 @@ extension FurnitureCompiler {
             let label = g.leaves.count > 1 ? "\(mark) Leaf \(li + 1)" : mark
             let length = "((\(hi)) - (\(lo)))"
             let countName = "\(label) Hinge Count"
+            totals[key] = first.visibility.map { "if(\($0), \(countName), 0)" } ?? countName // FMG3
             params.append(FamilyParameter(name: countName, type: .integer, group: .other,
                                           formula: "if(\(length) <= 40.001\", 2, if(\(length) <= 60.001\", 3, if(\(length) <= 80.001\", 4, 5)))"))
             let a = "(\(lo)) + min(\(PartSolidContext.number(inset)) m, \(length) / 4)", b = "(\(hi)) - min(\(PartSolidContext.number(inset)) m, \(length) / 4)"
@@ -190,11 +196,14 @@ extension FurnitureCompiler {
             replace[first.index] = set
             for r in group.dropFirst() { replace[r.index] = [] }
         }
+        if !totals.isEmpty, f.parameter(named: "Hinges") == nil { // FMG3: the piece's hinges for the current height, for schedules
+            params.append(FamilyParameter(name: "Hinges", type: .integer, group: .other, formula: totals.keys.sorted().compactMap { totals[$0] }.joined(separator: " + ")))
+        }
+        for p in params where f.parameter(named: p.name) == nil { f.parameters.append(p) }
         guard !replace.isEmpty else { return }
         var out: [NestedFamilyInstance] = []
         for (i, inst) in f.nestedInstances.enumerated() { out += replace[i] ?? [inst] }
         f.nestedInstances = out
-        for p in params where f.parameter(named: p.name) == nil { f.parameters.append(p) }
     }
 }
 
