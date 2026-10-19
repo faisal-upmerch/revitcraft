@@ -46,7 +46,9 @@ final class FamilyCanvasView: NSView {
     var revision = -1
     private var hover: FamilyEditing.Item?
     private var hoverPlane: String?
-    private var cursor: Vec2?
+    var cursor: Vec2? // SFE: read by the snap feedback
+    /// SFE: object snapping (FamilyCanvas+SFE.swift).
+    var snapState: FamilySnapState?
     /// First plane or point of a two-click tool.
     var pending: Vec2?
     var pendingPlane: String?
@@ -86,25 +88,16 @@ final class FamilyCanvasView: NSView {
         if !fitted { zoomToFit() }
     }
 
-    /// Snaps a model point to reference planes within the tolerance, else to the millimetre.
-    private func snap(_ p: Vec2) -> Vec2 {
-        var q = p
-        var bestU = tolerance, bestV = tolerance
-        for pl in drawing.planes {
-            if pl.vertical, abs(p.x - pl.value) < bestU { bestU = abs(p.x - pl.value); q.x = pl.value }
-            if !pl.vertical, abs(p.y - pl.value) < bestV { bestV = abs(p.y - pl.value); q.y = pl.value }
-        }
-        if bestU >= tolerance { q.x = (q.x * 1000).rounded() / 1000 }
-        if bestV >= tolerance { q.y = (q.y * 1000).rounded() / 1000 }
-        return q
-    }
+    /// Snaps a view point like the project's 2D views (endpoints, intersections, reference planes, tracking…), else to the
+    /// millimetre. // SFE
+    private func snap(_ p: Vec2) -> Vec2 { sfeSnap(p).0 }
 
     private func planeLines() -> [FamilyEditing.PlaneLine] { drawing.planes.map { .init(name: $0.name, vertical: $0.vertical, value: $0.value) } }
 
     /// F1415: the view's sketch frame (plan in 3D, where nothing is sketched).
     private var viewFrame: FamilyEditing.ViewFrame { viewMode.frame ?? .plan }
-    /// A view point snapped to the planes (locking to them) or the millimetre, in sketch coordinates.
-    private func vertex(_ p: Vec2) -> FamilyEditing.SketchVertex { FamilyEditing.snapVertex(p, frame: viewFrame, planes: planeLines(), tolerance: tolerance) }
+    /// A view point snapped like `snap(_:)`, in sketch coordinates, locked to the planes it lies on. // SFE
+    private func vertex(_ p: Vec2) -> FamilyEditing.SketchVertex { sfeVertex(p) }
     /// A sketch-coordinate point on screen.
     private func screen(_ v: FamilyEditing.SketchVertex, in f: FamilyEditing.ViewFrame? = nil) -> CGPoint { screen((f ?? viewFrame).view(v.point)) }
 
@@ -122,6 +115,7 @@ final class FamilyCanvasView: NSView {
         let p = modelPoint(event)
         cursor = p
         model?.cursorText = String(format: "u %@  v %@", model?.length(p.x) ?? "", model?.length(p.y) ?? "")
+        sfeHover(p) // SFE
         let before = hover, beforePlane = hoverPlane
         if tool == .dimension { hoverPlane = FamilyEditing.hitPlane(planeLines(), at: p, tolerance: tolerance); hover = nil }
         else if tool == nil { hover = hitTest(p); hoverPlane = nil }
@@ -146,7 +140,7 @@ final class FamilyCanvasView: NSView {
         case nil:
             let hit = hitTest(raw)
             model.select(hit)
-            if case .plane(let n)? = hit, let pl = drawing.planes.first(where: { $0.name == n }) { drag = .plane(n, pl.vertical ? raw.x : raw.y) } else { drag = .maybeSelect }
+            if case .plane(let n)? = hit, let pl = drawing.planes.first(where: { $0.name == n }) { drag = .plane(n, pl.vertical ? raw.x : raw.y); sfeExclude(.plane(n)) } else { drag = .maybeSelect } // SFE
         case .referencePlane(let vertical)?:
             let p = snap(raw)
             model.addPlane(vertical: vertical, at: vertical ? p.x * viewMode.uSign : p.y) // F1415: Back/Left run −X/−Y
@@ -175,6 +169,7 @@ final class FamilyCanvasView: NSView {
         case .modelText(let text)?:
             model.placeModelText(text, at: vertex(raw))
         }
+        if tool != nil { sfePickDone() } // SFE
         needsDisplay = true
     }
 
@@ -189,6 +184,7 @@ final class FamilyCanvasView: NSView {
             guard let pl = drawing.planes.first(where: { $0.name == n }) else { return }
             drag = .plane(n, pl.vertical ? p.x : p.y)
         case .rubber(let a, _):
+            cursor = modelPoint(event) // SFE: the snap feedback follows the drag
             drag = .rubber(a, vertex(modelPoint(event)))
         case .orbit(let last, let moved):
             guard let model else { return }
@@ -206,7 +202,7 @@ final class FamilyCanvasView: NSView {
     }
 
     override func mouseUp(with event: NSEvent) {
-        defer { drag = .none; needsDisplay = true }
+        defer { drag = .none; needsDisplay = true; sfeExclude(nil) } // SFE
         switch drag {
         case .plane(let n, let v):
             guard let pl = drawing.planes.first(where: { $0.name == n }), abs(v - pl.value) > 1e-6 else { return }
@@ -265,6 +261,7 @@ final class FamilyCanvasView: NSView {
 
     override func keyDown(with event: NSEvent) {
         guard let model else { super.keyDown(with: event); return }
+        if sfeKey(event) { return } // SFE: Tab cycles snaps, typed SE, SM, … override the next pick
         switch event.keyCode {
         case 51, 117:
             if model.sketch != nil { model.undoSketchVertex() } else { model.deleteSelection() }
@@ -362,6 +359,7 @@ final class FamilyCanvasView: NSView {
         drawWorkPlane(ctx)
         drawSketch(ctx)
         drawToolFeedback(ctx)
+        sfeDrawSnap(ctx) // SFE
     }
 
     private func drawGrid(_ ctx: CGContext) {

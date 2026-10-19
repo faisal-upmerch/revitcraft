@@ -46,6 +46,7 @@ extension ToolContext {
 
     /// Status label for an element: "Walls : Basic Wall : Generic 200mm", "Lines : Model Lines".
     public func elementLabel(_ id: ElementID) -> String {
+        if let s = elementLabelProvider?(id) { return s } // SFE
         guard let e = model[id] else { return "?" }
         if e.modelLine != nil { return "Lines : Model Lines" }
         if e.category == .detailLines { return "Lines : Detail Lines" }
