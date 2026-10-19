@@ -105,7 +105,7 @@ enum FurnitureFrontParameters {
                                  return FurnitureFronts.leafCount(e, ctx.model) >= 2 ? "Pairs hinge on both sides." : nil // FMG3
                              })
     // FMG3: single or pair by instance, or by a family parameter (each family type sets it).
-    static let leafCount = P("furniture.front.leafCount", "Leaf Count", .choice(["By Type", "1", "2"]), .construction,
+    static let leafCount = P("furniture.front.instanceLeafCount", "Leaf Count", .choice(["By Type", "1", "2"]), .construction,
                              tooltip: "1 for a single door, 2 for a pair (By Type: the door type's).",
                              get: { e, _ in e.furnitureFront.map { f in .text(f.leafCount.map(String.init) ?? "By Type") } },
                              set: { e, v, _ in
@@ -124,7 +124,7 @@ enum FurnitureFrontParameters {
                                           }
                                           e.furnitureFront?.leafCountParameter = t.isEmpty ? nil : t
                                       })
-    static let effectiveLeaves = P("furniture.front.leaves", "Leaves", .integer, .construction, tooltip: "The door's leaves now (1 or 2).",
+    static let effectiveLeaves = P("furniture.front.leavesNow", "Leaves", .integer, .construction, tooltip: "The door's leaves now (1 or 2).",
                                    get: { e, ctx in e.furnitureFront?.kind == .door ? .int(FurnitureFronts.leafCount(e, ctx.model)) : nil })
     static func hardwareRef(_ id: String, _ name: String, kind: HardwareKind, get: @escaping @Sendable (FrontData) -> ElementID?,
                             set: @escaping @Sendable (inout FrontData, ElementID?) -> Void, typeValue: @escaping @Sendable (FurnitureFrontTypes.Values) -> ElementID?) -> P {

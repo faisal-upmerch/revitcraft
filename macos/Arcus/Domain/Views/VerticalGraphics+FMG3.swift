@@ -6,10 +6,10 @@ import ArcusGeometry
 // the family's own solids don't hide them (the swings on the doors you look at, not the ones round the back).
 
 extension VerticalGraphics {
-    func fmg3FamilyModelLines(_ fr: Frame, _ visible: [(Element, GraphicOverride)]) -> [GItem] {
-        var items: [GItem] = []
+    /// Adds the lines to each instance's own drawing (a new item when it has none).
+    func fmg3FamilyModelLines(_ fr: Frame, _ visible: [(Element, GraphicOverride)], into items: inout [GItem]) {
         for (e, o) in visible where e.component != nil {
-            if builder.isCancelled() { return items }
+            if builder.isCancelled() { return }
             guard let ev = FamilyInstanceGeometry.evaluate(e, model), !ev.modelLines.isEmpty, let p = ComponentGeometry.placement(e, model) else { continue }
             let level = builder.detailLevel(e.category)
             let lines = ev.modelLines.filter { !$0.isReference && $0.visibleAt.contains(level) }
@@ -29,9 +29,10 @@ extension VerticalGraphics {
                 if l.subcategory == .elevationSwing || l.subcategory == .swing { st.weight = 1; st.pattern = .dash }
                 prims.append(.polyline([ua, ub], closed: false, st))
             }
-            if !prims.isEmpty { items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: [])) }
+            guard !prims.isEmpty else { continue }
+            if let k = items.firstIndex(where: { $0.elementID == e.id && $0.layer == .model }) { items[k].primitives += prims }
+            else { items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: [])) }
         }
-        return items
     }
 
     /// A mesh's triangles in view coordinates (u, v) with each corner's depth.
