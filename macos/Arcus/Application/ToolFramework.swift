@@ -56,7 +56,11 @@ public enum EscapeResult: Sendable { case stayInTool, exitTool }
 
 /// A typed option shown in the contextual options bar while a tool is active.
 public struct ToolOption: Sendable, Identifiable, Hashable {
-    public enum Kind: Sendable, Hashable { case length, bool, choice([String]), integer, angle, level }
+    public enum Kind: Sendable, Hashable {
+        case length, bool, choice([String]), integer, angle, level
+        /// FM6: a push button (the Joint tool's Previous and Next): a click sends `setOption(id, .bool(true))`.
+        case button
+    }
     public var id: String
     public var label: String
     public var kind: Kind

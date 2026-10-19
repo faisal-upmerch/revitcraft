@@ -810,7 +810,9 @@ enum BuiltInCatalog {
         case .mass: // F5
             return MassParameters.instance + [name] + identity + phasing + ifc
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4
-            return FurniturePartParameters.instance(for: e)
+            return FurniturePartParameters.instance(for: e) + FurnitureJointParameters.part(e) // FM6: Cut Size
+        case .furnitureJoint: // FM6
+            return FurnitureJointParameters.instance(for: e)
         default:
             return []
         }
@@ -888,6 +890,7 @@ enum BuiltInCatalog {
         for p in MassParameters.instance where d[p.id] == nil { d[p.id] = p } // F5
         for p in F2Parameters.all where d[p.id] == nil { d[p.id] = p } // F2
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where d[p.id] == nil { d[p.id] = p } // FM4
+        for p in FurnitureJointParameters.all where d[p.id] == nil { d[p.id] = p } // FM6
         return d
     }()
 
@@ -915,6 +918,7 @@ enum BuiltInCatalog {
         for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         for p in F2Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F2
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM4
+        for p in FurnitureJointParameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // FM6
         return o
     }()
 }

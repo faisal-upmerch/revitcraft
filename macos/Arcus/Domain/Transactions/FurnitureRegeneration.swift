@@ -23,6 +23,7 @@ public enum FurnitureRegeneration {
             placePlanes(tx)
         }
         FurniturePartRegeneration.regenerate(tx, touched) // FM4: parts follow their planes (after the planes)
+        FurnitureJointOperations.regenerate(tx) // FM6: joint elements whose parts are gone
     }
 
     /// Gives axis-aligned reference planes drawn in a Furniture document their axis, so dimensions can drive them.
