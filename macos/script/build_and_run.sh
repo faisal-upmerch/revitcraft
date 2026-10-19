@@ -12,6 +12,11 @@
 # first "Apple Development" identity in the keychain, otherwise ad hoc. A stable certificate keeps the app's designated
 # requirement the same from build to build, so macOS privacy grants (Accessibility, Screen Recording) survive rebuilds.
 #
+# DWG engines (Docs/DWGSDKSetup.md): Arcus.app/Contents/Helpers gets arcus-dwg (Rust, acadrust; built with
+# ~/.cargo/bin/cargo, offline from Cargo.lock) and LibreDWG's dwg2dxf (from Tools/LibreDWG/cache, made by
+# Tools/LibreDWG/build_libredwg.sh). Both are rebuilt only when their inputs change. If one can't be built the app still
+# builds, with a warning, and DWG falls back to a converter the user installed.
+#
 # Requires Xcode 26+ command line tools (swift, codesign, iconutil, plutil). No Homebrew, Python or network.
 set -euo pipefail
 
@@ -77,6 +82,32 @@ BIN_DIR="$(swift build -c "$CONFIG" --show-bin-path)"
 WARNINGS=$( { grep -E "warning:" "$LOG" || true; } | { grep -v "Source files for target" || true; } | sort -u | wc -l | tr -d ' ')
 echo "✓ Build succeeded ($WARNINGS warnings)"
 
+# DWG: the bundled DWG engines.
+DWG_HELPERS=()
+DWG_WARNINGS=()
+CARGO="${CARGO:-$HOME/.cargo/bin/cargo}"
+ACADRUST_BIN="$ROOT/Tools/DWGHelper/target/release/arcus-dwg"
+if [[ -x "$CARGO" ]] || command -v cargo >/dev/null 2>&1; then
+  [[ -x "$CARGO" ]] || CARGO="$(command -v cargo)"
+  echo "==> Building the DWG engine (arcus-dwg, acadrust)"
+  if (cd "$ROOT/Tools/DWGHelper" && PATH="$(dirname "$CARGO"):$PATH" "$CARGO" build --release --locked --offline) > "$OUT/last-dwg-helper.log" 2>&1; then
+    DWG_HELPERS+=("$ACADRUST_BIN")
+    echo "✓ arcus-dwg ready"
+  else
+    DWG_WARNINGS+=("arcus-dwg did not build (see build/last-dwg-helper.log; run 'cargo fetch --locked' in Tools/DWGHelper once if crates are missing)")
+  fi
+else
+  DWG_WARNINGS+=("Rust is not installed, so arcus-dwg was not built (install rustup, then rebuild)")
+fi
+LIBREDWG_OUT="$("$ROOT/Tools/LibreDWG/build_libredwg.sh" --print-output)"
+echo "==> Building LibreDWG dwg2dxf (cached)"
+if "$ROOT/Tools/LibreDWG/build_libredwg.sh" > "$OUT/last-libredwg.log" 2>&1; then
+  DWG_HELPERS+=("$LIBREDWG_OUT/dwg2dxf")
+  echo "✓ dwg2dxf ready"
+else
+  DWG_WARNINGS+=("LibreDWG dwg2dxf is not bundled ($(tail -1 "$OUT/last-libredwg.log"))")
+fi
+
 echo "==> Staging $APP"
 stop_running
 STAGE="$OUT/.stage-$$"
@@ -90,10 +121,30 @@ mkdir -p "$STAGE/$APP_NAME.app/Contents/Resources/Docs"
 cp "$ROOT"/Docs/*.md "$STAGE/$APP_NAME.app/Contents/Resources/Docs/" 2>/dev/null || true
 cp "$ROOT/THIRD_PARTY_NOTICES.md" "$STAGE/$APP_NAME.app/Contents/Resources/" 2>/dev/null || true
 printf 'APPL????' > "$STAGE/$APP_NAME.app/Contents/PkgInfo"
+# DWG: helpers and their licences. LibreDWG ships with its exact source tarball and COPYING (GPLv3 §6).
+if [[ ${#DWG_HELPERS[@]} -gt 0 ]]; then
+  mkdir -p "$STAGE/$APP_NAME.app/Contents/Helpers"
+  for h in "${DWG_HELPERS[@]}"; do cp "$h" "$STAGE/$APP_NAME.app/Contents/Helpers/"; done
+fi
+TP="$STAGE/$APP_NAME.app/Contents/Resources/ThirdParty"
+if [[ -x "$STAGE/$APP_NAME.app/Contents/Helpers/arcus-dwg" ]]; then
+  mkdir -p "$TP/acadrust"
+  cp "$ROOT/Tools/DWGHelper/THIRD_PARTY_LICENSES.txt" "$TP/acadrust/"
+fi
+if [[ -x "$STAGE/$APP_NAME.app/Contents/Helpers/dwg2dxf" ]]; then
+  mkdir -p "$TP/LibreDWG"
+  cp "$LIBREDWG_OUT"/COPYING "$LIBREDWG_OUT"/SOURCE.txt "$LIBREDWG_OUT"/libredwg-*.tar.xz "$TP/LibreDWG/"
+  cp "$LIBREDWG_OUT"/libredwg-*.tar.xz.sig "$TP/LibreDWG/" 2>/dev/null || true
+fi
 SIGN_IDENTITY="${ARCUS_SIGN_IDENTITY:-}"
 if [[ -z "$SIGN_IDENTITY" ]]; then
   SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development: /{print $2; exit}')"
 fi
+# Inside-out: the helpers first, then the app (no --deep). Hardened runtime is not used.
+for h in "$STAGE/$APP_NAME.app/Contents/Helpers/"*; do
+  [[ -f "$h" ]] || continue
+  codesign --force --sign "${SIGN_IDENTITY:--}" --timestamp=none "$h" >/dev/null
+done
 if [[ -n "$SIGN_IDENTITY" ]]; then
   codesign --force --sign "$SIGN_IDENTITY" --timestamp=none "$STAGE/$APP_NAME.app" >/dev/null
   SIGNED_BY="$(codesign -dv --verbose=2 "$STAGE/$APP_NAME.app" 2>&1 | sed -n 's/^Authority=//p' | head -n1)"
@@ -113,7 +164,23 @@ codesign --verify --strict "$APP"
 [[ "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$APP/Contents/Info.plist")" == "$BUILD" ]]
 file "$APP/Contents/MacOS/$APP_NAME" | grep -q "arm64"
 if /usr/libexec/PlistBuddy -c 'Print' "$APP/Contents/Info.plist" | grep -E "UsageDescription" >/dev/null; then echo "✗ Unexpected privacy usage description" >&2; exit 1; fi
+for h in "$APP/Contents/Helpers/"*; do
+  [[ -f "$h" ]] || continue
+  codesign --verify --strict "$h"
+  file "$h" | grep -q "arm64"
+  if otool -L "$h" | tail -n +2 | awk '{print $1}' | grep -vE '^(/usr/lib/|/System/Library/)' >/dev/null; then echo "✗ $(basename "$h") links non-system libraries" >&2; exit 1; fi
+done
+if [[ -x "$APP/Contents/Helpers/arcus-dwg" ]]; then "$APP/Contents/Helpers/arcus-dwg" version >/dev/null || { echo "✗ arcus-dwg does not run" >&2; exit 1; }; fi
+if [[ -x "$APP/Contents/Helpers/dwg2dxf" ]]; then
+  [[ -f "$APP/Contents/Resources/ThirdParty/LibreDWG/COPYING" ]] && ls "$APP/Contents/Resources/ThirdParty/LibreDWG/"libredwg-*.tar.xz >/dev/null \
+    || { echo "✗ dwg2dxf is bundled without its GPL source tarball and COPYING" >&2; exit 1; }
+fi
 echo "✓ Bundle valid: $APP ($VERSION, build $BUILD), signed by $SIGNED_BY"
+if [[ ${#DWG_WARNINGS[@]} -gt 0 ]]; then
+  for w in "${DWG_WARNINGS[@]}"; do echo "⚠ DWG: $w. DWG import falls back to a converter the user installed; DWG export is unavailable without arcus-dwg." >&2; done
+else
+  echo "✓ DWG engines bundled: $(ls "$APP/Contents/Helpers" | tr '\n' ' ')"
+fi
 
 LSREGISTER=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 RUN_APP="$APP"

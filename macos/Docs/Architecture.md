@@ -30,7 +30,7 @@ Arcus is a single SwiftPM package that builds one executable (`Arcus`, staged in
     ArcusPersistence  .arcus / .arcusfamily packages (SQLite + manifest + checksums)
     ArcusServices     recovery journal, external-change detection, diagnostics log, signposts, versioning
     ArcusIFC          STEP reader/writer, IFC2x3 CV2.0 / IFC4 RV export & import
-    ArcusCAD          DXF reader/writer, CAD → reference drawing conversion, link service, DWG provider seam
+    ArcusCAD          DXF reader/writer, CAD → reference drawing conversion, link service, DWG engines (bundled helpers) and provider seam
     ArcusOutput       vector renderer for view/sheet graphics, PDF export, schedule CSV
 ```
 
@@ -87,7 +87,7 @@ The 3D view (`ArcusViewport3D`) builds per-element meshes (`ElementMeshes.parts`
 ## Exchange
 
 - **IFC**: native Swift STEP reader and writer. Export maps elements to IFC entities, spatial structure, types, materials, property sets, base quantities and classification, with stable GUIDs. Import creates native elements where the mapping is exact and keeps everything else as immutable reference geometry. See [IFCMapping.md](IFCMapping.md) and [EngineDecision.md](EngineDecision.md).
-- **CAD**: a native DXF reader and writer. Links convert CAD content into a content-addressed `ReferenceDrawing`. Reload re-reads the source and never writes to it. DWG goes through `DWGImportProvider`: only the ODA-backed provider (compiled with `ARCUS_HAS_ODA`) reads DWG, and the default `UnavailableDWGProvider` says so truthfully. See [DWGSDKSetup.md](DWGSDKSetup.md).
+- **CAD**: a native DXF reader and writer. Links convert CAD content into a content-addressed `ReferenceDrawing`. Reload re-reads the source and never writes to it. DWG goes through `DWGImportProvider`: `DWGEngineChain` tries the bundled acadrust helper, the bundled LibreDWG, an installed converter and the ODA SDK build in turn, each turning the DWG into DXF for the same DXF path; `DWGExporter` writes DXF from `DXFWriter` to DWG with the acadrust helper. The helpers are separate processes in `Contents/Helpers`. See [DWGSDKSetup.md](DWGSDKSetup.md).
 
 ## Concurrency
 

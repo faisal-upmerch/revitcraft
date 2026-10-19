@@ -5,6 +5,233 @@ Build verified: Arcus 1.0.0, development build `1.2609251653` (the `VERSION` fil
 
 This report records what was actually run and seen. Anything not verified is listed under **Limitations**.
 
+## DWG engines (2026-10-19)
+
+DWG import, link, open and export through the engines bundled in Arcus.app ([DWGSDKSetup.md](DWGSDKSetup.md)):
+`arcus-dwg` (acadrust 0.6.5) and GNU LibreDWG 0.14 `dwg2dxf`, both built on this Mac (arm64, macOS 26 SDK; only
+`libSystem`/`libiconv` linked). Not yet checked in the running app: the build was not installed or launched in this pass.
+
+| Check | Result |
+|---|---|
+| `swift test --filter CADTests` | 145 tests pass, including 14 in `BundledDWGEngineTests` (real engines) |
+| `swift test --filter DomainTests` | 901 tests pass |
+| Arcus's own export, every version | The Courtyard House ground-floor plan and first sheet, written by `DXFWriter` with AIA layers and exported as DWG 2018, 2013, 2010, 2007, 2004 and 2000, read back with the same entity count, entity types and layer table in every version; a small plan also reads back in LibreDWG |
+| Hostile input | 20 kB of random bytes behind an `AC1032` header and a sample cut to a third fail with a plain message; the helper never crashed |
+| Corpus | 163 DWG files: ACadSharp `samples/` (22, MIT) and LibreDWG 0.14 `test/test-data` (141), read as untrusted input |
+| Build script (dry run of the DWG steps) | Helpers built or reused, copied to `Contents/Helpers`, licences and the LibreDWG source tarball to `Contents/Resources/ThirdParty`, signed inside-out with the Apple Development identity; `codesign --verify --deep --strict` passes and both helpers run from the bundle |
+
+**Corpus by DWG version** (entity counts are model-space entities after Arcus's DXF reader; the round-trip columns
+export what acadrust read to each DWG version and read it back with acadrust, counting a pass when no entity is lost):
+
+| DWG version | Files (ACadSharp + LibreDWG) | acadrust read | LibreDWG read | Entities acadrust / LibreDWG | → 2018 | → 2013 | → 2010 | → 2007 | → 2004 | → 2000 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| AC1.40, AC2.10 (R1.4, R2.10) | 3 (0 + 3) | 0/3 | 3/3 | 0 / 28 | – | – | – | – | – | – |
+| AC1003 (2.6) | 2 (0 + 2) | 0/2 | 2/2 | 0 / 24 | – | – | – | – | – | – |
+| AC1004 (R9) | 1 (0 + 1) | 0/1 | 1/1 | 0 / 17 | – | – | – | – | – | – |
+| AC1006 (R10) | 2 (0 + 2) | 0/2 | 2/2 | 0 / 18 | – | – | – | – | – | – |
+| AC1009 (R11/R12) | 3 (0 + 3) | 2/3 | 3/3 | 27 / 27 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 | 2/2 |
+| AC1012 (R13) | 1 (0 + 1) | 1/1 | 1/1 | 68 / 63 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 | 1/1 |
+| AC1014 (R14) | 5 (1 + 4) | 5/5 | 5/5 | 260 / 232 | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 | 5/5 |
+| AC1015 (2000) | 25 (1 + 24) | 25/25 | 25/25 | 325 / 319 | 25/25 | 25/25 | 25/25 | 25/25 | 25/25 | 25/25 |
+| AC1018 (2004) | 23 (1 + 22) | 23/23 | 23/23 | 283 / 254 | 23/23 | 23/23 | 23/23 | 23/23 | 23/23 | 22/23 |
+| AC1021 (2007) | 20 (1 + 19) | 20/20 | 20/20 | 318 / 313 | 20/20 | 20/20 | 20/20 | 20/20 | 20/20 | 19/20 |
+| AC1024 (2010) | 20 (1 + 19) | 20/20 | 20/20 | 267 / 262 | 20/20 | 20/20 | 20/20 | 20/20 | 20/20 | 19/20 |
+| AC1027 (2013) | 21 (1 + 20) | 21/21 | 21/21 | 478 / 473 | 21/21 | 21/21 | 21/21 | 21/21 | 21/21 | 20/21 |
+| AC1032 (2018) | 37 (16 + 21) | 37/37 | 37/37 | 596 / 589 | 37/37 | 37/37 | 37/37 | 37/37 | 37/37 | 35/37 |
+| **All** | **163** | **154** | **163** | | **154/154** | **154/154** | **154/154** | **154/154** | **154/154** | **148/154** |
+
+What this shows:
+
+- **Every file was read by at least one engine.** acadrust read all 154 files from R13 to 2018 and 2 of 3 R12 files; it
+  rejects R1.4–R10 (`Unsupported CAD version`) and one R12 file, and LibreDWG read all of those, so the fallback order
+  matters for old drawings.
+- **acadrust usually finds more entities than LibreDWG** (e.g. 163 vs 141–161 in ACadSharp's sample; HELIX and some
+  surfaces are missing from LibreDWG's DXF), which supports acadrust as the primary reader.
+- **Export: 2018, 2013, 2010, 2007 and 2004 round-tripped every file.** The DWGs Arcus wrote were also read by LibreDWG,
+  an independent reader, with the same entity counts LibreDWG gets from the originals.
+- **AutoCAD 2000 refused 6 drawings** (ACadSharp's 2004–2018 samples): acadrust can't write *named (colour-book)
+  colours* in the 2000 format ("Not implemented: Named color … requires DWG 2004"). The helper then saves nothing and
+  Arcus shows the reason. Arcus's own DXF writer never writes named colours (only ACI and true colour), so every DWG that
+  File ▸ Export produces writes in 2000 too, as the export test above shows. All six versions are therefore offered,
+  with 2018 as the default.
+
+Command used:
+
+```sh
+ARCUS_DWG_CORPUS=<ACadSharp>/samples:<libredwg-0.14>/test/test-data ARCUS_DWG_CORPUS_REPORT=/tmp/dwg-corpus.md \
+  swift test --filter BundledDWGEngineTests/corpus      # 421 s
+```
+
+<details><summary>Per-file results (163 files)</summary>
+
+| File | Version | acadrust | LibreDWG | 2018 DWG | 2013 DWG | 2010 DWG | 2007 DWG | 2004 DWG | 2000 DWG |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| samples/aec_objects/AecObjects.dwg | AC1032 (AutoCAD 2018) | ✓ 0 ent, 7 lay | ✓ 0 ent, 7 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKALIGNMENTPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKBASEPOINTPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKFLIPPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKLINEARPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKLOOKUPPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 4 ent, 1 lay | ✓ 4 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKPOINTPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 3 ent, 1 lay | ✓ 3 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKPOLARPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKROTATIONPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 4 ent, 1 lay | ✓ 4 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKVISIBILITYPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 4 ent, 1 lay | ✓ 4 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/dynamic-blocks/BLOCKXYPARAMETER.dwg | AC1032 (AutoCAD 2018) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/geolocation/geoloc.dwg | AC1032 (AutoCAD 2018) | ✓ 0 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/sample_AC1014.dwg | AC1014 (AutoCAD R14) | ✓ 163 ent, 21 lay | ✓ 142 ent, 21 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 |
+| samples/sample_AC1015.dwg | AC1015 (AutoCAD 2000) | ✓ 163 ent, 21 lay | ✓ 161 ent, 21 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 |
+| samples/sample_AC1018.dwg | AC1018 (AutoCAD 2004) | ✓ 163 ent, 21 lay | ✓ 141 ent, 21 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/sample_AC1021.dwg | AC1021 (AutoCAD 2007) | ✓ 163 ent, 21 lay | ✓ 161 ent, 21 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/sample_AC1024.dwg | AC1024 (AutoCAD 2010) | ✓ 163 ent, 19 lay | ✓ 161 ent, 19 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/sample_AC1027.dwg | AC1027 (AutoCAD 2013) | ✓ 163 ent, 19 lay | ✓ 161 ent, 19 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/sample_AC1032.dwg | AC1032 (AutoCAD 2018) | ✓ 163 ent, 19 lay | ✓ 161 ent, 19 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/sample_base/empty.dwg | AC1032 (AutoCAD 2018) | ✓ 0 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| samples/sample_base/sample_base.dwg | AC1032 (AutoCAD 2018) | ✓ 163 ent, 19 lay | ✓ 161 ent, 19 lay | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✓ L161 | ✗ The drawing could not be written: Not implemented: Named color on entity 0x99F requires DW |
+| samples/svg/export_sample.dwg | AC1032 (AutoCAD 2018) | ✓ 22 ent, 4 lay | ✓ 22 ent, 4 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Arc.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Cone.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Constraints.dwg | AC1015 (AutoCAD 2000) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/ConstructionLine.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Donut.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Ellipse.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Helix.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2000/Leader.dwg | AC1015 (AutoCAD 2000) | ✓ 10 ent, 1 lay | ✓ 10 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Line.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Multiline.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Point.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/PolyLine2D.dwg | AC1015 (AutoCAD 2000) | ✓ 0 ent, 2 lay | ✓ 0 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/PolyLine3D.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Polygon.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Polyline.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/RAY.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/Spline.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/TS1.dwg | AC1015 (AutoCAD 2000) | ✓ 33 ent, 3 lay | ✓ 32 ent, 3 lay | ✓ L32 | ✓ L32 | ✓ L32 | ✓ L32 | ✓ L32 | ✓ L32 |
+| test-data/2000/Text.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/circle.dwg | AC1015 (AutoCAD 2000) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/entities-2d.dwg | AC1015 (AutoCAD 2000) | ✓ 13 ent, 2 lay | ✓ 13 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2000/entities-3d.dwg | AC1015 (AutoCAD 2000) | ✓ 14 ent, 2 lay | ✓ 14 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Arc.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Constraints.dwg | AC1018 (AutoCAD 2004) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/ConstructionLine.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Donut.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Ellipse.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/HatchG.dwg | AC1018 (AutoCAD 2004) | ✓ 4 ent, 1 lay | ✓ 4 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Helix.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2004/Leader.dwg | AC1018 (AutoCAD 2004) | ✓ 10 ent, 1 lay | ✓ 10 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Line.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Multiline.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Point.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/PolyLine3D.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Polygon.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Polyline.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/RAY.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Spline.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Surface.dwg | AC1018 (AutoCAD 2004) | ✓ 17 ent, 1 lay | ✓ 13 ent, 1 lay | ✓ L13 | ✓ L13 | ✓ L13 | ✓ L13 | ✓ L13 | ✓ L13 |
+| test-data/2004/Text.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/Underlay.dwg | AC1018 (AutoCAD 2004) | ✓ 3 ent, 1 lay | ✓ 3 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/circle.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2004/material.dwg | AC1018 (AutoCAD 2004) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/ATMOS-DC22S.dwg | AC1021 (AutoCAD 2007) | ✓ 60 ent, 2 lay | ✓ 60 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Arc.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Constraints.dwg | AC1021 (AutoCAD 2007) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/ConstructionLine.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Donut.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Ellipse.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Helix.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2007/Leader.dwg | AC1021 (AutoCAD 2007) | ✓ 10 ent, 1 lay | ✓ 10 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Line.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Multiline.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Point.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/PolyLine3D.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Polygon.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Polyline.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/RAY.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Spline.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/Text.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2007/circle.dwg | AC1021 (AutoCAD 2007) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Arc.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Constraints.dwg | AC1024 (AutoCAD 2010) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/ConstructionLine.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Donut.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Ellipse.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Helix.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2010/Leader.dwg | AC1024 (AutoCAD 2010) | ✓ 12 ent, 1 lay | ✓ 12 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Line.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Multiline.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Point.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/PolyLine3D.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Polygon.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Polyline.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/RAY.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Spline.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/Text.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/circle.dwg | AC1024 (AutoCAD 2010) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2010/gh209_1.dwg | AC1024 (AutoCAD 2010) | ✓ 7 ent, 5 lay | ✓ 7 ent, 5 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Arc.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Constraints.dwg | AC1027 (AutoCAD 2013) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/ConstructionLine.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Donut.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Ellipse.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Helix.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2013/Leader.dwg | AC1027 (AutoCAD 2013) | ✓ 10 ent, 1 lay | ✓ 10 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Line.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Multiline.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Point.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/PolyLine3D.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Polygon.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Polyline.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/RAY.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Spline.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/Text.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/circle.dwg | AC1027 (AutoCAD 2013) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/gh109_1.dwg | AC1027 (AutoCAD 2013) | ✓ 24 ent, 27 lay | ✓ 24 ent, 27 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2013/gh44-error.dwg | AC1027 (AutoCAD 2013) | ✓ 196 ent, 93 lay | ✓ 196 ent, 93 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Arc.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Constraints.dwg | AC1032 (AutoCAD 2018) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/ConstructionLine.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Donut.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Dynblocks.dwg | AC1032 (AutoCAD 2018) | ✓ 117 ent, 69 lay | ✓ 117 ent, 69 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Ellipse.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Helix.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 0 ent, 1 lay | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 | ✓ L0 |
+| test-data/2018/Leader.dwg | AC1032 (AutoCAD 2018) | ✓ 10 ent, 1 lay | ✓ 10 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Line.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/LiveSection1.dwg | AC1032 (AutoCAD 2018) | ✓ 5 ent, 2 lay | ✓ 5 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Multiline.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Point.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/PolyLine3D.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Polygon.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Polyline.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/RAY.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Spline.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/Text.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/2018/circle.dwg | AC1032 (AutoCAD 2018) | ✓ 1 ent, 1 lay | ✓ 1 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/example_2000.dwg | AC1015 (AutoCAD 2000) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_2004.dwg | AC1018 (AutoCAD 2004) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_2007.dwg | AC1021 (AutoCAD 2007) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_2010.dwg | AC1024 (AutoCAD 2010) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_2013.dwg | AC1027 (AutoCAD 2013) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_2018.dwg | AC1032 (AutoCAD 2018) | ✓ 68 ent, 5 lay | ✓ 66 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_r13.dwg | AC1012 (AutoCAD R13) | ✓ 68 ent, 5 lay | ✓ 63 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/example_r14.dwg | AC1014 (AutoCAD R14) | ✓ 68 ent, 5 lay | ✓ 62 ent, 5 lay | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 | ✓ L66 |
+| test-data/r1.4/entities.dwg | AC1.40 (Unknown (AC1.40)) | ✗ acadrust could not read this DWG (AC1.40: Unsupported CAD version: "AC1.40"). | ✓ 13 ent, 1 lay | – | – | – | – | – | – |
+| test-data/r10/entities.dwg | AC1006 (AutoCAD R10) | ✗ acadrust could not read this DWG (AC1006: Unsupported CAD version: "AC1006"). | ✓ 17 ent, 2 lay | – | – | – | – | – | – |
+| test-data/r10/tmp_line.dwg | AC1006 (AutoCAD R10) | ✗ acadrust could not read this DWG (AC1006: Unsupported CAD version: "AC1006"). | ✓ 1 ent, 1 lay | – | – | – | – | – | – |
+| test-data/r11/ACEB10.dwg | AC1009 (AutoCAD R11/R12) | ✗ acadrust could not read this DWG (AC1009: Invalid file format: AC1009 SEQEND at 0xa5e9 nam | ✓ 0 ent, 13 lay | – | – | – | – | – | – |
+| test-data/r11/entities-2d.dwg | AC1009 (AutoCAD R11/R12) | ✓ 13 ent, 2 lay | ✓ 13 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/r11/entities-3d.dwg | AC1009 (AutoCAD R11/R12) | ✓ 14 ent, 2 lay | ✓ 14 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/r14/Constraints.dwg | AC1014 (AutoCAD R14) | ✓ 2 ent, 1 lay | ✓ 2 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/r14/Leader.dwg | AC1014 (AutoCAD R14) | ✓ 10 ent, 1 lay | ✓ 9 ent, 1 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/r14/v.dwg | AC1014 (AutoCAD R14) | ✓ 17 ent, 5 lay | ✓ 17 ent, 5 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/r2.10/block.dwg | AC2.10 (Unknown (AC2.10)) | ✗ acadrust could not read this DWG (AC2.10: Unsupported CAD version: "AC2.10"). | ✓ 0 ent, 1 lay | – | – | – | – | – | – |
+| test-data/r2.10/entities.dwg | AC2.10 (Unknown (AC2.10)) | ✗ acadrust could not read this DWG (AC2.10: Unsupported CAD version: "AC2.10"). | ✓ 15 ent, 1 lay | – | – | – | – | – | – |
+| test-data/r2.6/dim.dwg | AC1003 (AutoCAD 2.6) | ✗ acadrust could not read this DWG (AC1003: Unsupported CAD version: "AC1003"). | ✓ 9 ent, 2 lay | – | – | – | – | – | – |
+| test-data/r2.6/entities.dwg | AC1003 (AutoCAD 2.6) | ✗ acadrust could not read this DWG (AC1003: Unsupported CAD version: "AC1003"). | ✓ 15 ent, 2 lay | – | – | – | – | – | – |
+| test-data/r9/entities.dwg | AC1004 (AutoCAD R9) | ✗ acadrust could not read this DWG (AC1004: Unsupported CAD version: "AC1004"). | ✓ 17 ent, 2 lay | – | – | – | – | – | – |
+| test-data/sample_2000.dwg | AC1015 (AutoCAD 2000) | ✓ 6 ent, 2 lay | ✓ 6 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| test-data/sample_2018.dwg | AC1032 (AutoCAD 2018) | ✓ 6 ent, 2 lay | ✓ 6 ent, 2 lay | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+</details>
+
 ## RevitCraft port pass (2026-10-18)
 
 The Arcus codebase was brought into the `revitcraft` repository (`macos/`) and given RevitCraft's behaviour and features. [RevitCraftPort.md](RevitCraftPort.md) §5 lists each milestone and its known limits.
@@ -187,7 +414,7 @@ See [Performance.md](Performance.md) for the full tables and method: `arcus-benc
 
 ## Limitations (honest list)
 
-- **DWG:** support compiles only against a licensed ODA Drawings SDK, which was not available. The ODA bridge (`Arcus/Infrastructure/Exchange/DWGBridge`) has **never been compiled or run**, and its library layout guesses are unverified. Without the SDK, Arcus truthfully reports that DWG is unavailable and offers DXF.
+- **DWG:** read and written by the bundled acadrust and LibreDWG engines (see the DWG section above; not yet exercised in the running app). AutoCAD 2000 export refuses drawings with named colours, which Arcus's own writer never produces. LibreDWG has a time limit but no memory cap. The optional ODA SDK bridge (`Arcus/Infrastructure/Exchange/DWGBridge`) has still **never been compiled or run**.
 - **RVT/RFA:** not read directly and not claimed. The Arcus Bridge add-in (C#, `Tools/RevitBridge`) has **never been compiled or run**: this Mac has no .NET SDK and no Revit. Its importer side is tested with hand-written `.arcusx` fixtures only. The ODA BimRv bridge is an unverified sketch whose SDK calls are TODOs. See [RevitInterop.md](RevitInterop.md) for the parts marked UNVERIFIED.
 - **IFC:** architectural subset (IFC2x3 CV 2.0 and IFC4 RV). Unsupported entities import as reference geometry. Round trips are exact for Arcus-authored models; files from other tools were tested only with the hand-written fixtures in `Arcus/Tests/IFCTests/Fixtures`.
 - **Geometry:** roofs on non-convex footprints use a documented approximation. Hidden-line views do not compute intersection lines between separate solids. Family forms are extrusions, sweeps, blends and revolves; only void extrusions cut solids (no general mesh booleans).

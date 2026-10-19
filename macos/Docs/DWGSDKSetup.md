@@ -1,15 +1,99 @@
-# DWG import: ODA Drawings SDK setup
+# DWG: bundled engines, installed converters and the ODA SDK
 
-Arcus reads **DXF** natively (ASCII and binary, R12 through AutoCAD 2018). **DWG** is a proprietary format, and Arcus
-contains **no DWG reader of its own**. There are two ways to get DWG files in:
+Arcus reads **DXF** natively (ASCII and binary, R12 through AutoCAD 2018). **DWG** comes in and goes out through two
+open-source engines **bundled inside Arcus.app**, so users import DWG and work with nothing to install:
 
-1. **An external converter the user installs** (every build, no licence needed by Arcus): ODA File Converter or LibreDWG's
-   `dwg2dxf`, run as a separate program that converts the DWG to DXF on the user's Mac. See
-   [DWG without the SDK: external converters](#dwg-without-the-sdk-external-converters).
-2. **The licensed ODA Drawings SDK** compiled into a build (the rest of this document).
+| Engine | Licence | Role | Where |
+| --- | --- | --- | --- |
+| `arcus-dwg` (Arcus's helper around **acadrust 0.6.5**) | acadrust: MPL-2.0; the helper itself is Arcus code | Reads DWG R13–2018 (AC1012–AC1032); **writes** DWG 2000–2018 | `Contents/Helpers/arcus-dwg`; source `Tools/DWGHelper` |
+| **GNU LibreDWG 0.14** `dwg2dxf`, unmodified | GPLv3 or later | Reads DWG only when acadrust can't | `Contents/Helpers/dwg2dxf`; source tarball and COPYING in `Contents/Resources/ThirdParty/LibreDWG/` |
 
-When neither is available Arcus says so when a user tries to link a DWG file (`UnavailableDWGProvider`), explains both
-options, and suggests saving the drawing as DXF instead. It never pretends to read DWG.
+Both are separate executables that Arcus starts with `Process` (an argument array, no shell), on a private copy of the
+drawing, and talks to only through files, exit codes and one line of JSON. Arcus links neither. Neither makes network
+connections (`nm -u` shows no socket or resolver calls), and Arcus never downloads anything at run time: the helpers are
+built when Arcus is built.
+
+**Reading order** (`DWGProviders.current` → `DWGEngineChain`, `Arcus/Infrastructure/Exchange/CAD/BundledDWGEngine.swift`):
+
+1. bundled acadrust (`BundledAcadrustDWGProvider`);
+2. bundled LibreDWG (`BundledLibreDWGProvider`);
+3. a converter the user installed: ODA File Converter or their own LibreDWG
+   ([below](#dwg-without-the-sdk-external-converters));
+4. the licensed ODA Drawings SDK, when Arcus was built with it ([below](#why-the-oda-drawings-sdk)).
+
+The first route that reads the drawing wins; if it isn't the first, the import report says which engine read it and why
+the earlier ones couldn't. If **every** route fails, the error names each engine and its reason in plain words and
+suggests saving the drawing as DXF. Settings ▸ DWG shows both engines (ready or missing) and which engine read the last
+file. Insert ▸ Link CAD / Import CAD and File ▸ Open accept `.dwg` directly (Open starts a new project from the
+Architectural template and shows the Import CAD dialog).
+
+**Saving DWG** (File ▸ Export ▸ CAD Formats ▸ DWG…, `Arcus/UI/Shell/Dialogs/DWGExportDialog.swift`,
+`Arcus/Infrastructure/Exchange/CAD/DWGExporter.swift`) works as Revit's DWG export: the chosen views and sheets are
+written one file each as **2D** drawings. Arcus's own `DXFWriter` produces the geometry with the same AIA or category
+layer names as the DXF export (Print Setup's hide options apply; sheets at paper size in mm, model views full size in mm
+or inches), and `arcus-dwg from-dxf … --version <code>` turns it into DWG. Versions: **AutoCAD 2018 (default)**, 2013,
+2010, 2007, 2004 and 2000. The helper reads every DWG it wrote back before it replaces anything; a file that doesn't read
+back with all its model-space entities is not saved. Saving goes through acadrust only.
+
+### The `arcus-dwg` helper
+
+```text
+arcus-dwg to-dxf   <in.dwg> <out.dxf>                    DWG → DXF (the drawing's own version)
+arcus-dwg from-dxf <in.dxf> <out.dwg> --version AC1032   DXF → DWG, then read back and checked
+arcus-dwg info     <in.dwg>                              version, entity count, layers (JSON)
+arcus-dwg version
+options: --max-memory-mb N (Arcus passes half the Mac's memory, 1–8 GB), --timeout S (Arcus passes 600)
+```
+
+Exit codes: 0 ok, 2 unreadable, 3 memory cap reached, 4 time cap reached, 5 write failed, 6 internal error (a caught
+panic), 7 written DWG didn't read back, 64 usage, 66 input missing. Errors are one sentence on stderr. Memory is capped by
+a counting allocator (macOS ignores `RLIMIT_AS`), time by a watchdog thread; acadrust runs on a 256 MB-stack worker under
+`catch_unwind`, strictly first and then in its failsafe recovery mode (a recovery with no entities counts as a failure so
+LibreDWG gets its turn). Output is written to `<out>.partial` and renamed only when complete. LibreDWG's `dwg2dxf` gets
+Arcus's 600 s timeout but no memory cap (it is an unmodified upstream program).
+
+### Building the engines
+
+`script/build_and_run.sh` does this on every build and reuses cached builds:
+
+- `cargo build --release --locked --offline` in `Tools/DWGHelper` (Rust from `~/.cargo/bin`; `Cargo.lock` pins acadrust
+  0.6.5 and every dependency). Run `cargo fetch --locked` there once on a new Mac (the only step that downloads crates).
+- `Tools/LibreDWG/build_libredwg.sh`: builds `dwg2dxf` from the tarball in `Tools/LibreDWG/cache/` after checking its
+  SHA-256 against `Tools/LibreDWG/libredwg.version`. It downloads only when run with `--download`. The build uses Xcode's
+  clang in a clean environment (`--disable-shared --disable-bindings --disable-python --disable-docs`, a pkg-config
+  stand-in that finds nothing), and refuses a binary that links anything outside `/usr/lib` and `/System`.
+- The helpers are copied to `Contents/Helpers/`, the licences to `Contents/Resources/ThirdParty/` (acadrust's dependency
+  licences in `acadrust/THIRD_PARTY_LICENSES.txt`, regenerated by `Tools/DWGHelper/collect_licenses.sh`; LibreDWG's
+  `COPYING`, `SOURCE.txt` and the exact `libredwg-0.14.tar.xz`), and each helper is signed with the app's identity
+  before the app (inside-out; no hardened runtime). Validation checks the helpers' signatures, architecture and linked
+  libraries, runs `arcus-dwg version`, and fails if `dwg2dxf` is present without its source tarball and COPYING.
+- If Rust is missing or a helper doesn't build, the app still builds and the script prints a warning. DWG then falls
+  back to an installed converter or the ODA SDK build (today's behaviour), and DWG export is disabled with a reason.
+
+Neither the binaries nor the tarball are committed; `Tools/DWGHelper/target/` and `Tools/LibreDWG/cache/` are ignored.
+
+### Testing
+
+`Arcus/Tests/CADTests/BundledDWGEngineTests.swift` uses the helpers built in the source tree and skips the engine tests
+when they aren't built. It reads three MIT-licensed ACadSharp samples (`Fixtures/dwg/`), checks hostile and truncated
+input, the route order and fallback messages, and exports a plan through every DWG version, reading each back with both
+engines. The corpus runner reads every DWG under the folders you give it with both engines and round-trips each one
+through every export version:
+
+```sh
+ARCUS_DWG_CORPUS=/path/to/ACadSharp/samples:/path/to/libredwg-0.14/test/test-data \
+ARCUS_DWG_CORPUS_REPORT=/tmp/dwg-corpus.md swift test --filter BundledDWGEngineTests/corpus
+```
+
+Results from 2026-10-19 are in `Docs/VerificationReport.md`.
+
+### Licensing note
+
+Arcus is closed source. acadrust is MPL-2.0: it is compiled unmodified into the separate `arcus-dwg` executable and its
+licence ships with it, which MPL allows. LibreDWG is GPLv3+: Arcus ships it as a separate program in the same bundle
+(an "aggregate"), executes it and never links it, and ships its exact source and licence next to it. **A legal review of
+this GPL aggregation is advisable before Arcus is sold.** Removing `dwg2dxf` from the bundle only loses the read
+fallback; acadrust still reads and writes DWG.
 
 ## DWG without the SDK: external converters
 
@@ -24,7 +108,8 @@ reverse-engineered reader.
 | **ODA File Converter** (free app, Open Design Alliance) | ODA's own terms, accepted by the user when installing | `/Applications/ODAFileConverter.app`, `~/Applications/ODAFileConverter.app`, and any `ODA…Converter….app` in those folders; the executable is the bundle's `CFBundleExecutable` (normally `Contents/MacOS/ODAFileConverter`) | `ODAFileConverter <in> <out> ACAD2018 DXF 0 1 drawing.dwg` (input folder, output folder, output version, output type, recurse off, audit on, input filter) |
 | **LibreDWG `dwg2dxf`** | GNU GPL v3; run as a separate process only, never linked or bundled | `/opt/homebrew/bin/dwg2dxf`, `/usr/local/bin/dwg2dxf`, `/opt/local/bin/dwg2dxf` | `dwg2dxf -y -o <out>/drawing.dxf <in>/drawing.dwg` |
 
-A user can also pick the app bundle, the executable inside it, or `dwg2dxf` in **Arcus ▸ Settings ▸ DWG Converter**
+These run after the bundled engines. A user can also pick the app bundle, the executable inside it, or `dwg2dxf` in
+**Arcus ▸ Settings ▸ DWG**
 (`Choose…`, `Detect`, `Clear`, a status line, and a switch for automatic use of a detected converter). The choice is stored
 in user defaults (`dwg.converterPath`, `dwg.converterAutoDetect`). A chosen path that no longer exists is reported
 instead of silently falling back.
@@ -146,7 +231,7 @@ and edit **only the ODA section** of `Package.swift`:
 
 ## Verifying a DWG-enabled build
 
-No DWG files are committed to this repository. Use **your own** DWG files: drawings you produced yourself or have the right
+Use **your own** DWG files: drawings you produced yourself or have the right
 to use for testing, saved in several versions (R14/2000, 2004, 2007, 2010, 2013, 2018).
 
 1. Build with the SDK (above) and run the CAD tests: `swift test --filter CADTests`. The existing DXF tests must still pass.
@@ -181,7 +266,10 @@ SDK's own version string at run time.
 
 | Symptom | Likely cause / fix |
 | --- | --- |
-| "DWG import is not available: Arcus has no DWG reader of its own, and no DWG converter was found…" | Built without `ARCUS_ODA_SDK_DIR` and no external converter installed. Install ODA File Converter or LibreDWG (above), rebuild with the SDK, or save the drawing as DXF. |
+| "DWG import is not available: the DWG engines that come with Arcus are missing…" | The helpers weren't bundled (Rust missing or a helper failed to build; see the build warnings) and no converter is installed. Rebuild with Rust, install a converter, or save the drawing as DXF. |
+| "Arcus could not read “x.dwg” (…). Tried: 1) … 2) …" | Every engine refused the drawing; each reason is quoted. Audit/recover it in its CAD application, or save it as DXF. |
+| "Arcus's DWG engine stopped …: the drawing needs more memory…" / "…did not finish in time" | The helper's caps were reached; LibreDWG is tried next automatically. |
+| DWG export: "The DWG read back with N of M model-space entities…, so it was not saved" | acadrust couldn't write that content faithfully in that version. Try AutoCAD 2018, or export DXF. |
 | "ODA File Converter did not produce a DXF file…" | The converter rejected the file (message quoted). Open the DWG in its CAD application, audit/recover it, and try again, or save it as DXF. |
 | "The DWG converter did not finish within 600 seconds…" | Very large or damaged drawing. Try again, or save as DXF. |
 | Build stops: "ARCUS_REQUIRE_DWG=1 but ARCUS_ODA_SDK_DIR is not set" | This is intended. Set `ARCUS_ODA_SDK_DIR`, or unset `ARCUS_REQUIRE_DWG` for a DXF-only build. |

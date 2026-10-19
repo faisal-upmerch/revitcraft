@@ -45,6 +45,7 @@ struct DialogHost: View {
             case .linkPDF(let url): UnderlayDialog(state: state, url: url, isPDF: true)
             case .linkImage(let url): UnderlayDialog(state: state, url: url, isPDF: false)
             case .dwgUnavailable: DWGUnavailableDialog(state: state)
+            case .exportDWG: ExportDWGDialog(state: state) // DWG
             case .report(let title, let text): ReportDialog(state: state, title: title, text: text)
             case .newView(let kind): NewViewDialog(state: state, kind: kind)
             case .snaps: SnapsDialog(state: state)

@@ -190,6 +190,30 @@ struct BundledDWGEngineTests {
         }
     }
 
+    /// The sample project's first floor plan and first sheet, as the DWG export writes them, in every version.
+    @Test(.enabled(if: hasAcadrust)) func exportRealPlanAndSheetEveryVersion() throws {
+        let helper = try #require(Self.helpers.acadrust)
+        let m = CourtyardHouse.make()
+        let plan = try #require(m.views.first { $0.view?.kind == .floorPlan })
+        let sheet = try #require(m.sheets.first)
+        let planDXF = DXFWriter.write(ViewGraphicsBuilder(model: m, view: plan).build(), units: .millimeters, layers: .aia, model: m)
+        let sheetG = SheetGraphicsBuilder(model: m, sheet: sheet, includeGuides: false, viewGraphics: { ViewGraphicsBuilder(model: m, view: $0).build() }).build()
+        let sheetDXF = DXFWriter.write(sheetG, units: .millimeters, layers: .aia, model: m)
+        for (name, dxf) in [("plan", planDXF), ("sheet", sheetDXF)] {
+            let reference = try DXFReader.read(dxf, fileName: "\(name).dxf")
+            #expect(reference.modelSpace.count > 20, "\(name) has content")
+            for v in DWGExportVersion.allCases {
+                let url = try Self.temp("\(name).dwg")
+                try DWGExporter.write(dxf: dxf, to: url, version: v, helper: helper, timeout: 120)
+                ExternalDWGConversionCache.shared.removeAll()
+                let back = try BundledAcadrustDWGProvider(helper: helper, timeout: 120).read(url, options: .init(), progress: { _ in }, isCancelled: { false })
+                #expect(back.modelSpace.count == reference.modelSpace.count, "\(name) \(v)")
+                #expect(Set(back.layers.map(\.name)) == Set(reference.layers.map(\.name)), "\(name) \(v) layers")
+                #expect(back.entityCounts == reference.entityCounts, "\(name) \(v) entity types")
+            }
+        }
+    }
+
     @Test func exportReplacesOnlyAfterSuccess() throws {
         let url = try Self.temp("Keep.dwg")
         try Data("previous".utf8).write(to: url)

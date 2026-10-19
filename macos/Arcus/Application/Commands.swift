@@ -98,6 +98,9 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // F1415 commands:
     case feExtrusion, feBlend, feRevolve, feSweep, feSweptBlend, feVoidExtrusion, feVoidBlend, feVoidRevolve, feVoidSweep, feModelLine, feComponent, feModelText, feOpening, feControl, feReferenceLine, feReferencePlane, feDimension, feSymbolicLine, feFamilyTypes, feFamilyCategory, feLoadIntoProject, feLoadAndClose, feFinishSketch, feCancelSketch, feDefault3D, feControlSingleVertical, feControlDoubleVertical, feControlSingleHorizontal, feControlDoubleHorizontal, feFilledRegion, feMaskingRegion, feText, feWorkPlaneSet, feWorkPlaneShow, feLoadNestedFamily, fePurgeUnused, feFlexTest, feSaveFamilyAs // F1415
 
+    // DWG commands:
+    case exportDWG // DWG
+
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
@@ -127,7 +130,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

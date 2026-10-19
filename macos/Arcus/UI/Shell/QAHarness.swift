@@ -329,7 +329,7 @@ enum QAHarness {
         }
         await step("DWG import reports licensing truthfully") {
             let p = DWGProviders.current
-            if p.isAvailable { return "ODA provider available: \(p.sdkVersion ?? "")" }
+            if p.isAvailable { return "DWG available: \(p.sdkName)" } // DWG: the bundled engines, an installed converter or the ODA SDK
             try check((p.unavailableReason ?? "").contains("ODA"), "Unavailable reason does not mention the ODA SDK")
             return p.unavailableReason ?? ""
         }
