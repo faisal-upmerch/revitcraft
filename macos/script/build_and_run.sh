@@ -120,10 +120,14 @@ RUN_APP="$APP"
 if [[ "$INSTALL" == "1" ]]; then
   echo "==> Installing to $INSTALL_DIR"
   INSTALLED="$INSTALL_DIR/$APP_NAME.app"
-  rm -rf "$INSTALLED.new"
+  # Never leave a half-copied app in place (macOS reports a bundle opened mid-copy as "damaged"): copy beside it, check
+  # the copy's signature, then swap it in with two renames and only then delete the old one.
+  rm -rf "$INSTALLED.new" "$INSTALLED.old"
   ditto "$APP" "$INSTALLED.new"
-  rm -rf "$INSTALLED"
+  codesign --verify --strict "$INSTALLED.new"
+  [[ -e "$INSTALLED" ]] && mv "$INSTALLED" "$INSTALLED.old"
   mv "$INSTALLED.new" "$INSTALLED"
+  rm -rf "$INSTALLED.old"
   codesign --verify --strict "$INSTALLED"
   # Only the installed copy is registered, so Finder, Spotlight and `open -b` find the one in Applications.
   "$LSREGISTER" -u "$APP" >/dev/null 2>&1 || true
