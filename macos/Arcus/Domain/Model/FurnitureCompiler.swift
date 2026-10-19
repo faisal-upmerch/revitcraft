@@ -46,6 +46,7 @@ public enum FurnitureCompiler {
         addComponents(m, to: &f)
         addParts(m, to: &f) // FM4: each part becomes family solids bounded by the same planes (FurnitureCompiler+Parts)
         addFronts(m, to: &f) // FM5: fronts as solids on the bays' planes, hardware as nested families, swing lines (FurnitureCompiler+Fronts)
+        addPlanRepresentation(to: &f) // FM8: Coarse outline, Medium/Fine edges seen from above (FurnitureCompiler+FM8)
         f.furnitureSource = FurnitureSource(m).encoded()
         return f
     }
@@ -111,11 +112,29 @@ public enum FurnitureLoading {
             mapped[id] = target
             return target
         }
-        for p in f.parameters { guard case .elementRef(.materials) = p.type else { continue }
-            for i in f.types.indices {
-                if let id = f.types[i].values[p.name]?.refValue { f.types[i].values[p.name] = material(id).map { .ref($0) } }
+        // FM8: nested families (hardware, legs, edge profiles) too, so their materials are the project's.
+        func mapMaterials(_ fam: inout FamilyDefinition) {
+            for p in fam.parameters { guard case .elementRef(.materials) = p.type else { continue }
+                for i in fam.types.indices {
+                    if let id = fam.types[i].values[p.name]?.refValue { fam.types[i].values[p.name] = material(id).map { .ref($0) } }
+                }
             }
+            for i in fam.nestedFamilies.indices { mapMaterials(&fam.nestedFamilies[i]) }
         }
-        return FamilyProjectLoader.load(f, replacing: existing, mode: mode, in: tx)
+        mapMaterials(&f)
+        let fid = FamilyProjectLoader.load(f, replacing: existing, mode: mode, in: tx)
+        setCosts(FurnitureCostEstimate.costs(byType: source), family: fid, mode: mode, in: tx) // FM8
+        return fid
+    }
+
+    /// FM8: the project types' Cost (Identity Data) from the piece's estimate: new types and Overwrite Parameter
+    /// Values take it; types that keep their values keep a cost already set in the project.
+    static func setCosts(_ costs: [String: Double], family fid: ElementID, mode: FamilyReloadMode, in tx: TransactionContext) {
+        let key = ParameterID("type.cost")
+        for t in tx.model.elements(.elementTypes) where t.typeData?.familyID == fid {
+            guard let c = costs[t.name], c > 0 else { continue }
+            if mode == .keepProjectValues, let old = t.typeData?.params[key]?.doubleValue, old > 0 { continue }
+            _ = tx.update(t.id) { $0.typeData?.params[key] = .double(c) }
+        }
     }
 }
