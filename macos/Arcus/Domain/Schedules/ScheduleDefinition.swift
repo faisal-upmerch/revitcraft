@@ -10,6 +10,11 @@ public enum ScheduleKind: String, Codable, Sendable, CaseIterable {
     case revisionSchedule = "Revision Schedule"
     case noteBlock = "Note Block"
     case keynoteLegend = "Keynote Legend" // F12
+    // FM7: Furniture fabrication schedules, computed from the parts rather than listing elements (FabricationSchedules).
+    case partList = "Part List", hardwareSchedule = "Hardware Schedule", edgeBanding = "Edge Banding", costSummary = "Cost"
+
+    /// FM7: schedules whose rows are fabrication items (cut parts, hardware lines, banding, cost lines).
+    public var isFabrication: Bool { self == .partList || self == .hardwareSchedule || self == .edgeBanding || self == .costSummary }
 }
 
 public enum ScheduleFieldSource: Hashable, Codable, Sendable {
@@ -27,6 +32,8 @@ public enum ScheduleFieldSource: Hashable, Codable, Sendable {
     case roomParameter(ParameterID)
     /// Combine Parameters: several parameters' values in one column (ScheduleFormatting.swift). // F12
     case combined([ScheduleCombinedPart])
+    /// FM7: a field of a fabrication schedule's rows, by name ("Cut Length", "Unit Cost"; FabricationSchedules.fields).
+    case fabrication(String)
 }
 
 public enum ScheduleTotal: String, Codable, Sendable, CaseIterable {

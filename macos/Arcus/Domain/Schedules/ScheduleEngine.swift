@@ -54,7 +54,7 @@ public enum ScheduleEngine {
         var records: [(ids: [ElementID], values: [String: ParamValue?], material: ElementID?)] = []
         for src in sources {
             var vals: [String: ParamValue?] = [:]
-            for f in def.fields where !isDeferred(f) { vals[f.id] = fieldValue(f, src.element, material: src.material, model) }
+            for f in def.fields where !isDeferred(f) { vals[f.id] = fieldValue(f, src.element, material: src.material, fabrication: src.fabrication, model) }
             for f in def.fields where isFormula(f) { vals[f.id] = formulaValue(f, def, vals, model) }
             records.append(([src.element.id], vals, src.material?.materialID))
         }
@@ -94,7 +94,12 @@ public enum ScheduleEngine {
                         case .total:
                             m.values[f.id] = sum(a, b)
                         case .none:
-                            if isCount(f) { m.values[f.id] = sum(a, b) } else if a != b { m.values[f.id] = .some(nil) }
+                            if isCount(f) { m.values[f.id] = sum(a, b) } else if a != b {
+                                // FM7: grouped cut-list rows list their Marks ("S1, S2").
+                                if case .fabrication(let n) = f.source, FabricationSchedules.joinedFields.contains(n), let x = a?.textValue, let y = b?.textValue {
+                                    m.values[f.id] = .text(x + ", " + y)
+                                } else { m.values[f.id] = .some(nil) }
+                            }
                         }
                     }
                     merged[merged.count - 1] = m
@@ -188,9 +193,12 @@ public enum ScheduleEngine {
 
     // MARK: Sources
 
-    struct Source { var element: Element; var material: MaterialQuantity? }
+    struct Source { var element: Element; var material: MaterialQuantity?; var fabrication: [String: ParamValue]? = nil }
 
     static func sourceRows(_ def: ScheduleDefinition, _ model: BIMModel) -> [Source] {
+        if def.kind.isFabrication { // FM7: cut parts, hardware lines, banding and cost lines
+            return FabricationSchedules.rows(def.kind, model).compactMap { r in model[r.elementID].map { Source(element: $0, material: nil, fabrication: r.values) } }
+        }
         switch def.kind {
         case .sheetList:
             return model.sheets.filter { $0.sheet?.appearsInSheetList ?? true }.map { Source(element: $0, material: nil) }
@@ -237,7 +245,7 @@ public enum ScheduleEngine {
         switch f.source { case .formula, .percentage: return true; default: return false }
     }
 
-    static func fieldValue(_ f: ScheduleField, _ e: Element, material: MaterialQuantity?, _ model: BIMModel) -> ParamValue? {
+    static func fieldValue(_ f: ScheduleField, _ e: Element, material: MaterialQuantity?, fabrication: [String: ParamValue]? = nil, _ model: BIMModel) -> ParamValue? {
         switch f.source {
         case .parameter(let p): return Parameters.value(p, of: e, model)
         case .count: return .double(1)
@@ -247,7 +255,7 @@ public enum ScheduleEngine {
             case "Name": return .text(model[m.materialID]?.name ?? "<By Category>")
             case "Area": return .double(m.area)
             case "Volume": return .double(m.volume)
-            default: return nil
+            default: return FabricationSchedules.takeoffValue(what, e, m, model) // FM7: Cost, Cost Unit, Sheet Count
             }
         case .roomParameter(let p):
             return RoomQueries.room(containing: e, model).flatMap { Parameters.value(p, of: $0, model) }
@@ -256,6 +264,8 @@ public enum ScheduleEngine {
             return nil
         case .combined(let parts): // F12
             return .text(ScheduleFormattingEdits.combinedText(parts, of: e, model))
+        case .fabrication(let n): // FM7
+            return fabrication?[n]
         }
     }
 
@@ -284,7 +294,8 @@ public enum ScheduleEngine {
             }
             return .text
         case .count: return .integer
-        case .material(let w): return w == "Area" ? .area : (w == "Volume" ? .volume : .text)
+        case .material(let w): return w == "Area" ? .area : (w == "Volume" ? .volume : (FabricationSchedules.takeoffFields.first { $0.name == w }?.type ?? .text)) // FM7
+        case .fabrication(let n): return FabricationSchedules.type(n, def.kind) // FM7
         case .formula(_, let t): return t
         case .percentage: return .percentage
         case .combined: return .text // F12
@@ -292,6 +303,8 @@ public enum ScheduleEngine {
     }
 
     static func format(_ v: ParamValue, type: ParamType, field: ScheduleField?, model: BIMModel) -> String {
+        // FM7: cut sizes in inches and fractions, as shops read them.
+        if case .fabrication(let n)? = field?.source, FabricationSchedules.inchFields.contains(n), let d = v.doubleValue { return FurnitureSizeText.inches(d) }
         if let dec = field?.decimals, let d = v.doubleValue, type.isNumeric, type != .integer {
             var units = model.units
             units.areaDecimals = dec; units.volumeDecimals = dec; units.numberDecimals = dec
