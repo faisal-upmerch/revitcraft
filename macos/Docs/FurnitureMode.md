@@ -30,7 +30,7 @@ Shop work in Revit is slow because every board is a hand-made extrusion, and not
 
 | Revit concept | Furniture mode equivalent | Behaves like |
 |---|---|---|
-| Wall (WA) | **Panel** (PN): sides, dividers, backs, aprons. Drawn by line in plan or elevation; Location Line (Panel Centerline / Face Inside / Face Outside); Base/Top Constraint to reference planes with offsets; Edit Profile; Opening | Walls: chain drawing, flip (Space), joins, grips, Attach Top/Base |
+| Wall (WA) | **Panel** (PA): sides, dividers, backs, aprons. Drawn by line in plan or elevation; Location Line (Panel Centerline / Face Inside / Face Outside); Base/Top Constraint to reference planes with offsets; Edit Profile; Opening | Walls: chain drawing, flip (Space), joins, grips, Attach Top/Base |
 | Floor (SB) | **Shelf / Top / Bottom** (SH): sketch boundary or Pick Panels; Height Offset from a plane; grain = span direction; Adjustable (shelf pins) or Fixed | Floors: sketch mode, Finish/Cancel, Pick Walls, span arrow |
 | Column (CL) | **Leg** (LG): placed at points/plane intersections; types square, round, tapered, turned, hairpin, sled; Base/Top Constraint | Columns: At Grids → **At Corners** |
 | Beam (BM) | **Rail** (RL): stretchers, aprons, cleats, slats; profile types; Z justification | Beams: chain, start/end offsets |
@@ -153,7 +153,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM1 | ✅ Home redesign (cards, recents grid, Imperial Architectural, no Residential), onboarding to match (port/HOME) | — |
 | FM2 | ✅ Family Editor on the main shell + clipping fixes (port/FES; minimum window 1200 × 700) | — |
 | FM3 | ✅ Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project (port/FM3). Open: labelling a new dimension from the UI; Forms use the in-place tool until FM4 | — |
-| FM4 | Parts: Panel, Shelf/Top/Bottom, Back, Divider, Leg, Rail, Plinth, Edge Profile; types, constraints, grips, graphics, Properties | FM3 |
+| FM4 | ✅ Parts: Panel (PA: PN is Revit's Pin), Shelf (SH), Top (TP), Back, Divider, Leg + At Corners, Rail + Slats, Plinth, Edge Profile, Groove; Forms + Cushion; types, constraints, grips, graphics, Properties, compile (port/FM4). Open: dimensions to part faces don't follow moved parts; Blend has no separate Edit Top; Sweep paths are plan-only | FM3 |
 | FM5 | Bays, Bay Divide, Doors/Drawers/Flaps, hardware families and auto-placement | FM4 |
 | FM6 | Joints: solver, Joint Rules, Joint tool, machining geometry, cut sizes | FM4 |
 | FM7 | Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Stock Sheets, nesting engine and views, CNC Export, shop drawing sheet | FM5, FM6 |

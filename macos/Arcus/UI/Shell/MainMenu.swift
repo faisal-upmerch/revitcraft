@@ -14,7 +14,7 @@ enum MainMenuBuilder {
         main.addItem(submenu("Edit", editItems()))
         main.addItem(submenu("View", viewItems()))
         CameraMenus.addNavigationItems(to: main.items.last?.submenu) // W2-CAM
-        // The menu bar follows the ribbon tabs: Architecture, Structure, Insert, Annotate, (View above), Manage.
+        // The menu bar follows the ribbon tabs: Architecture, Structure, Furniture, Insert, Annotate, (View above), Manage.
         let byFace = submenu("Model by Face", commands([.curtainSystemByFace, .roofByFace, .wallByFace, .floorByFace])) // F5
         let architecture = submenu("Architecture", commands([.wall, .stackedWall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .modelInPlace, .column, nil, // F1: Wall: Reveal; F2: Stacked; F5: In-place
                                                       .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
@@ -26,6 +26,7 @@ enum MainMenuBuilder {
         main.addItem(submenu("Structure", commands([.structuralColumn, .verticalColumn, .slantedColumn, .columnsAtGrids, .columnsAtColumns, .beam, // F2 .structuralWall, .structuralFloor, .truss, .brace, .beamSystem, nil,
                                                     .foundationIsolated, .foundationWall, .foundationSlab, nil, // F34
                                                     .rebar, .areaReinforcement, .pathReinforcement, .fabricArea, .fabricSheet, .rebarCover, .couplerOnBarEnd, .couplerBetweenBars])))
+        main.addItem(furnitureMenu()) // FM4: Furniture mode
         main.addItem(submenu("Insert", commands([.linkModel, .linkIFC, .linkCAD, .linkTopography, .dwfMarkup, .placeDecal, .decalTypes, .pointCloud, .coordinationModel, .linkPDF, .linkImage, nil, // F67
                                                  .manageLinks, .reloadLink, .unloadLink, .convertLinkToDrafting, nil,
                                                  .importCAD, .importGbXML, .importPDF, .importImage, .importIFC, .importRevit, nil,

@@ -80,6 +80,12 @@ public enum FurnitureRegeneration {
         for e in solution.errors.prefix(3) {
             tx.warn(ModelWarning(.warning, code: "furniture.solve", e, elements: []))
         }
+        // Where the planes were before this transaction (regeneration can run more than once per transaction).
+        var original: [ElementID: Double] = [:]
+        for p in FurniturePlanes.all(tx.model) {
+            if let rp = tx.originalElement(p.id)?.referencePlane, let v = FurniturePlanes.position(rp) { original[p.id] = v }
+        }
+        let before = FurniturePlanes.extents(tx.model, positions: original)
         let extents = FurniturePlanes.extents(tx.model, positions: solution.planes)
         for p in FurniturePlanes.all(tx.model) {
             guard let rp = p.referencePlane, let v = solution.planes[p.id] ?? FurniturePlanes.position(rp) else { continue }
@@ -87,6 +93,33 @@ public enum FurnitureRegeneration {
             if placed != rp { tx.propagate(p.id) { $0.referencePlane = placed } }
         }
         fitCrops(tx, extents)
+        keepDimensionsOutside(tx, from: before, to: extents)
+    }
+
+    /// The piece's box seen in a view (plan: x/y; elevations and sections: along the view's right vector and z).
+    static func viewRect(_ d: ViewData, _ e: (x: ClosedRange<Double>, y: ClosedRange<Double>, z: ClosedRange<Double>)) -> Rect2? {
+        if d.kind.isPlan { return Rect2(min: Vec2(e.x.lowerBound, e.y.lowerBound), max: Vec2(e.x.upperBound, e.y.upperBound)) }
+        guard d.kind.isVerticalCut, let o = d.planeOrigin, let r = d.rightVector else { return nil }
+        let us = [Vec2(e.x.lowerBound, e.y.lowerBound), Vec2(e.x.upperBound, e.y.lowerBound), Vec2(e.x.lowerBound, e.y.upperBound),
+                  Vec2(e.x.upperBound, e.y.upperBound)].map { ($0 - o.xy).dot(r) }
+        return Rect2(min: Vec2(us.min() ?? 0, e.z.lowerBound), max: Vec2(us.max() ?? 0, e.z.upperBound))
+    }
+
+    /// Dimensions placed outside the piece stay the same distance outside it when the piece grows or shrinks, so a
+    /// 60" table's Height dimension doesn't end up across the drawing.
+    static func keepDimensionsOutside(_ tx: TransactionContext, from old: (x: ClosedRange<Double>, y: ClosedRange<Double>, z: ClosedRange<Double>),
+                                      to new: (x: ClosedRange<Double>, y: ClosedRange<Double>, z: ClosedRange<Double>)) {
+        guard old != new else { return }
+        for dim in tx.model.elements(.dimensions) {
+            guard let vid = dim.ownerViewID, let vd = tx.model[vid]?.view, let dd = dim.dimension,
+                  let a0 = viewRect(vd, old), let b0 = viewRect(vd, new) else { continue }
+            // The planes' extents carry a margin; measure from the piece itself.
+            let a = a0.expanded(by: -FurniturePlanes.margin), b = b0.expanded(by: -FurniturePlanes.margin)
+            var lp = dd.linePoint
+            if lp.x < a.min.x { lp.x = b.min.x - (a.min.x - lp.x) } else if lp.x > a.max.x { lp.x = b.max.x + (lp.x - a.max.x) }
+            if lp.y < a.min.y { lp.y = b.min.y - (a.min.y - lp.y) } else if lp.y > a.max.y { lp.y = b.max.y + (lp.y - a.max.y) }
+            if lp != dd.linePoint { tx.propagate(dim.id) { $0.dimension?.linePoint = lp } }
+        }
     }
 
     /// Views whose crop follows the piece (the template's views, `FurnitureViews.autoCrop`): plans crop to the planes'
@@ -98,10 +131,8 @@ public enum FurnitureRegeneration {
             let crop: Rect2
             if d.kind.isPlan {
                 crop = Rect2(min: Vec2(e.x.lowerBound - pad, e.y.lowerBound - pad), max: Vec2(e.x.upperBound + pad, e.y.upperBound + pad))
-            } else if d.kind.isVerticalCut, let o = d.planeOrigin, let r = d.rightVector {
-                let us = [Vec2(e.x.lowerBound, e.y.lowerBound), Vec2(e.x.upperBound, e.y.lowerBound), Vec2(e.x.lowerBound, e.y.upperBound),
-                          Vec2(e.x.upperBound, e.y.upperBound)].map { ($0 - o.xy).dot(r) }
-                crop = Rect2(min: Vec2((us.min() ?? 0) - pad, e.z.lowerBound - pad), max: Vec2((us.max() ?? 0) + pad, e.z.upperBound + pad))
+            } else if d.kind.isVerticalCut, let r = viewRect(d, e) {
+                crop = r.expanded(by: pad)
             } else { continue }
             if d.cropRegion != crop || !d.cropActive || !d.annotationCropActive {
                 tx.propagate(v.id) { $0.view?.cropRegion = crop; $0.view?.cropActive = true; $0.view?.annotationCropActive = true }

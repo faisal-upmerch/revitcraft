@@ -268,6 +268,12 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Turn Override Off |  | `SS` | Cancel a snap override typed for the next pick; the normal snaps apply again. |
 | Repeat Last Command |  | `RC` | Run the last creation or modify command again. Return in Modify does the same. |
 | Select Joined Elements |  |  | Adds the elements joined to the selection. |
+| Edit Profile |  |  | Sketches a new outline for the selected panel in an elevation that looks at its face. |
+| Reset Profile |  |  | Restores the selected panels' rectangular outline. |
+| Attach Top/Base |  |  | Runs the selected panels or legs to a shelf or top you pick: tops to its underside, bases to its top face. |
+| Detach Top/Base |  |  | Detaches the selected panels and legs from their shelf or top. |
+| Opening |  |  | Cuts a rectangular opening in a panel: pick two corners on its face in an elevation. |
+| Flip Panel |  |  | Swaps the outside and inside faces of the selected panels. |
 
 ### Architecture
 
@@ -357,6 +363,29 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Wall by Face |  |  | Creates walls on the vertical faces of the selected mass. |
 | Floor by Face |  |  | Creates floors where levels cut the selected mass (mass floors). |
 | Model In-place |  |  | Creates an in-place family: unique geometry modelled in the context of the project. |
+| Panel |  | `PA` | Draws sheet panels (sides, aprons, backs) like walls: by line, chain, rectangle or picked lines, in plan or in an elevation. Space flips the outside face. |
+| Shelf |  | `SH` | Sketches a shelf or bottom like a floor: draw its boundary or Pick Panels, then Finish. |
+| Top |  | `TP` | Sketches a top like a floor, its edges past the carcass by the type's overhang. |
+| Back |  | `BK` | Places a back across a carcass: click inside it in an elevation; fits inside or over the back edges. |
+| Divider |  | `DV` | Splits a bay into equal spaces with vertical or horizontal panels (EQ): click inside the bay in an elevation. |
+| Leg |  | `LG` | Places legs like columns at points; Space rotates. At Corners places one in each corner of a top. |
+| At Corners |  |  | Places a leg in each corner of the picked top or shelf, inset from its edges, up to its underside. |
+| Rail |  | `RL` | Draws stretchers, aprons and cleats like beams between two points, with Z Justification. |
+| Slats |  | `SLT` | Fills a region with slats at a spacing or number, as a beam system (bench seats, bed bases). |
+| Plinth |  | `KK` | Runs a toe kick under the front of a bottom: pick the bottom, set the setback. |
+| Edge Profile |  | `EP` | Runs a profile along part edges (round-over, chamfer, bullnose, ogee, cove, finger pull), as a wall sweep. |
+| Groove |  | `GV` | Cuts a groove along a part edge at an offset, as a wall reveal. |
+| Extrusion |  |  | Sketches a closed profile on the work plane and extrudes it. |
+| Blend |  |  | Sketches a base loop and a top loop, and blends between them. |
+| Revolve |  |  | Sketches a profile and an axis line in an elevation, and turns the profile about the axis. |
+| Sweep |  |  | Sketches a path and a profile, and sweeps the profile along the path. |
+| Swept Blend |  |  | Sweeps a profile along a path, changing to a second profile at its end. |
+| Cushion |  | `CU` | Places a cushion: a box with a crowned top, rounded corners and piping. |
+| Void Extrusion |  |  | An extrusion that cuts the parts it reaches. |
+| Void Blend |  |  | A blend that cuts the parts it reaches. |
+| Void Revolve |  |  | A revolve that cuts the parts it reaches. |
+| Void Sweep |  |  | A sweep that cuts the parts it reaches. |
+| Void Swept Blend |  |  | A swept blend that cuts the parts it reaches. |
 
 ### Structure
 
