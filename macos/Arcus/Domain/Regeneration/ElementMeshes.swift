@@ -46,6 +46,8 @@ public enum ElementMeshes {
             return MassGeometry.meshParts(e, model)
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureForm: // FM4: furniture parts
             return FurniturePartMeshes.meshParts(e, model, detail: detail)
+        case .furnitureFront: // FM5: doors, drawers and flaps
+            return FurnitureFrontSolids.meshParts(e, model, detail: detail)
         default:
             return []
         }
@@ -72,6 +74,7 @@ public enum ElementMeshes {
         case .mass: true // F5
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail: true // FM4
         case .furnitureForm(let f): !f.isVoid // FM4: void forms cut parts and show no solid of their own
+        case .furnitureFront: true // FM5
         default: false
         }
     }
@@ -100,6 +103,8 @@ public enum ElementMeshes {
         case .mass: RGBColor(0.72, 0.80, 0.90, 0.5) // F5: masses are translucent, as in RevitCraft
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails: RGBColor(0.85, 0.74, 0.56) // FM4: unfinished wood
         case .furnitureForms: RGBColor(0.70, 0.72, 0.76) // FM4
+        case .furnitureFronts: RGBColor(0.88, 0.78, 0.60) // FM5
+        case .furnitureHardware: RGBColor(0.62, 0.64, 0.67) // FM5: brushed steel
         default: RGBColor(0.80, 0.80, 0.80)
         }
     }
@@ -236,6 +241,8 @@ public enum DependencyGraph {
             s.formUnion(Reinforcement.inputs(of: e, model))
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4: edge profiles, void forms
             s.formUnion(FurniturePartMeshes.inputs(of: e, model))
+        case .furnitureFront: // FM5: its bay, materials and hardware
+            s.formUnion(FurnitureFrontSolids.inputs(of: e, model))
         default:
             break
         }
@@ -281,6 +288,8 @@ public enum DependencyGraph {
                     if let h = e.hostID { out.insert(h) }
                 case .furnitureEdgeProfile: // FM4: the host part's solid has the profile
                     if let h = e.hostID { out.insert(h) }
+                case .furnitureBay: // FM5: fronts and sub-bays follow their bay
+                    for x in m.hosted(by: id) { out.insert(x.id); for y in m.hosted(by: x.id) { out.insert(y.id) } }
                 case .furnitureForm(let f) where f.isVoid: // FM4: a void form cuts every part it reaches
                     for c in Category.furnitureParts { for x in m.elements(c) { out.insert(x.id) } }
                 case .opening: // WP3

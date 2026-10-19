@@ -64,6 +64,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FM4 categories:
     case furniturePanels, furnitureShelves, furnitureLegs, furnitureRails, furnitureEdgeProfiles, furnitureForms // FM4
     // FM5 categories:
+    case furnitureBays, furnitureFronts, furnitureBaySeparators, furnitureHardware // FM5
     // FM6 categories:
     // FM7 categories:
     // FM8 categories:
@@ -110,6 +111,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .matchlines: return .datum // F810: shown in every plan, as in RevitCraft
         case .renderings: return .internal_ // F810: Render Gallery images
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
+        case .furnitureBays, .furnitureFronts, .furnitureBaySeparators, .furnitureHardware: return .model // FM5: bays like rooms, separators like room separators
         }
     }
 
@@ -127,6 +129,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .structuralRebar, .areaReinforcement, .pathReinforcement, .fabricAreas, .fabricReinforcement, .rebarCouplers, // F34
         .spaces, .mass, // F5
         .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
+        .furnitureBays, .furnitureFronts, .furnitureHardware, // FM5
     ]
     /// Categories whose instances can be tagged.
     public static let taggable: [Category] = [
@@ -135,6 +138,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking, // W2-LIB
         .spaces, // F5
         .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms, // FM4
+        .furnitureBays, .furnitureFronts, .furnitureHardware, // FM5
     ]
 
     public var displayName: String {
@@ -250,6 +254,10 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureRails: "Rails"
         case .furnitureEdgeProfiles: "Edge Profiles"
         case .furnitureForms: "Forms"
+        case .furnitureBays: "Bays" // FM5
+        case .furnitureFronts: "Doors and Drawers"
+        case .furnitureBaySeparators: "Bay Separation Lines"
+        case .furnitureHardware: "Furniture Hardware"
         }
     }
 
@@ -367,6 +375,10 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureRails: "Rail"
         case .furnitureEdgeProfiles: "Edge Profile"
         case .furnitureForms: "Form"
+        case .furnitureBays: "Bay" // FM5
+        case .furnitureFronts: "Front"
+        case .furnitureBaySeparators: "Bay Separation Line"
+        case .furnitureHardware: "Furniture Hardware"
         }
     }
 
@@ -385,6 +397,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
              .doors, .windows, .topography, .buildingPads, .genericModels, .casework, .ramps:
             true
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms: true // FM4
+        case .furnitureFronts: true // FM5
         default: false
         }
     }
@@ -400,6 +413,7 @@ extension Category {
     public static let componentCategories: [Category] = [
         .furniture, .casework, .plumbingFixtures, .genericModels, .specialtyEquipment,
         .lightingFixtures, .electricalFixtures, .mechanicalEquipment, .planting, .entourage, .site, .parking,
+        .furnitureHardware, // FM5: hinges, slides, handles… placed with Component
     ]
     public var isComponentCategory: Bool { Category.componentCategories.contains(self) }
 }

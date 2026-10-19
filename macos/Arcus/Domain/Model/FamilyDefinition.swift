@@ -26,6 +26,7 @@ public enum FamilyTemplate: String, Codable, Sendable, CaseIterable {
     case entourage = "Entourage"
     case parking = "Parking"
     case site = "Site"
+    case furnitureHardware = "Furniture Hardware" // FM5: hinges, slides, handles, stays, glides, pins, connectors
 
     public var category: Category {
         switch self {
@@ -51,6 +52,7 @@ public enum FamilyTemplate: String, Codable, Sendable, CaseIterable {
         case .entourage: .entourage
         case .parking: .parking
         case .site: .site
+        case .furnitureHardware: .furnitureHardware // FM5
         }
     }
     public var isHostedInWall: Bool { self == .door || self == .window }

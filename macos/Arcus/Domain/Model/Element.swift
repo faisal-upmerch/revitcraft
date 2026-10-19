@@ -166,6 +166,8 @@ public enum ElementKind: String, Codable, Sendable, CaseIterable {
 
     // FM4 element kinds:
     case furniturePanel, furnitureShelf, furnitureLeg, furnitureRail, furnitureEdgeProfile, furnitureForm // FM4
+    // FM5 element kinds:
+    case furnitureBay, furnitureFront, furnitureBaySeparator // FM5
 }
 
 /// Kind-specific element data.
@@ -276,6 +278,9 @@ public enum ElementData: Hashable, Codable, Sendable {
     case furniturePanel(PanelData), furnitureShelf(ShelfData), furnitureLeg(LegData), furnitureRail(RailData)
     case furnitureEdgeProfile(EdgeProfileData), furnitureForm(FurnitureFormData)
     // FM5 element data:
+    /// FM5: bays (openings between parts, like rooms), bay separators, and the doors, drawers and flaps hosted in them
+    /// (Domain/Furniture/FurnitureFrontData.swift).
+    case furnitureBay(BayData), furnitureFront(FrontData), furnitureBaySeparator(BaySeparatorData)
     // FM6 element data:
     // FM7 element data:
     // FM8 element data:
@@ -383,6 +388,9 @@ public enum ElementData: Hashable, Codable, Sendable {
         case .furnitureRail: .furnitureRail
         case .furnitureEdgeProfile: .furnitureEdgeProfile
         case .furnitureForm: .furnitureForm
+        case .furnitureBay: .furnitureBay // FM5
+        case .furnitureFront: .furnitureFront
+        case .furnitureBaySeparator: .furnitureBaySeparator
         }
     }
 }

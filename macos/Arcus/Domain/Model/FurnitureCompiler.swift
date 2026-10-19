@@ -45,6 +45,7 @@ public enum FurnitureCompiler {
         f.planLines = symbolicLines(m)
         addComponents(m, to: &f)
         addParts(m, to: &f) // FM4: each part becomes family solids bounded by the same planes (FurnitureCompiler+Parts)
+        addFronts(m, to: &f) // FM5: fronts as solids on the bays' planes, hardware as nested families, swing lines (FurnitureCompiler+Fronts)
         f.furnitureSource = FurnitureSource(m).encoded()
         return f
     }
