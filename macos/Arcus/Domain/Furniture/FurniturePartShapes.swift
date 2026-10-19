@@ -35,6 +35,7 @@ public enum FurnitureLegShapes {
         if let mat = tv.material { values["Material"] = .ref(mat) }
         f.types = [FamilyTypeDefinition(name: "Leg", values: values)]
         let w = tv.width, d = tv.depth, rod = max(tv.rod, 0.003)
+        // FM9: offsets from Height are written as lengths ("Height - 0.003 m"), so the leg evaluates in compiled families.
         switch tv.legShape {
         case .square:
             if tv.taper > Tolerance.length {
@@ -63,23 +64,23 @@ public enum FurnitureLegShapes {
             // Two rods from the foot to the top plate, splayed across the leg's width; a 3/16" plate on top.
             let plate = 0.1875 * 0.0254
             let spread = max(w / 2 - rod, rod)
-            f.solids = [solid("Plate", rect(-w / 2, -rod * 2, w / 2, rod * 2), "Height - \(n(plate))", "Height")]
+            f.solids = [solid("Plate", rect(-w / 2, -rod * 2, w / 2, rod * 2), "Height - \(n(plate)) m", "Height")]
             for (k, sx) in [-1.0, 1.0].enumerated() {
                 f.solids.append(solid("Rod \(k + 1)", .blend(FamilyBlend(bottom: ngon(Vec2(sx * rod * 0.6, 0), rod / 2, sides: 8),
-                                                                         top: ngon(Vec2(sx * spread, 0), rod / 2, sides: 8))), "0", "Height - \(n(plate))"))
+                                                                         top: ngon(Vec2(sx * spread, 0), rod / 2, sides: 8))), "0", "Height - \(n(plate)) m"))
             }
         case .sled:
             // A tube frame across the depth: runner, two posts and a top bar.
             let t = rod, half = max(d / 2, t)
             f.solids = [solid("Runner", rect(-w / 2, -half, w / 2, half), "0", n(t)),
-                        solid("Top Bar", rect(-w / 2, -half, w / 2, half), "Height - \(n(t))", "Height"),
-                        solid("Post 1", rect(-w / 2, -half, w / 2, -half + t), n(t), "Height - \(n(t))"),
-                        solid("Post 2", rect(-w / 2, half - t, w / 2, half), n(t), "Height - \(n(t))")]
+                        solid("Top Bar", rect(-w / 2, -half, w / 2, half), "Height - \(n(t)) m", "Height"),
+                        solid("Post 1", rect(-w / 2, -half, w / 2, -half + t), n(t), "Height - \(n(t)) m"),
+                        solid("Post 2", rect(-w / 2, half - t, w / 2, half), n(t), "Height - \(n(t)) m")]
         case .caster:
-            // Mounting plate, fork and wheel; the wheel fills most of the height.
+            // Mounting plate, fork and wheel; the wheel fills most of the height. (FM9C: offsets from Height are lengths.)
             let plate = 0.125 * 0.0254
-            f.solids = [solid("Plate", rect(-w / 2, -w / 2, w / 2, w / 2), "Height - \(n(plate))", "Height"),
-                        solid("Fork", rect(-w * 0.18, -w * 0.3, w * 0.18, w * 0.3), "Height * 0.45", "Height - \(n(plate))")]
+            f.solids = [solid("Plate", rect(-w / 2, -w / 2, w / 2, w / 2), "Height - \(n(plate)) m", "Height"),
+                        solid("Fork", rect(-w * 0.18, -w * 0.3, w * 0.18, w * 0.3), "Height * 0.45", "Height - \(n(plate)) m")]
             var wheel = FamilySolid(name: "Wheel", profile: .circle(center: FamilyPoint(.expr("0"), .expr("Height * 0.3")), radius: "Height * 0.3"),
                                     zMin: .expr(n(-w * 0.12)), zMax: .expr(n(w * 0.12)), materialParameter: "Material")
             wheel.workPlane = .xz

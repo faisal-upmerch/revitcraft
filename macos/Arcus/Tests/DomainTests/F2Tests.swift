@@ -224,6 +224,7 @@ struct F2Tests {
         let tool = StairTool(ctx: ctx, shape: .straight)
         tool.multistoryTopLevelID = ids.levels[2]
         click(tool, Vec2(0, 0)); click(tool, Vec2(0, 5))
+        #expect(tool.finish()) // STAIR: Create Stair is a sketch: Finish Edit Mode creates the stair
         let stair = try #require(ctx.model.elements(.stairs).first)
         #expect(stair.stair?.multistoryTopLevelID == ids.levels[2])
         let m = ctx.model

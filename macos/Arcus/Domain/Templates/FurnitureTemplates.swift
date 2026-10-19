@@ -180,7 +180,9 @@ public enum FurnitureTemplates {
             tx.create(.viewports, data: .viewport(ViewportData(viewID: view, center: center, detailNumber: number)), ownerViewID: sheet)
         }
         FurniturePartTypes.ensureStandard(in: tx) // FM4: standard part types and the Part Tag
-        // FM7 schedules: Part List, Hardware Schedule and Material Takeoff are added by the fabrication milestone.
+        FurnitureFrontTypes.ensureStandard(in: tx) // FM5: hardware families, door/drawer/flap types, Bay and Front Tags
+        FurnitureJointOperations.ensureCutSizeTag(in: tx) // FM6: the Cut Size Tag
+        FurnitureShopDrawings.ensureStandard(in: tx) // FM7: Part List, Hardware Schedule, Material Takeoff, Edge Banding, Cost; sheets F101–F104
     }
 
     /// A new untitled piece from a saved Furniture document (a library piece or the user's own template), renamed and

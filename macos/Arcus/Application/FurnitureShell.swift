@@ -23,7 +23,7 @@ public enum FurnitureShell {
     /// (Ref. Level), as a family does.
     public static let architectureOnly: Set<CommandID> = [
         .wall, .wallArc, .wallRectangle, .wallPickLines, .door, .window, .column, .structuralColumn, .beam, .floor, .floorPickWalls, .ceiling,
-        .roofFootprint, .roofPickWalls, .roofExtrusion, .roofSoffit, .stairStraight, .stairL, .stairU, .editStair, .railing, .ramp,
+        .roofFootprint, .roofPickWalls, .roofExtrusion, .roofSoffit, .stairStraight, .stairL, .stairU, .editStair, .railing, .ramp, .stair, // STAIR
         .room, .roomSeparator, .roomTag, .area, .areaBoundary, .areaTag, .areaPlan, .placeRoomsAutomatically, .placeAreasAutomatically,
         .colorSchemes, .colorFillLegend, .highlightBoundaries, .grid, .gridPickLines, .gridMultiSegment, .level, .connectLevels,
         .propertyLine, .toposurface, .toposurfaceFromFile, .toposurfaceFromImport, .buildingPad, .subregion, .splitSurface, .mergeSurfaces,

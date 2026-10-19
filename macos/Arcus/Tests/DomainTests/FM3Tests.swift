@@ -22,7 +22,7 @@ struct FM3Tests {
 
     // MARK: Template
 
-    @Test func blankTemplateIsAnImperialFurnitureDocument() {
+    @Test func blankTemplateIsAnImperialFurnitureDocument() throws {
         let m = FurnitureTemplates.blank(category: .furniture, name: "Side Table")
         #expect(m.isFurniture)
         #expect(m.units == .imperial)
@@ -39,10 +39,10 @@ struct FM3Tests {
         for v in ["Floor Plan: Ref. Level", "Elevation: Front", "Elevation: Back", "Elevation: Left", "Elevation: Right", "3D View: {3D}"] {
             #expect(views.contains(v), "missing \(v) in \(views)")
         }
-        #expect(m.sheets.count == 1)
-        let sheet = m.sheets[0]
+        #expect(m.sheets.count == 4) // FM7: F101 Shop Drawing and F102–F104 (Part List, Nesting, 3D and Costs)
+        let sheet = try #require(m.sheets.first { $0.sheet?.number == "F101" })
         #expect(sheet.sheet?.paper == .ansiB && sheet.sheet?.titleBlockTypeID != nil)
-        #expect(m.owned(byView: sheet.id).filter { $0.viewport != nil }.count == 4)
+        #expect(m.owned(byView: sheet.id).filter { $0.viewport != nil }.count == 5) // FM7: plus Section A
         // The eight planes with Revit-style strengths, in their default places.
         let planes = Dictionary(uniqueKeysWithValues: FurniturePlanes.all(m).map { ($0.name, $0.referencePlane!.furniture!) })
         #expect(Set(planes.keys) == ["Center (Left/Right)", "Center (Front/Back)", "Left", "Right", "Front", "Back", "Bottom", "Top"])
@@ -213,7 +213,7 @@ struct FM3Tests {
         #expect(f.referencePlanes.first { $0.name == "Right" }?.offset == "Width / 2")
         #expect(f.dimensions.contains { $0.labelParameter == "Width" } && f.dimensions.contains(where: \.isEquality))
         #expect(f.parameters.map(\.name) == ["Width", "Depth", "Height", "Material"])
-        #expect(f.planLines.count == 1)
+        #expect(f.planLines.filter { $0.visibleAt != [.coarse] }.count == 1) // FM8: plus the Coarse outline on Left/Right/Front/Back
         #expect(FamilyEvaluator.flexTest(f, units: .imperial).isEmpty, "\(FamilyEvaluator.flexTest(f, units: .imperial))")
         #expect(FurnitureParameters.flex(m).isEmpty)
         let ev = FamilyEvaluator.evaluate(f, typeName: f.types[0].name, units: .imperial)

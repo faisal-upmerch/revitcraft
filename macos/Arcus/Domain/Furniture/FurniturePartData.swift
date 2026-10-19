@@ -331,6 +331,8 @@ public struct FurnitureFormData: Hashable, Codable, Sendable {
     public var cushion: CushionSpec?
     public var materialID: ElementID?
     public var visibleAt: Set<DetailLevel>
+    /// FM9: the planes the form follows (nil = it stays where it was drawn).
+    public var lock: FormLock? = nil
     public init(kind: FurnitureFormKind, isVoid: Bool = false, plane: FamilySketchPlane = .xy, profile: [Vec2], w0: Double, w1: Double) {
         self.kind = kind; self.isVoid = isVoid; self.plane = plane; self.profile = profile; holes = []; topProfile = nil; endProfile = nil
         path = nil; axis = nil; startAngle = 0; endAngle = 2 * .pi; self.w0 = w0; self.w1 = w1; cushion = nil; materialID = nil

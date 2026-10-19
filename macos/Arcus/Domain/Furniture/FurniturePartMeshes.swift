@@ -7,7 +7,7 @@ import ArcusGeometry
 
 public enum FurniturePartMeshes {
     /// The part as a family to evaluate, with the material of each of its solids.
-    static func displayFamily(_ e: Element, _ m: BIMModel, voids extra: [FamilySolid] = []) -> (FamilyDefinition, [String: ElementID]) {
+    static func displayFamily(_ e: Element, _ m: BIMModel, voids extra: [FamilySolid] = [], detail: DetailLevel? = nil) -> (FamilyDefinition, [String: ElementID]) {
         let ctx = PartSolidContext(symbolic: false)
         var parts = FurniturePartSolids.solids(e, m, ctx)
         if e.furnitureEdgeProfile == nil, e.furnitureForm?.isVoid != true {
@@ -16,6 +16,7 @@ public enum FurniturePartMeshes {
         var f = FamilyDefinition(name: "Part \(e.id.raw)", template: .genericModel)
         f.types = [FamilyTypeDefinition(name: "Part", values: [:])]
         f.solids = parts.solids + extra
+        if let detail { f.solids = f.solids.filter { $0.visibleAt.contains(detail) } } // FM6: joint cuts and tenons only at Fine
         for (k, p) in parts.placed.enumerated() {
             var nf = p.family
             nf.name = "Local \(k) \(nf.name)"
@@ -33,9 +34,9 @@ public enum FurniturePartMeshes {
     }
 
     /// The part evaluated, with its materials per solid id.
-    public static func evaluated(_ e: Element, _ m: BIMModel) -> (EvaluatedFamily, [String: ElementID])? {
+    public static func evaluated(_ e: Element, _ m: BIMModel, detail: DetailLevel? = nil) -> (EvaluatedFamily, [String: ElementID])? {
         guard e.category.isFurniturePart else { return nil }
-        var (f, mats) = displayFamily(e, m)
+        var (f, mats) = displayFamily(e, m, detail: detail)
         guard !f.solids.isEmpty || !f.nestedInstances.isEmpty else { return nil }
         var ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units)
         // Void forms cut the parts they reach, as voids cut solids in a family.
@@ -43,7 +44,7 @@ public enum FurniturePartMeshes {
             let b = ev.bounds
             let voids = voidForms(m).filter { $0.1.intersects(b) }.flatMap(\.0)
             if !voids.isEmpty {
-                (f, mats) = displayFamily(e, m, voids: voids)
+                (f, mats) = displayFamily(e, m, voids: voids, detail: detail)
                 ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units)
             }
         }
@@ -65,7 +66,7 @@ public enum FurniturePartMeshes {
 
     /// The part's 3D representation: one mesh part per solid, with its material (faces coloured by a face material).
     public static func meshParts(_ e: Element, _ m: BIMModel, detail: DetailLevel) -> [MeshPart] {
-        guard let (ev, mats) = evaluated(e, m) else { return [] }
+        guard let (ev, mats) = evaluated(e, m, detail: detail) else { return [] }
         let tv = FurniturePartTypes.values(of: e, m)
         let face = tv.faceMaterial.flatMap { m[$0]?.material }
         return ev.solids.filter { !$0.isVoid && $0.visibleAt.contains(detail) }.map { s in
@@ -85,6 +86,8 @@ public enum FurniturePartMeshes {
         for v in m.elements(.furnitureForms) where v.furnitureForm?.isVoid == true { s.insert(v.id) }
         let tv = FurniturePartTypes.values(of: e, m)
         for id in [tv.coreMaterial, tv.faceMaterial].compactMap({ $0 }) { s.insert(id) }
+        s.formUnion(FurnitureJoints.inputs(of: e, m)) // FM6: the parts it joins, its joints and the Joint Rules
+        s.formUnion(FurnitureFormLocks.inputs(of: e, m)) // FM9: the planes a locked form follows
         return s
     }
 

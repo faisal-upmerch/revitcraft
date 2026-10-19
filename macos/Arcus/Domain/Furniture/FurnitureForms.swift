@@ -46,6 +46,7 @@ public enum FurnitureForms {
             guard let c = f.cushion else { return out }
             list = cushion(name, c, z0: f.w0)
         }
+        list = FurnitureFormLocks.apply(f.lock, to: list, m, ctx) // FM9: forms locked to planes follow them
         for var s in list {
             s.visibleAt = f.visibleAt
             out.solids.append(s)

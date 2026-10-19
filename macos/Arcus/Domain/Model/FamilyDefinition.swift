@@ -26,6 +26,7 @@ public enum FamilyTemplate: String, Codable, Sendable, CaseIterable {
     case entourage = "Entourage"
     case parking = "Parking"
     case site = "Site"
+    case furnitureHardware = "Furniture Hardware" // FM5: hinges, slides, handles, stays, glides, pins, connectors
 
     public var category: Category {
         switch self {
@@ -51,6 +52,7 @@ public enum FamilyTemplate: String, Codable, Sendable, CaseIterable {
         case .entourage: .entourage
         case .parking: .parking
         case .site: .site
+        case .furnitureHardware: .furnitureHardware // FM5
         }
     }
     public var isHostedInWall: Bool { self == .door || self == .window }
@@ -219,6 +221,8 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
     /// F1415: the plane an extrusion's profile is sketched on (nil = plan, XY). On XZ and YZ the rectangle, polygon or
     /// circle coordinates are that plane's (u, v), and `zMin`/`zMax` run along its normal (Y or X).
     public var workPlane: FamilySketchPlane?
+    /// FM6: Cut Geometry: the ids of the solids this void cuts (nil = every solid it reaches).
+    public var cuts: [String]? = nil
     public init(name: String, profile: Profile, zMin: FamilyBound, zMax: FamilyBound, materialParameter: String? = nil,
                 subcategory: FamilySubcategory = .general, isVoid: Bool = false, visibleInPlan: Bool = true) {
         id = UUID().uuidString; self.name = name; self.profile = profile; self.zMin = zMin; self.zMax = zMax
@@ -231,6 +235,7 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
         case id, name, profile, zMin, zMax, materialParameter, subcategory, isVoid, visibilityParameter, visibleAt, visibleInPlan
         case visibleIn3D, visibleInFrontBack, visibleInLeftRight
         case workPlane // F1415
+        case cuts // FM6
     }
     /// Families written before the view-visibility settings existed decode as visible everywhere.
     public init(from decoder: any Decoder) throws {
@@ -250,6 +255,7 @@ public struct FamilySolid: Hashable, Codable, Sendable, Identifiable {
         visibleInFrontBack = try c.decodeIfPresent(Bool.self, forKey: .visibleInFrontBack) ?? true
         visibleInLeftRight = try c.decodeIfPresent(Bool.self, forKey: .visibleInLeftRight) ?? true
         workPlane = try c.decodeIfPresent(FamilySketchPlane.self, forKey: .workPlane) // F1415
+        cuts = try c.decodeIfPresent([String].self, forKey: .cuts) // FM6
     }
 }
 

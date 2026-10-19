@@ -13,12 +13,16 @@ enum LibrarySidebarItem: Hashable {
     case all, recent, inProject
     case category(Category)
     case group(Category, String)
+    /// FM9: the Furniture Library (nil = all its pieces, else one room).
+    case furniture(String?)
 }
 
 struct ComponentLibraryView: View {
     let state: DocumentState
     /// Categories the browser is limited to (empty = the whole library).
     let categories: [Category]
+    /// FM9: the Furniture Library pieces shown (tests pass their own; the app scans the library).
+    var furnitureItems: [FurnitureLibraryCatalog.Item]? = nil
 
     @State private var query = ""
     @State private var region: LibraryRegion?
@@ -31,6 +35,21 @@ struct ComponentLibraryView: View {
     @State private var columns = 4
     @State private var expanded: Set<Category> = []
     @FocusState private var searchFocused: Bool
+    /// FM9: the Furniture Library's pieces (bundled and the user's templates) and the selected one.
+    @State private var furniture: [FurnitureLibraryCatalog.Item] = []
+    @State private var furnitureSelected: String?
+
+    /// FM9: QA captures open the browser on the Furniture Library.
+    static var startInFurniture = false
+
+    /// FM9: the Furniture Library shows when the browser isn't limited to other categories.
+    var showsFurniture: Bool { categories.isEmpty || categories.contains(.furniture) || categories.contains(.casework) }
+    var furnitureRoom: String?? { if case .furniture(let r) = sidebar { return .some(r) }; return nil }
+    var furnitureRooms: [FurnitureLibraryCatalog.Room] { FurnitureRoomList.rooms(furniture, room: furnitureRoom ?? nil, query: query) }
+    var furnitureItem: FurnitureLibraryCatalog.Item? {
+        let list = furnitureRooms.flatMap(\.items)
+        return list.first { $0.id == furnitureSelected } ?? list.first
+    }
 
     static let cardWidth: CGFloat = 164
     static let cardSpacing: CGFloat = 12
@@ -56,6 +75,7 @@ struct ComponentLibraryView: View {
             list = list.filter { names.contains($0.name) }
         case .category(let c): list = list.filter { $0.category == c }
         case .group(let c, let g): list = list.filter { $0.category == c && $0.group == g }
+        case .furniture: return [] // FM9: the Furniture Library has its own grid
         }
         return list.filter { $0.isAvailable(in: region) && $0.matches(query) }
     }
@@ -88,15 +108,23 @@ struct ComponentLibraryView: View {
             HStack(spacing: 0) {
                 sidebarView.frame(width: 214)
                 Divider()
-                browser(list).frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
-                Divider()
-                detail.frame(width: 300)
+                if furnitureRoom != nil {
+                    furnitureBrowser.frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                    Divider()
+                    Group { if let f = furnitureItem { FurniturePieceDetail(item: f) } else { Color.clear } }.frame(width: 300)
+                } else {
+                    browser(list).frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
+                    Divider()
+                    detail.frame(width: 300)
+                }
             }
             Divider()
-            footer(list)
+            if furnitureRoom != nil { furnitureFooter } else { footer(list) }
         }
         .frame(width: 1120, height: 720)
         .onAppear {
+            if showsFurniture { furniture = furnitureItems ?? FurnitureLibraryCatalog.all() } // FM9
+            if Self.startInFurniture, showsFurniture { sidebar = .furniture(nil) }
             searchFocused = true
             if categories.count == 1, let c = categories.first { sidebar = .category(c) }
             expanded = Set(visibleCategories.prefix(categories.isEmpty ? 1 : visibleCategories.count))
@@ -167,6 +195,7 @@ struct ComponentLibraryView: View {
                 sidebarRow(.all, categories.isEmpty ? "All Components" : "All", symbol: "square.grid.3x3", count: baseItems.count)
                 if !recent.isEmpty { sidebarRow(.recent, "Recently Placed", symbol: "clock", count: recent.count) }
                 sidebarRow(.inProject, "In This Project", symbol: "checkmark.circle", count: baseItems.filter { names.contains($0.name) }.count)
+                if showsFurniture, !furniture.isEmpty { furnitureSection } // FM9
                 Text("Categories").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
                     .padding(.horizontal, 8).padding(.top, 12).padding(.bottom, 3)
                 ForEach(visibleCategories, id: \.self) { c in
@@ -232,6 +261,54 @@ struct ComponentLibraryView: View {
         case .parking: "parkingsign"
         default: "cube"
         }
+    }
+
+    // MARK: Furniture Library (FM9)
+
+    /// The sidebar's Furniture Library section: all its pieces and each room.
+    @ViewBuilder var furnitureSection: some View {
+        Text("Furniture Library").font(.system(size: 10.5, weight: .semibold)).foregroundStyle(.secondary)
+            .padding(.horizontal, 8).padding(.top, 12).padding(.bottom, 3)
+        sidebarRow(.furniture(nil), "All Pieces", symbol: "chair.lounge", count: Set(furniture.map(\.url)).count)
+        ForEach(FurnitureLibraryCatalog.rooms(furniture)) { r in
+            sidebarRow(.furniture(r.name), r.name, symbol: FurnitureRoomList.symbol(r.name), count: r.items.count).padding(.leading, 14)
+        }
+    }
+
+    @ViewBuilder var furnitureBrowser: some View {
+        let rooms = furnitureRooms
+        if rooms.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "magnifyingglass").font(.system(size: 30, weight: .light)).foregroundStyle(.tertiary)
+                Text("No pieces match “\(query)”").font(.title3).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else {
+            ScrollView {
+                FurnitureLibraryGrid(rooms: rooms, selectedID: furnitureItem?.id, onSelect: { furnitureSelected = $0.id }, onOpen: { placeFurniture($0) })
+                    .padding(14)
+            }
+        }
+    }
+
+    var furnitureFooter: some View {
+        HStack(spacing: 10) {
+            Text("\(Set(furnitureRooms.flatMap(\.items).map(\.url)).count) pieces · loads as a family").font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            Text("Double-click or press Place to load and place").font(.system(size: 11)).foregroundStyle(.tertiary)
+            Spacer()
+            Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
+            Button("Place") { if let f = furnitureItem { placeFurniture(f) } }
+                .keyboardShortcut(.defaultAction)
+                .disabled(furnitureItem == nil)
+                .help("Load the piece as a family (compiled from its furniture document) and start placing it")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 11)
+    }
+
+    func placeFurniture(_ item: FurnitureLibraryCatalog.Item) {
+        state.presented = nil
+        let url = item.url
+        DispatchQueue.main.async { FurnitureFileLoad.place(url, in: state) }
     }
 
     // MARK: Browser

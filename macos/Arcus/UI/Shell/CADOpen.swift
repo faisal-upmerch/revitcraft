@@ -14,12 +14,17 @@ final class ArcusDocumentController: NSDocumentController {
     static let cadExtensions: Set<String> = ["dwg", "dxf"]
 
     override func runModalOpenPanel(_ openPanel: NSOpenPanel, forTypes types: [String]?) -> Int {
-        openPanel.message = "Open an Arcus project, or a DWG or DXF drawing to import into a new project."
-        return super.runModalOpenPanel(openPanel, forTypes: (types ?? []) + Self.cadExtensions.sorted())
+        openPanel.message = "Open an Arcus project, furniture piece or family, or a DWG or DXF drawing to import into a new project."
+        return super.runModalOpenPanel(openPanel, forTypes: (types ?? []) + Self.cadExtensions.sorted() + [UTType.arcusFamily.identifier]) // FM8: families
     }
 
     override func openDocument(withContentsOf url: URL, display displayDocument: Bool,
                                completionHandler: @escaping (NSDocument?, Bool, (any Error)?) -> Void) {
+        if url.pathExtension.lowercased() == "arcusfamily" { // FM8: families open in the Family Editor (FamilyFileOpen.swift)
+            FamilyFileOpen.open(url) // reports its own errors
+            completionHandler(nil, false, CocoaError(.userCancelled))
+            return
+        }
         guard Self.cadExtensions.contains(url.pathExtension.lowercased()) else {
             super.openDocument(withContentsOf: url, display: displayDocument, completionHandler: completionHandler)
             return

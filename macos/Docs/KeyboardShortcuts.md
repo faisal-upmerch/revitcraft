@@ -274,6 +274,15 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Detach Top/Base |  |  | Detaches the selected panels and legs from their shelf or top. |
 | Opening |  |  | Cuts a rectangular opening in a panel: pick two corners on its face in an elevation. |
 | Flip Panel |  |  | Swaps the outside and inside faces of the selected panels. |
+| Remove Bay Divide |  |  | Removes the selected bays' divisions (and the fronts of their cells). |
+| Flip Hinge |  |  | Flips the selected doors to hinge on the other side (Space does the same). |
+| Pick New Host |  |  | Moves the selected front to another bay: click the bay. |
+| Select Hardware |  |  | Selects the hardware of the selected fronts. |
+| Joint |  | `JT` | Shows a marker at every joint; pick one to set its type (butt, miter, dado, dowel, cam lock…), which part runs through, and its sizes. |
+| Allow Join |  |  | Lets the selected parts join at their ends again. |
+| Disallow Join |  |  | Stops the selected parts joining at their ends: they stay as drawn. |
+| Edit Path |  |  | Sketches a new path for the selected stair railing; it keeps following the stair's height. |
+| Reset Railing |  |  | Puts the selected stair railing back on the stair's edge. |
 
 ### Architecture
 
@@ -386,6 +395,32 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Void Revolve |  |  | A revolve that cuts the parts it reaches. |
 | Void Sweep |  |  | A sweep that cuts the parts it reaches. |
 | Void Swept Blend |  |  | A swept blend that cuts the parts it reaches. |
+| Bay |  | `BY` | Places a bay like a room: click inside a region bounded by parts in the Front elevation (or a box in plan, for a top-access bay). It follows the parts as they move. |
+| Bay Separator |  | `BYS` | Draws lines that bound bays without a part, as Room Separator. |
+| Bay Divide |  | `BD` | Splits a bay into equal (EQ) or sized rows or columns, as a curtain grid: each cell takes its own door or drawer. |
+| Door |  | `DF` | Places a cabinet front that hinges in a bay: full or half overlay, or inset; single or pair. Space flips the hinge side. |
+| Drawer |  | `DW` | Places drawers in a bay: the front, its box and slides sized from the bay. Number stacks that many drawers (EQ). |
+| Flap |  | `FP` | Places a lift-up or drop-down flap in a bay (in plan: a lid on a top-access bay), with its hinges and stays. |
+| Hardware |  | `HW` | Places a hardware type (hinge, slide, handle, glide, caster, pin, connector) as a component. Doors and drawers place their own. |
+| Stair |  |  | Creates a stair by components: sketch its runs, landings and supports, then Finish Edit Mode. |
+| Run |  |  | Draws stair runs: straight, spiral, winder, or sketched with boundary, riser and path lines. |
+| Landing |  |  | Adds a landing between two runs, or sketches its boundary. |
+| Support |  |  | Adds a stringer or carriage along a picked run edge. |
+| Straight |  |  | Draws a straight run: click its start, then its end. |
+| Full-Step Spiral |  |  | Draws a spiral run of all the remaining risers: click its centre, then its start. |
+| Center-Ends Spiral |  |  | Draws a spiral run: click its centre, its start and its end. |
+| L-Shape Winder |  |  | Places an L-shaped run with winders at the turn; Space rotates it. |
+| U-Shape Winder |  |  | Places a U-shaped run with winders at both turns; Space rotates it. |
+| Create Sketch |  |  | Sketches a run with boundary, riser and stair path lines. |
+| Pick Two Runs |  |  | Creates the landing that joins two runs you pick. |
+| Create Sketch |  |  | Sketches a landing's boundary. |
+| Pick Edges |  |  | Adds a support along the run edges you pick. |
+| Boundary |  |  | Draws the boundary lines of a sketched run. |
+| Riser |  |  | Draws the riser lines of a sketched run. |
+| Stair Path |  |  | Draws the stair path of a sketched run, from the bottom to the top. |
+| Railing |  |  | Chooses the railing type the stair gets (or None) and whether it sits on the treads or the stringer. |
+| Flip |  |  | Reverses the stair's up direction. |
+| Pick Stair |  |  | Adds the outline of the stair you pick to the shaft sketch. |
 
 ### Structure
 
@@ -454,6 +489,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Load as Group… |  |  | Loads the model of another Arcus project as a model group, placed at the internal origin. |
 | Insert Views from File… |  |  | Copies drafting views, legends and schedules (with their 2D content) from another project file. |
 | Insert 2D Elements from File… |  |  | Copies the 2D elements of a drafting view or legend in another project into the current view. |
+| Load Furniture… |  |  | Shows the Furniture Library (bundled pieces and your furniture templates) to load a piece as a family and place it. |
 
 ### Annotate
 
@@ -511,6 +547,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Linear Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set horizontally or vertically, with its tag. |
 | Space Tag |  |  | Tags a space with its name and number. |
 | Keynoting Settings |  |  | Chooses the keynote table and how keynote tags read. |
+| Bay Tag |  |  | Tags a bay with its name and clear opening, as Room Tag. |
 
 ### View
 
@@ -662,6 +699,13 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Align Bottom |  |  | Aligns the selected cells' text to the bottom. |
 | Split & Place |  |  | Splits the schedule and places the parts on a sheet. |
 | Keynote Legend |  |  | Creates a legend listing the keynotes used in the project. |
+| Part List |  |  | Opens the Part List: every part and drawer box piece at its cut size, grouped by material and thickness, with edge banding and cost. |
+| Hardware Schedule |  |  | Opens the Hardware Schedule: hinges, slides, handles and the joints' dowels, cams and screws, with count and cost. |
+| Material Takeoff |  |  | Opens the Material Takeoff with cost: area, volume, cost and sheets needed by material. |
+| Edge Banding |  |  | Opens the Edge Banding takeoff: linear feet and cost by banding material. |
+| Cost |  |  | Opens the Cost schedule: materials, banding, hardware, labor and markup, totalled as the piece cost. |
+| Nesting |  |  | Lays the sheet parts out on stock sheets, one Nesting view per material and thickness, with grain and yield. |
+| Shop Drawings |  |  | Tags the parts, makes the Nesting views and arranges sheets F101–F104 at scales that fit. |
 
 ### Manage
 
@@ -753,6 +797,10 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Flex |  |  | Tries every type, and each length parameter at 50% and 150%, and reports what breaks. |
 | Load into Project |  |  | Loads this piece into an open project as a family (reloads it when it is already there). |
 | Load into Project and Close |  |  | Loads this piece into an open project, then closes it. |
+| Joint Rules |  |  | Sets the joint each kind of pair gets (side–top, shelf–side, rail–leg…) and its sizes. |
+| Stock Sheets |  |  | Sets the sheet sizes parts are nested on (per material and thickness), the kerf, edge trim, grain and rotation. |
+| Hardware Catalog |  |  | Lists every hardware type with its cost, manufacturer and model for editing. |
+| Check Parts |  |  | Checks the parts before cutting: too thin for their hardware, larger than the stock, missing materials, overlapping without a joint, edges that show unbanded. |
 
 ### File
 
@@ -786,6 +834,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Print Setup… |  |  | Specifies the paper, zoom, colors and options used to print. |
 | Export DWG… |  |  | Exports views and sheets as 2D DWG drawings (AutoCAD 2000 to 2018 formats), one file each. |
 | New Furniture… |  |  | Creates a Furniture document: a custom piece with parameters, cut lists and shop drawings. |
+| CNC Export |  |  | Writes DXF or DWG programs per part or per nested sheet (outline, drilling, grooves, pockets, grain, labels) and a CSV part list. |
+| Save as Furniture Template… |  |  | Saves this piece with a preview in your Furniture Templates, under a room, so it appears on Home ▸ Furniture and in Load Furniture. |
 
 ### Arcus
 

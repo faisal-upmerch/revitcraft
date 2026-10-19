@@ -32,9 +32,12 @@ public struct ViewGraphicsBuilder: Sendable {
         case .elevation, .section, .detail: items = VerticalGraphics(builder: self).build()
         case .drafting, .legend: items = []
         case .threeD: items = ThreeDGraphics(builder: self).build()
+        case .nesting: items = nestingGraphics() // FM7: stock sheets with their parts
         }
         items += furnitureGraphics() // FM3: Furniture reference planes in elevations and sections
         items += furniturePartGraphics() // FM4: parts in plans; hidden lines, grain and edge profiles in elevations and sections
+        items += furnitureFrontGraphics() // FM5: bays, separators, door swings and drawer boxes
+        items += furnitureJointGraphics() // FM6: hidden dowel, cam and shelf-pin holes at Fine
         items = f810Graphics(items) // F810: Show Hidden Lines, matchlines, walkthrough paths
         items += AnnotationGraphics(builder: self).build()
         if data.kind != .threeD, data.visualStyle == .wireframe { items = Self.wireframe(items) } // BL-VG: 2D visual style
@@ -159,6 +162,7 @@ extension ViewGraphicsBuilder {
             .union(Category.f34Structural) // F34
             .union([.mass]) // F5: conceptual masses (hidden when Show Mass is off)
             .union(Category.furnitureParts) // FM4: furniture parts
+            .union(Category.furnitureOpenings) // FM5: bays, fronts, separators and hardware
     }
 
     func visibleModelElements() -> [(Element, GraphicOverride)] {

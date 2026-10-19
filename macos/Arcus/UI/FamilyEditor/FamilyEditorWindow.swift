@@ -17,6 +17,7 @@ final class FamilyEditorWindowController: NSWindowController, NSWindowDelegate, 
 
     static func open(familyID: ElementID, state: DocumentState) {
         if let existing = open.first(where: { $0.model.familyID == familyID && $0.model.state === state }) { existing.window?.makeKeyAndOrderFront(nil); return }
+        if FurnitureEditFamily.open(familyID: familyID, from: state) { return } // FM8: pieces from Furniture mode reopen there
         guard let fam = state.model[familyID]?.family else { return }
         present(FamilyEditorModel(family: fam, state: state, familyID: familyID))
     }

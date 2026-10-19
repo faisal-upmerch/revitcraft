@@ -38,11 +38,13 @@ enum FurnitureLoad {
         let source = state.model
         let family = FurnitureCompiler.family(from: source)
         var placed: DocumentState?
+        var reloaded = false
         for target in targets {
-            let existing = target.model.family(named: family.name)?.id
+            // FM8: the family Edit Family opened, else the family of the same name.
+            let existing = FurnitureEditFamily.familyID(of: state, in: target) ?? target.model.family(named: family.name)?.id
             var mode = FamilyReloadMode.keepProjectValues
             if existing != nil {
-                guard let m = askReloadMode(family.name, project: target.documentName) else { continue }
+                guard let m = FamilyReloadPrompt.ask(family.name) else { continue } // FM8: Revit's prompt
                 mode = m
             }
             var fid: ElementID?
@@ -55,26 +57,13 @@ enum FurnitureLoad {
             if let type, let cat = type.typeData?.instanceCategory { target.currentTypes[cat] = type.id }
             target.show(existing == nil ? "Loaded “\(family.name)” from Furniture." : "Reloaded “\(family.name)” from Furniture.")
             placed = target
+            reloaded = existing != nil // FM8
         }
         guard let placed else { return }
         placed.window?.makeKeyAndOrderFront(nil)
-        // Place an instance, as Revit does after Load into Project (plans only; elsewhere the type is ready to place).
-        if CommandRouter(state: placed).disabledReason(.component) == nil { CommandRouter(state: placed).run(.component) }
+        // Place an instance, as Revit does after a first Load into Project (plans only; elsewhere the type is ready to
+        // place). FM8: a reload updates the placed instances and doesn't start placing.
+        if !reloaded, CommandRouter(state: placed).disabledReason(.component) == nil { CommandRouter(state: placed).run(.component) }
         if close { state.window?.performClose(nil) }
-    }
-
-    /// What to do with the project's type values when the piece is already loaded (nil = cancel).
-    static func askReloadMode(_ name: String, project: String) -> FamilyReloadMode? {
-        let alert = NSAlert()
-        alert.messageText = "“\(name)” is already in “\(project)”."
-        alert.informativeText = "Its geometry and parameters will be replaced by this version. Types that exist in both can keep the values set in the project, or take the values of this piece."
-        alert.addButton(withTitle: "Keep Project Values")
-        alert.addButton(withTitle: "Use Furniture Values")
-        alert.addButton(withTitle: "Cancel")
-        switch alert.runModal() {
-        case .alertFirstButtonReturn: return .keepProjectValues
-        case .alertSecondButtonReturn: return .overwriteValues
-        default: return nil
-        }
     }
 }

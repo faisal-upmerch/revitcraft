@@ -159,8 +159,8 @@ Present: straight, L and U stairs with landings, automatic railings, run width, 
 | ID | Item | Status | Pri | Sketch |
 |---|---|---|---|---|
 | R1 | Ramp (width, base/top level, max slope, max run before a landing, solid or thin shape) | Missing | P1 | Add `RampData` (run path, width, levels) and `RampGeometry` next to `StairGeometry.swift`. The tool shows the required length while drawing and warns rather than blocking when the length does not match (Model Health) |
-| R2 | Edit an existing stair (drag run width, move risers between flights, reshape the landing) | Missing | P1 | Grips for `StairData` in `GripService` plus an "Edit Stair" mode |
-| R3 | Spiral stairs, winders, sketch-based stairs (boundary, riser, path), multistorey Connect Levels | Missing | P2 | Add cases to `StairShape`. For sketch stairs, `StairData` holds explicit riser curves |
+| R2 | Edit an existing stair (drag run width, move risers between flights, reshape the landing) | ✅ Done (STAIR, see Docs/Stairs.md) | P1 | Grips for `StairData` in `GripService` plus an "Edit Stair" mode |
+| R3 | Spiral stairs, winders, sketch-based stairs (boundary, riser, path), multistorey Connect Levels | ✅ Done (STAIR, see Docs/Stairs.md) | P2 | Add cases to `StairShape`. For sketch stairs, `StairData` holds explicit riser curves |
 | R4 | Rail structure and baluster pattern editors, Place on Host, Reset Railing | Partial | P2 | Replace the scalar type parameters with a `RailStructure` table on `TypeData` |
 
 ### Components, families and the Family Editor

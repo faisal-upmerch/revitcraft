@@ -16,6 +16,12 @@ public enum DXFWriter {
         return w.build(g, layerName: { layers.layer(for: $0, model) })
     }
 
+    /// FM7: exports with a layer name per display item (CNC programs name their own layers).
+    public static func write(_ g: ViewGraphics, units: CADUnits, itemLayer: (GItem) -> String) -> Data {
+        var w = DXFEmitter(units: units == .unitless ? .millimeters : units, scale: max(1, g.scale))
+        return w.build(g, layerName: itemLayer)
+    }
+
     /// Standard DXF lineweights (1/100 mm).
     static let lineWeights = [0, 5, 9, 13, 15, 18, 20, 25, 30, 35, 40, 50, 53, 60, 70, 80, 90, 100, 106, 120, 140, 158, 200, 211]
 

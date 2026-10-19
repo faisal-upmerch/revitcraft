@@ -112,14 +112,24 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case furniturePanel, furnitureShelf, furnitureTop, furnitureBack, furnitureDivider, furnitureLeg, furnitureLegsAtCorners, furnitureRail, furnitureSlats, furniturePlinth, furnitureEdgeProfile, furnitureGroove, furnitureEditProfile, furnitureResetProfile, furnitureAttach, furnitureDetach, furniturePanelOpening, furnitureFlipPanel, furnitureExtrusion, furnitureBlend, furnitureRevolve, furnitureSweep, furnitureSweptBlend, furnitureCushion, furnitureVoidExtrusion, furnitureVoidBlend, furnitureVoidRevolve, furnitureVoidSweep, furnitureVoidSweptBlend // FM4
 
     // FM5 commands:
+    case furnitureBay, furnitureBaySeparator, furnitureBayDivide, furnitureBayTag, furnitureDoor, furnitureDrawer, furnitureFlap, furnitureHardware, furnitureFlipHinge, furniturePickNewHost, furnitureSelectHardware, furnitureRemoveDivide // FM5
 
     // FM6 commands:
+    case furnitureJoint, furnitureJointRules, furnitureAllowJoin, furnitureDisallowJoin // FM6
 
     // FM7 commands:
+    case furniturePartList, furnitureHardwareSchedule, furnitureMaterialTakeoff, furnitureEdgeBanding, furnitureCost, furnitureStockSheets, furnitureHardwareCatalog, furnitureNesting, furnitureCNCExport, furnitureCheckParts, furnitureShopDrawings // FM7
 
     // FM8 commands:
+    case loadFurniture, saveAsFurnitureTemplate // FM8
 
     // FM9 commands:
+
+    // STAIR commands:
+    case stair, stairComponentRun, stairComponentLanding, stairComponentSupport, stairRunStraight, stairRunFullStepSpiral
+    case stairRunCenterEndsSpiral, stairRunLWinder, stairRunUWinder, stairRunSketch, stairLandingPickRuns, stairLandingSketch
+    case stairSupportPickEdges, stairSketchBoundary, stairSketchRiser, stairSketchPath, stairRailingSettings, stairFlip
+    case stairRailingEditPath, stairRailingReset, shaftPickStair
 
 }
 
@@ -150,7 +160,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

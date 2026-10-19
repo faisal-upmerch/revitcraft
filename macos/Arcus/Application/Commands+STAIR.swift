@@ -1,0 +1,55 @@
+import Foundation
+
+// STAIR: Revit-style stairs batch (component stairs, sketch stairs, runs, landings, supports, railings).
+
+extension CommandCatalog {
+    /// Stair (Architecture ▸ Circulation) enters Create Stair; the rest are its Components, Draw and Tools panels, the
+    /// railing's Edit Path and Reset Railing, and the Shaft tool's Pick Stair.
+    static let stairCommands: [CommandInfo] = [
+        CommandInfo(.stair, "Stair", .build, "stairs",
+                    help: "Creates a stair by components: sketch its runs, landings and supports, then Finish Edit Mode.",
+                    keywords: ["stair", "stairs", "run", "landing", "flight", "steps", "staircase"]),
+        CommandInfo(.stairComponentRun, "Run", .build, "stairs",
+                    help: "Draws stair runs: straight, spiral, winder, or sketched with boundary, riser and path lines.", keywords: ["stair", "run", "flight"]),
+        CommandInfo(.stairComponentLanding, "Landing", .build, "square.dashed",
+                    help: "Adds a landing between two runs, or sketches its boundary.", keywords: ["stair", "landing", "platform"]),
+        CommandInfo(.stairComponentSupport, "Support", .build, "rectangle.split.1x2",
+                    help: "Adds a stringer or carriage along a picked run edge.", keywords: ["stair", "support", "stringer", "carriage"]),
+        CommandInfo(.stairRunStraight, "Straight", .build, "line.diagonal",
+                    help: "Draws a straight run: click its start, then its end.", keywords: ["stair", "run", "straight"]),
+        CommandInfo(.stairRunFullStepSpiral, "Full-Step Spiral", .build, "hurricane",
+                    help: "Draws a spiral run of all the remaining risers: click its centre, then its start.", keywords: ["stair", "spiral", "helical"]),
+        CommandInfo(.stairRunCenterEndsSpiral, "Center-Ends Spiral", .build, "circle.bottomhalf.filled",
+                    help: "Draws a spiral run: click its centre, its start and its end.", keywords: ["stair", "spiral", "curved"]),
+        CommandInfo(.stairRunLWinder, "L-Shape Winder", .build, "arrow.turn.up.right",
+                    help: "Places an L-shaped run with winders at the turn; Space rotates it.", keywords: ["stair", "winder", "l-shaped", "quarter turn"]),
+        CommandInfo(.stairRunUWinder, "U-Shape Winder", .build, "arrow.uturn.up",
+                    help: "Places a U-shaped run with winders at both turns; Space rotates it.", keywords: ["stair", "winder", "u-shaped", "half turn"]),
+        CommandInfo(.stairRunSketch, "Create Sketch", .build, "pencil.and.outline",
+                    help: "Sketches a run with boundary, riser and stair path lines.", keywords: ["stair", "sketch", "boundary", "riser"]),
+        CommandInfo(.stairLandingPickRuns, "Pick Two Runs", .build, "cursorarrow.rays",
+                    help: "Creates the landing that joins two runs you pick.", keywords: ["stair", "landing"]),
+        CommandInfo(.stairLandingSketch, "Create Sketch", .build, "pencil.and.outline",
+                    help: "Sketches a landing's boundary.", keywords: ["stair", "landing", "sketch"]),
+        CommandInfo(.stairSupportPickEdges, "Pick Edges", .build, "cursorarrow.rays",
+                    help: "Adds a support along the run edges you pick.", keywords: ["stair", "support", "stringer"]),
+        CommandInfo(.stairSketchBoundary, "Boundary", .build, "skew",
+                    help: "Draws the boundary lines of a sketched run.", keywords: ["stair", "boundary", "sketch"]),
+        CommandInfo(.stairSketchRiser, "Riser", .build, "line.3.horizontal",
+                    help: "Draws the riser lines of a sketched run.", keywords: ["stair", "riser", "sketch"]),
+        CommandInfo(.stairSketchPath, "Stair Path", .build, "arrow.up",
+                    help: "Draws the stair path of a sketched run, from the bottom to the top.", keywords: ["stair", "path", "walk line"]),
+        CommandInfo(.stairRailingSettings, "Railing", .build, "figure.stairs",
+                    help: "Chooses the railing type the stair gets (or None) and whether it sits on the treads or the stringer.",
+                    keywords: ["stair", "railing", "handrail", "guard"]),
+        CommandInfo(.stairFlip, "Flip", .build, "arrow.up.arrow.down",
+                    help: "Reverses the stair's up direction.", keywords: ["stair", "flip", "reverse", "direction"]),
+        CommandInfo(.stairRailingEditPath, "Edit Path", .modify, "point.topleft.down.to.point.bottomright.curvepath",
+                    help: "Sketches a new path for the selected stair railing; it keeps following the stair's height.",
+                    keywords: ["railing", "path", "stair", "edit"]),
+        CommandInfo(.stairRailingReset, "Reset Railing", .modify, "arrow.counterclockwise",
+                    help: "Puts the selected stair railing back on the stair's edge.", keywords: ["railing", "reset", "stair"]),
+        CommandInfo(.shaftPickStair, "Pick Stair", .build, "square.dashed.inset.filled",
+                    help: "Adds the outline of the stair you pick to the shaft sketch.", keywords: ["shaft", "opening", "stair", "floor"]),
+    ]
+}

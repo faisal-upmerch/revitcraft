@@ -97,7 +97,10 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 - `JointSolver` runs at regeneration over every pair of touching or overlapping parts and applies the rule for the pair (Joint Rules), unless the user has set the joint.
 - It decides which part runs through, trims the other, and adds machining: dado/rabbet grooves (voids), dowel/cam/pocket holes and mortises.
 - The **cut size** of each part (length × width × thickness, with groove allowances and tenons) is the base of the Part List and CNC.
-- Joint tool: click a joint marker to cycle types (like Wall Joins' Next/Previous), or pick from the Options Bar. Joint markers are drawn in plan and elevation while the tool is active.
+- Joint tool (JT) works like Wall Joins: markers at every joint while it runs (round = by rule, square = set by you); pick one, set its type or use Previous/Next (Space); By Rule clears it.
+- Joint Rules: one row per pair kind (Side – Top … Other) with joint, runs through and sizes, stored with the furniture setup.
+- Drawn touching, a corner keeps the part drawn through; drawn overlapping, the rule decides.
+- Voids cut only the solids they list, at the detail levels they show (families too).
 
 ### Fabrication outputs
 - **Part List:** schedule kind `partList`. Fields: Mark, Part, Type, Material, Length, Width, Thickness, Grain, Edge Banding (L1 L2 W1 W2), Qty, Area, Cost. Grouped by material and thickness.
@@ -106,6 +109,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 - **Nesting:** a guillotine/maxrects nesting engine on stock sheets (Manage ▸ Stock Sheets: 4'×8' default, thickness, material, kerf, edge trim, grain). Grain-locked parts don't rotate. Nesting views (new `ViewKind.nesting`) show each sheet, with yield %, and can be placed on sheets.
 - **CNC Export:** DXF (and DWG via the bundled engine) per part or per nested sheet. Layers: `OUTLINE`, `INNER`, `DRILL_<dia>_<depth>`, `GROOVE_<depth>`, `POCKET_<depth>`, `GRAIN`, `LABEL`. Units in inches.
 - **Shop drawings:** template sheet with plan, front/side elevations, a section, 3D, a part list and a title block. PDF via `PDFExporter`, images via `RasterExporter`.
+- Also Edge Banding and Cost schedules; Fabricate ▸ Shop Drawings sets up F101–F104; CNC layers include `HDRILL_<dia>_<depth>_Z<z>` for edge boring, and face B goes to `_B` files or `B_` layers.
 
 ### Load into Project and Edit Family
 - `FurnitureCompiler.family(from:) -> FamilyDefinition`:
@@ -115,6 +119,8 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
   - joints and machining are visible at Fine only, so projects stay light.
 - The compiled family stores the furniture source (`furnitureSource: Data?`, a zipped model), so **Edit Family** reopens it in Furniture mode, and Load into Project replaces the family as usual.
 - Projects load `.arcusfurniture` files directly (Insert ▸ Load Family accepts both file types).
+- Plans: Coarse outline on Left/Right/Front/Back; Medium/Fine edges seen from above, plus swings. Dividers and Bay Divide lines are formula planes. Hinges come in sets of 2–5 shown by door height. Drawers take the stock slide that fits the bay depth. Cost (Identity Data) is an estimate from materials and hardware.
+- Edit Family reopens the piece tied to its project; Load into Project shows Family Already Exists. Insert ▸ Load Family / Load Furniture and drops from Finder load `.arcusfurniture`. File ▸ Save as Furniture Template saves under a room with a 3D preview. `.arcusfamily` opens in the Family Editor.
 
 ### Library
 - `arcus-bench --furniture-library <dir>` builds every library piece with the Furniture mode API (the same operations the tools call) and saves `.arcusfurniture` files.
@@ -123,6 +129,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
   - Sofa, Coffee Table, TV Stand, Armchair, Side Table, Bookshelf, Bed, Bedside Table, Wardrobe, Dresser, Dressing Table, Dining Table, Dining Chair, Sideboard
   - Kitchen Cabinet, Pantry Cabinet, Study Desk, Office Chair, Storage Cabinet, Shoe Rack, Entryway Bench, Bathroom Vanity, Shelving Unit, Ottoman, Console Table
 - **The rest (simple):** correct overall form from panels, legs and fronts, parametric W/D/H and materials, one or two types.
+- Each piece's types are its standard sizes. Search covers names, rooms and keywords.
 - Repeats in the list (Kitchen Island, Bunk Bed, Corner Shelf, Rocking Chair, Lounge Chair, Nesting Tables, Storage Bed, Storage Cabinet, Storage Chest, Folding Chair, Plant Stand, Room Divider) are one file, listed under each room.
 
 ## 4. Home redesign
@@ -154,9 +161,9 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM2 | ✅ Family Editor on the main shell + clipping fixes (port/FES; minimum window 1200 × 700) | — |
 | FM3 | ✅ Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project (port/FM3). Open: labelling a new dimension from the UI; Forms use the in-place tool until FM4 | — |
 | FM4 | ✅ Parts: Panel (PA: PN is Revit's Pin), Shelf (SH), Top (TP), Back, Divider, Leg + At Corners, Rail + Slats, Plinth, Edge Profile, Groove; Forms + Cushion; types, constraints, grips, graphics, Properties, compile (port/FM4). Open: dimensions to part faces don't follow moved parts; Blend has no separate Edit Top; Sweep paths are plan-only | FM3 |
-| FM5 | Bays, Bay Divide, Doors/Drawers/Flaps, hardware families and auto-placement | FM4 |
-| FM6 | Joints: solver, Joint Rules, Joint tool, machining geometry, cut sizes | FM4 |
-| FM7 | Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Stock Sheets, nesting engine and views, CNC Export, shop drawing sheet | FM5, FM6 |
-| FM8 | Full compile, Edit Family round trip, projects load `.arcusfurniture` | FM5, FM6 |
-| FM9 | Library: Top 25 high detail + the rest simple, bundled, on Home and in Load Furniture | FM8 |
+| FM5 | ✅ Bays (BY), Bay Divide (BD), Doors (DF)/Drawers (DW)/Flaps (FP: FL is Floor), 17 hardware families (HW) with cost and auto-placement (port/FM5). Open: hinge count fixed in compiled families; bays drawn in Front-facing views only; lids are slab only; bays can't be moved | FM4 |
+| FM6 | ✅ Joints: solver, Joint Rules, Joint tool (JT), machining geometry, cut sizes (port/FM6). Open: Properties shows only joints you set; panels with Edit Profile or openings, round rails and slats aren't joined; a back grooved on four sides leaves its 3D corners open | FM4 |
+| FM7 | ✅ Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Edge Banding, Cost, Stock Sheets, nesting engine and views, CNC Export, Shop Drawings F101–F104, Check Parts (port/FM7). Open: F104 is an annotated 3D view, not exploded; slats and shaped panels other than Edit Profile get outlines only in CNC; labor and markup are Global Parameters; part tags can crowd small elevations | FM5, FM6 |
+| FM8 | ✅ Full compile, Edit Family round trip, projects load `.arcusfurniture`, Load Furniture, Save as Furniture Template, `.arcusfamily` opens (port/FM8). Open: drops on the 3D view; door swings in project elevations; Fine machining keeps the document's hinge count | FM5, FM6 |
+| FM9 | ✅ Library: the Top 25 at high detail (+ Kitchen Wall Cabinet, Kitchen Base Cabinet - Single Door) built with the Furniture Library kit (port/FM9); 169 simple pieces (port/FM9B, port/FM9C); `arcus-bench --furniture-library` writes the files and index.json; Home ▸ Furniture, Load Furniture and the Component Library list pieces by room. Open: one piece can't switch between single and pair doors per type; parts flex proportionally between the planes; a few simple pieces are approximations (Corner Cabinet, Storage Bed drawers at the foot, Wine Rack as cubbies) because bays only face the front; nine pieces with angled parts or revolves (Sun Lounger, Hammock, Hanging Chair, Picnic Table, Folding Chair, Swing Bench, Adirondack Chair, Folding Screen, Ladder Shelf) keep those parts' size when they flex; mechanisms are shown in one position (Murphy Bed closed, Sofa Bed as a sofa) | FM8 |
 | FM10 | Docs, keyboard shortcuts, QA checks (Home, Family Editor, Furniture mode), verification | all |

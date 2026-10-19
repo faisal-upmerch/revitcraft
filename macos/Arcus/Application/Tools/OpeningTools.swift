@@ -124,6 +124,8 @@ public final class ShaftOpeningTool: BaseTool, InteractiveTool {
     public var topOffset = 0.0
     /// Closed boundary loops sketched so far.
     var loops: [[Curve2]] = []
+    /// STAIR: the next click picks a stair whose outline joins the sketch (Pick Stair).
+    public var pickingStair = false
     /// Points of the line chain in progress, or the first corner / centre.
     var points: [Vec2] = []
     var current: Vec2?
@@ -204,6 +206,7 @@ public final class ShaftOpeningTool: BaseTool, InteractiveTool {
 
     public func pointerDown(_ i: ToolInput) {
         guard ctx.isPlan else { message("Open a plan view to sketch a shaft."); return }
+        if pickingStair { pickStair(i); return } // STAIR: Pick Stair
         add(i.point)
         rebuildPreview()
     }

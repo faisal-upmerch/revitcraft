@@ -38,6 +38,7 @@ public enum FurnitureSamples {
     /// Adds the plinth and the back once the carcass is committed (they're picked from it, as the tools pick).
     public static func bookcaseFinish(in tx: TransactionContext, _ ids: [String: ElementID]) throws(TransactionError) {
         guard let bottom = ids["bottom"] else { return }
+        try lockToFramingPlanes((1...4).compactMap { ids["shelf\($0)"] }, in: tx) // FM8: the shelves flex with the sides (planes are placed now)
         _ = try FurniturePartOperations.createPlinth(under: bottom, setback: 0.5 * inch, in: tx)
         let back = type(tx.model, .furniturePanels, "1/4\" Back Panel (Hardboard)")
         let mid = Vec2(0, 30 * inch)
@@ -69,9 +70,11 @@ public enum FurnitureSamples {
         let x0 = tb.min.x + inset + lw, x1 = tb.max.x - inset - lw, y0 = tb.min.y + inset + lw, y1 = tb.max.y - inset - lw
         let yf = tb.min.y + inset + lw / 2, yb = tb.max.y - inset - lw / 2, xl = tb.min.x + inset + lw / 2, xr = tb.max.x - inset - lw / 2
         let under = tb.min.z - (FurniturePlanes.positionsByName(tx.model)["Top"] ?? tb.max.z)
+        var aprons: [ElementID] = []
         for (s, e) in [(Vec2(x0, yf), Vec2(x1, yf)), (Vec2(x1, yb), Vec2(x0, yb)), (Vec2(xl, y1), Vec2(xl, y0)), (Vec2(xr, y0), Vec2(xr, y1))] {
-            _ = try FurniturePartOperations.createRail(start: s, end: e, w: under, wPlane: "Top", justification: .top, typeID: apron, in: tx)
+            aprons.append(try FurniturePartOperations.createRail(start: s, end: e, w: under, wPlane: "Top", justification: .top, typeID: apron, in: tx))
         }
+        try lockToFramingPlanes(aprons, in: tx) // FM8: the aprons flex with the legs
     }
 
     /// A Furniture document with the bookcase.
