@@ -159,7 +159,7 @@ struct FamilyViewTabPills: View {
             .foregroundStyle(.secondary)
             .accessibilityLabel("Close \(v.viewTitle)")
         }
-        .padding(.leading, 11).padding(.trailing, 6).padding(.vertical, 4)
+        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 4) // as the project window's view tabs
         .background { if active { Capsule().fill(Tokens.selectionColor.opacity(0.14)) } }
         .modifier(HoverBackground(radius: 12))
         .contentShape(Capsule())
