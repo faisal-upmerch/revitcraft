@@ -25,13 +25,15 @@ struct TagAllDialog: View {
         let selection = Set(state.session.selection.ids)
         let cats = Category.taggable.filter { untagged[$0]?.isEmpty == false }
         let leaderLength = (try? Parameters.parse(leaderText, type: .length, model: m))?.doubleValue
-        DialogFrame(title: "Tag All", subtitle: "Tags every visible element of the chosen categories that has no tag in “\(m[viewID]?.name ?? "")”.",
-                    okDisabled: chosen.isEmpty || (leader && (leaderLength ?? 0) <= 0), state: state) {
+        DialogFrame(title: "Tag All Not Tagged", icon: "tag", tint: .orange, subtitle: "Tags untagged visible elements of the chosen categories in “\(m[viewID]?.name ?? "")”.",
+                    okDisabled: chosen.isEmpty || (leader && (leaderLength ?? 0) <= 0),
+                    disabledReason: cats.isEmpty ? nil : (chosen.isEmpty ? "Check at least one category" : "Enter a leader length on paper"), labelWidth: 100, state: state) {
             apply(visible: visible, selection: selection, leaderLength: leaderLength ?? 0.012)
         } content: {
             if cats.isEmpty {
-                Text("Every taggable element in this view is already tagged.").foregroundStyle(.secondary)
+                DialogNotice(.success, "Every taggable element in this view is already tagged.")
             } else {
+                DialogListBox(count: cats.count, rowHeight: 34, minRows: 1, maxRows: 7) {
                 List(cats, id: \.self) { c in
                     let count = (untagged[c] ?? []).filter { !onlySelected || selection.contains($0) }.count
                     let options = TagAll.tagTypes(for: c, m)
@@ -51,21 +53,22 @@ struct TagAllDialog: View {
                         }
                     }
                 }
-                .frame(minHeight: 180)
-            }
-            Toggle("Only selected elements in the current view", isOn: $onlySelected).disabled(selection.isEmpty)
-            HStack {
-                Toggle("Leader", isOn: $leader)
-                TextField("Length", text: $leaderText).textFieldStyle(.roundedBorder).frame(width: 90).disabled(!leader)
-                if leader && (leaderLength ?? 0) <= 0 { Text("Enter a length on paper").font(.caption).foregroundStyle(.red) }
-                Spacer()
-                Picker("Orientation", selection: $orientation) {
-                    ForEach(TagOrientation.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
-                .frame(width: 200)
+            }
+            DialogSection {
+                Toggle("Only selected elements in the current view", isOn: $onlySelected).disabled(selection.isEmpty)
+                DialogRow("Leader") {
+                    HStack(spacing: 8) {
+                        Toggle("", isOn: $leader).labelsHidden()
+                        TextField("Length", text: $leaderText).labelsHidden().frame(width: 90).disabled(!leader)
+                        if leader && (leaderLength ?? 0) <= 0 { Label("Enter a length on paper", systemImage: "exclamationmark.circle.fill").font(.callout).foregroundStyle(.red) }
+                    }
+                }
+                DialogRow("Orientation") {
+                    Picker("", selection: $orientation) { ForEach(TagOrientation.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                }
             }
         }
-        .frame(minWidth: 540)
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -124,40 +127,52 @@ struct ColorSchemesDialog: View {
     var body: some View {
         let m = state.model
         let canApply = viewCategory != nil && viewCategory == category && selectedIndex != nil
-        DialogFrame(title: "Color Schemes", subtitle: "Rows are added automatically for new values. Hidden rows are not filled and not listed in legends.",
-                    okDisabled: placeLegend && !canApply, state: state) {
+        DialogFrame(title: "Edit Color Scheme", icon: "paintpalette", tint: .pink, size: .wide, subtitle: "New values add rows automatically. Hidden rows aren't filled or listed in legends.",
+                    okDisabled: placeLegend && !canApply, disabledReason: "Choose a scheme for this view's category", labelWidth: 100, state: state) {
             apply(canApply: canApply)
         } content: {
-            HStack(alignment: .top, spacing: 14) {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 6) {
                     Picker("", selection: $category) {
                         Text("Rooms").tag(Category.rooms)
                         Text("Areas").tag(Category.areas)
                     }
                     .pickerStyle(.segmented).labelsHidden()
-                    List(selection: $selected) {
-                        ForEach(drafts.filter { $0.data.category == category }) { d in Text(d.name).tag(d.id) }
+                    VStack(spacing: 0) {
+                        List(selection: $selected) {
+                            ForEach(drafts.filter { $0.data.category == category }) { d in DialogListRow(icon: "paintpalette", title: d.name).tag(d.id) }
+                        }
+                        .listStyle(.inset).scrollContentBackground(.hidden)
+                        .frame(height: 330)
+                        Divider()
+                        HStack(spacing: 0) {
+                            Button { duplicate() } label: { Image(systemName: "plus").frame(width: 24, height: 20) }.help("Duplicate the selected scheme, or add one")
+                            Divider().frame(height: 14)
+                            Button { remove() } label: { Image(systemName: "minus").frame(width: 24, height: 20) }.help("Delete the selected scheme").disabled(selectedIndex == nil)
+                            Spacer()
+                        }
+                        .buttonStyle(.borderless).padding(.horizontal, 4).frame(height: 24)
                     }
-                    .frame(width: 190, height: 300)
-                    HStack {
-                        Button { duplicate() } label: { Image(systemName: "plus.square.on.square") }.help("Duplicate the selected scheme, or add one")
-                        Button { remove() } label: { Image(systemName: "trash") }.help("Delete the selected scheme").disabled(selectedIndex == nil)
-                    }
-                    .buttonStyle(.borderless)
+                    .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
                 }
+                .frame(width: 210)
                 if let i = selectedIndex {
                     editor(i, m)
                 } else {
-                    Text("Add a scheme to colour \(category.displayName.lowercased()).").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 300)
+                    DialogSection(rows: false) {
+                        DialogEmptyState(icon: "paintpalette", title: "No scheme", message: "Add a scheme to colour \(category.displayName.lowercased()).").frame(height: 330)
+                    }
                 }
             }
             if let vc = viewCategory {
-                Toggle("Use the selected scheme in “\(view?.name ?? "")”", isOn: $applyToView).disabled(!canApply)
-                if vc != category { Text("This view colours \(vc.displayName.lowercased()).").font(.caption).foregroundStyle(.secondary) }
+                DialogSection(footnote: vc != category ? "This view colours \(vc.displayName.lowercased())." : nil) {
+                    Toggle("Use the selected scheme in “\(view?.name ?? "")”", isOn: $applyToView).disabled(!canApply)
+                }
             }
-            if placeLegend { Text("After OK, click in the view to place the legend.").font(.caption).foregroundStyle(.secondary) }
+            if placeLegend { DialogNotice(.info, "After OK, click in the view to place the legend.") }
         }
-        .frame(minWidth: 820)
         .onAppear(perform: load)
         .onChange(of: category) { _, c in
             if let i = selectedIndex, drafts[i].data.category == c { return }
@@ -172,26 +187,30 @@ struct ColorSchemesDialog: View {
         let params = parameterChoices(d.data.category, m)
         let numeric = params.first { $0.id == d.data.parameter }?.type.isNumeric ?? false
         let inUse = ColorFill.valuesInUse(d.data, m)
-        VStack(alignment: .leading, spacing: 8) {
-            FormRow(label: "Name") { TextField("", text: draftBinding(i, \.name, "")).textFieldStyle(.roundedBorder) }
-            FormRow(label: "Legend title") { TextField("", text: draftBinding(i, \.data.title, "")).textFieldStyle(.roundedBorder) }
-            FormRow(label: "Color by") {
-                Picker("", selection: Binding(get: { d.data.parameter }, set: { setParameter(i, $0, params, m) })) {
-                    ForEach(params, id: \.id) { p in Text(p.name).tag(p.id) }
-                }
-                .labelsHidden().frame(width: 220)
-                Picker("", selection: Binding(get: { d.data.mode }, set: { setMode(i, $0, m) })) {
-                    ForEach(ColorFillMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented).labelsHidden().frame(width: 180).disabled(!numeric)
-            }
-            if d.data.category == .areas {
-                FormRow(label: "Area scheme") {
-                    Picker("", selection: draftBinding(i, \.data.areaSchemeID, nil)) {
-                        Text("Any").tag(ElementID?.none)
-                        ForEach(AreaPlans.sortedSchemes(m), id: \.id) { s in Text(s.name).tag(Optional(s.id)) }
+        VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+            DialogSection("Scheme") {
+                DialogRow("Name") { TextField("", text: draftBinding(i, \.name, "")).labelsHidden() }
+                DialogRow("Legend title") { TextField("", text: draftBinding(i, \.data.title, "")).labelsHidden() }
+                DialogRow("Color by") {
+                    HStack {
+                        Picker("", selection: Binding(get: { d.data.parameter }, set: { setParameter(i, $0, params, m) })) {
+                            ForEach(params, id: \.id) { p in Text(p.name).tag(p.id) }
+                        }
+                        .labelsHidden().frame(width: 220)
+                        Picker("", selection: Binding(get: { d.data.mode }, set: { setMode(i, $0, m) })) {
+                            ForEach(ColorFillMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }
+                        .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!numeric)
                     }
-                    .labelsHidden().frame(width: 220)
+                }
+                if d.data.category == .areas {
+                    DialogRow("Area scheme") {
+                        Picker("", selection: draftBinding(i, \.data.areaSchemeID, nil)) {
+                            Text("Any").tag(ElementID?.none)
+                            ForEach(AreaPlans.sortedSchemes(m), id: \.id) { s in Text(s.name).tag(Optional(s.id)) }
+                        }
+                        .labelsHidden().frame(width: 220)
+                    }
                 }
             }
             rows(i, inUse, m)
@@ -201,7 +220,7 @@ struct ColorSchemesDialog: View {
 
     @ViewBuilder func rows(_ i: Int, _ inUse: [String: Int], _ m: BIMModel) -> some View {
         let d = drafts[i]
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("Visible").frame(width: 44)
                 Text(d.data.mode == .byValue ? "Value" : "At least").frame(width: 110, alignment: .leading)
@@ -210,7 +229,7 @@ struct ColorSchemesDialog: View {
                 Text("Fill pattern").frame(width: 150, alignment: .leading)
                 if d.data.mode == .byValue { Text("In use").frame(width: 50) }
             }
-            .font(.caption).foregroundStyle(.secondary)
+            .font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.horizontal, 12)
             ScrollView {
                 VStack(spacing: 3) {
                     ForEach(d.data.entries.indices, id: \.self) { j in
@@ -239,7 +258,11 @@ struct ColorSchemesDialog: View {
                     }
                 }
             }
-            .frame(minHeight: 180, maxHeight: 260)
+            .padding(.vertical, 6).padding(.horizontal, 12)
+            .frame(minHeight: 150, maxHeight: 220)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
             HStack {
                 if d.data.mode == .byRange {
                     Button("Add Range") { addRange(i) }
@@ -439,11 +462,12 @@ struct NewAreaPlanDialog: View {
 
     var body: some View {
         let m = state.model
-        DialogFrame(title: "New Area Plan", subtitle: "Area plans show the areas of one scheme. Boundary lines decide where areas are measured.",
-                    okDisabled: chosen.isEmpty || (scheme == nil && newScheme == nil), state: state) {
+        DialogFrame(title: "New Area Plan", icon: "square.dashed", tint: .orange, subtitle: "Areas of one scheme, measured to its boundary lines.",
+                    okDisabled: chosen.isEmpty || (scheme == nil && newScheme == nil), disabledReason: "Choose at least one level", state: state) {
             create()
         } content: {
-            FormRow(label: "Area scheme") {
+            DialogSection {
+            DialogRow("Area scheme") {
                 Picker("", selection: Binding(get: { scheme.map { "id\($0.raw)" } ?? "new-\(newScheme?.rawValue ?? "")" }, set: { tag in
                     if let s = schemes.first(where: { "id\($0.id.raw)" == tag }) { scheme = s.id; newScheme = nil } else {
                         scheme = nil; newScheme = AreaBoundaryRule(rawValue: String(tag.dropFirst(4)))
@@ -454,16 +478,14 @@ struct NewAreaPlanDialog: View {
                 }
                 .labelsHidden().frame(width: 220)
             }
-            FormRow(label: "Boundary") {
-                Text((scheme.flatMap { m[$0]?.areaScheme?.rule } ?? newScheme ?? .gross).displayName).foregroundStyle(.secondary)
-            }
-            List(m.levels, id: \.id) { l in
-                Toggle(isOn: Binding(get: { chosen.contains(l.id) }, set: { if $0 { chosen.insert(l.id) } else { chosen.remove(l.id) } })) {
-                    Text("\(l.name)  ·  \(Parameters.format(.double(l.level?.elevation ?? 0), type: .length, model: m))")
-                }
-            }
-            .frame(minHeight: 160)
+            DialogValueRow(label: "Boundary", value: (scheme.flatMap { m[$0]?.areaScheme?.rule } ?? newScheme ?? .gross).displayName)
             Toggle("Create area boundary lines automatically from exterior walls", isOn: $automatic)
+            }
+            DialogSection("Levels", boxed: false) {
+                DialogCheckList(items: m.levels.map { l in
+                    DialogCheckItem(id: l.id, title: l.name, icon: "square.3.layers.3d", detail: Parameters.format(.double(l.level?.elevation ?? 0), type: .length, model: m))
+                }, checked: $chosen, maxRows: 7, noun: "levels", emptyTitle: "No levels")
+            }
         }
         .onAppear {
             scheme = schemes.first?.id

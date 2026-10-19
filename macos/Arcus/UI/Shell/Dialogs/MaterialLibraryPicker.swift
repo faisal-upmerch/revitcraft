@@ -30,11 +30,9 @@ struct MaterialLibraryPicker: View {
         let groups = Dictionary(grouping: list, by: \.materialClass)
         let classes = MaterialClass.allCases.filter { groups[$0] != nil }
         let addable = list.filter { !have.contains($0.name) }
-        VStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Add Materials from Library").font(.headline)
-                Text("\(MaterialLibrary.all.count) common building materials. Check the ones to add to this project.")
-                    .font(.callout).foregroundStyle(.secondary)
+        ArcusDialog(icon: "books.vertical", tint: .pink, title: "Add Materials from Library", subtitle: "\(MaterialLibrary.all.count) common building materials. Check the ones to add.",
+                    size: .large, okTitle: checked.count == 1 ? "Add 1 Material" : "Add \(checked.count) Materials", okDisabled: checked.isEmpty,
+                    disabledReason: "Check the materials to add", height: 600, onCancel: { finish([]) }, onOK: { add() }) { // DIALOGS
                 HStack(spacing: 8) {
                     HStack(spacing: 6) {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
@@ -58,9 +56,6 @@ struct MaterialLibraryPicker: View {
                     .fixedSize()
                     .accessibilityLabel("Region")
                 }
-            }
-            .padding(16)
-            Divider()
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 1) {
                     ForEach(classes, id: \.self) { c in
@@ -87,19 +82,14 @@ struct MaterialLibraryPicker: View {
                 }
                 .padding(.horizontal, 10).padding(.bottom, 10)
             }
-            Divider()
-            HStack {
-                Text(checked.isEmpty ? "\(addable.count) available" : "\(checked.count) selected")
-                    .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
-                Spacer()
-                Button("Cancel") { finish([]) }.keyboardShortcut(.cancelAction)
-                Button(checked.count == 1 ? "Add 1 Material" : "Add \(checked.count) Materials") { add() }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(checked.isEmpty)
-            }
-            .padding(.horizontal, 16).padding(.vertical, 12)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            .frame(maxHeight: .infinity)
+        } leading: {
+            Text(checked.isEmpty ? "\(addable.count) available" : "\(checked.count) selected")
+                .font(.callout.monospacedDigit()).foregroundStyle(.secondary)
         }
-        .frame(width: 640, height: 580)
         .onAppear { searchFocused = true }
     }
 

@@ -31,19 +31,18 @@ struct FindReplaceDialog: View {
         let selection = state.session.selection.ids
         let matches = TextSearch.find(find, options, scope: scope, view: viewID, selection: selection, state.model)
         let chosen = matches.filter { !excluded.contains($0.id) }
-        DialogFrame(title: "Find and Replace", subtitle: "Searches text notes and the text values tags show (replacing in a tag changes the tagged element).",
-                    okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
-            Form {
-                TextField("Find what:", text: $find)
-                TextField("Replace with:", text: $replace)
-                Picker("Search in:", selection: $scope) {
-                    ForEach(TextSearch.Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+        DialogFrameWithActions(title: "Find/Replace", icon: "magnifyingglass", tint: .blue, size: .large, subtitle: "Text notes and the values tags show. Replacing in a tag changes the tagged element.",
+                    okTitle: "Done", showCancel: false, labelWidth: 100, state: state) { state.presented = nil } content: {
+            DialogSection {
+                DialogRow("Find") { TextField("", text: $find).labelsHidden() }
+                DialogRow("Replace with") { TextField("", text: $replace).labelsHidden() }
+                DialogRow("Search in") {
+                    Picker("", selection: $scope) { ForEach(TextSearch.Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
                 }
-                Toggle("Match case", isOn: $matchCase)
-                Toggle("Whole words only", isOn: $wholeWords)
+                DialogRow("") { HStack(spacing: 16) { Toggle("Match case", isOn: $matchCase); Toggle("Whole words only", isOn: $wholeWords) } }
             }
-            Text(find.isEmpty ? "Type the text to find." : "\(matches.count) match\(matches.count == 1 ? "" : "es")" + (excluded.isEmpty ? "" : ", \(chosen.count) to replace"))
-                .font(.callout).foregroundStyle(.secondary)
+            DialogSection(find.isEmpty ? "Matches" : "\(matches.count) match\(matches.count == 1 ? "" : "es")" + (excluded.isEmpty ? "" : ", \(chosen.count) to replace"), boxed: false) {
+            DialogListBox(count: matches.count, rowHeight: 62, minRows: 2, maxRows: 4, isEmpty: matches.isEmpty) {
             List(matches) { m in
                 HStack(alignment: .top) {
                     Toggle("", isOn: Binding(get: { !excluded.contains(m.id) }, set: { on in if on { excluded.remove(m.id) } else { excluded.insert(m.id) } }))
@@ -65,10 +64,12 @@ struct FindReplaceDialog: View {
                     .controlSize(.small)
                 }
             }
-            .frame(minHeight: 220)
-            if let result { Text(result).font(.callout) }
-            HStack {
-                Spacer()
+            } empty: {
+                DialogEmptyState(icon: "magnifyingglass", title: find.isEmpty ? "Type the text to find" : "No matches")
+            }
+            }
+            if let result { DialogNotice(.success, result) }
+        } actions: {
                 Button("Replace \(chosen.count == matches.count ? "All" : "Selected")") {
                     let q = find, r = replace, o = options
                     var n = 0
@@ -77,10 +78,8 @@ struct FindReplaceDialog: View {
                     excluded = []
                 }
                 .disabled(find.isEmpty || chosen.isEmpty)
-            }
         }
         .onAppear { if !state.session.selection.ids.isEmpty { scope = .selection } }
-        .frame(minWidth: 560, idealWidth: 600)
     }
 }
 
@@ -164,22 +163,25 @@ struct CheckSpellingDialog: View {
     }
 
     var body: some View {
-        DialogFrame(title: "Check Spelling", subtitle: "Checks text notes and tag texts in the selection or this view with the macOS dictionary.",
-                    okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
+        DialogFrame(title: "Check Spelling", icon: "textformat.abc", tint: .blue, subtitle: "Text notes and tag texts in the selection or this view, with the macOS dictionary.",
+                    okTitle: "Done", showCancel: false, labelWidth: 90, state: state) { state.presented = nil } content: {
             if !scanned {
-                ProgressView().onAppear { rescan() }
+                ProgressView().frame(maxWidth: .infinity).onAppear { rescan() }
             } else if let c = current {
-                Text("Not in dictionary (\(index + 1) of \(issues.count)):").font(.callout).foregroundStyle(.secondary)
-                Text(c.context).padding(8).frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.secondary.opacity(0.1)))
-                Text("“\(c.word)”").font(.headline)
-                TextField("Change to:", text: $replacement)
+                DialogSection("Not in dictionary · \(index + 1) of \(issues.count)") {
+                    Text(c.context).frame(maxWidth: .infinity, alignment: .leading)
+                    DialogRow("Word") { Text("“\(c.word)”").font(.headline) }
+                    DialogRow("Change to") { TextField("", text: $replacement).labelsHidden() }
+                }
                 let guesses = AnnotationSpelling.guesses(c.word)
                 if !guesses.isEmpty {
-                    List(guesses, id: \.self) { g in
-                        Button(g) { replacement = g }.buttonStyle(.plain)
+                    DialogSection("Suggestions", boxed: false) {
+                        DialogListBox(count: guesses.count, rowHeight: 26, minRows: 1, maxRows: 4) {
+                            List(guesses, id: \.self) { g in
+                                Button(g) { replacement = g }.buttonStyle(.plain)
+                            }
+                        }
                     }
-                    .frame(height: 110)
                 }
                 HStack {
                     Button("Ignore") { index += 1; replacement = current.map { AnnotationSpelling.guesses($0.word).first ?? $0.word } ?? "" }
@@ -189,10 +191,8 @@ struct CheckSpellingDialog: View {
                     Button("Change All") { change(all: true) }.disabled(replacement.isEmpty || replacement == c.word)
                 }
             } else {
-                Label(issues.isEmpty ? "No spelling mistakes found." : "Spelling check complete.", systemImage: "checkmark.circle")
-                    .foregroundStyle(.secondary)
+                DialogNotice(.success, issues.isEmpty ? "No spelling mistakes found." : "Spelling check complete.")
             }
         }
-        .frame(minWidth: 460, idealWidth: 480)
     }
 }

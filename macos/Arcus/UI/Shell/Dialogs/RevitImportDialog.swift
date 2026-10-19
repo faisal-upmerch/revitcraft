@@ -27,23 +27,20 @@ struct RevitImportDialog: View {
     // MARK: .arcusx
 
     var exchangeBody: some View {
-        DialogFrame(title: "Import Revit Model: \(url.lastPathComponent)",
-                    subtitle: "Walls, floors, roofs, ceilings, doors, windows, rooms, stairs, railings, columns, beams, materials and families become native, editable Arcus elements. Other geometry arrives as reference geometry.",
-                    okTitle: "Import", state: state) { run() } content: {
-            Form {
-                Picker("Elements imported before", selection: $policy) {
-                    Text("Update them from this file").tag(ExchangeImportOptions.ExistingElementPolicy.update)
-                    Text("Keep them unchanged").tag(ExchangeImportOptions.ExistingElementPolicy.keep)
-                    Text("Import as new copies").tag(ExchangeImportOptions.ExistingElementPolicy.duplicate)
+        DialogFrame(title: "Import Revit Model", file: url, subtitle: url.lastPathComponent + DialogFileInfo.sizeSuffix(url), okTitle: "Import", labelWidth: 170, state: state) { run() } content: {
+            DialogSection("Options", footnote: "Elements keep their identity across imports: re-importing an updated export updates the same walls and doors.") {
+                DialogRow("Elements imported before") {
+                    Picker("", selection: $policy) {
+                        Text("Update them from this file").tag(ExchangeImportOptions.ExistingElementPolicy.update)
+                        Text("Keep them unchanged").tag(ExchangeImportOptions.ExistingElementPolicy.keep)
+                        Text("Import as new copies").tag(ExchangeImportOptions.ExistingElementPolicy.duplicate)
+                    }.labelsHidden().fixedSize()
                 }
                 Toggle("Create floor plans for new levels", isOn: $createPlanViews)
                 Toggle("Import unsupported geometry as reference meshes", isOn: $importMeshes)
             }
-            .formStyle(.grouped)
-            Text("Elements keep their identity across imports, so re-importing an updated export updates the same walls and doors.")
-                .font(.caption).foregroundStyle(.secondary)
+            DialogNotice(.info, "Walls, floors, roofs, ceilings, doors, windows, rooms, stairs, railings, columns, beams, materials and families become native, editable elements. Other geometry arrives as reference geometry.")
         }
-        .frame(minWidth: 520, idealWidth: 520)
     }
 
     func run() {
@@ -84,46 +81,55 @@ struct RevitImportDialog: View {
 
     // MARK: .rvt / .rfa
 
-    var revitFileBody: some View {
-        DialogFrame(title: url.lastPathComponent,
-                    subtitle: info.map { i in i.kind.displayName + (i.revitRelease.map { " · saved by release \($0)" } ?? "") } ?? (inspectionError == nil ? "Reading the file…" : "The file could not be inspected."), // W4-AUDIT
+    @ViewBuilder var revitFileBody: some View {
+        let status = info.map { i in i.kind.displayName + (i.revitRelease.map { " · release \($0)" } ?? "") } ?? (inspectionError == nil ? "Reading the file…" : "Can't be read")
+        DialogFrame(title: provider.isAvailable ? "Import Revit Model" : "Open Revit File", file: url, subtitle: url.lastPathComponent + " · " + status, // W4-AUDIT
                     okTitle: provider.isAvailable ? "Import" : "Done", showCancel: provider.isAvailable, state: state) {
             if provider.isAvailable { runDirect() } else { state.presented = nil }
         } content: {
-            HStack(alignment: .top, spacing: 16) {
-                preview
-                VStack(alignment: .leading, spacing: 8) {
-                    if let inspectionError { Label(inspectionError, systemImage: "exclamationmark.triangle").foregroundStyle(.orange) }
-                    if !provider.isAvailable {
-                        ScrollView {
-                            Text(provider.unavailableReason ?? "").font(.callout).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
+            if info != nil || inspectionError == nil {
+                DialogSection(rows: false) {
+                    HStack(alignment: .center, spacing: 14) {
+                        preview
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(url.lastPathComponent).font(.headline).lineLimit(1).truncationMode(.middle)
+                            Text(info.map { $0.kind.displayName } ?? "Reading the file…").foregroundStyle(.secondary)
+                            if let r = info?.revitRelease { Text("Saved by release \(r)").foregroundStyle(.secondary) }
                         }
-                        .frame(maxHeight: 220)
-                        HStack {
-                            Button("Import a .arcusx Export…") { state.presented = nil; CommandRouter(state: state).run(.importRevit) }
-                            Button("Import IFC…") { state.presented = nil; CommandRouter(state: state).run(.importIFC) }
-                        }
-                        .controlSize(.small)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(12)
+                }
+            }
+            if let inspectionError { DialogNotice(.error, title: "This file can't be read", inspectionError.components(separatedBy: "could not be read: ").last ?? inspectionError) }
+            if !provider.isAvailable {
+                DialogNotice(.info, title: "Arcus doesn't open .rvt or .rfa files directly", "Export from Revit, then import the export here.",
+                             detail: provider.unavailableReason)
+                DialogSection("Import instead") {
+                    DialogListRow(icon: "arrow.triangle.2.circlepath", iconTint: .accentColor, title: "Arcus Bridge export (.arcusx)",
+                                  subtitle: "Recommended. Walls, doors, rooms and families stay editable.") {
+                        Button("Import .arcusx…") { state.presented = nil; CommandRouter(state: state).run(.importRevit) }
+                    }
+                    DialogListRow(icon: "cube.transparent", iconTint: .teal, title: "IFC", subtitle: "In Revit choose File ▸ Export ▸ IFC.") {
+                        Button("Import IFC…") { state.presented = nil; CommandRouter(state: state).run(.importIFC) }
                     }
                 }
             }
         }
-        .frame(minWidth: 600, idealWidth: 600)
         .task { inspect() }
     }
 
     @ViewBuilder var preview: some View {
         if let png = info?.previewPNG, let image = NSImage(data: png) {
             Image(nsImage: image).resizable().interpolation(.high).aspectRatio(contentMode: .fit)
-                .frame(width: 160, height: 160)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.separator))
+                .frame(width: 96, height: 96)
+                .background(RoundedRectangle(cornerRadius: Tokens.radiusSection).fill(Color.white))
+                .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
                 .accessibilityLabel("Preview image stored in the file")
         } else {
-            RoundedRectangle(cornerRadius: 8).fill(.quaternary)
-                .frame(width: 160, height: 160)
-                .overlay(Image(systemName: "doc.questionmark").font(.system(size: 34, weight: .light)).foregroundStyle(.secondary))
+            Image(nsImage: DialogFileIcon.image(for: url)).resizable().interpolation(.high)
+                .frame(width: 64, height: 64)
                 .accessibilityHidden(true)
         }
     }

@@ -110,6 +110,7 @@ public enum FurnitureCheckParts {
                 out.append(ModelWarning(.info, code: "fm7.banding", "\(p.mark): the \(direction(info.normal)) edge (\(edge.rawValue)) shows and isn't banded.", elements: [e.id]))
             }
         }
+        out += ComponentChecks.check(m) // COMP: component compatibility rules and hardware overlaps
         return out.sorted { a, b in a.severity != b.severity ? a.severity > b.severity : a.message.localizedStandardCompare(b.message) == .orderedAscending }
     }
 

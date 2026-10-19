@@ -24,31 +24,25 @@ struct FiltersDialog: View {
         .filter { ![.modelGroups, .importedCAD, .ifcReference].contains($0) }.sorted { $0.displayName < $1.displayName }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Filters").font(.title3.weight(.semibold))
-            HStack(alignment: .top, spacing: 12) {
-                filterList.frame(width: 200)
-                Divider()
+        ArcusDialog(icon: "line.3.horizontal.decrease.circle", tint: .indigo, title: "Filters", subtitle: "Rule-based selections of elements that views can hide or override.",
+                    size: .wide, height: 600, onCancel: { close() }, onOK: { save(); close() }) {
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                filterList.frame(width: 190)
                 if selection != nil {
-                    categoryList.frame(width: 220)
-                    Divider()
-                    rulesEditor.frame(minWidth: 460, maxWidth: .infinity)
+                    categoryList.frame(width: 210)
+                    rulesEditor.frame(maxWidth: .infinity)
                 } else {
-                    ContentUnavailableView("No Filter Selected", systemImage: "line.3.horizontal.decrease.circle",
-                                           description: Text("Create a filter, then choose its categories and rules."))
-                        .frame(maxWidth: .infinity)
+                    DialogPane {
+                        DialogEmptyState(icon: "line.3.horizontal.decrease.circle", title: "No Filter Selected", message: "Create a filter, then choose its categories and rules.",
+                                         actionTitle: "New Filter", action: { newFilter() })
+                    }
+                    .padding(.top, 21)
                 }
             }
-            .frame(minHeight: 420)
-            HStack {
-                Spacer()
-                Button("Cancel") { close() }.keyboardShortcut(.cancelAction)
-                Button("Apply") { save() }.disabled(!dirty)
-                Button("OK") { save(); close() }.keyboardShortcut(.defaultAction)
-            }
+            .frame(maxHeight: .infinity)
+        } trailing: {
+            Button("Apply") { save() }.disabled(!dirty).dialogButton()
         }
-        .padding(20)
-        .frame(minWidth: 960, minHeight: 560)
         .onAppear { select(initial ?? filters.first?.id) }
         .onChange(of: selection) { old, new in
             if old != nil, old == loaded { save() }
@@ -59,15 +53,16 @@ struct FiltersDialog: View {
     // MARK: Filter list
 
     var filterList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Filters").font(.headline)
-            List(filters, id: \.id, selection: $selection) { f in Text(f.name).tag(f.id) }
-                .overlay { if filters.isEmpty { Text("No filters yet").foregroundStyle(.secondary) } }
-            HStack(spacing: 4) {
-                Button { newFilter() } label: { Image(systemName: "plus") }.help("New filter").accessibilityLabel("New filter")
-                Button { duplicate() } label: { Image(systemName: "plus.square.on.square") }.help("Duplicate").accessibilityLabel("Duplicate filter").disabled(selection == nil)
-                Button { delete() } label: { Image(systemName: "minus") }.help("Delete (removes it from every view)").accessibilityLabel("Delete filter").disabled(selection == nil)
+        VStack(alignment: .leading, spacing: 8) {
+            DialogPane("Filters") {
+                List(filters, id: \.id, selection: $selection) { f in Label(f.name, systemImage: "line.3.horizontal.decrease").tag(f.id) }
+                    .overlay { if filters.isEmpty { DialogEmptyState(icon: "line.3.horizontal.decrease.circle", title: "No filters yet") } }
+            } bar: {
+                Button { newFilter() } label: { Image(systemName: "plus").frame(width: 20) }.help("New filter").accessibilityLabel("New filter")
+                Button { duplicate() } label: { Image(systemName: "plus.square.on.square").frame(width: 20) }.help("Duplicate").accessibilityLabel("Duplicate filter").disabled(selection == nil)
+                Button { delete() } label: { Image(systemName: "minus").frame(width: 20) }.help("Delete (removes it from every view)").accessibilityLabel("Delete filter").disabled(selection == nil)
             }
+            .buttonStyle(.borderless)
             if selection != nil {
                 TextField("Name", text: $name).textFieldStyle(.roundedBorder).accessibilityLabel("Filter name")
             }
@@ -77,17 +72,20 @@ struct FiltersDialog: View {
     // MARK: Categories
 
     var categoryList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Categories").font(.headline)
-            Toggle("Hide un-checked categories", isOn: $hideUnchecked).controlSize(.small)
-            List {
-                ForEach(Self.filterableCategories.filter { !hideUnchecked || draft.categories.contains($0) }, id: \.self) { c in
-                    Toggle(c.displayName, isOn: Binding(get: { draft.categories.contains(c) }, set: { on in
-                        if on { if !draft.categories.contains(c) { draft.categories.append(c) } } else { draft.categories.removeAll { $0 == c } }
-                    })).toggleStyle(.checkbox)
+        VStack(alignment: .leading, spacing: 8) {
+            DialogPane("Categories") {
+                List {
+                    ForEach(Self.filterableCategories.filter { !hideUnchecked || draft.categories.contains($0) }, id: \.self) { c in
+                        Toggle(c.displayName, isOn: Binding(get: { draft.categories.contains(c) }, set: { on in
+                            if on { if !draft.categories.contains(c) { draft.categories.append(c) } } else { draft.categories.removeAll { $0 == c } }
+                        })).toggleStyle(.checkbox)
+                    }
                 }
+            } bar: {
+                Button("Check All") { draft.categories = Self.filterableCategories }
+                Button("Check None") { draft.categories = [] }
             }
-            HStack { Button("Check All") { draft.categories = Self.filterableCategories }; Button("Check None") { draft.categories = [] } }.controlSize(.small)
+            Toggle("Hide un-checked categories", isOn: $hideUnchecked).controlSize(.small)
         }
     }
 
@@ -96,8 +94,8 @@ struct FiltersDialog: View {
     var parameters: [(id: ParameterID, name: String, type: ParamType)] { FilterEvaluation.parameters(for: draft.categories, model) }
 
     var rulesEditor: some View {
+        DialogPane("Filter rules") {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Filter Rules").font(.headline)
             Picker("Elements must match", selection: $draft.matchAll) {
                 Text("all rules (AND)").tag(true); Text("any rule (OR)").tag(false)
             }.fixedSize()
@@ -130,7 +128,9 @@ struct FiltersDialog: View {
                 Spacer()
                 Text(summary).font(.caption).foregroundStyle(.secondary).lineLimit(2)
             }
-            if draft.categories.isEmpty { Text("Choose at least one category.").font(.caption).foregroundStyle(.orange) }
+            if draft.categories.isEmpty { DialogNotice(.warning, "Choose at least one category.") }
+        }
+        .padding(12)
         }
     }
 
