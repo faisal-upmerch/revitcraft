@@ -316,10 +316,13 @@ public enum JointSolver {
                 let p = list[i], q = list[j]
                 guard FamilyAxis.allCases.allSatisfy({ overlap(p, q, $0) >= -eps }),
                       FamilyAxis.allCases.filter({ overlap(p, q, $0) > eps }).count >= 2 else { continue }
-                guard let cfg = config(p, q) ?? config(q, p), piecesMeet(p, q) else { continue } // FMG2: slats meet by a piece
+                guard var cfg = config(p, q) ?? config(q, p), piecesMeet(p, q) else { continue } // FMG2: slats meet by a piece
                 // FMG2: slats join at their ends only (a rail alongside the first slat doesn't trim it).
                 if let la = cfg.b.slatAxis, cfg.a1 != la { continue }
                 if let la = cfg.a.slatAxis, let a2 = cfg.a2, a2 != la { continue }
+                // FMG4: a leg or rail at the end of slats isn't an L corner with the whole layout (it would run on across
+                // every slat); the slats stop at it.
+                if cfg.b.slatAxis != nil { cfg.a2 = nil }
                 guard let (kind, first) = classify(p, q) else {
                     // Adjustable shelves: pin rows in the parts they end at.
                     let shelf = p.role == .adjustableShelf ? p : q

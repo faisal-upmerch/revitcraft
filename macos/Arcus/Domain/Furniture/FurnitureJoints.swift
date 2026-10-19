@@ -77,6 +77,11 @@ public enum FurnitureJoints {
         let mains = raw.solids.indices.filter { !raw.solids[$0].isVoid }
         var hosts = mains.map { raw.solids[$0].id } + raw.placed.flatMap { $0.family.solids.map(\.id) }
         let material = mains.first.flatMap { raw.materials[raw.solids[$0].id] } ?? raw.placed.first?.material
+        // FMG4: faces that follow formulas (spread slats) keep them through the reshape, as do the tenons on them and
+        // the mortises cut for other parts' (the partners' formula faces).
+        let own = FormulaFaces(raw, e, m, ctx)
+        let partners = ctx.planeFormulas == nil ? [] : ctx.formulaFaces(m).filter { $0.key != e.id }.map(\.value)
+        func bind(_ b: JBox, inside: Bool) -> JBox { partners.reduce(own.rebind(b, inside: inside)) { $1.rebind($0, inside: inside) } }
         if mods.reshapes, part.reshapeable, let box = sol.finalBoxes[e.id] {
             // FMG2: each slat with its own final box; round rails stay round; shaped parts keep their (reshaped) outline.
             let boxes = sol.finalPieces[e.id] ?? [box]
@@ -84,9 +89,11 @@ public enum FurnitureJoints {
                 var ids: [String] = []
                 for (k, i) in mains.enumerated() {
                     let old = raw.solids[i]
-                    var s = JointSolver.shapedSolid(old.name, part, boxes[k], outline: sol.finalOutlines[e.id], ctx) ?? mainSolid(old.name, boxes[k], mods.miters, ctx)
+                    let bk = own.rebind(boxes[k], inside: false) // FMG4
+                    var s = JointSolver.shapedSolid(old.name, part, bk, outline: sol.finalOutlines[e.id], ctx) ?? mainSolid(old.name, bk, mods.miters, ctx)
                     s.materialParameter = old.materialParameter
                     s.visibleAt = old.visibleAt
+                    s.visibilityParameter = old.visibilityParameter // FMG4: slats past the count stay hidden
                     out.solids[i] = s
                     out.materials[old.id] = nil
                     if let material { out.materials[s.id] = material }
@@ -96,13 +103,15 @@ public enum FurnitureJoints {
             }
         }
         let name = mains.first.map { raw.solids[$0].name } ?? (e.mark.isEmpty ? "Part" : e.mark)
-        for (k, b) in mods.fineSolids.enumerated() {
+        for (k, b0) in mods.fineSolids.enumerated() {
+            let b = bind(b0, inside: true) // FMG4
             var s = FurniturePartSolids.box("\(name) Tenon \(k + 1)", plane: .xy, u: (b.lo[0], b.hi[0]), v: (b.lo[1], b.hi[1]), w: (b.lo[2], b.hi[2]), ctx)
             s.visibleAt = [.fine]
             out.solids.append(s)
             if let material { out.materials[s.id] = material }
         }
-        for (k, b) in mods.fineVoids.enumerated() {
+        for (k, b0) in mods.fineVoids.enumerated() {
+            let b = bind(b0, inside: true) // FMG4
             var s = FurniturePartSolids.box("\(name) Joint Cut \(k + 1)", plane: .xy, u: (b.lo[0], b.hi[0]), v: (b.lo[1], b.hi[1]), w: (b.lo[2], b.hi[2]), ctx, void: true)
             s.visibleAt = [.fine]
             s.cuts = hosts

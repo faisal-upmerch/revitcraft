@@ -59,6 +59,8 @@ public final class PartSolidContext {
     public var planeFormula: ((String) -> String?)?
     /// FMG3: compiling a canted front: its face's front corners (see CantAnchors).
     public var cantAnchors: CantAnchors?
+    /// FMG4: the formula faces of the model's parts, found once per compile (see FormulaFaces).
+    var formulaFacesCache: [ElementID: FormulaFaces]?
 
     /// FMG1: a coordinate as a length formula, when compiling with plane formulas and its plane has one.
     public func formula(_ v: PartValue) -> String? {
