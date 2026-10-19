@@ -38,6 +38,7 @@ public enum FabricationSchedules {
         case .hardwareSchedule:
             [("Family", .text), ("Type", .text), ("Kind", .text), ("Source", .text), ("Count", .integer), ("Unit Cost", .currency),
              ("Total Cost", .currency), ("Manufacturer", .text), ("Model", .text), ("Description", .text)]
+                + ComponentSchedules.hardwareFields // COMP: component category, SKU and power
         case .edgeBanding:
             [("Banding Material", .text), ("Banding Thickness", .length), ("Mark", .text), ("Part", .text), ("Edges", .text), ("Length", .length),
              ("Linear Feet", .number), ("Cost", .currency)]
@@ -87,7 +88,7 @@ public enum FabricationSchedules {
             "Family": .text(h.family), "Type": .text(h.typeName), "Kind": .text(h.kind), "Source": .text(h.source), "Count": .int(h.count),
             "Unit Cost": .double(h.unitCost), "Total Cost": .double(h.totalCost), "Manufacturer": .text(h.manufacturer), "Model": .text(h.model),
             "Description": .text(h.description),
-        ])
+        ].merging(ComponentSchedules.hardwareValues(h, m), uniquingKeysWith: { a, _ in a })) // COMP
     }
 
     static func bandingRow(_ b: FurnitureFabrication.BandingItem, _ m: BIMModel) -> FabricationRow {
