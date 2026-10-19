@@ -181,7 +181,7 @@ corners, edge midpoints, centres, crossings, nearest, and the work plane's own s
 **Family Editor.** In the plan and elevation views, snapping works as in project views. While a tool is active,
 `Tab` cycles the snaps under the pointer, and the typed snap overrides `SE` `SM` `SI` `SN` `SC` `SP` `ST` `SQ` `SX`
 `SR` `SZ` `SO` `SS` apply to the next pick. `Return` finishes a sketch, `Delete` removes its last point, and `Esc` ends
-the rubber band or chain.
+the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks as in the project window, and ⌘Return finishes a sketch.
 
 ## Commands
 
