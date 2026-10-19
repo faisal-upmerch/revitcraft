@@ -7,5 +7,5 @@ import ArcusGeometry
 
 extension ComponentLibrary {
     /// Group C's component definitions, in browser order.
-    static var groupC: [ComponentDefinition] { [] }
+    static var groupC: [ComponentDefinition] { ComponentsC.all } // COMPC: ComponentLibrary+C+*.swift
 }
