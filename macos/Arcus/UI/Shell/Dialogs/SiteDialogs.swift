@@ -35,7 +35,7 @@ struct SiteSettingsDialog: View {
     @State private var primaryEvery = 5
     @State private var show = true
     var body: some View {
-        DialogFrame(title: "Site Settings", subtitle: "Contour lines of every toposurface in plan views.", state: state) {
+        DialogFrame(title: "Site Settings", icon: "mountain.2", tint: .green, subtitle: "Contour lines of every toposurface in plan views.", labelWidth: 170, state: state) {
             let m = state.model
             guard let v = try? Parameters.parse(interval, type: .length, model: m).doubleValue, v >= 0.01 else {
                 state.show("Enter a contour interval of at least 10 mm.", error: true); return
@@ -45,12 +45,13 @@ struct SiteSettingsDialog: View {
             state.session.perform("Site Settings") { tx in tx.update(pi) { s.write(to: &$0) } }
             state.presented = nil
         } content: {
-            FormRow(label: "Show contours") { Toggle("", isOn: $show).labelsHidden() }
-            FormRow(label: "Contour interval") { TextField("", text: $interval).textFieldStyle(.roundedBorder).frame(width: 140) }
-            FormRow(label: "Primary contour every") {
-                Stepper(value: $primaryEvery, in: 1...50) { Text("\(primaryEvery) contour\(primaryEvery == 1 ? "" : "s")") }
+            DialogSection("Contours", footnote: "Primary contours are drawn heavier. Label them with Massing & Site ▸ Label Contours.") {
+                DialogRow("Show contours") { Toggle("", isOn: $show).labelsHidden().toggleStyle(.switch).controlSize(.small) }
+                DialogRow("Interval") { TextField("", text: $interval).labelsHidden().multilineTextAlignment(.trailing).frame(width: 120) }
+                DialogRow("Primary contour every") {
+                    Stepper(value: $primaryEvery, in: 1...50) { Text("\(primaryEvery) contour\(primaryEvery == 1 ? "" : "s")").monospacedDigit() }
+                }
             }
-            Text("Primary contours are drawn heavier. Label them with Massing & Site ▸ Label Contours.").font(.caption).foregroundStyle(.secondary)
         }
         .onAppear {
             let s = SiteSettings(state.model)
@@ -74,34 +75,40 @@ struct PointFileDialog: View {
     var scale: Double { Self.units.first { $0.0 == unit }?.2 ?? 1 }
 
     var body: some View {
-        DialogFrame(title: "\(noun) from Point File", subtitle: url.lastPathComponent, okTitle: "Create", okDisabled: (result?.points.count ?? 0) < 3, state: state) {
+        let count = result?.points.count ?? 0
+        DialogFrame(title: "\(noun) from Point File", file: url, subtitle: url.lastPathComponent + DialogFileInfo.sizeSuffix(url), okTitle: "Create", okDisabled: count < 3,
+                    disabledReason: error == nil ? "The file needs at least 3 points" : nil, labelWidth: 110, state: state) {
             create()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
-            FormRow(label: "File units") {
-                Picker("", selection: $unit) { ForEach(Self.units, id: \.0) { Text($0.1).tag($0.0) } }.labelsHidden().frame(width: 180)
-            }
-            if let r = result {
-                Text("\(r.points.count) points read" + (r.skippedLines.isEmpty ? "." : "; \(r.skippedLines.count) line(s) skipped (first: line \(r.skippedLines[0]))."))
-                if let b = bounds(r) { Text(b).font(.caption).foregroundStyle(.secondary) }
-                if r.points.count > SiteOperations.maxSurfacePoints {
-                    Text("Dense data is thinned evenly to about \(SiteOperations.maxSurfacePoints) points.").font(.caption).foregroundStyle(.secondary)
+            if let error { DialogNotice(.error, title: "The file can't be read", error) }
+            DialogSection("File", footnote: "Each line: x, y, z (comma, semicolon, tab or space separated), optionally after a point name. Placed at internal coordinates.") {
+                DialogRow("Units") {
+                    Picker("", selection: $unit) { ForEach(Self.units, id: \.0) { Text($0.1).tag($0.0) } }.labelsHidden().fixedSize()
                 }
             }
-            Text("Each line: x, y, z (comma, semicolon, tab or space separated), optionally after a point name or number. Coordinates are placed as internal coordinates.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if let r = result {
+                DialogSection("Preview") {
+                    DialogValueRow(label: "Points", value: "\(r.points.count)" + (r.skippedLines.isEmpty ? "" : " · \(r.skippedLines.count) line\(r.skippedLines.count == 1 ? "" : "s") skipped (first: line \(r.skippedLines[0]))"))
+                    if let (extent, elevations) = bounds(r) {
+                        DialogValueRow(label: "Extent", value: extent)
+                        DialogValueRow(label: "Elevations", value: elevations)
+                    }
+                }
+                if r.points.count > SiteOperations.maxSurfacePoints {
+                    DialogNotice(.info, "Dense data is thinned evenly to about \(SiteOperations.maxSurfacePoints) points.")
+                }
+            }
         }
-        .frame(width: 520)
         .onAppear(perform: load)
         .onChange(of: unit) { _, _ in result = SitePointFile.parse(text, scale: scale) }
     }
 
-    func bounds(_ r: SitePointFile.Result) -> String? {
+    func bounds(_ r: SitePointFile.Result) -> (String, String)? {
         guard !r.points.isEmpty else { return nil }
         let b = Rect2(points: r.points.map(\.xy))
         let zs = r.points.map(\.z)
         let f = { (v: Double) in Parameters.format(.double(v), type: .length, model: state.model) }
-        return "Extent \(f(b.width)) × \(f(b.height)); elevations \(f(zs.min() ?? 0)) to \(f(zs.max() ?? 0))."
+        return ("\(f(b.width)) × \(f(b.height))", "\(f(zs.min() ?? 0)) to \(f(zs.max() ?? 0))")
     }
 
     func load() {
@@ -139,26 +146,24 @@ struct TopoFromImportDialog: View {
     @State private var cancel = CancelBox()
 
     var body: some View {
-        DialogFrame(title: "\(noun) from Import", subtitle: "Choose the layers with contour lines or spot points. Their elevations become the surface.",
-                    okTitle: "Create", okDisabled: doc == nil || chosen.isEmpty, state: state) {
+        DialogFrameWithActions(title: "\(noun) from Import", icon: "mountain.2", tint: .green, subtitle: "Choose layers with contour lines or spot points. Their elevations become the surface.",
+                    okTitle: "Create", okDisabled: doc == nil || chosen.isEmpty, disabledReason: doc == nil ? nil : "Check at least one layer", state: state) {
             create()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            if let error { DialogNotice(.error, title: "The drawing can't be used", error) }
             if doc != nil {
-                List(summaries, id: \.name) { l in
-                    Toggle(isOn: Binding(get: { chosen.contains(l.name) }, set: { if $0 { chosen.insert(l.name) } else { chosen.remove(l.name) } })) {
-                        HStack {
-                            Text(l.name)
-                            Spacer()
-                            Text(l.elevations > 0 ? "\(l.points) points, \(l.elevations)+ elevations" : "\(l.points) points, flat").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                }.frame(height: 220)
+                DialogCheckList(items: summaries.map { l in
+                    DialogCheckItem(id: l.name, title: l.name, subtitle: l.elevations > 0 ? "\(l.elevations)+ elevations" : "flat", detail: "\(l.points) points")
+                }, checked: $chosen, maxRows: 8, noun: "layers", emptyTitle: "No layers")
             } else if error == nil {
-                ProgressView("Reading \(state.model[linkID]?.link?.sourceName ?? "")…").frame(maxWidth: .infinity, minHeight: 120)
+                DialogSection(rows: false) {
+                    ProgressView("Reading \(state.model[linkID]?.link?.sourceName ?? "")…").padding(20).frame(maxWidth: .infinity, minHeight: 120)
+                }
             }
+        } actions: {
+            Button("Check All") { chosen = Set(summaries.map(\.name)) }.disabled(summaries.isEmpty)
+            Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
         }
-        .frame(width: 520)
         .task { await read() }
         .onDisappear { cancel.cancelled = true }
     }
@@ -208,14 +213,29 @@ struct TopoFromImportDialog: View {
     }
 }
 
-/// BL-SITE: Simplify Surface — removes survey points that change the surface by less than the chosen accuracy.
+/// BL-SITE: Simplify Surface — removes survey points that change the surface by less than the chosen accuracy. The
+/// preview runs the same simplification on a scratch transaction (nothing is committed) as the accuracy changes.
 struct SimplifySurfaceDialog: View {
     let state: DocumentState
     let elementID: ElementID
     @State private var accuracy = ""
+
+    /// Points left at `accuracy` (nil when the value doesn't parse or the surface is too large to preview live).
+    func preview(_ text: String) -> (before: Int, after: Int)? {
+        let m = state.model
+        guard let v = try? Parameters.parse(text, type: .length, model: m).doubleValue, v > 0,
+              (m[elementID]?.topography?.points.count ?? 0) <= 4000 else { return nil }
+        let tx = TransactionContext(model: m, name: "Preview")
+        return try? ToposolidOperations.simplify(elementID, tolerance: v, in: tx)
+    }
+
     var body: some View {
         let e = state.model[elementID]
-        DialogFrame(title: "Simplify Surface", subtitle: "\(e?.name ?? "") — \(e?.topography?.points.count ?? 0) points", okTitle: "Simplify", state: state) {
+        let n = e?.topography?.points.count ?? 0
+        let valid = (try? Parameters.parse(accuracy, type: .length, model: state.model).doubleValue).map { $0 > 0 } ?? false
+        let p = preview(accuracy)
+        DialogFrame(title: "Simplify Surface", icon: "mountain.2", tint: .green, subtitle: "\(e?.name ?? "Surface") · \(n) points", okTitle: "Simplify",
+                    okDisabled: !valid, disabledReason: "Enter an accuracy greater than zero", state: state) {
             let m = state.model
             guard let v = try? Parameters.parse(accuracy, type: .length, model: m).doubleValue, v > 0 else {
                 state.show("Enter an accuracy greater than zero.", error: true); return
@@ -227,11 +247,18 @@ struct SimplifySurfaceDialog: View {
             state.presented = nil
             state.show(r.after < r.before ? "Simplified from \(r.before) to \(r.after) points." : "Every point shapes the surface at this accuracy; nothing was removed.")
         } content: {
-            FormRow(label: "Accuracy") { TextField("", text: $accuracy).textFieldStyle(.roundedBorder).frame(width: 140) }
-            Text("Points are removed while the surface stays within this vertical distance of every original point. The outline is kept.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            DialogSection(footnote: "Points are removed while the surface stays within this vertical distance of every original point. The outline is kept.") {
+                DialogRow("Accuracy") { TextField("", text: $accuracy).labelsHidden().multilineTextAlignment(.trailing).frame(width: 120) }
+            }
+            DialogSection("Preview") {
+                DialogValueRow(label: "Points now", value: "\(n)")
+                if let p {
+                    DialogValueRow(label: "After", value: p.after < p.before ? "\(p.after) (\(p.before - p.after) removed, \(Int((Double(p.before - p.after) / Double(max(p.before, 1)) * 100).rounded())) %)" : "\(p.after) (nothing to remove)")
+                } else {
+                    DialogValueRow(label: "After", value: valid ? "Shown when you simplify" : "—")
+                }
+            }
         }
-        .frame(width: 460)
         .onAppear { accuracy = Parameters.format(.double(state.model.units.system == .imperial ? 0.0254 : 0.02), type: .length, model: state.model) }
     }
 }

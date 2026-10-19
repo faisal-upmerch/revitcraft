@@ -199,7 +199,7 @@ struct FillPatternsSettingsView: View {
                 }
             }
         }
-        .sheet(item: $editor) { mode in FillPatternEditor(state: state, mode: mode) { editor = nil } }
+        .sheet(item: $editor) { mode in FillPatternEditor(state: state, mode: mode) { editor = nil }.opaqueDialogBackground() } // DIALOGS
     }
 
     static func summary(_ d: FillPatternData?) -> String {
@@ -274,24 +274,27 @@ struct FillPatternEditor: View {
     var body: some View {
         let fams = (try? parsed.get()) ?? []
         let preview = FillPatternData(kind: FillPatternText.closestKind(fams), isModelPattern: isModel, spacing: fams.first?.spacing ?? 2)
-        VStack(alignment: .leading, spacing: 12) {
-            Text(mode == .new ? "New Fill Pattern" : "Edit Fill Pattern").font(.title3.weight(.semibold))
-            Grid(alignment: .leading, verticalSpacing: 8) {
-                GridRow { Text("Name"); TextField("Name", text: $name).frame(width: 300).accessibilityLabel("Pattern name") }
-                GridRow {
-                    Text("Type")
+        ArcusDialog(icon: "square.grid.3x3.fill.square", tint: .indigo, title: mode == .new ? "New Fill Pattern" : "Edit Fill Pattern", subtitle: "Line families drawn as a hatch.",
+                    size: .large, labelWidth: 100, okDisabled: fams.isEmpty || name.trimmingCharacters(in: .whitespaces).isEmpty,
+                    disabledReason: name.trimmingCharacters(in: .whitespaces).isEmpty ? "Enter a name" : "Add at least one valid line family",
+                    onCancel: { dismiss() }, onOK: { commit(fams) }) { // DIALOGS
+            DialogSection {
+                DialogRow("Name") { TextField("", text: $name).labelsHidden().accessibilityLabel("Pattern name") }
+                DialogRow("Type") {
                     Picker("", selection: $isModel) { Text("Drafting (paper mm, same at every scale)").tag(false); Text("Model (real-world mm, scales with the view)").tag(true) }
-                        .labelsHidden().frame(width: 360)
+                        .labelsHidden().fixedSize()
                 }
-                GridRow { Text("Description"); TextField("Optional", text: $description).frame(width: 360) }
+                DialogRow("Description") { TextField("Optional", text: $description).labelsHidden() }
             }
-            HStack(alignment: .top, spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Line families — one per line: angle°, origin x, origin y, shift, spacing, dashes… (mm; dash > 0 pen down, < 0 gap, 0 dot)")
-                        .font(.caption).foregroundStyle(.secondary)
-                    TextEditor(text: $text).font(.system(size: 12).monospaced()).frame(width: 380, height: 160)
-                        .overlay(RoundedRectangle(cornerRadius: 4).strokeBorder(.secondary.opacity(0.4)))
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Line families").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
+                    TextEditor(text: $text).font(.system(size: 12).monospaced()).frame(height: 160)
+                        .scrollContentBackground(.hidden).padding(6)
+                        .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
                         .accessibilityLabel("Line families")
+                    DialogCaption("One per line: angle°, origin x, origin y, shift, spacing, dashes… (mm; dash > 0 pen down, < 0 gap, 0 dot)").padding(.horizontal, 4)
                     HStack {
                         Button("Add Line Family") { text += (text.hasSuffix("\n") || text.isEmpty ? "" : "\n") + "135, 0, 0, 0, 3" }.controlSize(.small)
                         Menu("Start From…") {
@@ -301,22 +304,18 @@ struct FillPatternEditor: View {
                         }.controlSize(.small).fixedSize()
                     }
                 }
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Preview").font(.caption).foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Preview").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
                     Image(nsImage: FillPatternSwatch.image(withFamilies(preview, fams), width: 220, height: 160))
-                    if case .failure(let e) = parsed { Text(String(describing: e)).font(.caption).foregroundStyle(.red).frame(width: 220) }
-                    else { Text("\(fams.count) line famil\(fams.count == 1 ? "y" : "ies")").font(.caption).foregroundStyle(.secondary) }
+                        .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                        .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+                    if case .failure(let e) = parsed { Label(String(describing: e), systemImage: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.red).frame(width: 220, alignment: .leading) }
+                    else { DialogCaption("\(fams.count) line famil\(fams.count == 1 ? "y" : "ies")").padding(.horizontal, 4) }
                 }
+                .frame(width: 220)
             }
-            if let error { Text(error).font(.callout).foregroundStyle(.red) }
-            HStack {
-                Spacer()
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
-                Button("OK") { commit(fams) }.keyboardShortcut(.defaultAction).disabled(fams.isEmpty || name.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+            if let error { DialogNotice(.error, error) }
         }
-        .padding(20)
-        .frame(width: 680)
         .onAppear(perform: load)
     }
 

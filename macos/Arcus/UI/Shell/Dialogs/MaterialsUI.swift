@@ -272,7 +272,9 @@ struct MaterialsDialog: View {
 
     var body: some View {
         let _ = state.session.changeCounter
-        DialogChrome { // W4-SHELL: window-like dialog grammar (content, hairline, button strip)
+        ArcusDialog(icon: "paintpalette", tint: .pink, title: "Materials", subtitle: "\(state.model.materials.count) materials in this project. Changes apply as you make them.",
+                    size: .wide, okTitle: "Done", showCancel: false, height: 640, padded: false, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) { // DIALOGS
+            Divider()
             HStack(spacing: 0) {
                 sidebar.frame(width: 270)
                 Divider()
@@ -280,18 +282,13 @@ struct MaterialsDialog: View {
                     if let id = selected, let mat = state.model[id], mat.material != nil {
                         MaterialDetail(state: state, materialID: id).id(id)
                     } else {
-                        VStack(spacing: 8) {
-                            Image(systemName: "paintpalette").font(.system(size: 34, weight: .light)).foregroundStyle(.tertiary)
-                            Text("Select a material").font(.title3).foregroundStyle(.secondary)
-                            Text("or create one with the + button.").font(.callout).foregroundStyle(.tertiary)
-                        }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        DialogEmptyState(icon: "paintpalette", title: "Select a material", message: "or create one with the + button.", illustrated: true)
                     }
                 }
                 .frame(minWidth: 0, maxWidth: .infinity, maxHeight: .infinity)
             }
-        } buttons: {
-            DialogButtonRow(okTitle: "Done", showCancel: false, onCancel: {}, onOK: { state.presented = nil }) {
+            .frame(maxHeight: .infinity)
+        } leading: {
                 Button { if let id = selected { paint(id) } } label: { Label("Paint Selection", systemImage: "paintbrush") }
                     .disabled(selected == nil || state.session.selection.isEmpty)
                     .help(state.session.selection.isEmpty ? "Select elements in the view first" : "Apply this material to all surfaces of the selected elements")
@@ -299,11 +296,9 @@ struct MaterialsDialog: View {
                 Button { showingLibrary = true } label: { Label("Add from Library…", systemImage: "books.vertical") }
                     .help("Add common building materials from the built-in library")
                     .sheet(isPresented: $showingLibrary) {
-                        MaterialLibraryPicker(state: state) { added in showingLibrary = false; if let first = added.first { selected = first } }
+                        MaterialLibraryPicker(state: state) { added in showingLibrary = false; if let first = added.first { selected = first } }.opaqueDialogBackground() // DIALOGS
                     }
-            }
         }
-        .frame(width: 880, height: 600)
         .onAppear { if selected == nil { selected = state.model.materials.first?.id } }
         .confirmationDialog(deleteTitle, isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } })) {
             Button("Delete", role: .destructive) { if let id = confirmDelete { delete(id) } }

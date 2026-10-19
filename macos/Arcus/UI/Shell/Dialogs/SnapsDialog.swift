@@ -13,11 +13,13 @@ struct SnapsDialog: View {
     static let overrideKeys: [SnapKind: String] = [.endpoint: "SE", .midpoint: "SM", .intersection: "SI", .nearest: "SN", .center: "SC",
                                                    .perpendicular: "SP", .tangent: "ST", .quadrant: "SQ"]
     var body: some View {
-        DialogFrame(title: "Snaps", subtitle: "Settings apply to every view. Type a two-letter override during a tool to use one snap for the next pick; SO turns snapping off for it.",
-                    okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
-            Toggle("Snaps On", isOn: $state.snapSettings.snapsOn).toggleStyle(.switch)
-            GroupBox("Object Snaps") {
-                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 6) {
+        DialogFrame(title: "Snaps", icon: "dot.squareshape.split.2x2", tint: .blue, size: .medium, subtitle: "Every view. During a tool, a two-letter key overrides the next pick; SO turns snapping off for it.",
+                    okTitle: "Done", showCancel: false, labelWidth: 130, state: state) { state.presented = nil } content: {
+            DialogSection {
+                HStack { Text("Snaps"); Spacer(); Toggle("", isOn: $state.snapSettings.snapsOn).toggleStyle(.switch).labelsHidden() }
+            }
+            DialogSection("Object snaps", rows: false) {
+                LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], spacing: 8) {
                     ForEach(SnapKind.allCases.filter { ![.angle, .parallel, .extension].contains($0) }, id: \.self) { k in
                         Toggle(isOn: Binding(get: { state.snapSettings.enabled.contains(k) },
                                              set: { on in if on { state.snapSettings.enabled.insert(k) } else { state.snapSettings.enabled.remove(k) } })) {
@@ -29,32 +31,30 @@ struct SnapsDialog: View {
                     }
                 }
                 .disabled(!state.snapSettings.snapsOn)
-                .padding(4)
-                HStack {
+                .padding(12)
+            } accessory: {
+                HStack(spacing: 4) {
                     Button("Check All") { state.snapSettings.enabled = Set(SnapKind.allCases) }
                     Button("Check None") { state.snapSettings.enabled = [.angle] }
                 }
-                .controlSize(.small)
             }
-            GroupBox("Angular and Distance") {
-                VStack(alignment: .leading, spacing: 8) {
+            DialogSection("Angular and distance", footnote: "Hold ⇧ while drawing to constrain to horizontal or vertical.") {
                     Toggle("Angle snaps", isOn: Binding(get: { state.snapSettings.enabled.contains(.angle) },
                                                         set: { on in if on { state.snapSettings.enabled.insert(.angle) } else { state.snapSettings.enabled.remove(.angle) } }))
                     Toggle("Extensions of lines (dashed alignment guides)", isOn: Binding(get: { state.snapSettings.enabled.contains(.extension) },
                                                         set: { on in if on { state.snapSettings.enabled.insert(.extension) } else { state.snapSettings.enabled.remove(.extension) } }))
                     Toggle("Parallel and perpendicular to nearby or recently hovered lines", isOn: Binding(get: { state.snapSettings.enabled.contains(.parallel) },
                                                         set: { on in if on { state.snapSettings.enabled.insert(.parallel) } else { state.snapSettings.enabled.remove(.parallel) } }))
-                    Picker("Angle increment", selection: $state.snapSettings.angleIncrement) {
-                        Text("Adaptive (45° to 1° as you zoom)").tag(0.0) // I2: RevitCraft's increments
-                        ForEach([90.0, 45, 30, 15, 10, 5, 1], id: \.self) { Text("\(Int($0))°").tag($0) }
+                    DialogRow("Angle increment") {
+                        Picker("", selection: $state.snapSettings.angleIncrement) {
+                            Text("Adaptive (45° to 1° as you zoom)").tag(0.0) // I2: RevitCraft's increments
+                            ForEach([90.0, 45, 30, 15, 10, 5, 1], id: \.self) { Text("\(Int($0))°").tag($0) }
+                        }.labelsHidden().fixedSize()
                     }
-                    .frame(maxWidth: 240)
-                    Slider(value: $state.snapSettings.pixelRadius, in: 4...24, step: 1) { Text("Snap distance: \(Int(state.snapSettings.pixelRadius)) pt") }
-                    Text("Hold ⇧ while drawing to constrain to horizontal or vertical.").font(.caption).foregroundStyle(.secondary)
-                }
-                .padding(4)
+                    DialogRow("Snap distance") {
+                        HStack { Slider(value: $state.snapSettings.pixelRadius, in: 4...24, step: 1).labelsHidden(); Text("\(Int(state.snapSettings.pixelRadius)) pt").monospacedDigit().foregroundStyle(.secondary).frame(width: 40, alignment: .trailing) }
+                    }
             }
         }
-        .frame(minWidth: 480, idealWidth: 480)
     }
 }

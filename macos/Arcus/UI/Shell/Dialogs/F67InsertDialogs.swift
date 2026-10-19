@@ -55,20 +55,19 @@ struct PointLinkDialog: View {
     let topography: Bool
     @State private var units = PointFileReader.Units.auto
     var body: some View {
-        DialogFrame(title: topography ? "Link Topography" : "Point Cloud", subtitle: url.lastPathComponent, okTitle: "Link", state: state) {
+        DialogFrame(title: topography ? "Link Topography" : "Point Cloud", file: url, subtitle: url.lastPathComponent + DialogFileInfo.sizeSuffix(url), okTitle: "Link", state: state) {
             state.presented = nil
             F67Links(state: state).linkPoints(url, units: units, topography: topography)
         } content: {
-            FormRow(label: "File units") {
-                Picker("", selection: $units) { ForEach(PointFileReader.Units.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 180)
+            DialogSection(footnote: "Automatic reads meters unless the coordinates are evidently millimeters.") {
+                DialogRow("File units") {
+                    Picker("", selection: $units) { ForEach(PointFileReader.Units.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize()
+                }
             }
-            Text(topography
-                 ? "Each line: x y z, separated by spaces, commas, semicolons or tabs. The toposolid goes through the points, placed as internal coordinates, and follows the file when the project opens."
-                 : "Each line: x y z, optionally followed by r g b (XYZ, PTS, CSV, TXT, or ASCII PLY). Points are placed as internal coordinates; dense clouds are thinned evenly. The cloud is re-read when the project opens.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Text("Automatic reads meters unless the coordinates are evidently millimeters.").font(.caption).foregroundStyle(.secondary)
+            DialogNotice(.info, topography
+                 ? "Each line: x y z, separated by spaces, commas, semicolons or tabs. The toposolid goes through the points at internal coordinates and follows the file when the project opens."
+                 : "Each line: x y z, optionally followed by r g b (XYZ, PTS, CSV, TXT or ASCII PLY). Dense clouds are thinned evenly; the cloud is re-read when the project opens.")
         }
-        .frame(width: 480)
     }
 }
 
@@ -83,27 +82,26 @@ struct DWFMarkupDialog: View {
     @State private var loading = true
     var body: some View {
         let sheets = state.model.sheets
-        DialogFrame(title: "Link Markups", subtitle: "DWF file: \(url.lastPathComponent)", okTitle: "OK", okDisabled: targets.isEmpty, state: state) {
+        DialogFrame(title: "Link Markups", file: url, subtitle: url.lastPathComponent, okTitle: "OK", okDisabled: targets.isEmpty,
+                    disabledReason: pages.isEmpty ? nil : "Choose a sheet for at least one page", labelWidth: 180, state: state) {
             place()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
-            if loading { ProgressView("Reading \(url.lastPathComponent)…").frame(maxWidth: .infinity, minHeight: 80) }
-            else if !pages.isEmpty {
-                Grid(alignment: .leading, horizontalSpacing: 16, verticalSpacing: 6) {
-                    GridRow { Text("DWF Sheet").bold(); Text("Sheet").bold() }
+            if let error { DialogNotice(.error, title: "The DWF file can't be read", error) }
+            if loading {
+                DialogSection(rows: false) { ProgressView("Reading \(url.lastPathComponent)…").padding(20).frame(maxWidth: .infinity, minHeight: 80) }
+            } else if !pages.isEmpty {
+                DialogSection("DWF sheet → Arcus sheet") {
                     ForEach(pages.indices, id: \.self) { k in
-                        GridRow {
-                            Text(pages[k].name).lineLimit(1)
+                        DialogRow(pages[k].name) {
                             Picker("", selection: Binding(get: { targets[k] ?? ElementID(0) }, set: { targets[k] = $0 == ElementID(0) ? nil : $0 })) {
                                 Text("(None)").tag(ElementID(0))
                                 ForEach(sheets) { s in Text("\(s.sheet?.number ?? "") - \(s.name)").tag(s.id) }
-                            }.labelsHidden().frame(width: 260)
+                            }.labelsHidden()
                         }
                     }
                 }
             }
         }
-        .frame(width: 520)
         .task { await load() }
     }
 
@@ -118,7 +116,7 @@ struct DWFMarkupDialog: View {
             pages = p
             let active = state.model[state.activeViewID]?.sheet != nil ? state.activeViewID : nil
             for (k, pg) in p.enumerated() { targets[k] = InsertOperations.matchingSheet(for: pg.name, in: state.model) ?? active }
-        case .failure(let e): error = "\(e)"
+        case .failure(let e): error = DialogErrorText.describe(e)
         }
     }
 
@@ -142,18 +140,17 @@ struct ImportPDFDialog: View {
     @State private var dpi = 150
     @State private var error: String?
     var body: some View {
-        DialogFrame(title: "Import PDF", subtitle: url.lastPathComponent, okTitle: "Import", state: state) {
+        DialogFrame(title: "Import PDF", file: url, subtitle: url.lastPathComponent + DialogFileInfo.sizeSuffix(url), okTitle: "Import", okDisabled: pageCount == 0, state: state) {
             importPage()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
-            FormRow(label: "Page") { Stepper("\(page) of \(pageCount)", value: $page, in: 1...max(pageCount, 1)) }
-            FormRow(label: "Resolution") {
-                Picker("", selection: $dpi) { ForEach([72, 150, 300], id: \.self) { Text("\($0) dpi").tag($0) } }.labelsHidden().frame(width: 120)
+            if let error { DialogNotice(.error, error) }
+            DialogSection(footnote: "Stored in the project as an image at its printed size (scaled by the view scale in model views). Use Link PDF to keep it linked to the file.") {
+                DialogRow("Page") { Stepper("\(page) of \(pageCount)", value: $page, in: 1...max(pageCount, 1)).monospacedDigit() }
+                DialogRow("Resolution") {
+                    Picker("", selection: $dpi) { ForEach([72, 150, 300], id: \.self) { Text("\($0) dpi").tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                }
             }
-            Text("The page is stored in the project as an image at its printed size (scaled by the view scale in model views). Use Link PDF to keep it linked to the file.")
-                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        .frame(width: 460)
         .onAppear {
             let access = url.startAccessingSecurityScopedResource()
             defer { if access { url.stopAccessingSecurityScopedResource() } }
@@ -232,30 +229,33 @@ struct InsertFromFileDialog: View {
     @State private var error: String?
     var candidates: [Element] { src.map { views ? InsertFromFile.insertableViews($0) : InsertFromFile.viewsWith2DElements($0) } ?? [] }
     var body: some View {
-        DialogFrame(title: views ? "Insert Views" : "Insert 2D Elements", subtitle: url.lastPathComponent, okTitle: "OK", okDisabled: chosen.isEmpty, state: state) {
+        DialogFrameWithActions(title: views ? "Insert Views" : "Insert 2D Elements", file: url, subtitle: url.lastPathComponent, okTitle: "OK", okDisabled: chosen.isEmpty,
+                               disabledReason: src == nil ? nil : (views ? "Check at least one view" : "Choose a view"), state: state) {
             insert()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
-            if src == nil && error == nil { ProgressView("Reading \(url.lastPathComponent)…").frame(maxWidth: .infinity, minHeight: 100) }
-            else if src != nil {
-                Text(views ? "Views (drafting views, legends and schedules):" : "Choose the view whose 2D elements to copy into the current view:").font(.callout)
-                List(candidates) { v in
-                    Toggle(isOn: Binding(get: { chosen.contains(v.id) }, set: { on in
-                        if views { if on { chosen.insert(v.id) } else { chosen.remove(v.id) } } else { chosen = on ? [v.id] : [] }
-                    })) {
-                        HStack { Text(v.name); Spacer(); Text(v.schedule != nil ? "Schedule" : v.view?.kind.rawValue ?? "").foregroundStyle(.secondary).font(.caption) }
-                    }
-                }.frame(height: 240)
-                if views { HStack { Button("Check All") { chosen = Set(candidates.map(\.id)) }; Button("Check None") { chosen = [] } } }
+            if let error { DialogNotice(.error, error) }
+            if src == nil && error == nil {
+                DialogSection(rows: false) { ProgressView("Reading \(url.lastPathComponent)…").padding(20).frame(maxWidth: .infinity, minHeight: 100) }
+            } else if src != nil, !candidates.isEmpty {
+                DialogSection(views ? "Drafting views, legends and schedules" : "Copy the 2D elements of", boxed: false) {
+                    DialogCheckList(items: candidates.map { v in DialogCheckItem(id: v.id, title: v.name, detail: v.schedule != nil ? "Schedule" : v.view?.kind.rawValue ?? "") },
+                                    checked: Binding(get: { chosen }, set: { new in
+                                        if views { chosen = new } else { chosen = new.subtracting(chosen).first.map { [$0] } ?? (new.isEmpty ? [] : chosen) }
+                                    }), maxRows: 8, emptyTitle: "Nothing to insert")
+                }
+            }
+        } actions: {
+            if views && src != nil {
+                Button("Check All") { chosen = Set(candidates.map(\.id)) }.disabled(candidates.isEmpty)
+                Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
             }
         }
-        .frame(width: 480)
         .task {
             switch await f67ReadProject(url) {
             case .success(let m):
                 src = m
                 if candidates.isEmpty { error = views ? "The file has no drafting views, legends or schedules to insert." : "The file has no drafting views or legends with 2D elements." }
-            case .failure(let e): error = "\(e)"
+            case .failure(let e): error = DialogErrorText.describe(e)
             }
         }
     }
@@ -301,40 +301,48 @@ struct TransferStandardsDialog: View {
     var items: [ProjectStandards.Item] { src.map(ProjectStandards.items) ?? [] }
 
     var body: some View {
-        DialogFrame(title: "Select Items to Copy", subtitle: "Copies types and settings from another project. Existing items with the same name can be overwritten or kept.",
-                    okTitle: "OK", okDisabled: src == nil || chosen.isEmpty || duplicates != nil, state: state) {
+        DialogFrameWithActions(title: "Select Items to Copy", icon: "arrow.right.doc.on.clipboard", tint: .blue, subtitle: "Transfer Project Standards: types and settings from another project.",
+                    okTitle: "OK", okDisabled: src == nil || chosen.isEmpty || duplicates != nil,
+                    disabledReason: duplicates != nil ? "Choose Overwrite or New Only" : (src == nil ? "Choose a source project" : "Check at least one item"), state: state) {
             proceed()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            if let error { DialogNotice(.error, error) }
             if let duplicates {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Duplicate Types").font(.headline)
-                    Text("These items already exist in this project:").font(.callout)
-                    ScrollView { Text(duplicates.joined(separator: "\n")).font(.caption).frame(maxWidth: .infinity, alignment: .leading) }.frame(height: 140)
-                    HStack {
-                        Button("Overwrite") { transfer(overwrite: true) }
-                        Button("New Only") { transfer(overwrite: false) }.keyboardShortcut(.defaultAction)
-                        Button("Cancel") { self.duplicates = nil }
-                    }
+                DialogNotice(.warning, title: "Duplicate types", "\(duplicates.count) item\(duplicates.count == 1 ? "" : "s") already exist in this project. Overwrite them, or copy only the new ones?")
+                DialogReportText(text: duplicates.map { "• " + $0 }.joined(separator: "\n"), maxHeight: 160)
+                HStack {
+                    Spacer()
+                    Button("Cancel") { self.duplicates = nil }
+                    Button("Overwrite") { transfer(overwrite: true) }
+                    Button("New Only") { transfer(overwrite: false) }.buttonStyle(.borderedProminent)
                 }
             } else {
-                FormRow(label: "Copy from") {
-                    Picker("", selection: $sourceID) { ForEach(sources) { Text($0.name).tag($0.id) } }.labelsHidden().frame(width: 260)
-                    Button("Choose File…") { chooseFile() }
+                DialogSection {
+                    DialogRow("Copy from") {
+                        HStack {
+                            if sources.isEmpty { Text("No other project is open").foregroundStyle(.secondary) }
+                            else { Picker("", selection: $sourceID) { ForEach(sources) { Text($0.name).tag($0.id) } }.labelsHidden().frame(maxWidth: 260) }
+                            Spacer()
+                            Button("Choose File…") { chooseFile() }
+                        }
+                    }
                 }
                 if src != nil {
-                    List(items) { it in
-                        Toggle(isOn: Binding(get: { chosen.contains(it.id) }, set: { if $0 { chosen.insert(it.id) } else { chosen.remove(it.id) } })) {
-                            HStack { Text(it.title); Spacer(); Text("\(it.count)").foregroundStyle(.secondary).font(.caption) }
-                        }
-                    }.frame(height: 260)
-                    HStack { Button("Check All") { chosen = Set(items.map(\.id)) }; Button("Check None") { chosen = [] } }
+                    DialogSection("Items to copy", boxed: false) {
+                        DialogCheckList(items: items.map { DialogCheckItem(id: $0.id, title: $0.title, detail: "\($0.count)") }, checked: $chosen, maxRows: 8, noun: "items", emptyTitle: "Nothing to copy")
+                    }
                 } else {
-                    Text("Open the source project, or choose its file.").foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 80)
+                    DialogSection(rows: false) {
+                        DialogEmptyState(icon: "doc.on.doc", title: "No source project", message: "Open the source project, or choose its file.").padding(16)
+                    }
                 }
             }
+        } actions: {
+            if src != nil && duplicates == nil {
+                Button("Check All") { chosen = Set(items.map(\.id)) }
+                Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
+            }
         }
-        .frame(width: 520)
         .onAppear(perform: findOpenProjects)
         .onChange(of: sourceID) { _, _ in chosen = Set(items.map(\.id)) }
     }
@@ -360,7 +368,7 @@ struct TransferStandardsDialog: View {
                 if !sources.contains(where: { $0.id == id }) { sources.append(Source(id: id, name: u.lastPathComponent)) }
                 sourceID = id
                 chosen = Set(items.map(\.id))
-            case .failure(let e): error = "\(e)"
+            case .failure(let e): error = DialogErrorText.describe(e)
             }
         }
     }
@@ -402,27 +410,36 @@ struct DecalTypesDialog: View {
     var index: Int? { drafts.firstIndex { $0.id == selection } }
 
     var body: some View {
-        DialogFrame(title: "Decal Types", okTitle: "OK", state: state) { commit() } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
-            HStack(alignment: .top, spacing: 16) {
+        DialogFrame(title: "Decal Types", icon: "photo.on.rectangle", tint: .pink, size: .large, subtitle: "Images placed on model surfaces.", okTitle: "OK", labelWidth: 110, state: state) { commit() } content: {
+            if let error { DialogNotice(.error, error) }
+            HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Decal Types in Project").font(.caption).foregroundStyle(.secondary)
+                    Text("Decal types in project").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
                     TextField("Search", text: $search).textFieldStyle(.roundedBorder)
-                    List(drafts.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }, selection: $selection) { d in
-                        Text(d.name).tag(d.id)
-                    }.frame(width: 220, height: 260)
-                    HStack {
-                        Button("New") { add(DecalTypeData(), name: "New Decal") }
-                        Button("Duplicate") { if let i = index { add(drafts[i].data, name: drafts[i].name + " 2") } }.disabled(index == nil)
-                        Button("Delete") { delete() }.disabled(index == nil)
-                    }.controlSize(.small)
+                    VStack(spacing: 0) {
+                        List(drafts.filter { search.isEmpty || $0.name.localizedCaseInsensitiveContains(search) }, selection: $selection) { d in
+                            DialogListRow(icon: "photo", title: d.name).tag(d.id)
+                        }
+                        .listStyle(.inset).scrollContentBackground(.hidden)
+                        .frame(height: 300)
+                        Divider()
+                        HStack(spacing: 8) {
+                            Button("New") { add(DecalTypeData(), name: "New Decal") }
+                            Button("Duplicate") { if let i = index { add(drafts[i].data, name: drafts[i].name + " 2") } }.disabled(index == nil)
+                            Spacer()
+                            Button("Delete") { delete() }.disabled(index == nil)
+                        }.controlSize(.small).buttonStyle(.borderless).padding(.horizontal, 10).frame(height: 28)
+                    }
+                    .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+                    .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
                 }
+                .frame(width: 220)
                 if let i = index { settings(i) } else {
-                    Text("Create a decal type with New.").foregroundStyle(.secondary).frame(width: 300, height: 260)
+                    DialogSection(rows: false) { DialogEmptyState(icon: "photo.on.rectangle", title: "No decal type", message: "Create one with New.").frame(height: 300) }
                 }
             }
         }
-        .frame(width: 600)
         .onAppear {
             drafts = state.model.elements(.decalTypes).sorted { $0.name < $1.name }.compactMap { e in e.decalType.map { Draft(elementID: e.id, name: e.name, data: $0) } }
             selection = drafts.first(where: { $0.elementID == state.currentTypes[.decals] })?.id ?? drafts.first?.id
@@ -431,36 +448,42 @@ struct DecalTypesDialog: View {
     }
 
     @ViewBuilder func settings(_ i: Int) -> some View {
-        Form {
-            TextField("Name", text: $drafts[i].name)
-            LabeledContent("Source") {
-                HStack {
-                    Text(drafts[i].data.imageName.isEmpty ? "(none)" : drafts[i].data.imageName).lineLimit(1).truncationMode(.middle)
-                    Button("…") { chooseImage(i) }
+        VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
+            DialogSection("Image") {
+                DialogRow("Name") { TextField("", text: $drafts[i].name).labelsHidden() }
+                DialogRow("Source") {
+                    HStack {
+                        Text(drafts[i].data.imageName.isEmpty ? "None" : drafts[i].data.imageName).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button("Choose…") { chooseImage(i) }.controlSize(.small)
+                    }
+                }
+                Group {
+                    if let img = NSImage(data: drafts[i].data.image) {
+                        Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(maxWidth: .infinity).frame(height: 80)
+                    } else {
+                        Text(drafts[i].data.image.isEmpty ? "No image" : "Invalid image file").foregroundStyle(.secondary).frame(maxWidth: .infinity).frame(height: 44)
+                    }
                 }
             }
-            Group {
-                if let img = NSImage(data: drafts[i].data.image) {
-                    Image(nsImage: img).resizable().aspectRatio(contentMode: .fit).frame(height: 90)
-                } else {
-                    Text(drafts[i].data.image.isEmpty ? "No image" : "Invalid Image File").foregroundStyle(.secondary).frame(height: 90)
-                }
+            DialogSection("Appearance") {
+                DialogRow("Brightness") { TextField("", value: $drafts[i].data.brightness, format: .number.precision(.fractionLength(0...2))).labelsHidden().frame(width: 70) }
+                percent("Reflectivity", $drafts[i].data.reflectivity)
+                percent("Transparency", $drafts[i].data.transparency)
+                DialogRow("Finish") { Picker("", selection: $drafts[i].data.finish) { ForEach(DecalFinish.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Luminance") { Picker("", selection: $drafts[i].data.luminance) { ForEach(DecalTypeData.luminancePresets, id: \.self) { Text($0).tag($0) } }.labelsHidden().fixedSize() }
+                percent("Bump amount", $drafts[i].data.bumpAmount)
+                DialogRow("Cutouts") { Picker("", selection: $drafts[i].data.cutout) { Text("None").tag(false); Text("Image file").tag(true) }.labelsHidden().fixedSize() }
             }
-            LabeledContent("Brightness") { TextField("", value: $drafts[i].data.brightness, format: .number.precision(.fractionLength(0...2))).frame(width: 80) }
-            percent("Reflectivity", $drafts[i].data.reflectivity)
-            percent("Transparency", $drafts[i].data.transparency)
-            Picker("Finish", selection: $drafts[i].data.finish) { ForEach(DecalFinish.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-            Picker("Luminance (cd/m²)", selection: $drafts[i].data.luminance) { ForEach(DecalTypeData.luminancePresets, id: \.self) { Text($0).tag($0) } }
-            percent("Bump Amount", $drafts[i].data.bumpAmount)
-            Picker("Cutouts", selection: $drafts[i].data.cutout) { Text("None").tag(false); Text("Image file").tag(true) }
         }
-        .frame(width: 320)
     }
 
     func percent(_ label: String, _ v: Binding<Double>) -> some View {
-        LabeledContent(label) {
-            TextField("", value: Binding(get: { (v.wrappedValue * 100).rounded() }, set: { v.wrappedValue = max(0, min(100, $0)) / 100 }), format: .number).frame(width: 60)
-            Text("%")
+        DialogRow(label) {
+            HStack(spacing: 6) {
+                TextField("", value: Binding(get: { (v.wrappedValue * 100).rounded() }, set: { v.wrappedValue = max(0, min(100, $0)) / 100 }), format: .number).labelsHidden().frame(width: 70)
+                Text("%").foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -553,21 +576,19 @@ struct F67ManageLinksSection: View {
     var body: some View {
         let _ = state.session.changeCounter
         let links = InsertOperations.linkElements(state.model)
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Models, IFC, Point Clouds, Topography and DWF Markups").font(DialogMetrics.sectionHeader).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Models, IFC, point clouds, topography and DWF markups").font(DialogStyle.sectionTitle).foregroundStyle(.secondary).padding(.leading, 4)
+            DialogListBox(count: links.count, rowHeight: 26, minRows: 3, maxRows: 6, isEmpty: links.isEmpty) {
             Table(links, selection: $selected) {
                 TableColumn("Name") { e in Text(e.name) }
                 TableColumn("Type") { e in Text(Self.kind(e)) }.width(130)
                 TableColumn("Status") { e in Text(Self.status(e)) }.width(80)
                 TableColumn("Path") { e in Text(e.f67LinkSource?.path ?? "").lineLimit(1).truncationMode(.middle) }
             }
-            .frame(minHeight: 140)
-            .overlay {
-                if links.isEmpty {
-                    Text("No linked models, point clouds, topography or markups.\nUse Insert ▸ Link Model, Link IFC, Point Cloud or DWF Markup.").multilineTextAlignment(.center).font(.callout).foregroundStyle(.secondary)
-                }
+            } empty: {
+                DialogEmptyState(icon: "link", title: "No linked models or point clouds", message: "Use Insert ▸ Link Model, Link IFC, Point Cloud or DWF Markup.")
             }
-            HStack {
+            if !links.isEmpty { HStack {
                 Button("Reload") { if let s = selected { F67Links(state: state).reload([s]) } }.disabled(selected == nil)
                 Button("Reload From…") { if let s = selected { F67Links(state: state).locate(s) } }.disabled(selected == nil)
                 Button("Unload") { if let s = selected { state.session.perform("Unload Link") { tx in InsertOperations.setLoaded(s, false, in: tx) } } }.disabled(!canToggle(true))
@@ -575,6 +596,7 @@ struct F67ManageLinksSection: View {
                 Spacer()
                 Button("Remove", role: .destructive) { if let s = selected { state.session.delete([s]); selected = nil } }.disabled(selected == nil)
             }
+            .controlSize(.small) }
         }
     }
 

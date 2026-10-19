@@ -29,12 +29,9 @@ struct KeyboardShortcutsDialog: View {
     private var normalizedKeys: String? { AliasTable.normalize(newKeys) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Keyboard Shortcuts").font(.title3.weight(.semibold))
-                Text("Type a command's keys (such as WA) on the canvas; it runs as soon as they match. Menu shortcuts (⌘) are fixed.")
-                    .font(.callout).foregroundStyle(.secondary)
-            }
+        ArcusDialog(icon: "keyboard", tint: .gray, title: "Keyboard Shortcuts",
+                                 subtitle: "Type a command's keys (such as WA) on the canvas; it runs as soon as they match. Menu shortcuts (⌘) are fixed.",
+                                 size: .large, height: 600, onCancel: { state.presented = nil }, onOK: { KeyboardAliases.shared.replace(draft); state.presented = nil }) {
             HStack {
                 TextField("Search commands or keys", text: $filter).textFieldStyle(.roundedBorder)
                 Picker("Show", selection: $group) {
@@ -49,23 +46,19 @@ struct KeyboardShortcutsDialog: View {
                 TableColumn("Menu Shortcut") { c in Text(c.shortcut ?? "").font(.body.monospaced()) }.width(90)
                 TableColumn("Keys") { c in Text(draft.aliases(for: c.id).joined(separator: "  ")).font(.body.monospaced()) }.width(110)
             }
-            .frame(minHeight: 300)
-            assignArea
-            if let message {
-                Text(message).font(.callout).foregroundStyle(messageIsError ? Color.red : Color.secondary).fixedSize(horizontal: false, vertical: true)
-            }
-            HStack {
-                Button("Import…") { importFile() }
-                Button("Export…") { exportFile() }
-                Button("Restore Defaults") { draft.restoreDefaults(); note("Default keys restored. Choose OK to keep them.") }
-                Spacer()
-                Button("Cancel") { state.presented = nil }.keyboardShortcut(.cancelAction)
-                Button("OK") { KeyboardAliases.shared.replace(draft); state.presented = nil }
-                    .keyboardShortcut(keysFocused ? nil : .defaultAction)
-            }
+            .scrollContentBackground(.hidden)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+            .frame(minHeight: 260, maxHeight: .infinity)
+            DialogSection { assignArea }
+            if let message { DialogNotice(messageIsError ? .error : .info, message) }
+        } leading: {
+            Button("Import…") { importFile() }
+            Button("Export…") { exportFile() }
+            Button("Restore Defaults") { draft.restoreDefaults(); note("Default keys restored. Choose OK to keep them.") }
         }
-        .padding(20)
-        .frame(minWidth: 700, idealWidth: 720, minHeight: 560)
+        .returnKeyEnabled(!keysFocused)
         .onChange(of: selected) { _, _ in newKeys = ""; message = nil }
     }
 
