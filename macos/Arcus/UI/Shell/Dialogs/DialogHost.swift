@@ -78,6 +78,7 @@ struct DialogHost: View {
             case .fm7(let d): FM7DialogHost(state: state, dialog: d) // FM7
             case .fmg2(let d): FMG2DialogHost(state: state, dialog: d) // FMG2
             case .fm8(let d): FM8DialogHost(state: state, dialog: d) // FM8
+            case .comp(let d): COMPDialogHost(state: state, dialog: d) // COMP
             }
         }
         .presentationSizing(.fitted)

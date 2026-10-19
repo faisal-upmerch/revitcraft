@@ -148,6 +148,10 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FM3D commands:
 
     // COMP commands:
+    case components, componentBrowser, componentPlace, componentReplace, componentAssembly, componentHardwareRules, componentSaveSelection
+    case componentBOM, componentPowerSummary, componentUpdate, componentNewFamily
+    case componentAddHandle, componentAddHinges, componentAddLock, componentAddSoftClose, componentAddPushToOpen, componentAddSlides, componentAddOrganizer
+    case componentAddHangingRod, componentAddShoeRack, componentAddLighting, componentAddSlidingSystem
 
 }
 

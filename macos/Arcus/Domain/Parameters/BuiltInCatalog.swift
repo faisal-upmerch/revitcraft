@@ -800,6 +800,7 @@ enum BuiltInCatalog {
         case .structuralRebar, .fabricReinforcement: return ReinforcementParameters.typeParameters(td) + [materialParam] + identity // F34
         case let c where c.isFurniturePart: return FurniturePartParameters.type(for: td) + identity // FM4
         case .furnitureFronts: return FurnitureFrontParameters.type(for: td) + identity // FM5
+        case .furnitureHardware: return ComponentParameters.type(identity) // COMP: SKU and library version
         default: return identity
         }
     }
