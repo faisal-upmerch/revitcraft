@@ -26,7 +26,7 @@ extension RibbonContent {
         case .insert: return furnitureInsertPanels
         case .annotate: return withoutArchitecture(tabPanels(.annotate))
         case .fabricate: return furnitureFabricatePanels
-        case .view: return withoutArchitecture(tabPanels(.view))
+        case .view: return fm3dViewPanels(withoutArchitecture(tabPanels(.view))) // FM3D: 3D Design
         case .manage: return furnitureManagePanels
         case .modify: return fm6ModifyPanels(tabPanels(.modify)) + [familyEditorPanel] // FM6: Joint on Modify ▸ Geometry
         default: return withoutArchitecture(tabPanels(tab))
@@ -127,6 +127,7 @@ extension RibbonContent {
         }
         if parts.contains(where: { $0.furniturePanel?.plane == .xy || $0.furnitureLeg != nil }) { items += [.large(.furnitureAttach), .small(.furnitureDetach)] }
         if parts.count == 1, parts[0].furnitureShelf != nil { items += [.large(.furnitureLegsAtCorners)] }
+        if parts.count == 1, parts[0].furnitureForm?.kind == .extrusion { items += [.large(.furnitureEditSketch)] } // FM3D
         let title = parts.allSatisfy({ $0.furniturePanel != nil }) ? "Modify Panel" : parts.allSatisfy({ $0.furnitureLeg != nil }) ? "Modify Leg" : "Modify Part"
         return items.isEmpty ? (nil, []) : (title, items)
     }
@@ -213,4 +214,20 @@ extension RibbonContent {
 
     // FM9 panels: Load Furniture on Insert ▸ Load from Library.
     static var fm9InsertItems: [RibbonItem] { [.large(.loadFurniture)] } // FM8: the Load Furniture command (FM9 fills the library)
+}
+
+extension RibbonContent {
+    /// FM3D: View ▸ Create ▸ 3D View offers 3D Design in Furniture documents.
+    static func fm3dViewPanels(_ panels: [RibbonPanel]) -> [RibbonPanel] {
+        panels.map { p in
+            guard p.title == "Create" else { return p }
+            let items = p.items.map { item -> RibbonItem in
+                guard item.id == .threeDView else { return item }
+                var i = item
+                i.variants = item.variants + [.furniture3DDesign]
+                return i
+            }
+            return RibbonPanel(title: p.title, items: items, tint: p.tint)
+        }
+    }
 }

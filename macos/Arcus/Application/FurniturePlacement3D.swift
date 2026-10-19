@@ -90,8 +90,8 @@ public struct FurniturePlacement3D: Sendable, Equatable {
 }
 
 public enum FurniturePlacements {
-    static func component(_ v: Vec3, _ a: FamilyAxis) -> Double { switch a { case .x: v.x; case .y: v.y; case .z: v.z } }
-    static func unit(_ a: FamilyAxis) -> Vec3 { switch a { case .x: .unitX; case .y: .unitY; case .z: .unitZ } }
+    public static func component(_ v: Vec3, _ a: FamilyAxis) -> Double { switch a { case .x: v.x; case .y: v.y; case .z: v.z } }
+    public static func unit(_ a: FamilyAxis) -> Vec3 { switch a { case .x: .unitX; case .y: .unitY; case .z: .unitZ } }
 
     /// What each Furniture command needs of its work plane in 3D; nil for commands that don't draw.
     public static func need(_ id: CommandID) -> FurniturePlacementNeed? {

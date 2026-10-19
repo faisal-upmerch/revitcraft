@@ -275,3 +275,36 @@ public enum FurnitureMove3D {
         return (move, snaps)
     }
 }
+
+// MARK: - Snapping on a work plane
+
+public enum FurnitureSnapTraces {
+    /// Where the faces of the parts cross a work plane square to the piece: each part box the plane cuts gives the
+    /// rectangle of its section, so lines drawn on the plane snap to the parts' faces (a shelf sketched between the
+    /// sides' inside faces, a rail along a top's edge).
+    public static func traces(on f: WorkPlaneFrame, _ m: BIMModel) -> [Snap3DExtraLine] {
+        guard m.isFurniture else { return [] }
+        let n = f.normal
+        guard let axis = FamilyAxis.allCases.first(where: { abs(abs(FurniturePlacements.component(n, $0)) - 1) < 1e-6 }) else { return [] }
+        let d = FurniturePlacements.component(f.origin, axis)
+        var out: [Snap3DExtraLine] = []
+        for c in Category.furnitureParts where c != .furnitureEdgeProfiles {
+            for e in m.elements(c) {
+                guard let b = FurniturePartFaces.box(e, m) else { continue }
+                let lo = FurniturePlacements.component(b.min, axis), hi = FurniturePlacements.component(b.max, axis)
+                guard d >= lo - 1e-6, d <= hi + 1e-6 else { continue }
+                func p(_ x: Double, _ y: Double, _ z: Double) -> Vec3 {
+                    switch axis { case .x: Vec3(d, y, z); case .y: Vec3(x, d, z); case .z: Vec3(x, y, d) }
+                }
+                let corners: [Vec3]
+                switch axis {
+                case .x: corners = [p(0, b.min.y, b.min.z), p(0, b.max.y, b.min.z), p(0, b.max.y, b.max.z), p(0, b.min.y, b.max.z)]
+                case .y: corners = [p(b.min.x, 0, b.min.z), p(b.max.x, 0, b.min.z), p(b.max.x, 0, b.max.z), p(b.min.x, 0, b.max.z)]
+                case .z: corners = [p(b.min.x, b.min.y, 0), p(b.max.x, b.min.y, 0), p(b.max.x, b.max.y, 0), p(b.min.x, b.max.y, 0)]
+                }
+                for k in 0..<4 { out.append(Snap3DExtraLine(segment: Segment3(corners[k], corners[(k + 1) % 4]), id: e.id, category: e.category)) }
+            }
+        }
+        return out
+    }
+}
