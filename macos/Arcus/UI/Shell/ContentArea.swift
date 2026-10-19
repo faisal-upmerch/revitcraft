@@ -488,6 +488,7 @@ struct StatusBarView: View {
                         .accessibilityLabel("Cancel \(t.title)")
                 }
             }
+            if level < 3, ClaudeIntegration.shared.showsPill { ClaudeStatusPill(session: state.session) } // MCP: live mode on
             if level < 3 { // W4-WIRE
             Button { state.presented = .warnings } label: { // BL-VG: status bar opens the Warnings dialog
                 let errors = state.healthWarnings.filter { $0.severity == .error }.count

@@ -88,6 +88,7 @@ struct FurnitureLibraryBrowser: View {
         if all.isEmpty {
             emptyState(symbol: "books.vertical", title: "No furniture yet",
                        message: "Pieces you save with File ▸ Save as Furniture Template appear here, by room. Browse… loads any furniture file.")
+                .overlay(alignment: .bottom) { ClaudeFurnitureHint().padding(.bottom, 24).padding(.horizontal, 24) } // MCP
         } else if rooms.isEmpty {
             emptyState(symbol: "magnifyingglass", title: "No pieces match “\(query)”", message: "Try another name, room or material.")
         } else {
