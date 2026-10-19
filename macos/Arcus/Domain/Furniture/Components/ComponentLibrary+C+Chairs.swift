@@ -27,7 +27,7 @@ extension ComponentsC {
         b.length("Bottom Diameter", CC.mm(24))
         b.flag("Metal Tube", false, instance: false, group: .dimensions)
         b.flag("Wood", false, formula: "not(Metal Tube)")
-        b.host([.bottom, .form, .rail], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight], offsetX: CC.inch(1.5), offsetY: CC.inch(1.5))
+        b.host([.bottom, .top, .form, .rail], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight], offsetX: CC.inch(1.5), offsetY: CC.inch(1.5))
         b.using("Plate Material")
         b.plate("Plate", width: "Top Diameter + 0.02 m", depth: "Top Diameter + 0.02 m", radius: CX.mm(4), z: ("-0.0025 m", "0 m"))
         b.using("Leg Material")
@@ -170,7 +170,7 @@ extension ComponentsC {
         b.length("Plate Depth", CC.mm(270))
         b.length("Hole Spacing X", CC.mm(200))
         b.length("Hole Spacing Y", CC.mm(250))
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         b.box("Seat Plate", x: ("-Plate Width / 2", "Plate Width / 2"), y: ("-Plate Depth / 2", "Plate Depth / 2"), z: ("-0.003 m", "0 m"))
         b.cyl("Bearing Ring", axis: .z, center: ("0 m", "0 m"), radius: CX.mm(60), from: "-0.015 m", to: "-0.003 m", segments: 36)
         taperSocket(&b, z: "-0.015 m")
@@ -197,10 +197,11 @@ extension ComponentsC {
         b.number("Maximum Tilt", 15, unit: "°", group: .dimensions)
         b.flag("Knee Tilt", true, instance: false, group: .dimensions)
         b.length("Pivot Y", 0, formula: "if(Knee Tilt, -Plate Depth / 2 + 0.03 m, 0 m)")
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         b.clearance(.box(name: "Tilt", x0: "-Plate Width / 2", x1: "Plate Width / 2", y0: "-Plate Depth / 2", y1: "Plate Depth / 2", z0: "-0.08 m", z1: "0 m"))
-        b.link("Seat Plate", plane: .yz, ("-Plate Depth / 2", "-0.0015 m - (Pivot Y + Plate Depth / 2) * sin(Tilt Angle)"),
-               ("Plate Depth / 2", "-0.0015 m - (Pivot Y - Plate Depth / 2) * sin(Tilt Angle)"), at: "0 m", width: CX.mm(3), thickness: "Plate Width")
+        // Tilting back about the pivot: behind it the plate drops, in front of it it rises.
+        b.link("Seat Plate", plane: .yz, ("-Plate Depth / 2", "-0.0015 m + (Plate Depth / 2 + Pivot Y) * sin(Tilt Angle)"),
+               ("Plate Depth / 2", "-0.0015 m - (Plate Depth / 2 - Pivot Y) * sin(Tilt Angle)"), at: "0 m", width: CX.mm(3), thickness: "Plate Width")
         b.box("Housing", x: ("-0.06 m", "0.06 m"), y: ("-Plate Depth / 2 + 0.02 m", "Plate Depth / 2 - 0.04 m"), z: ("-0.06 m", "-0.005 m"))
         b.cyl("Pivot Shaft", axis: .x, center: ("Pivot Y", "-0.015 m"), radius: CX.mm(8), from: "-Plate Width / 2 + 0.01 m", to: "Plate Width / 2 - 0.01 m")
         b.cyl("Tension Knob", axis: .y, center: ("0 m", "-0.045 m"), radius: CX.mm(25), from: "-Plate Depth / 2 - 0.03 m", to: "-Plate Depth / 2 + 0.02 m", segments: 28)
@@ -231,7 +232,7 @@ extension ComponentsC {
         b.number("Seat to Back Ratio", 2, unit: ":1", group: .data)
         b.length("Elbow Y", 0, formula: "Plate Depth / 2 - 0.02 m + Arm Length * cos(Recline Angle)")
         b.length("Elbow Z", 0, formula: "-0.05 m - Arm Length * sin(Recline Angle)")
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         b.box("Seat Plate", x: ("-Plate Width / 2", "Plate Width / 2"), y: ("-Plate Depth / 2", "Plate Depth / 2"), z: ("-0.003 m", "0 m"))
         b.box("Housing", x: ("-0.07 m", "0.07 m"), y: ("-Plate Depth / 2 + 0.02 m", "Plate Depth / 2"), z: ("-0.07 m", "-0.003 m"))
         b.link("Back Iron Arm", plane: .yz, ("Plate Depth / 2 - 0.02 m", "-0.05 m"), ("Elbow Y", "Elbow Z"), at: "0 m", width: CX.mm(14), thickness: CX.mm(60))
@@ -261,7 +262,7 @@ extension ComponentsC {
         b.length("Cable Length", CC.mm(180))
         b.flag("Right Side", true, group: .placement)
         b.flag("Left Side", false, formula: "not(Right Side)")
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         for (side, sign) in [("Right Side", ""), ("Left Side", "-")] {
             b.shown(side) { b in
                 b.box("Bracket", x: ("\(sign)0.02 m", "\(sign)0.08 m"), y: ("-0.03 m", "0.03 m"), z: ("-0.004 m", "0 m"))
@@ -358,7 +359,7 @@ extension ComponentsC {
         b.length("Offset", CC.mm(60))
         b.flag("Right Arm", true, group: .placement)
         b.flag("Left Arm", false, formula: "not(Right Arm)")
-        b.host([.bottom, .form], faces: [.bottom], align: .right, alignments: [.right, .left], mirroredPair: true)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .right, alignments: [.right, .left])
         for (side, s) in [("Right Arm", ""), ("Left Arm", "-")] {
             let x = "\(s)Offset"
             b.shown(side) { b in
@@ -391,7 +392,7 @@ extension ComponentsC {
         b.length("Offset", CC.mm(65))
         b.angle("Pad Swivel", 0, instance: true, group: .placement)
         b.text("Adjustments", "Height, width", group: .data)
-        b.host([.bottom, .form], faces: [.bottom], align: .right, alignments: [.right, .left], mirroredPair: true)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .right, alignments: [.right, .left])
         b.using("Frame Material")
         b.box("Bracket", x: ("0 m", "Offset"), y: ("-0.11 m", "0.11 m"), z: ("-0.008 m", "0 m"))
         b.box("Outer Column", x: ("Offset - 0.022 m", "Offset + 0.022 m"), y: ("-0.035 m", "0.035 m"), z: ("-0.008 m", "Arm Height * 0.55"))
@@ -483,7 +484,7 @@ extension ComponentsC {
         b.length("Setback", CC.mm(60))
         b.length("Bar Width", CC.mm(60))
         b.length("Bar Thickness", CC.mm(8))
-        b.host([.bottom, .form], faces: [.bottom], align: .top, alignments: [.top])
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .top, alignments: [.top])
         let path: [(String, String)] = [("-Seat Reach", "-Bar Thickness / 2"), ("0 m", "-Bar Thickness / 2"), ("Setback * 0.7", "-0.02 m"), ("Setback", "0.03 m"), ("Setback", "Back Rise")]
         b.sweep("Back Iron", path: ComponentKit.points(path), profile: ComponentKit.rect(width: "Bar Thickness", height: "Bar Width"), plane: .yz, at: "0 m")
         for y in ["-Seat Reach + 0.03 m", "-Seat Reach / 2"] { b.drill("Seat bolt", x: "0 m", y: y, diameter: CX.mm(6), depth: CX.mm(16)) }
@@ -528,7 +529,7 @@ extension ComponentsC {
         b.material("Finish Material", .chrome)
         b.length("Reach", CC.mm(45))
         b.length("Plate Length", CC.mm(80))
-        b.host([.bottom, .rail, .leg], faces: [.bottom], align: .right, alignments: [.right, .left])
+        b.host([.bottom, .top, .rail, .leg], faces: [.bottom], align: .right, alignments: [.right, .left])
         b.box("Mount Plate", x: ("-0.02 m", "0 m"), y: ("-Plate Length / 2", "Plate Length / 2"), z: ("-0.003 m", "0 m"))
         b.wire("Hook", plane: .xz, [("-0.01 m", "-0.003 m"), ("Reach", "-0.003 m"), ("Reach", "-0.025 m")], at: "0 m", d: CX.mm(8))
         b.box("Slot Plate (Next Chair)", x: ("Reach - 0.015 m", "Reach + 0.015 m"), y: ("-0.02 m", "0.02 m"), z: ("-0.03 m", "-0.027 m"))
@@ -549,16 +550,16 @@ extension ComponentsC {
         b.length("Pattern X", CC.mm(200))
         b.length("Pattern Y", CC.mm(250))
         b.length("Plate Thickness", CC.mm(2.5))
-        b.length("Seat Thickness", CC.mm(15), instance: true, group: .placement)
+        b.length("Host Thickness", CC.mm(15), instance: true, group: .placement)
         b.text("Thread", "M8", group: .manufacturing)
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         b.requires(.hostThickness(min: "0.012 m", max: nil))
         b.box("Plate", x: ("-Pattern X / 2 - 0.02 m", "Pattern X / 2 + 0.02 m"), y: ("-Pattern Y / 2 - 0.02 m", "Pattern Y / 2 + 0.02 m"), z: ("-Plate Thickness", "0 m"))
         for (x, y) in [("-1", "-1"), ("1", "-1"), ("1", "1"), ("-1", "1")] {
             let px = "\(x) * Pattern X / 2", py = "\(y) * Pattern Y / 2"
-            b.cyl("T-Nut", axis: .z, center: (px, py), radius: CX.mm(5), from: "0 m", to: "Seat Thickness * 0.6", segments: 12)
+            b.cyl("T-Nut", axis: .z, center: (px, py), radius: CX.mm(5), from: "0 m", to: "Host Thickness * 0.6", segments: 12)
             b.cyl("T-Nut Flange", axis: .z, center: (px, py), radius: CX.mm(11), from: "-Plate Thickness - 0.0015 m", to: "-Plate Thickness", segments: 16)
-            b.drill("T-nut bore", x: px, y: py, diameter: CX.mm(10), depth: "Seat Thickness * 0.6")
+            b.drill("T-nut bore", x: px, y: py, diameter: CX.mm(10), depth: "Host Thickness * 0.6")
         }
         b.symbol(.face, [.coarse], .rect(("-Pattern X / 2 - 0.02 m", "-Pattern Y / 2 - 0.02 m"), ("Pattern X / 2 + 0.02 m", "Pattern Y / 2 + 0.02 m")))
         b.symbol(.face, [.medium, .fine], .circle(("-Pattern X / 2", "-Pattern Y / 2"), "0.005 m"), .circle(("Pattern X / 2", "-Pattern Y / 2"), "0.005 m"),

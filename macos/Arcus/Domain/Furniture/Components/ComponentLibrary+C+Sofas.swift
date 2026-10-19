@@ -30,7 +30,7 @@ extension ComponentsC {
         b.flag("Bun Foot", false, instance: false, group: .dimensions)
         b.flag("Tapered", false, formula: "not(Bun Foot)")
         b.number("Load per Leg", 250, unit: "lb", group: .data)
-        b.host([.bottom, .rail, .form], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight, .center], offsetX: CC.inch(2), offsetY: CC.inch(2))
+        b.host([.bottom, .top, .rail, .form], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight, .center], offsetX: CC.inch(2), offsetY: CC.inch(2))
         b.using("Plate Material")
         b.plate("Plate", width: "Top Diameter + 0.02 m", depth: "Top Diameter + 0.02 m", radius: CX.mm(4), z: ("-0.002 m", "0 m"))
         b.using("Leg Material")
@@ -81,7 +81,7 @@ extension ComponentsC {
         b.length("Plate Length", CC.mm(115))
         b.length("Plate Width", CC.mm(60))
         b.length("Gap", CC.mm(0), instance: true, group: .placement, min: 0)
-        b.host([.rail, .bottom], faces: [.bottom], align: .left, alignments: [.left, .right])
+        b.host([.rail, .bottom, .top], faces: [.bottom], align: .left, alignments: [.left, .right])
         b.requires(.note("One plate under each section, teeth facing; place on both ends of the joint."))
         for (n, x0, x1) in [("Left", "-Plate Length - Gap / 2", "-Gap / 2"), ("Right", "Gap / 2", "Plate Length + Gap / 2")] {
             b.box("\(n) Plate", x: (x0, x1), y: ("-Plate Width / 2", "Plate Width / 2"), z: ("-0.0025 m", "0 m"))
@@ -135,7 +135,7 @@ extension ComponentsC {
         b.length("Foot Y", 0, formula: "if(Reclined, -Seat Depth / 2 - Footrest Reach, -Seat Depth / 2 + 0.02 m)")
         b.length("Foot Z", 0, formula: "if(Reclined, -0.06 m, -0.2 m)")
         b.length("Back Lean", 0, formula: "if(Reclined, Back Height * 0.7, Back Height * 0.2)")
-        b.host([.bottom, .form, .rail], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form, .rail], faces: [.bottom], align: .center)
         b.requires(.hostWidth(min: "Mechanism Spacing + 0.06 m", max: nil))
         b.requires(.note("Footrest Reach plus the seat must clear the room in front; wall huggers need 4\" behind."))
         b.clearance(.box(name: "Footrest travel", x0: "-Footrest Width / 2", x1: "Footrest Width / 2", y0: "-Seat Depth / 2 - Footrest Reach - 0.05 m", y1: "-Seat Depth / 2", z0: "-0.25 m", z1: "0 m"))
@@ -304,16 +304,17 @@ extension ComponentsC {
         b.length("Waist Diameter", CC.mm(55))
         b.length("Wire Diameter", CC.mm(3.5))
         b.text("Wire Gauge", "9 ga", group: .manufacturing)
-        b.host([.form, .bottom, .rail], faces: [.top], align: .center)
+        b.host([.form, .bottom, .top, .rail], faces: [.top], align: .center)
         let ts: [Double] = [0, 0.18, 0.36, 0.5, 0.64, 0.82, 1]
         for (k, t) in ts.enumerated() {
             let shape = abs(t - 0.5) * 2 // 1 at the ends, 0 at the waist
             let r = "(Waist Diameter + (End Diameter - Waist Diameter) * \(LX.num(shape * shape))) / 2"
             b.revolve("Coil \(k + 1)", profile: ComponentKit.circle(center: (r, "0 m"), radius: "Wire Diameter / 2", segments: 8), base: "Wire Diameter / 2 + (Free Height - Wire Diameter) * \(LX.num(t))")
         }
+        // The rise from turn to turn, on one side (a helix drawn as rings joined by short risers).
         for k in 0..<(ts.count - 1) {
-            b.strut("Turn \(k + 1)", plane: .xz, ("(Waist Diameter + (End Diameter - Waist Diameter) * \(LX.num(pow(abs(ts[k] - 0.5) * 2, 2)))) / 2", "Wire Diameter / 2 + (Free Height - Wire Diameter) * \(LX.num(ts[k]))"),
-                    ("-(Waist Diameter + (End Diameter - Waist Diameter) * \(LX.num(pow(abs(ts[k + 1] - 0.5) * 2, 2)))) / 2", "Wire Diameter / 2 + (Free Height - Wire Diameter) * \(LX.num(ts[k + 1]))"),
+            b.strut("Riser \(k + 1)", plane: .xz, ("(Waist Diameter + (End Diameter - Waist Diameter) * \(LX.num(pow(abs(ts[k] - 0.5) * 2, 2)))) / 2", "Wire Diameter / 2 + (Free Height - Wire Diameter) * \(LX.num(ts[k]))"),
+                    ("(Waist Diameter + (End Diameter - Waist Diameter) * \(LX.num(pow(abs(ts[k + 1] - 0.5) * 2, 2)))) / 2", "Wire Diameter / 2 + (Free Height - Wire Diameter) * \(LX.num(ts[k + 1]))"),
                     at: "0 m", d: "Wire Diameter", segments: 8)
         }
         b.symbol(.face, [.coarse], .circle(("0 m", "0 m"), "End Diameter / 2"), .circle(("0 m", "0 m"), "Waist Diameter / 2"))
@@ -548,7 +549,7 @@ extension ComponentsC {
         b.length("Wheel Width", CC.mm(18))
         b.length("Plate Size", CC.mm(45))
         b.number("Load Capacity", 90, unit: "lb", group: .data)
-        b.host([.bottom, .rail, .leg], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight], offsetX: CC.inch(2), offsetY: CC.inch(2))
+        b.host([.bottom, .top, .rail, .leg], faces: [.bottom], align: .bottomLeft, alignments: [.bottomLeft, .bottomRight, .topLeft, .topRight], offsetX: CC.inch(2), offsetY: CC.inch(2))
         b.caster("Caster", x: "0 m", y: "0 m", top: "0 m", wheel: "Wheel Diameter", wheelWidth: "Wheel Width", plateSize: "Plate Size")
         for (x, y) in [("-1", "-1"), ("1", "1")] { b.drill("Plate screw", x: "\(x) * Plate Size * 0.33", y: "\(y) * Plate Size * 0.33", diameter: CX.mm(4), depth: CX.mm(16)) }
         b.symbol(.face, [.coarse], .rect(("-Plate Size / 2", "-Plate Size / 2"), ("Plate Size / 2", "Plate Size / 2")))
@@ -571,7 +572,7 @@ extension ComponentsC {
         b.length("Base Height", CC.inch(3))
         b.flag("Memory Return", false, instance: false, group: .data)
         b.number("Load Capacity", 500, unit: "lb", group: .data)
-        b.host([.bottom, .form], faces: [.bottom], align: .center)
+        b.host([.bottom, .top, .form], faces: [.bottom], align: .center)
         b.box("Seat Plate", x: ("-Plate Size / 2", "Plate Size / 2"), y: ("-Plate Size / 2", "Plate Size / 2"), z: ("-0.003 m", "0 m"))
         b.cyl("Bearing", axis: .z, center: ("0 m", "0 m"), radius: "Plate Size * 0.48", from: "-0.012 m", to: "-0.003 m", segments: 40)
         b.box("Base Plate", x: ("-Plate Size / 2", "Plate Size / 2"), y: ("-Plate Size / 2", "Plate Size / 2"), z: ("-0.015 m", "-0.012 m"))

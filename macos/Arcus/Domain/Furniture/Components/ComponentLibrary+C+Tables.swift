@@ -375,28 +375,28 @@ extension ComponentsC {
         b.material("Hardware Material", .steel)
         b.length("Leaf Width", CC.inch(18))
         b.length("Leaf Depth", CC.inch(38))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.flag("Unfolded", false, group: .placement)
         b.flag("Stored", false, formula: "not(Unfolded)")
         b.host([.top], faces: [.bottom], align: .center)
         b.requires(.hostHeight(min: "Leaf Depth", max: nil))
         b.requires(.note("Used with Table Extension Slides; the table opens by Leaf Width."))
         b.using("Leaf Material")
-        b.shown("Unfolded") { $0.box("Leaf (Unfolded)", x: ("-Leaf Width / 2", "Leaf Width / 2"), y: ("-Leaf Depth / 2", "Leaf Depth / 2"), z: ("0 m", "Top Thickness")) }
+        b.shown("Unfolded") { $0.box("Leaf (Unfolded)", x: ("-Leaf Width / 2", "Leaf Width / 2"), y: ("-Leaf Depth / 2", "Leaf Depth / 2"), z: ("0 m", "Host Thickness")) }
         b.shown("Stored") { b in
             for s in ["-", ""] {
-                b.box("Leaf Half (Stored)", x: ("\(s)(Top Thickness) - 0.001 m", "\(s)0.001 m"), y: ("-Leaf Depth / 2", "Leaf Depth / 2"), z: ("-Leaf Width / 2 - 0.01 m", "-0.01 m"))
+                b.box("Leaf Half (Stored)", x: ("\(s)(Host Thickness) - 0.001 m", "\(s)0.001 m"), y: ("-Leaf Depth / 2", "Leaf Depth / 2"), z: ("-Leaf Width / 2 - 0.01 m", "-0.01 m"))
             }
         }
         b.using("Hardware Material")
         for s in ["-", ""] {
             b.box("Hinge", x: ("-0.012 m", "0.012 m"), y: ("\(s)(Leaf Depth / 3) - 0.03 m", "\(s)(Leaf Depth / 3) + 0.03 m"), z: ("if(Unfolded, -0.004 m, -Leaf Width / 2 - 0.014 m)", "if(Unfolded, 0 m, -Leaf Width / 2 - 0.01 m)"))
-            b.box("Pivot Bracket", x: ("-Top Thickness - 0.02 m", "Top Thickness + 0.02 m"), y: ("\(s)(Leaf Depth / 2) - 0.004 m", "\(s)(Leaf Depth / 2) + 0.004 m"), z: ("-0.05 m", "0 m"))
+            b.box("Pivot Bracket", x: ("-Host Thickness - 0.02 m", "Host Thickness + 0.02 m"), y: ("\(s)(Leaf Depth / 2) - 0.004 m", "\(s)(Leaf Depth / 2) + 0.004 m"), z: ("-0.05 m", "0 m"))
         }
         b.using(nil)
         b.symbol(.face, [.coarse], .rect(("-Leaf Width / 2", "-Leaf Depth / 2"), ("Leaf Width / 2", "Leaf Depth / 2")))
         b.symbol(.face, [.medium, .fine], dashed: true, .line(("0 m", "-Leaf Depth / 2"), ("0 m", "Leaf Depth / 2")))
-        b.symbol(.top, [.coarse], .rect(("-Leaf Width / 2", "-Leaf Width / 2"), ("Leaf Width / 2", "Top Thickness")))
+        b.symbol(.top, [.coarse], .rect(("-Leaf Width / 2", "-Leaf Width / 2"), ("Leaf Width / 2", "Host Thickness")))
         for (w, cost) in [(18.0, 89.0), (24, 109)] {
             b.type("Butterfly Leaf Mechanism - \(Int(w))\" Leaf", ["Leaf Width": CC.inch(w)], cost: cost, model: "BLM-\(Int(w))")
         }
@@ -414,18 +414,18 @@ extension ComponentsC {
         b.length("Hole Diameter", CC.mm(60))
         b.length("Cap Diameter", 0, formula: "Hole Diameter + 0.01 m")
         b.length("Cap Thickness", CC.mm(3))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.host([.top, .shelf], faces: [.top], align: .topRight, alignments: [.topRight, .topLeft, .center], offsetX: CC.inch(4), offsetY: CC.inch(3))
         b.requires(.hostThickness(min: "0.012 m", max: "0.05 m"))
-        b.drill("Grommet hole", x: "0 m", y: "0 m", diameter: "Hole Diameter", depth: "Top Thickness", through: true)
-        b.cyl("Host Cutout", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2", from: "-Top Thickness", to: "0 m", segments: 32, void: true)
-        b.revolve("Liner", profile: ComponentKit.points([("Hole Diameter / 2 - 0.0025 m", "0 m"), ("Hole Diameter / 2", "0 m"), ("Hole Diameter / 2", "Top Thickness"),
-                                                         ("Hole Diameter / 2 - 0.0025 m", "Top Thickness")]), base: "-Top Thickness")
+        b.drill("Grommet hole", x: "0 m", y: "0 m", diameter: "Hole Diameter", depth: "Host Thickness", through: true)
+        b.cyl("Host Cutout", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2", from: "-Host Thickness", to: "0 m", segments: 32, void: true)
+        b.revolve("Liner", profile: ComponentKit.points([("Hole Diameter / 2 - 0.0025 m", "0 m"), ("Hole Diameter / 2", "0 m"), ("Hole Diameter / 2", "Host Thickness"),
+                                                         ("Hole Diameter / 2 - 0.0025 m", "Host Thickness")]), base: "-Host Thickness")
         b.revolve("Cap", profile: ComponentKit.points([("Hole Diameter / 2 - 0.0025 m", "0 m"), ("Cap Diameter / 2", "0 m"), ("Cap Diameter / 2 - 0.001 m", "Cap Thickness"),
                                                        ("Hole Diameter / 2 - 0.0025 m", "Cap Thickness")]), base: "0 m", startDegrees: "20", endDegrees: "340")
         b.box("Cable Slot Cover", x: ("-Hole Diameter / 2 + 0.003 m", "Hole Diameter / 2 - 0.003 m"), y: ("-Hole Diameter * 0.2", "Hole Diameter / 2 - 0.004 m"), z: ("0.0005 m", "Cap Thickness"))
         b.symbol(.face, [.coarse, .medium, .fine], .circle(("0 m", "0 m"), "Cap Diameter / 2"), .circle(("0 m", "0 m"), "Hole Diameter / 2"))
-        b.symbol(.top, [.coarse], .rect(("-Cap Diameter / 2", "-Top Thickness"), ("Cap Diameter / 2", "Cap Thickness")))
+        b.symbol(.top, [.coarse], .rect(("-Cap Diameter / 2", "-Host Thickness"), ("Cap Diameter / 2", "Cap Thickness")))
         for (d, cost) in [(60.0, 3.0), (80, 4.0), (100, 5.5)] {
             b.type("Desk Cable Grommet - \(Int(d)) mm", ["Hole Diameter": CC.mm(d)], cost: cost, model: "DCG-\(Int(d))")
         }
@@ -471,7 +471,7 @@ extension ComponentsC {
         b.length("Channel Width", CC.mm(30))
         b.length("Channel Height", CC.mm(16))
         b.length("Wall", CC.mm(1.5), group: .manufacturing)
-        b.host([.top, .bottom, .rail, .back], faces: [.bottom, .back], align: .top, alignments: [.top, .center, .full])
+        b.host([.top, .bottom, .rail], faces: [.bottom], align: .top, alignments: [.top, .center, .full])
         b.profileAlongX("Channel", profile: ComponentKit.points([("-Channel Width / 2", "0 m"), ("Channel Width / 2", "0 m"), ("Channel Width / 2", "-Channel Height"),
                                                                  ("Channel Width / 2 - Wall", "-Channel Height"), ("Channel Width / 2 - Wall", "-Wall"), ("-Channel Width / 2 + Wall", "-Wall"),
                                                                  ("-Channel Width / 2 + Wall", "-Channel Height"), ("-Channel Width / 2", "-Channel Height")]),
@@ -495,7 +495,7 @@ extension ComponentsC {
         b.length("Base Length", CC.mm(30))
         b.length("Slot Diameter", CC.mm(8))
         b.number("Slots", 1, group: .dimensions)
-        b.host([.top, .bottom, .rail, .back, .leg], faces: [.bottom, .back, .any], align: .center)
+        b.host([.top, .bottom, .rail], faces: [.bottom], align: .center)
         b.box("Base", x: ("-Base Length / 2", "Base Length / 2"), y: ("-0.01 m", "0.01 m"), z: ("-0.002 m", "0 m"))
         for k in 1...3 {
             let v: String? = k == 1 ? nil : "Show Slot \(k)"
@@ -549,7 +549,7 @@ extension ComponentsC {
         b.length("Arm Reach", CC.mm(420), instance: true, group: .placement, max: CC.mm(520))
         b.length("Arm Height", CC.mm(320), instance: true, group: .placement)
         b.length("Clamp Opening", CC.mm(85))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.flag("Dual", false, instance: false, group: .dimensions)
         b.flag("Single", false, formula: "not(Dual)")
         b.number("Load per Arm", 17.6, unit: "lb", group: .data)
@@ -559,9 +559,9 @@ extension ComponentsC {
         b.clearance(.box(name: "Arm swing", x0: "-Arm Reach", x1: "Arm Reach", y0: "-Arm Reach", y1: "0.05 m", z0: "0 m", z1: "Pole Height"))
         // Clamp: top plate, back plate down the edge, lower jaw and screw.
         b.box("Clamp Top", x: ("-0.04 m", "0.04 m"), y: ("-0.09 m", "0.012 m"), z: ("0 m", "0.01 m"))
-        b.box("Clamp Back", x: ("-0.03 m", "0.03 m"), y: ("0.002 m", "0.012 m"), z: ("-Top Thickness - 0.025 m", "0 m"))
-        b.box("Clamp Jaw", x: ("-0.03 m", "0.03 m"), y: ("-0.06 m", "0.012 m"), z: ("-Top Thickness - 0.012 m", "-Top Thickness"))
-        b.rodZ("Clamp Screw", x: "0 m", y: "-0.035 m", d: CX.mm(10), from: "-Top Thickness - 0.04 m", to: "-Top Thickness - 0.012 m")
+        b.box("Clamp Back", x: ("-0.03 m", "0.03 m"), y: ("0.002 m", "0.012 m"), z: ("-Host Thickness - 0.025 m", "0 m"))
+        b.box("Clamp Jaw", x: ("-0.03 m", "0.03 m"), y: ("-0.06 m", "0.012 m"), z: ("-Host Thickness - 0.012 m", "-Host Thickness"))
+        b.rodZ("Clamp Screw", x: "0 m", y: "-0.035 m", d: CX.mm(10), from: "-Host Thickness - 0.04 m", to: "-Host Thickness - 0.012 m")
         b.cyl("Pole", axis: .z, center: ("0 m", "-0.04 m"), radius: "0.016 m", from: "0.01 m", to: "Pole Height", segments: 28)
         for (side, sign) in [("Single", "0"), ("Dual", "-1"), ("Dual", "1")] {
             let tag = sign == "0" ? "" : (sign == "-1" ? " L" : " R")
@@ -576,7 +576,7 @@ extension ComponentsC {
                 b.box("VESA Plate\(tag)", x: ("\(hx) - 0.06 m", "\(hx) + 0.06 m"), y: ("\(hy) - 0.036 m", "\(hy) - 0.03 m"), z: ("Arm Height - 0.07 m", "Arm Height + 0.05 m"))
             }
         }
-        b.drill("Grommet mount (option)", x: "0 m", y: "-0.04 m", diameter: CX.mm(12), depth: "Top Thickness", through: true)
+        b.drill("Grommet mount (option)", x: "0 m", y: "-0.04 m", diameter: CX.mm(12), depth: "Host Thickness", through: true)
         b.symbol(.face, [.coarse], .rect(("-0.04 m", "-0.09 m"), ("0.04 m", "0.012 m")), .line(("0 m", "-0.04 m"), ("0 m", "-0.04 m - Arm Reach")))
         b.symbol(.face, [.medium, .fine], dashed: true, .arc(center: FamilyPoint("0 m", "-0.04 m"), radius: "Arm Reach", startDegrees: "200", sweepDegrees: "140"))
         b.symbol(.top, [.coarse], .line(("0 m", "0 m"), ("0 m", "Pole Height")), .rect(("-0.06 m", "Arm Height - 0.07 m"), ("0.06 m", "Arm Height + 0.05 m")))
@@ -693,7 +693,7 @@ extension ComponentsC {
         b.length("Panel Width", CC.inch(48))
         b.length("Panel Height", CC.inch(18))
         b.length("Panel Thickness", CC.mm(12))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.host([.top], faces: [.top], align: .top, alignments: [.top, .bottom, .left, .right])
         b.requires(.hostWidth(min: "Panel Width", max: nil))
         b.using("Panel Material")
@@ -702,11 +702,11 @@ extension ComponentsC {
         for s in ["-", ""] {
             let x = "\(s)(Panel Width / 2 - 0.15 m)"
             b.box("Clamp", x: ("\(x) - 0.025 m", "\(x) + 0.025 m"), y: ("-0.04 m", "Panel Thickness + 0.006 m"), z: ("0 m", "0.04 m"))
-            b.box("Clamp Jaw", x: ("\(x) - 0.025 m", "\(x) + 0.025 m"), y: ("-0.04 m", "Panel Thickness + 0.006 m"), z: ("-Top Thickness - 0.01 m", "-Top Thickness"))
-            b.box("Clamp Back", x: ("\(x) - 0.025 m", "\(x) + 0.025 m"), y: ("Panel Thickness", "Panel Thickness + 0.006 m"), z: ("-Top Thickness - 0.01 m", "0.04 m"))
+            b.box("Clamp Jaw", x: ("\(x) - 0.025 m", "\(x) + 0.025 m"), y: ("-0.04 m", "Panel Thickness + 0.006 m"), z: ("-Host Thickness - 0.01 m", "-Host Thickness"))
+            b.box("Clamp Back", x: ("\(x) - 0.025 m", "\(x) + 0.025 m"), y: ("Panel Thickness", "Panel Thickness + 0.006 m"), z: ("-Host Thickness - 0.01 m", "0.04 m"))
         }
         b.using(nil)
-        b.outlines(x: ("-Panel Width / 2", "Panel Width / 2"), y: ("-0.04 m", "Panel Thickness + 0.006 m"), z: ("-Top Thickness - 0.01 m", "Panel Height"))
+        b.outlines(x: ("-Panel Width / 2", "Panel Width / 2"), y: ("-0.04 m", "Panel Thickness + 0.006 m"), z: ("-Host Thickness - 0.01 m", "Panel Height"))
         b.type("Desk Privacy Panel - 48\" x 18\" Felt", [:], cost: 129, model: "DPP-4818F")
         b.type("Desk Privacy Panel - 60\" x 18\" Felt", ["Panel Width": CC.inch(60)], cost: 149, model: "DPP-6018F")
         b.type("Desk Privacy Panel - 48\" x 24\" Acrylic", ["Panel Height": CC.inch(24), "Panel Thickness": CC.mm(6)], cost: 119, model: "DPP-4824A")
@@ -790,7 +790,7 @@ extension ComponentsC {
         b.length("Cutout Length", CC.mm(160))
         b.length("Cutout Width", CC.mm(70))
         b.length("Housing Depth", CC.mm(60))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.number("Outlets", 2, group: .dimensions)
         b.number("USB Ports", 2, group: .dimensions)
         b.flag("Pop-Up", false, instance: false, group: .dimensions)
@@ -799,10 +799,10 @@ extension ComponentsC {
         b.host([.top], faces: [.top], align: .top, alignments: [.top, .center, .topLeft, .topRight], offsetY: CC.inch(4))
         b.requires(.hostThickness(min: "0.012 m", max: "0.05 m"))
         b.requires(.note("Keep the housing's underside clear of rails and drawers."))
-        b.pocket("Power module cutout", width: "Cutout Length", height: "Cutout Width", depth: "Top Thickness", through: true)
-        b.box("Host Cutout", x: ("-Cutout Length / 2", "Cutout Length / 2"), y: ("-Cutout Width / 2", "Cutout Width / 2"), z: ("-Top Thickness", "0 m"), void: true)
+        b.pocket("Power module cutout", width: "Cutout Length", height: "Cutout Width", depth: "Host Thickness", through: true)
+        b.box("Host Cutout", x: ("-Cutout Length / 2", "Cutout Length / 2"), y: ("-Cutout Width / 2", "Cutout Width / 2"), z: ("-Host Thickness", "0 m"), void: true)
         b.using("Housing Material")
-        b.box("Housing", x: ("-Cutout Length / 2 + 0.001 m", "Cutout Length / 2 - 0.001 m"), y: ("-Cutout Width / 2 + 0.001 m", "Cutout Width / 2 - 0.001 m"), z: ("-Top Thickness - Housing Depth", "0 m"))
+        b.box("Housing", x: ("-Cutout Length / 2 + 0.001 m", "Cutout Length / 2 - 0.001 m"), y: ("-Cutout Width / 2 + 0.001 m", "Cutout Width / 2 - 0.001 m"), z: ("-Host Thickness - Housing Depth", "0 m"))
         b.shown("Flush") { $0.roundedBar("Bezel", width: "Cutout Length + 0.012 m", height: "Cutout Width + 0.012 m", radius: CX.mm(4), from: "0 m", to: "0.003 m") }
         b.shown("Pop-Up") { b in
             b.cyl("Tower", axis: .z, center: ("0 m", "0 m"), radius: "Cutout Width / 2 - 0.002 m", from: "0 m", to: "Cutout Length", segments: 32)
@@ -825,7 +825,7 @@ extension ComponentsC {
         b.symbol(.face, [.coarse, .medium, .fine], .rect(("-Cutout Length / 2 - 0.006 m", "-Cutout Width / 2 - 0.006 m"), ("Cutout Length / 2 + 0.006 m", "Cutout Width / 2 + 0.006 m")))
         b.symbol(.face, [.coarse], .line(("-Cutout Length / 2", "-Cutout Width / 2"), ("Cutout Length / 2", "Cutout Width / 2")),
                  .line(("-Cutout Length / 2", "Cutout Width / 2"), ("Cutout Length / 2", "-Cutout Width / 2")))
-        b.symbol(.top, [.coarse], dashed: true, .rect(("-Cutout Length / 2", "-Top Thickness - Housing Depth"), ("Cutout Length / 2", "0 m")))
+        b.symbol(.top, [.coarse], dashed: true, .rect(("-Cutout Length / 2", "-Host Thickness - Housing Depth"), ("Cutout Length / 2", "0 m")))
         b.type("Desk Power Module - 2 Outlets + 2 USB", [:], cost: 79, model: "DPM-2A2U")
         b.type("Desk Power Module - 3 Outlets", ["Cutout Length": CC.mm(190)], numbers: ["Outlets": 3, "USB Ports": 0], cost: 89, model: "DPM-3A")
         b.type("Desk Power Module - Pop-Up 3 Outlets", ["Cutout Length": CC.mm(200), "Cutout Width": CC.mm(80), "Housing Depth": CC.mm(210)], flags: ["Pop-Up": true],
@@ -841,20 +841,20 @@ extension ComponentsC {
         b.material("Finish Material", .blackPlastic)
         b.length("Hole Diameter", CC.mm(60))
         b.length("Body Depth", CC.mm(55))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.number("USB-A Ports", 1, group: .dimensions)
         b.number("USB-C Ports", 1, group: .dimensions)
         b.electrical(watts: 30, volts: 5, supply: "AC 120 V adapter to USB 5 V (USB-C PD up to 20 V)", cable: "6 ft cord to the adapter", connector: "NEMA 1-15")
         b.host([.top, .shelf], faces: [.top], align: .topRight, alignments: [.topRight, .topLeft, .center], offsetX: CC.inch(4), offsetY: CC.inch(3))
         b.requires(.hostThickness(min: "0.012 m", max: "0.05 m"))
-        b.drill("USB module hole", x: "0 m", y: "0 m", diameter: "Hole Diameter", depth: "Top Thickness", through: true)
-        b.cyl("Host Cutout", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2", from: "-Top Thickness", to: "0 m", segments: 32, void: true)
-        b.cyl("Body", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2 - 0.001 m", from: "-Top Thickness - Body Depth", to: "0 m", segments: 32)
+        b.drill("USB module hole", x: "0 m", y: "0 m", diameter: "Hole Diameter", depth: "Host Thickness", through: true)
+        b.cyl("Host Cutout", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2", from: "-Host Thickness", to: "0 m", segments: 32, void: true)
+        b.cyl("Body", axis: .z, center: ("0 m", "0 m"), radius: "Hole Diameter / 2 - 0.001 m", from: "-Host Thickness - Body Depth", to: "0 m", segments: 32)
         b.revolve("Bezel", profile: ComponentKit.points([("0 m", "0 m"), ("Hole Diameter / 2 + 0.005 m", "0 m"), ("Hole Diameter / 2 + 0.004 m", "0.004 m"), ("0 m", "0.004 m")]))
         b.box("USB-A Port", x: ("-0.014 m", "-0.002 m"), y: ("-0.0025 m", "0.0025 m"), z: ("0.004 m", "0.0045 m"))
         b.box("USB-C Port", x: ("0.004 m", "0.0125 m"), y: ("-0.0016 m", "0.0016 m"), z: ("0.004 m", "0.0045 m"))
         b.symbol(.face, [.coarse, .medium, .fine], .circle(("0 m", "0 m"), "Hole Diameter / 2 + 0.005 m"))
-        b.symbol(.top, [.coarse], dashed: true, .rect(("-Hole Diameter / 2", "-Top Thickness - Body Depth"), ("Hole Diameter / 2", "0.004 m")))
+        b.symbol(.top, [.coarse], dashed: true, .rect(("-Hole Diameter / 2", "-Host Thickness - Body Depth"), ("Hole Diameter / 2", "0.004 m")))
         b.type("Desk USB Charging Module - 60 mm A+C", [:], cost: 35, model: "DUM-60AC")
         b.type("Desk USB Charging Module - 80 mm 2C", ["Hole Diameter": CC.mm(80)], numbers: ["USB-A Ports": 0, "USB-C Ports": 2, "Power": 65], cost: 49, model: "DUM-80CC")
         return b.build()
@@ -868,7 +868,7 @@ extension ComponentsC {
         b.material("Finish Material", .blackPlastic)
         b.length("Pad Diameter", CC.mm(80))
         b.length("Pad Depth", CC.mm(18))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.length("Remaining Thickness", CC.mm(6), group: .manufacturing)
         b.flag("Under-Mount", false, instance: false, group: .dimensions)
         b.flag("Flush Mount", false, formula: "not(Under-Mount)")
@@ -882,11 +882,11 @@ extension ComponentsC {
                                                            ("Pad Diameter / 2 - 0.003 m", "0.002 m")]))
         }
         b.shown("Under-Mount") { b in
-            b.cyl("Pad (Under-Mount)", axis: .z, center: ("0 m", "0 m"), radius: "Pad Diameter / 2", from: "-Top Thickness - Pad Depth + Top Thickness - Remaining Thickness",
+            b.cyl("Pad (Under-Mount)", axis: .z, center: ("0 m", "0 m"), radius: "Pad Diameter / 2", from: "-Host Thickness - Pad Depth + Host Thickness - Remaining Thickness",
                   to: "-Remaining Thickness", segments: 40)
-            b.box("Mount Bracket", x: ("-Pad Diameter / 2 - 0.02 m", "Pad Diameter / 2 + 0.02 m"), y: ("-0.012 m", "0.012 m"), z: ("-Top Thickness - 0.003 m", "-Top Thickness"))
+            b.box("Mount Bracket", x: ("-Pad Diameter / 2 - 0.02 m", "Pad Diameter / 2 + 0.02 m"), y: ("-0.012 m", "0.012 m"), z: ("-Host Thickness - 0.003 m", "-Host Thickness"))
         }
-        b.pocket("Wireless charger pocket", width: "Pad Diameter", height: "Pad Diameter", depth: "if(Under-Mount, Top Thickness - Remaining Thickness, Pad Depth)", through: false)
+        b.pocket("Wireless charger pocket", width: "Pad Diameter", height: "Pad Diameter", depth: "if(Under-Mount, Host Thickness - Remaining Thickness, Pad Depth)", through: false)
         b.symbol(.face, [.coarse, .medium, .fine], .circle(("0 m", "0 m"), "Pad Diameter / 2"))
         b.symbol(.top, [.coarse], dashed: true, .rect(("-Pad Diameter / 2", "-Pad Depth"), ("Pad Diameter / 2", "0 m")))
         b.type("In-Desk Wireless Charger - Flush 15 W", [:], cost: 45, model: "IWC-F15")
@@ -903,7 +903,7 @@ extension ComponentsC {
         b.material("Lens Material", .diffuser)
         b.length("Arm Length", CC.mm(380))
         b.length("Head Length", CC.mm(400))
-        b.length("Top Thickness", CC.inch(1), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1), instance: true, group: .placement)
         b.angle("Arm Angle", 60, instance: true, group: .placement)
         b.flag("Grommet Mount", false, instance: false, group: .dimensions)
         b.flag("Clamp Mount", false, formula: "not(Grommet Mount)")
@@ -914,11 +914,11 @@ extension ComponentsC {
         b.requires(.hostThickness(min: "0.012 m", max: "0.065 m"))
         b.shown("Clamp Mount") { b in
             b.box("Clamp Top", x: ("-0.03 m", "0.03 m"), y: ("-0.07 m", "0.01 m"), z: ("0 m", "0.012 m"))
-            b.box("Clamp Back", x: ("-0.025 m", "0.025 m"), y: ("0 m", "0.01 m"), z: ("-Top Thickness - 0.02 m", "0 m"))
-            b.box("Clamp Jaw", x: ("-0.025 m", "0.025 m"), y: ("-0.05 m", "0.01 m"), z: ("-Top Thickness - 0.01 m", "-Top Thickness"))
+            b.box("Clamp Back", x: ("-0.025 m", "0.025 m"), y: ("0 m", "0.01 m"), z: ("-Host Thickness - 0.02 m", "0 m"))
+            b.box("Clamp Jaw", x: ("-0.025 m", "0.025 m"), y: ("-0.05 m", "0.01 m"), z: ("-Host Thickness - 0.01 m", "-Host Thickness"))
         }
         b.shown("Grommet Mount") { b in
-            b.cyl("Grommet Post", axis: .z, center: ("0 m", "-0.03 m"), radius: "0.006 m", from: "-Top Thickness - 0.02 m", to: "0.012 m")
+            b.cyl("Grommet Post", axis: .z, center: ("0 m", "-0.03 m"), radius: "0.006 m", from: "-Host Thickness - 0.02 m", to: "0.012 m")
             b.cyl("Grommet Collar", axis: .z, center: ("0 m", "-0.03 m"), radius: "0.025 m", from: "0 m", to: "0.008 m")
         }
         b.cyl("Pivot", axis: .z, center: ("0 m", "-0.03 m"), radius: "0.012 m", from: "0.012 m", to: "0.06 m")
@@ -930,7 +930,7 @@ extension ComponentsC {
         b.using("Lens Material")
         b.roundedBar("Lens", center: ("0 m", hy), width: "Head Length - 0.02 m", height: "0.025 m", radius: "0.008 m", from: "\(hz) - 0.014 m", to: "\(hz) - 0.012 m")
         b.using(nil)
-        b.drill("Grommet mount hole", x: "0 m", y: "-0.03 m", diameter: CX.mm(14), depth: "Top Thickness", through: true)
+        b.drill("Grommet mount hole", x: "0 m", y: "-0.03 m", diameter: CX.mm(14), depth: "Host Thickness", through: true)
         b.symbol(.face, [.coarse], .rect(("-0.03 m", "-0.07 m"), ("0.03 m", "0.01 m")), .rect(("-Head Length / 2", "\(hy) - 0.02 m"), ("Head Length / 2", "\(hy) + 0.02 m")))
         b.symbol(.top, [.coarse], .line(("0 m", "0.06 m"), ("0 m", hz)))
         b.type("Desk Task Light - Clamp", [:], cost: 89, model: "DTL-C")

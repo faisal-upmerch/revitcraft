@@ -27,8 +27,61 @@ public enum ComponentsC {
         for k in d.family.solids.indices where d.family.solids[k].isVoid && d.family.solids[k].name.hasSuffix("Cutout") && d.family.solids[k].cuts == nil {
             d.family.solids[k].cuts = []
         }
+        if let type = d.defaultType?.name {
+            for (name, values) in presets[d.name] ?? [] where !d.presets.contains(where: { $0.name == name }) {
+                d.presets.append(ComponentPreset(name: name, definitionID: d.id, typeName: type, values: values))
+            }
+        }
         return d
     }
+
+    /// Built-in presets on the default type: mechanisms opened, desks raised, the other hand (Components panel ▸
+    /// Presets). Values are instance parameters (angles in radians).
+    static let presets: [String: [(String, [String: ParamValue])]] = {
+        let deg = { (v: Double) in ParamValue.double(v * .pi / 180) }
+        let on = ParamValue.bool(true), off = ParamValue.bool(false)
+        return [
+            "Magic Corner Unit": [("Pulled Out", ["Pulled Out": on])],
+            "Blind-Corner Swing-Out": [("Left Hand", ["Left Hand": on])],
+            "Corner Storage Basket": [("Right Corner", ["Left Corner": off])],
+            "Appliance Lift Mechanism": [("Raised", ["Raised": on])],
+            "Mixer Lift Mechanism": [("Raised", ["Lift Angle": deg(80)])],
+            "Pull-Out Worktop": [("Pulled Out", ["Pull Out": .double(CC.mm(350))])],
+            "Fold-Down Worktop": [("Folded", ["Folded": on])],
+            "Utensil Tray": [("Top Tray Back", ["Upper Tray Position": .double(CC.mm(220))])],
+            "Electric Standing Desk Frame": [("Standing 44\"", ["Desk Height": .double(CC.inch(44))])],
+            "Manual Crank Desk Frame": [("Standing 42\"", ["Desk Height": .double(CC.inch(42))])],
+            "Height-Adjustable Desk Mechanism": [("Standing 42\"", ["Desk Height": .double(CC.inch(42))])],
+            "Folding Table Hinge": [("Folded", ["Folded": on])],
+            "Drop-Leaf Support": [("Closed", ["Open": off])],
+            "Table Extension Slide": [("Extended 20\"", ["Extension": .double(CC.inch(20))])],
+            "Butterfly Leaf Mechanism": [("Unfolded", ["Unfolded": on])],
+            "Keyboard Tray": [("Stowed", ["Pull Out": .double(0)])],
+            "Under-Desk Drawer": [("Open", ["Pull Out": .double(CC.inch(10))])],
+            "Desk Task Light": [("Low Arm", ["Arm Angle": deg(35)])],
+            "Gas Lift Bed Mechanism": [("Open 40°", ["Open Angle": deg(40)])],
+            "Hydraulic Storage Bed Lift": [("Raised", ["Lift Angle": deg(60)])],
+            "Bed Storage Hinge": [("Open 70°", ["Open Angle": deg(70)])],
+            "Folding Bed Mechanism": [("Folded", ["Folded": on])],
+            "Murphy Bed Mechanism": [("Open", ["Open Angle": deg(90)])],
+            "Recliner Mechanism": [("Reclined", ["Reclined": on])],
+            "Manual Recliner Mechanism": [("Reclined", ["Reclined": on])],
+            "Electric Recliner Mechanism": [("Reclined", ["Reclined": on])],
+            "Sofa Bed Mechanism": [("Open", ["Open": on])],
+            "Pull-Out Sofa Bed Frame": [("Pulled Out", ["Pull Out": .double(CC.inch(30))])],
+            "Armrest Hinge": [("Raised 45°", ["Arm Angle": deg(45)])],
+            "Adjustable Headrest Mechanism": [("Tilted 30°", ["Tilt Angle": deg(30)])],
+            "Gas Lift Cylinder": [("Fully Raised", ["Extension": .double(CC.mm(120))])],
+            "Tilt Mechanism": [("Tilted 12°", ["Tilt Angle": deg(12)])],
+            "Chair Recline Mechanism": [("Reclined 20°", ["Recline Angle": deg(20)])],
+            "Adjustable Armrest": [("Raised 10\"", ["Arm Height": .double(CC.inch(10))])],
+            "Lumbar Support Mechanism": [("Low", ["Lumbar Height": .double(CC.mm(-40))])],
+            "Chair Headrest Mechanism": [("Raised and Tilted", ["Headrest Height": .double(CC.mm(120)), "Tilt Angle": deg(15)])],
+            "Folding Chair Hinge": [("Folded", ["Folded": on])],
+            "Seat Height Adjuster": [("Left Side", ["Right Side": off])],
+            "Armrest Support": [("Left Arm", ["Right Arm": off])],
+        ]
+    }()
 }
 
 /// Type value constants (meters).

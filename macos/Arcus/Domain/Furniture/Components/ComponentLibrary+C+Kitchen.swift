@@ -432,7 +432,8 @@ extension ComponentsC {
         b.length("Peg Spacing", CC.mm(96), instance: true, group: .placement)
         b.length("Row Spacing", CC.mm(220), instance: true, group: .placement)
         b.length("Edge Clearance", CC.mm(5), group: .manufacturing)
-        b.host([.bay, .drawerFront], faces: [.bottom], align: .full)
+        b.host([.bay], faces: [.bottom], align: .full)
+        b.requires(.note("Place it in the drawer's bay; it sits in the drawer box."))
         b.requires(.fitsHeight("Board Thickness + Peg Height + 0.01 m"))
         b.using("Board Material")
         b.box("Board", x: ("Edge Clearance", "Opening Width - Edge Clearance"), y: ("Edge Clearance", "Opening Depth - Edge Clearance"), z: ("0 m", "Board Thickness"))
@@ -506,7 +507,8 @@ extension ComponentsC {
         b.length("Tray Height", CC.mm(55))
         b.length("Wall Thickness", CC.mm(3))
         b.number("Compartments", 5, group: .dimensions)
-        b.host([.drawerFront, .bay], faces: [.bottom], align: .full)
+        b.host([.bay], faces: [.bottom], align: .full)
+        b.requires(.note("Place it in the drawer's bay; it sits in the drawer box."))
         b.requires(.fitsHeight("Tray Height + 0.005 m"))
         b.requires(.note("Sized to the drawer box inside; trim to fit."))
         b.tray("Tray", x: ("0 m", "Opening Width"), y: ("0 m", "Opening Depth"), z: ("0 m", "Tray Height"), wall: "Wall Thickness", floor: "Wall Thickness")
@@ -537,7 +539,8 @@ extension ComponentsC {
         b.length("Upper Tray Height", CC.mm(40))
         b.length("Wall Thickness", CC.mm(6))
         b.length("Upper Tray Position", CC.mm(0), instance: true, group: .placement, min: 0)
-        b.host([.drawerFront, .bay], faces: [.bottom], align: .full)
+        b.host([.bay], faces: [.bottom], align: .full)
+        b.requires(.note("Place it in the drawer's bay; it sits in the drawer box."))
         b.requires(.fitsHeight("Lower Tray Height + Upper Tray Height + 0.008 m"))
         b.tray("Lower Tray", x: ("0 m", "Opening Width"), y: ("0 m", "Opening Depth"), z: ("0 m", "Lower Tray Height"), wall: "Wall Thickness", floor: "Wall Thickness")
         for k in 1...3 {
@@ -569,7 +572,8 @@ extension ComponentsC {
         b.length("Divider Depth", CC.mm(300))
         b.number("Divider Count", 4, group: .dimensions)
         b.length("Divider Spacing", CC.mm(100), instance: true, group: .placement)
-        b.host([.drawerFront, .bay], faces: [.bottom], align: .full)
+        b.host([.bay], faces: [.bottom], align: .full)
+        b.requires(.note("Place it in the drawer's bay; it sits in the drawer box."))
         b.requires(.fitsHeight("Divider Height + 0.01 m"))
         b.using("Rail Material")
         for (k, y) in ["0.03 m", "Opening Depth - 0.05 m"].enumerated() {
@@ -718,7 +722,8 @@ extension ComponentsC {
         b.length("Bin Height", CC.mm(260))
         b.length("Bin Width", 0, formula: "(Opening Width - 0.03 m) / 2")
         b.length("Bin Depth", 0, formula: "(Opening Depth - 0.03 m) / 2")
-        b.host([.drawerFront, .bay], faces: [.bottom], align: .full)
+        b.host([.bay], faces: [.bottom], align: .full)
+        b.requires(.note("Place it in the drawer's bay; it sits in the drawer box."))
         b.requires(.fitsHeight("Bin Height + 0.02 m"))
         b.using("Frame Material")
         b.box("Base Frame", x: ("0 m", "Opening Width"), y: ("0 m", "Opening Depth"), z: ("0 m", "0.008 m"))
@@ -761,7 +766,13 @@ extension ComponentsC {
         b.requires(.hostHeight(min: "Tray Height + 0.02 m", max: nil))
         b.clearance(.box(name: "Tilt swing", x0: "-Tray Length / 2", x1: "Tray Length / 2", y0: "-Tray Height / 2", y1: "Tray Height / 2", z0: "0 m", z1: "Tray Depth + 0.06 m"))
         b.using("Tray Material")
-        b.tray("Tray", x: ("-Tray Length / 2", "Tray Length / 2"), y: ("-Tray Height / 2", "Tray Height / 2"), z: ("0 m", "Tray Depth"), wall: CX.mm(2), floor: CX.mm(2))
+        // Open at the top: floor at the bottom, walls against the front and toward the sink.
+        b.box("Tray Floor", x: ("-Tray Length / 2", "Tray Length / 2"), y: ("-Tray Height / 2", "-Tray Height / 2 + 0.002 m"), z: ("0 m", "Tray Depth"))
+        b.box("Tray Front", x: ("-Tray Length / 2", "Tray Length / 2"), y: ("-Tray Height / 2", "Tray Height / 2"), z: ("0 m", "0.002 m"))
+        b.box("Tray Back", x: ("-Tray Length / 2", "Tray Length / 2"), y: ("-Tray Height / 2", "Tray Height / 4"), z: ("Tray Depth - 0.002 m", "Tray Depth"))
+        for s in ["-", ""] {
+            b.box("Tray End", x: ("\(s)(Tray Length / 2) - 0.001 m", "\(s)(Tray Length / 2) + 0.001 m"), y: ("-Tray Height / 2", "Tray Height / 4"), z: ("0 m", "Tray Depth"))
+        }
         b.using("Hinge Material")
         for s in ["-", ""] {
             b.box("Tilt Hinge", x: ("\(s)(Tray Length / 2) - 0.012 m", "\(s)(Tray Length / 2) + 0.012 m"), y: ("-Tray Height / 2 - 0.02 m", "-Tray Height / 2"), z: ("0 m", "0.04 m"))
@@ -789,20 +800,20 @@ extension ComponentsC {
         b.length("Bowl Depth", CC.inch(9))
         b.length("Faucet Hole Diameter", CC.mm(35))
         b.length("Faucet Setback", CC.inch(1.5))
-        b.length("Top Thickness", CC.inch(1.5), instance: true, group: .placement)
+        b.length("Host Thickness", CC.inch(1.5), instance: true, group: .placement)
         b.flag("Drop-In", false, instance: false, group: .data)
         b.flag("Undermount", false, formula: "not(Drop-In)")
         b.host([.top], faces: [.top], align: .center)
         b.requires(.hostWidth(min: "Cutout Width + 0.1 m", max: nil))
         b.requires(.note("Leave 2\" (50 mm) of top in front of the cutout and 3\" behind it for the faucet."))
-        b.pocket("Sink cutout", width: "Cutout Width", height: "Cutout Depth", depth: "Top Thickness", through: true)
-        b.drill("Faucet hole", x: "0 m", y: "Cutout Depth / 2 + Faucet Setback", diameter: "Faucet Hole Diameter", depth: "Top Thickness", through: true)
+        b.pocket("Sink cutout", width: "Cutout Width", height: "Cutout Depth", depth: "Host Thickness", through: true)
+        b.drill("Faucet hole", x: "0 m", y: "Cutout Depth / 2 + Faucet Setback", diameter: "Faucet Hole Diameter", depth: "Host Thickness", through: true)
         // The cut itself (a void through the top) and the bowl below for clearance checks.
-        b.extrusion("Host Cutout", profile: ComponentKit.roundedRect(width: "Cutout Width", height: "Cutout Depth", radius: "Corner Radius"), from: "-Top Thickness", to: "0 m", void: true)
-        b.cyl("Faucet Hole Cutout", axis: .z, center: ("0 m", "Cutout Depth / 2 + Faucet Setback"), radius: "Faucet Hole Diameter / 2", from: "-Top Thickness", to: "0 m", void: true)
+        b.extrusion("Host Cutout", profile: ComponentKit.roundedRect(width: "Cutout Width", height: "Cutout Depth", radius: "Corner Radius"), from: "-Host Thickness", to: "0 m", void: true)
+        b.cyl("Faucet Hole Cutout", axis: .z, center: ("0 m", "Cutout Depth / 2 + Faucet Setback"), radius: "Faucet Hole Diameter / 2", from: "-Host Thickness", to: "0 m", void: true)
         b.shown("Undermount") { b in
             b.tray("Bowl", x: ("-Cutout Width / 2 - 0.01 m", "Cutout Width / 2 + 0.01 m"), y: ("-Cutout Depth / 2 - 0.01 m", "Cutout Depth / 2 + 0.01 m"),
-                   z: ("-Top Thickness - Bowl Depth", "-Top Thickness"), wall: CX.mm(1.2), floor: CX.mm(1.2))
+                   z: ("-Host Thickness - Bowl Depth", "-Host Thickness"), wall: CX.mm(1.2), floor: CX.mm(1.2))
         }
         b.shown("Drop-In") { b in
             b.tray("Bowl", x: ("-Cutout Width / 2 + 0.002 m", "Cutout Width / 2 - 0.002 m"), y: ("-Cutout Depth / 2 + 0.002 m", "Cutout Depth / 2 - 0.002 m"),
@@ -814,7 +825,7 @@ extension ComponentsC {
                  .circle(("0 m", "Cutout Depth / 2 + Faucet Setback"), "Faucet Hole Diameter / 2"))
         b.symbol(.face, [.medium, .fine], dashed: true, .line(("-Cutout Width / 2", "-Cutout Depth / 2"), ("Cutout Width / 2", "Cutout Depth / 2")),
                  .line(("-Cutout Width / 2", "Cutout Depth / 2"), ("Cutout Width / 2", "-Cutout Depth / 2")))
-        b.symbol(.top, [.coarse], dashed: true, .rect(("-Cutout Width / 2", "-Top Thickness - Bowl Depth"), ("Cutout Width / 2", "0 m")))
+        b.symbol(.top, [.coarse], dashed: true, .rect(("-Cutout Width / 2", "-Host Thickness - Bowl Depth"), ("Cutout Width / 2", "0 m")))
         b.type("Sink Cutout - Single Bowl 30\" Base", ["Cutout Width": CC.inch(28.5), "Cutout Depth": CC.inch(16.5)], cost: 0, model: "SC-SB30", description: "Undermount single bowl, 30\" base")
         b.type("Sink Cutout - Single Bowl 33\" Base", ["Cutout Width": CC.inch(31.5), "Cutout Depth": CC.inch(17.5)], cost: 0, model: "SC-SB33", description: "Undermount single bowl, 33\" base")
         b.type("Sink Cutout - Double Bowl 36\" Base", ["Cutout Width": CC.inch(32.5), "Cutout Depth": CC.inch(18)], cost: 0, model: "SC-DB36", description: "Undermount double bowl, 36\" base")
@@ -923,14 +934,15 @@ extension ComponentsC {
         b.host([.bay], faces: [.top], align: .full)
         b.requires(.fitsDepth("Slide Length + 0.01 m"))
         b.requires(.fitsHeight("Board Thickness + 0.01 m"))
-        b.clearance(.box(name: "Pull-out travel", x0: "0 m", x1: "Opening Width", y0: "-Slide Length", y1: "0 m", z0: "0 m", z1: "Board Thickness"))
+        b.clearance(.box(name: "Pull-out travel", x0: "0 m", x1: "Opening Width", y0: "-Slide Length", y1: "0 m", z0: "Opening Height - Board Thickness", z1: "Opening Height"))
         b.using("Slide Material")
-        b.sideRunners("Slide", width: "Opening Width", y: ("0 m", "Slide Length"), z: "Board Thickness / 2", height: CX.mm(17), thickness: CX.mm(12.7))
+        let bz = "Opening Height - Board Thickness - 0.003 m"
+        b.sideRunners("Slide", width: "Opening Width", y: ("0 m", "Slide Length"), z: "\(bz) + Board Thickness / 2", height: CX.mm(17), thickness: CX.mm(12.7))
         b.using("Board Material")
-        b.box("Board", x: ("0.013 m", "Opening Width - 0.013 m"), y: ("-Pull Out", "Board Depth - Pull Out"), z: ("0 m", "Board Thickness"))
-        b.box("Pull Lip", x: ("0.013 m", "Opening Width - 0.013 m"), y: ("-Pull Out - 0.02 m", "-Pull Out"), z: ("Board Thickness - 0.012 m", "Board Thickness + 0.006 m"))
+        b.box("Board", x: ("0.013 m", "Opening Width - 0.013 m"), y: ("-Pull Out", "Board Depth - Pull Out"), z: (bz, "\(bz) + Board Thickness"))
+        b.box("Pull Lip", x: ("0.013 m", "Opening Width - 0.013 m"), y: ("-Pull Out - 0.02 m", "-Pull Out"), z: ("\(bz) + Board Thickness - 0.012 m", "\(bz) + Board Thickness + 0.003 m"))
         b.using(nil)
-        b.outlines(x: ("0 m", "Opening Width"), y: ("0 m", "Board Depth"), z: ("0 m", "Board Thickness"))
+        b.outlines(x: ("0 m", "Opening Width"), y: ("0 m", "Board Depth"), z: ("Opening Height - Board Thickness - 0.003 m", "Opening Height"))
         b.symbol(.face, [.medium, .fine], dashed: true, .rect(("0.013 m", "-Slide Length"), ("Opening Width - 0.013 m", "0 m")))
         for (w, cost) in [(450.0, 69.0), (600, 79)] {
             b.type("Pull-Out Worktop - \(Int(w)) mm", ["Opening Width": openingFor(w)], cost: cost, model: "POW-\(Int(w))", description: "Pull-out worktop for a \(Int(w)) mm cabinet")
@@ -947,7 +959,7 @@ extension ComponentsC {
         b.material("Bracket Material", .matteBlack)
         b.length("Top Width", CC.inch(30))
         b.length("Top Depth", CC.inch(16))
-        b.length("Top Thickness", CC.mm(25))
+        b.length("Host Thickness", CC.mm(25))
         b.length("Mount Height", CC.inch(36), instance: true, group: .placement)
         b.flag("Folded", false, group: .placement)
         b.flag("Open", false, formula: "not(Folded)")
@@ -957,18 +969,18 @@ extension ComponentsC {
         b.clearance(.box(name: "Fold swing", x0: "-Top Width / 2", x1: "Top Width / 2", y0: "-Top Depth", y1: "0 m", z0: "0 m", z1: "Top Depth"))
         b.shown("Open") { b in
             b.using("Top Material")
-            b.box("Top", x: ("-Top Width / 2", "Top Width / 2"), y: ("-Top Thickness", "0 m"), z: ("0 m", "Top Depth"))
+            b.box("Top", x: ("-Top Width / 2", "Top Width / 2"), y: ("-Host Thickness", "0 m"), z: ("0 m", "Top Depth"))
             b.using("Bracket Material")
             for s in ["-", ""] {
                 let x = "\(s)(Top Width / 2 - 0.08 m)"
-                b.box("Bracket Plate", x: ("\(x) - 0.012 m", "\(x) + 0.012 m"), y: ("-0.3 m", "-Top Thickness"), z: ("0 m", "0.004 m"))
-                b.box("Bracket Arm", x: ("\(x) - 0.012 m", "\(x) + 0.012 m"), y: ("-Top Thickness - 0.004 m", "-Top Thickness"), z: ("0 m", "Top Depth * 0.85"))
-                b.link("Bracket Brace", plane: .yz, ("-0.28 m", "0.004 m"), ("-Top Thickness - 0.004 m", "Top Depth * 0.7"), at: x, width: CX.mm(16), thickness: CX.mm(20))
+                b.box("Bracket Plate", x: ("\(x) - 0.012 m", "\(x) + 0.012 m"), y: ("-0.3 m", "-Host Thickness"), z: ("0 m", "0.004 m"))
+                b.box("Bracket Arm", x: ("\(x) - 0.012 m", "\(x) + 0.012 m"), y: ("-Host Thickness - 0.004 m", "-Host Thickness"), z: ("0 m", "Top Depth * 0.85"))
+                b.link("Bracket Brace", plane: .yz, ("-0.28 m", "0.004 m"), ("-Host Thickness - 0.004 m", "Top Depth * 0.7"), at: x, width: CX.mm(16), thickness: CX.mm(20))
             }
         }
         b.shown("Folded") { b in
             b.using("Top Material")
-            b.box("Top (Folded)", x: ("-Top Width / 2", "Top Width / 2"), y: ("-Top Depth", "0 m"), z: ("0.03 m", "0.03 m + Top Thickness"))
+            b.box("Top (Folded)", x: ("-Top Width / 2", "Top Width / 2"), y: ("-Top Depth", "0 m"), z: ("0.03 m", "0.03 m + Host Thickness"))
             b.using("Bracket Material")
             for s in ["-", ""] {
                 let x = "\(s)(Top Width / 2 - 0.08 m)"
@@ -1109,7 +1121,7 @@ extension ComponentsC {
         b.length("Hook Length", CC.inch(1.5))
         b.length("Wire Diameter", CC.mm(3.5))
         b.length("Thread Length", CC.mm(10))
-        b.host([.shelf, .bottom, .rail], faces: [.bottom], align: .center)
+        b.host([.shelf, .bottom, .top, .rail], faces: [.bottom], align: .center)
         b.requires(.hostThickness(min: "Thread Length + 0.003 m", max: nil))
         b.rodZ("Thread", x: "0 m", y: "0 m", d: "Wire Diameter", from: "0 m", to: "Thread Length")
         b.cyl("Collar", axis: .z, center: ("0 m", "0 m"), radius: "Wire Diameter * 1.4", from: "-0.002 m", to: "0 m")
@@ -1165,7 +1177,7 @@ extension ComponentsC {
         b.length("Roll Diameter", CC.mm(130))
         b.length("Drop", CC.mm(85))
         b.flag("Show Roll", true, group: .constraints)
-        b.host([.bottom, .shelf], faces: [.bottom], align: .center)
+        b.host([.bottom, .shelf, .top], faces: [.bottom], align: .center)
         b.requires(.hostWidth(min: "Roll Length + 0.04 m", max: nil))
         for s in ["-", ""] {
             let x = "\(s)(Roll Length / 2 + 0.008 m)"

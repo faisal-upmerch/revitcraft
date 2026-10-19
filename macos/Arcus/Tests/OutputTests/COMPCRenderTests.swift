@@ -14,8 +14,8 @@ struct COMPCRenderTests {
     static let dir = URL(fileURLWithPath: "/tmp/arcus-compc")
 
     /// The family's solids for the type, at a detail level.
-    static func evaluated(_ d: ComponentDefinition, _ type: String, detail: DetailLevel) -> EvaluatedFamily {
-        var ev = FamilyEvaluator.evaluate(d.family, typeName: type)
+    static func evaluated(_ d: ComponentDefinition, _ type: String, _ inst: [String: ParamValue] = [:], detail: DetailLevel) -> EvaluatedFamily {
+        var ev = FamilyEvaluator.evaluate(d.family, typeName: type, instance: inst)
         ev.solids = ev.solids.filter { !$0.isVoid && $0.visibleAt.contains(detail) }
         // Face-based items stand on their host face: Z (out of the face) toward the viewer, Y up.
         if d.frame == .face {
@@ -26,7 +26,7 @@ struct COMPCRenderTests {
     }
 
     /// A symbol's shapes as plan lines of a scratch family, so the evaluator resolves their expressions.
-    static func symbolLines(_ d: ComponentDefinition, _ type: String, _ view: ComponentSymbolView, _ level: DetailLevel) -> [(Curve2, Bool)] {
+    static func symbolLines(_ d: ComponentDefinition, _ type: String, _ view: ComponentSymbolView, _ level: DetailLevel, _ inst: [String: ParamValue] = [:]) -> [(Curve2, Bool)] {
         var f = d.family
         f.planLines = []
         var dashed: [Bool] = []
@@ -46,7 +46,7 @@ struct COMPCRenderTests {
                 for l in lines { f.planLines.append(FamilyLine(shape: l)); dashed.append(s.dashed) }
             }
         }
-        let ev = FamilyEvaluator.evaluate(f, typeName: type)
+        let ev = FamilyEvaluator.evaluate(f, typeName: type, instance: inst)
         return zip(ev.planLines.map(\.curve), dashed).map { ($0, $1) }
     }
 
@@ -69,13 +69,27 @@ struct COMPCRenderTests {
         ctx.setLineDash(phase: 0, lengths: [])
     }
 
+    /// One tile: a definition, the type and instance values to draw, and the caption.
+    struct Tile { var d: ComponentDefinition; var type: String; var values: [String: ParamValue]; var caption: String }
+
     @Test func everyComponentDrawsWithItsSymbols() throws {
+        let tiles = ComponentsC.all.map { d in Tile(d: d, type: d.defaultType!.name, values: [:], caption: "\(d.category.code) \(d.name) · \(d.defaultType!.name)") }
+        try Self.sheets(tiles, prefix: "sheet")
+    }
+
+    /// Every built-in preset drawn (mechanisms open, desks raised), on preset-N.png.
+    @Test func everyPresetDraws() throws {
+        let tiles = ComponentsC.all.flatMap { d in d.presets.map { p in Tile(d: d, type: p.typeName, values: p.values, caption: "\(d.name) · \(p.name)") } }
+        #expect(tiles.count >= 30)
+        try Self.sheets(tiles, prefix: "preset")
+    }
+
+    static func sheets(_ tiles: [Tile], prefix: String) throws {
         try FileManager.default.createDirectory(at: Self.dir, withIntermediateDirectories: true)
-        let defs = ComponentsC.all
         let (tw, th, label, sym) = (360, 300, 24, 170)
         let cols = 3, rows = 4
-        for (page, start) in stride(from: 0, to: defs.count, by: cols * rows).enumerated() {
-            let list = Array(defs[start..<min(defs.count, start + cols * rows)])
+        for (page, start) in stride(from: 0, to: tiles.count, by: cols * rows).enumerated() {
+            let list = Array(tiles[start..<min(tiles.count, start + cols * rows)])
             let cw = tw + sym, ch = th + label
             let rep = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: cols * cw, pixelsHigh: rows * ch, bitsPerSample: 8, samplesPerPixel: 4,
                                                     hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
@@ -85,12 +99,13 @@ struct COMPCRenderTests {
             let ctx = try #require(g?.cgContext)
             NSColor(white: 0.97, alpha: 1).setFill()
             NSRect(x: 0, y: 0, width: cols * cw, height: rows * ch).fill()
-            for (i, d) in list.enumerated() {
+            for (i, t) in list.enumerated() {
+                let d = t.d, type = t.type
                 let c = i % cols, r = i / cols
                 let x0 = CGFloat(c * cw), y0 = CGFloat((rows - 1 - r) * ch)
-                let type = try #require(d.defaultType?.name)
-                let ev = Self.evaluated(d, type, detail: .fine)
-                #expect(!ev.solids.isEmpty, "\(d.name) draws")
+                let ev = Self.evaluated(d, type, t.values, detail: .fine)
+                #expect(!ev.solids.isEmpty, "\(t.caption) draws")
+                #expect(ev.errors.isEmpty, "\(t.caption): \(ev.errors.prefix(2))")
                 var colors: [String: ArcusDomain.RGBColor] = [:]
                 for m in d.materials { colors[m.name] = m.finish.color }
                 ctx.saveGState()
@@ -100,20 +115,18 @@ struct COMPCRenderTests {
                 ShadedFamilyRenderer.draw(ev, colors: colors, fallback: ArcusDomain.RGBColor(hex: 0x9EA3A8), ctx, width: tw, height: th,
                                           pitch: under ? -ShadedFamilyRenderer.pitch : ShadedFamilyRenderer.pitch)
                 ctx.restoreGState()
-                let planView: ComponentSymbolView = .face
-                Self.drawSymbols(Self.symbolLines(d, type, planView, .coarse), in: CGRect(x: x0 + CGFloat(tw), y: y0 + CGFloat(th / 2), width: CGFloat(sym), height: CGFloat(th / 2)), ctx)
-                var elev = Self.symbolLines(d, type, .top, .coarse)
-                if elev.isEmpty { elev = Self.symbolLines(d, type, .side, .coarse) }
+                Self.drawSymbols(Self.symbolLines(d, type, .face, .coarse, t.values), in: CGRect(x: x0 + CGFloat(tw), y: y0 + CGFloat(th / 2), width: CGFloat(sym), height: CGFloat(th / 2)), ctx)
+                var elev = Self.symbolLines(d, type, .top, .coarse, t.values)
+                if elev.isEmpty { elev = Self.symbolLines(d, type, .side, .coarse, t.values) }
                 Self.drawSymbols(elev, in: CGRect(x: x0 + CGFloat(tw), y: y0, width: CGFloat(sym), height: CGFloat(th / 2)), ctx)
                 NSColor(white: 0.8, alpha: 1).setStroke()
                 NSRect(x: x0, y: y0, width: CGFloat(cw), height: CGFloat(ch)).frame()
                 NSRect(x: x0 + CGFloat(tw), y: y0, width: CGFloat(sym), height: CGFloat(th)).frame()
-                ("\(d.category.code) \(d.name) · \(type)" as NSString).draw(at: NSPoint(x: x0 + 6, y: y0 + CGFloat(th) + 4),
-                                                                           withAttributes: [.font: NSFont.boldSystemFont(ofSize: 12), .foregroundColor: NSColor.black])
+                (t.caption as NSString).draw(at: NSPoint(x: x0 + 6, y: y0 + CGFloat(th) + 4), withAttributes: [.font: NSFont.boldSystemFont(ofSize: 12), .foregroundColor: NSColor.black])
             }
             NSGraphicsContext.restoreGraphicsState()
             let png = try #require(rep.representation(using: .png, properties: [:]))
-            try png.write(to: Self.dir.appendingPathComponent("sheet-\(page + 1).png"))
+            try png.write(to: Self.dir.appendingPathComponent("\(prefix)-\(page + 1).png"))
         }
     }
 }
