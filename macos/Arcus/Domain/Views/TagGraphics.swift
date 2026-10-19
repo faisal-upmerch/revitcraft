@@ -171,43 +171,12 @@ extension AnnotationRenderer {
             prims.append(.text(GText(position: t.head + Vec2(0, h.y + s * 0.0008), height: 0.0018, string: v.name, alignment: .center,
                                      verticalAnchor: 0, color: st.color, halftone: st.halftone)))
             targetView = v.id
-        case .treadNumber:
-            guard let target, let l = StairGeometry.layout(target, model) else { return nil }
-            var n = 1
-            for (k, r) in l.runs.enumerated() {
-                let side = r.direction.perpendicular
-                // Numbers sit on the side of the run the user picked (measured from the first run's centreline).
-                let off: Double = k == 0 ? (t.head - r.start).dot(side) : (t.head - l.runs[0].start).dot(l.runs[0].direction.perpendicular)
-                let clamped = max(-r.width / 2 * 0.8, min(r.width / 2 * 0.8, off))
-                for i in 0..<max(r.risers - 1, 0) {
-                    let p = r.start + r.direction * ((Double(i) + 0.5) * l.treadDepth) + side * clamped
-                    prims.append(.text(GText(position: p, height: 0.002, string: "\(n)", rotation: readable(r.direction.angle + .pi / 2),
-                                             alignment: .center, verticalAnchor: 0.5, color: st.color, halftone: st.halftone)))
-                    hit.append(.rectangle(Rect2(center: p, halfSize: Vec2(s * 0.0015, s * 0.0015))))
-                    n += 1
-                }
-            }
-        case .stairPath:
-            guard let target, let l = StairGeometry.layout(target, model), !l.runs.isEmpty else { return nil }
-            var pts: [Vec2] = []
-            for r in l.runs {
-                pts.append(r.start)
-                pts.append(r.start + r.direction * (Double(max(r.risers - 1, 0)) * l.treadDepth))
-            }
-            let pathSt = GStroke(weight: 1, color: st.color, halftone: st.halftone)
-            prims.append(.polyline(pts, closed: false, pathSt))
-            let first = l.runs[0]
-            prims.append(.arc(Arc2(center: pts[0], radius: s * 0.0012, startAngle: 0, sweep: Angle.twoPi), pathSt))
-            if let lastRun = l.runs.last, pts.count >= 2 {
-                prims += arrowhead(.openArrow, at: pts[pts.count - 1], direction: lastRun.direction, scale: s * 1.4, st: st)
-            }
-            prims.append(.text(GText(position: pts[0] - first.direction * (s * 0.004), height: 0.0022, string: "UP",
-                                     rotation: readable(first.direction.angle), alignment: .center, verticalAnchor: 0.5, color: st.color, halftone: st.halftone)))
-            for q in zip(pts, pts.dropFirst()) {
-                let seg = Segment2(q.0, q.1)
-                let n = seg.length > 0 ? seg.direction.perpendicular * (s * 0.0012) : .zero
-                hit.append(Polygon2([q.0 - n, q.1 - n, q.1 + n, q.0 + n]))
-            }
+        case .treadNumber: // STAIR: every run shape (TagGraphics+STAIR.swift)
+            guard let target, let r = stairTreadNumbers(t, target: target, model: model, scale: s, st: st) else { return nil }
+            prims += r.prims; hit += r.hits
+        case .stairPath: // STAIR: through runs and landings; DN on the arrival level
+            guard let target, let r = stairPathSymbol(e, target: target, model: model, scale: s, st: st) else { return nil }
+            prims += r.prims; hit += r.hits
         case .spanDirection:
             let a = t.angle ?? target.flatMap { spanAngle($0) } ?? 0
             let d = Vec2.fromAngle(a), n = d.perpendicular

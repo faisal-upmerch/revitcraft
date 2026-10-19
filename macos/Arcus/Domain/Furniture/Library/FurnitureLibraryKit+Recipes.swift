@@ -75,8 +75,10 @@ public struct CarcassRow: Sendable {
     public var rod: Bool
     /// This row's front type (nil = the carcass's).
     public var frontType: String?
-    public init(_ front: Front = .none, height: Double? = nil, shelves: Int = 0, rod: Bool = false, frontType: String? = nil) {
-        self.front = front; self.height = height; self.shelves = shelves; self.rod = rod; self.frontType = frontType
+    /// Where this row's door handles go (nil = the default: top on low doors, bottom on wall cabinet doors).
+    public var handle: HandlePosition?
+    public init(_ front: Front = .none, height: Double? = nil, shelves: Int = 0, rod: Bool = false, frontType: String? = nil, handle: HandlePosition? = nil) {
+        self.front = front; self.height = height; self.shelves = shelves; self.rod = rod; self.frontType = frontType; self.handle = handle
     }
 }
 
@@ -210,6 +212,10 @@ extension LibraryBuilder {
                 case .flapUp: out.fronts += try front(.flap, in: bayID, type: row.frontType ?? s.flapType)
                 case .flapDown: out.fronts += try front(.flap, in: bayID, type: row.frontType ?? s.flapType ?? "Slab - Full Overlay Drop-Down")
                 }
+                if let hp = row.handle {
+                    let made = Set(out.fronts)
+                    for f in tx.model.hosted(by: bayID) where made.contains(f.id) && f.furnitureFront?.kind == .door { _ = tx.update(f.id) { $0.furnitureFront?.handlePosition = hp } }
+                }
             }
         }
         // Adjustable shelves and closet rods inside the rows (behind any doors).
@@ -314,12 +320,15 @@ extension LibraryBuilder {
                 out.aprons.append(try rail(from: Vec2(dx1 + rt, fy), to: Vec2(ax1, fy), z: under, type: apron))
                 let front = fy - aw / 2
                 let zLow = under - dr.height
-                let support = "3/4\" x 1 1/2\" Stretcher"
-                _ = support
                 out.drawer.append(try board(x: (dx0 - rt)...dx0, y: front...(by - aw / 2), z: (zLow - 0.75)...under, type: runner))
                 out.drawer.append(try board(x: dx1...(dx1 + rt), y: front...(by - aw / 2), z: (zLow - 0.75)...under, type: runner))
-                out.drawer.append(try shelf(x: dx0...dx1, y: front...(by - aw / 2), top: zLow, type: "1/2\" Plywood Shelf", role: .shelf))
-                out.drawer.append(try rail(from: Vec2(dx0, front + 0.375), to: Vec2(dx1, front + 0.375), z: under, type: "3/4\" x 3/4\" Cleat"))
+                // The drawer's runners, support and kicker in the runners' material.
+                let core = tx.model[FurniturePartTypes.Values(tx.model[type(.furniturePanels, runner)]?.typeData).material]?.name ?? "Plywood"
+                let support = "1/2\" \(core) Drawer Support", kicker = "3/4\" x 3/4\" \(core) Kicker"
+                shelfType(support, thickness: 0.5, material: core)
+                railType(kicker, width: 0.75, height: 0.75, material: core)
+                out.drawer.append(try shelf(x: dx0...dx1, y: front...(by - aw / 2), top: zLow, type: support, role: .shelf))
+                out.drawer.append(try rail(from: Vec2(dx0, front + 0.375), to: Vec2(dx1, front + 0.375), z: under, type: kicker))
             } else {
                 out.aprons.append(try rail(from: Vec2(ax0, fy), to: Vec2(ax1, fy), z: under, type: apron))
             }

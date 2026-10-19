@@ -12,6 +12,7 @@ public enum MultistoryStairs {
         var first = e
         first.stair?.multistoryTopLevelID = nil
         var out = [first]
+        let firstHeight = StairGeometry.numbers(first, model).map { $0.top - $0.base }
         let levels = model.levels.compactMap { l in l.level.map { (l.id, $0.elevation) } }.sorted { $0.1 < $1.1 }
         while let z = model[cur]?.level?.elevation, z < topZ - Tolerance.length {
             guard let next = levels.first(where: { $0.1 > z + Tolerance.length }) else { break }
@@ -20,6 +21,14 @@ public enum MultistoryStairs {
             copy.stair?.baseOffset = 0
             copy.stair?.topLevelID = next.0
             copy.stair?.topOffset = 0
+            // STAIR: a storey of another height gets the risers it needs (its own riser layout), as Revit groups a
+            // multistory stair's storeys by height.
+            if let h0 = firstHeight, let n = StairGeometry.numbers(copy, model), abs((n.top - n.base) - h0) > 0.001 {
+                copy.stair?.desiredRiserCount = nil
+                if let runs = copy.stair?.runs, !runs.isEmpty, let need = StairGeometry.numbers(copy, model)?.desired {
+                    copy.stair?.runs = StairComponents.redistribute(runs, to: need)
+                }
+            }
             out.append(copy)
             cur = next.0
         }
@@ -29,7 +38,7 @@ public enum MultistoryStairs {
     /// The paths of a railing hosted on a multistory stair, one per storey; nil otherwise.
     public static func railingPaths(_ e: Element, _ model: BIMModel) -> [[Vec3]]? {
         guard let r = e.railing, r.followsHost, let host = model[e.hostID], let storeys = storeys(of: host, model) else { return nil }
-        return storeys.map { StairGeometry.railingPath($0, model, leftSide: r.hostSideLeft) }
+        return storeys.map { StairRailings.layout(e, stair: $0, model)?.base ?? [] } // STAIR
     }
 
     /// Levels a stair can repeat up to: those above its top level.

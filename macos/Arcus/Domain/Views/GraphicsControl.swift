@@ -75,6 +75,8 @@ public enum Subcategories {
         case .furniture, .casework, .genericModels, .plumbingFixtures, .specialtyEquipment, .lightingFixtures, .electricalFixtures,
              .mechanicalEquipment, .columns, .planting, .entourage, .site, .parking:
             [FamilySubcategory.hidden.rawValue]
+        case .stairs: StairSubcategory.stairs // STAIR: Outlines, Nosing Lines, Cut Marks, Stair Path, Supports and their <Above>
+        case .railings: StairSubcategory.railings // STAIR: Top Rails, Balusters and their <Above>
         default: []
         }
     }

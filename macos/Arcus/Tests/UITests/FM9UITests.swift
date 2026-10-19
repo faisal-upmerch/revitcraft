@@ -10,7 +10,7 @@ import ArcusPersistence
 
 /// FM9: offscreen renders of the Furniture Library to `/tmp/arcus-fm9/` (every essential piece in 3D and in a front
 /// elevation, each type; the kit's recipes), and of the galleries that show it (Home ▸ Furniture, Load Furniture).
-/// `FM9_PIECES=Sofa,Bed` limits the piece renders to those names.
+/// `FM9_PIECES=Sofa,Bed` limits the piece renders to those names; `FM9_FAST=1` renders only the first type in 3D.
 @MainActor
 @Suite("FM9 Furniture Library UI", .serialized)
 struct FM9UITests {
@@ -30,10 +30,11 @@ struct FM9UITests {
     static func renderPiece(_ name: String, _ m: BIMModel) {
         let file = name.replacingOccurrences(of: " ", with: "-").replacingOccurrences(of: "'", with: "")
         let types = m.furnitureSetup?.family.types.map(\.name) ?? []
-        for (k, t) in types.enumerated() {
+        let fast = ProcessInfo.processInfo.environment["FM9_FAST"] != nil
+        for (k, t) in types.enumerated() where !fast || k == 0 {
             let suffix = types.count > 1 ? "-\(k + 1)" : ""
             write(onWhite(FurnitureThumbnail.image(m, width: 900, height: 680, type: t)), "\(file)\(suffix)-3d")
-            if k == 0 {
+            if k == 0, !fast {
                 write(onWhite(FurnitureThumbnail.image(m, width: 900, height: 680, type: t, yaw: 0, pitch: 0)), "\(file)-front")
                 write(onWhite(FurnitureThumbnail.image(m, width: 900, height: 680, type: t, yaw: -Double.pi / 2, pitch: 0)), "\(file)-side")
             }

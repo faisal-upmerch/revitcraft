@@ -119,6 +119,10 @@ cp "$ROOT/Arcus/Resources/Icon/AppIcon.icns" "$STAGE/$APP_NAME.app/Contents/Reso
 # FM3: document icons for .arcus, .arcusfamily and .arcusfurniture, drawn by the bench tool.
 swift build -c "$CONFIG" --product arcus-bench >> "$LOG" 2>&1
 "$BIN_DIR/arcus-bench" --document-icons "$STAGE/$APP_NAME.app/Contents/Resources" >/dev/null
+# FM9: the Furniture Library (every registered piece, thumbnails and index.json), built by the bench tool.
+"$BIN_DIR/arcus-bench" --furniture-library "$STAGE/$APP_NAME.app/Contents/Resources/Furniture Library" \
+  --app-version "$VERSION" --app-build "$BUILD" >> "$LOG" 2>&1 || { echo "✗ Furniture Library build failed (see $LOG)"; exit 1; }
+echo "✓ Furniture Library: $(find "$STAGE/$APP_NAME.app/Contents/Resources/Furniture Library" -name '*.arcusfurniture' -maxdepth 2 | wc -l | tr -d ' ') pieces"
 find "$BIN_DIR" -maxdepth 1 -name "*.bundle" -exec cp -R {} "$STAGE/$APP_NAME.app/Contents/Resources/" \; 2>/dev/null || true
 mkdir -p "$STAGE/$APP_NAME.app/Contents/Resources/Docs"
 cp "$ROOT"/Docs/*.md "$STAGE/$APP_NAME.app/Contents/Resources/Docs/" 2>/dev/null || true

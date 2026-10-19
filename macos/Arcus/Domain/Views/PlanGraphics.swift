@@ -278,43 +278,15 @@ struct PlanGraphics {
 
     // MARK: Stairs & railings
 
-    func stairs(_ list: [(Element, GraphicOverride)]) -> [GItem] {
-        var items: [GItem] = []
-        let list = list.flatMap { x in (MultistoryStairs.storeys(of: x.0, model) ?? [x.0]).map { ($0, x.1) } } // F2: each storey in its level's plans
-        for (e, o) in list {
-            guard let l = StairGeometry.layout(e, model), l.baseZ <= cutZ + 0.01, l.topZ >= depthZ else { continue }
-            let lines = StairGeometry.planLines(e, model, cutZ: cutZ)
-            let st = builder.stroke(.stairs, cut: false, o)
-            let cutSt = builder.stroke(.stairs, cut: true, o)
-            var prims: [GPrimitive] = []
-            for s in lines.outline { prims.append(.polyline([s.start, s.end], closed: false, cutSt)) }
-            for s in lines.treads { prims.append(.polyline([s.start, s.end], closed: false, st)) }
-            if builder.detailLevel(.stairs) == .fine { // BL-VG
-                let hidden = GStroke(weight: 1, color: st.color, pattern: .hidden, halftone: st.halftone)
-                for s in lines.above { prims.append(.polyline([s.start, s.end], closed: false, hidden)) }
-            }
-            if let b = lines.breakLine {
-                let m = b.midpoint, d = b.direction, n = b.normal * builder.paper(0.0015)
-                let zig = [b.start, m - d * builder.paper(0.002), m + n, m - n, m + d * builder.paper(0.002), b.end]
-                prims.append(.polyline(zig, closed: false, st))
-            }
-            if lines.walk.count >= 2 {
-                prims.append(.polyline(lines.walk, closed: false, st))
-                let end = lines.walk.last!, prev = lines.walk[lines.walk.count - 2]
-                let d = (end - prev).normalized, n = d.perpendicular
-                let a = builder.paper(0.0025)
-                prims.append(.polyline([end - d * a + n * a * 0.4, end, end - d * a - n * a * 0.4], closed: false, st))
-                prims.append(.text(GText(position: lines.walk[0] - d * builder.paper(0.003), height: 0.0022, string: "UP", alignment: .center, verticalAnchor: 0.5)))
-            }
-            let hit = l.runs.map { l.runRect($0) } + l.landings.map(\.polygon)
-            items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: hit))
-        }
-        return items
-    }
+    func stairs(_ list: [(Element, GraphicOverride)]) -> [GItem] { stairItems(list) } // STAIR: PlanGraphics+STAIR.swift
 
     func railings(_ list: [(Element, GraphicOverride)]) -> [GItem] {
         var items: [GItem] = []
         for (e, o) in list {
+            if let r = e.railing, r.followsHost, let host = model[e.hostID], host.stair != nil { // STAIR: cut like its stair
+                if let item = stairRailingItem(e, o, host: host) { items.append(item) }
+                continue
+            }
             // F2: a multistory stair's railing shows on each storey's plan.
             let paths = MultistoryStairs.railingPaths(e, model) ?? [RailingGeometry.path(e, model)]
             guard let path = paths.first(where: { p in let z0 = p.map(\.z).min() ?? 0; return p.count >= 2 && z0 <= cutZ + 1.2 && z0 >= depthZ - 0.1 }) else { continue }

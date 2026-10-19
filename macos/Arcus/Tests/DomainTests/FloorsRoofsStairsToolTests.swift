@@ -133,6 +133,8 @@ struct FloorsRoofsStairsToolTests {
 
     // MARK: Edit Stair
 
+    /// STAIR: Edit Stairs reads an older L stair as its runs; dragging run 1's end arrow adds whole treads and run 2's
+    /// start arrow takes them back (risers moved between the flights); a side arrow widens the run from that side.
     @Test func editStairMovesRisersBetweenFlightsAndWidens() throws {
         let (ctx, ids) = context()
         var sid: ElementID!
@@ -141,50 +143,56 @@ struct FloorsRoofsStairsToolTests {
                             typeID: ids.systemTypes["Stair"], levelID: ids.levels[0])
         }
         let before = try #require(StairGeometry.layout(ctx.model[sid]!, ctx.model))
-        let tool = try #require(EditStairTool(ctx: ctx, stairID: sid))
-        let handles = Dictionary(uniqueKeysWithValues: tool.handles().map { ($0.0, $0.1) })
-        #expect(Set(handles.keys) == Set(EditStairTool.Handle.allCases))
-        // Drag the landing two treads further along the first run.
-        let land = handles[.landing]!
-        tool.pointerDown(ToolInput(point: land, rawPoint: land))
-        let to = land + Vec2(2 * before.treadDepth, 0)
-        tool.pointerDragged(ToolInput(point: to, rawPoint: to))
-        tool.pointerUp(ToolInput(point: to, rawPoint: to))
-        #expect(tool.draft.firstRunRisers == before.runs[0].risers + 2)
-        // Drag the left width handle out by 0.1 m.
-        let wl = tool.handles().first { $0.0 == .widthLeft }!.1
-        tool.pointerDown(ToolInput(point: wl, rawPoint: wl))
-        let wl2 = wl + Vec2(0, 0.1)
-        tool.pointerDragged(ToolInput(point: wl2, rawPoint: wl2))
-        tool.pointerUp(ToolInput(point: wl2, rawPoint: wl2))
-        #expect(Fx.approx(tool.draft.width, 1.3))
-        #expect(ctx.model[sid]!.stair!.width == 1.1, "nothing changes before Finish")
+        let tool = try #require(StairTool(ctx: ctx, editing: sid))
+        #expect(tool.modifying && tool.draft.runs?.count == 2)
+        func drag(_ from: Vec2, _ to: Vec2) {
+            tool.pointerDown(ToolInput(point: from, rawPoint: from))
+            tool.pointerDragged(ToolInput(point: to, rawPoint: to))
+            tool.pointerUp(ToolInput(point: to, rawPoint: to))
+        }
+        // Select run 1 and drag its end two treads on.
+        click(tool, before.runs[0].walkPoint(1))
+        #expect(tool.selection == .run(0))
+        let end = try #require(tool.grips().first { $0.1 == .end }?.0)
+        drag(end, end + Vec2(2 * before.treadDepth, 0))
+        #expect(tool.draft.runs?[0].risers == before.runs[0].risers + 2)
+        // Run 2's start arrow two treads back along it.
+        click(tool, before.runs[1].walkPoint(1))
+        #expect(tool.selection == .run(1))
+        let start = try #require(tool.grips().first { $0.1 == .start }?.0)
+        drag(start, start + before.runs[1].direction * (2 * before.treadDepth))
+        #expect(tool.draft.runs?[1].risers == before.runs[1].risers - 2)
+        // Widen run 2 from its left by 0.2 m.
+        let wl = try #require(tool.grips().first { $0.1 == .widthLeft }?.0)
+        drag(wl, wl + before.runs[1].direction.perpendicular * 0.2)
+        #expect(Fx.approx(tool.draft.runs?[1].width ?? 0, 1.3))
+        #expect(ctx.model[sid]!.stair!.runs == nil, "nothing changes before Finish")
         #expect(tool.finish())
         let after = try #require(StairGeometry.layout(ctx.model[sid]!, ctx.model))
         #expect(after.runs[0].risers == before.runs[0].risers + 2)
         #expect(after.riserCount == before.riserCount)
-        #expect(Fx.approx(ctx.model[sid]!.stair!.width, 1.3))
-        #expect(ctx.session.undoManager.undoActionName == "Edit Stair")
+        #expect(Fx.approx(after.runs[1].width, 1.3))
+        #expect(ctx.session.undoManager.undoActionName == "Edit Stairs")
     }
 
+    /// STAIR: the Options Bar edits the selected run; Cancel Edit Mode leaves the stair as it was.
     @Test func editStairOptionsAndCancel() throws {
         let (ctx, ids) = context()
         var sid: ElementID!
         ctx.session.perform("Stair") { tx in
             sid = tx.create(.stairs, data: .stair(StairData(origin: .zero, direction: 0, topLevelID: ids.levels[1])), typeID: ids.systemTypes["Stair"], levelID: ids.levels[0])
         }
-        let tool = try #require(EditStairTool(ctx: ctx, stairID: sid))
-        #expect(!tool.options.contains { $0.id == "firstRun" })
-        tool.setOption("shape", .text(StairShape.uShaped.rawValue))
-        tool.setOption("risers", .int(24))
-        #expect(tool.options.contains { $0.id == "firstRun" })
-        tool.setOption("firstRun", .int(10))
-        #expect(tool.draft.firstRunRisers == 10)
+        let tool = try #require(StairTool(ctx: ctx, editing: sid))
+        #expect(!tool.options.contains { $0.id == "selRisers" })
+        click(tool, Vec2(1, 0))
+        #expect(tool.options.contains { $0.id == "selRisers" })
+        tool.setOption("selRisers", .int(24))
+        #expect(tool.draft.runs?[0].risers == 24)
         tool.cancelSketch()
-        #expect(ctx.model[sid]!.stair!.shape == .straight)
-        let t2 = try #require(EditStairTool(ctx: ctx, stairID: sid))
-        t2.setOption("shape", .text(StairShape.uShaped.rawValue))
-        t2.setOption("risers", .int(24))
+        #expect(ctx.model[sid]!.stair!.runs == nil)
+        let t2 = try #require(StairTool(ctx: ctx, editing: sid))
+        click(t2, Vec2(1, 0))
+        t2.setOption("selRisers", .int(24))
         #expect(t2.finish())
         #expect(StairGeometry.layout(ctx.model[sid]!, ctx.model)?.riserCount == 24)
     }

@@ -129,6 +129,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
   - Sofa, Coffee Table, TV Stand, Armchair, Side Table, Bookshelf, Bed, Bedside Table, Wardrobe, Dresser, Dressing Table, Dining Table, Dining Chair, Sideboard
   - Kitchen Cabinet, Pantry Cabinet, Study Desk, Office Chair, Storage Cabinet, Shoe Rack, Entryway Bench, Bathroom Vanity, Shelving Unit, Ottoman, Console Table
 - **The rest (simple):** correct overall form from panels, legs and fronts, parametric W/D/H and materials, one or two types.
+- Each piece's types are its standard sizes. Search covers names, rooms and keywords.
 - Repeats in the list (Kitchen Island, Bunk Bed, Corner Shelf, Rocking Chair, Lounge Chair, Nesting Tables, Storage Bed, Storage Cabinet, Storage Chest, Folding Chair, Plant Stand, Room Divider) are one file, listed under each room.
 
 ## 4. Home redesign
@@ -164,5 +165,5 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM6 | ✅ Joints: solver, Joint Rules, Joint tool (JT), machining geometry, cut sizes (port/FM6). Open: Properties shows only joints you set; panels with Edit Profile or openings, round rails and slats aren't joined; a back grooved on four sides leaves its 3D corners open | FM4 |
 | FM7 | ✅ Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Edge Banding, Cost, Stock Sheets, nesting engine and views, CNC Export, Shop Drawings F101–F104, Check Parts (port/FM7). Open: F104 is an annotated 3D view, not exploded; slats and shaped panels other than Edit Profile get outlines only in CNC; labor and markup are Global Parameters; part tags can crowd small elevations | FM5, FM6 |
 | FM8 | ✅ Full compile, Edit Family round trip, projects load `.arcusfurniture`, Load Furniture, Save as Furniture Template, `.arcusfamily` opens (port/FM8). Open: drops on the 3D view; door swings in project elevations; Fine machining keeps the document's hinge count | FM5, FM6 |
-| FM9 | Library: Top 25 high detail + the rest simple, bundled, on Home and in Load Furniture | FM8 |
+| FM9 | ✅ Library: the Top 25 at high detail (+ Kitchen Wall Cabinet, Kitchen Base Cabinet - Single Door) built with the Furniture Library kit (port/FM9); 83 simple pieces (port/FM9B); `arcus-bench --furniture-library` writes the files and index.json; Home ▸ Furniture, Load Furniture and the Component Library list pieces by room. Open: one piece can't switch between single and pair doors per type; parts flex proportionally between the planes; a few simple pieces are approximations (Corner Cabinet, Storage Bed drawers at the foot, Wine Rack as cubbies) because bays only face the front | FM8 |
 | FM10 | Docs, keyboard shortcuts, QA checks (Home, Family Editor, Furniture mode), verification | all |

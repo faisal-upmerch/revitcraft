@@ -281,6 +281,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Joint |  | `JT` | Shows a marker at every joint; pick one to set its type (butt, miter, dado, dowel, cam lock…), which part runs through, and its sizes. |
 | Allow Join |  |  | Lets the selected parts join at their ends again. |
 | Disallow Join |  |  | Stops the selected parts joining at their ends: they stay as drawn. |
+| Edit Path |  |  | Sketches a new path for the selected stair railing; it keeps following the stair's height. |
+| Reset Railing |  |  | Puts the selected stair railing back on the stair's edge. |
 
 ### Architecture
 
@@ -400,6 +402,25 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Drawer |  | `DW` | Places drawers in a bay: the front, its box and slides sized from the bay. Number stacks that many drawers (EQ). |
 | Flap |  | `FP` | Places a lift-up or drop-down flap in a bay (in plan: a lid on a top-access bay), with its hinges and stays. |
 | Hardware |  | `HW` | Places a hardware type (hinge, slide, handle, glide, caster, pin, connector) as a component. Doors and drawers place their own. |
+| Stair |  |  | Creates a stair by components: sketch its runs, landings and supports, then Finish Edit Mode. |
+| Run |  |  | Draws stair runs: straight, spiral, winder, or sketched with boundary, riser and path lines. |
+| Landing |  |  | Adds a landing between two runs, or sketches its boundary. |
+| Support |  |  | Adds a stringer or carriage along a picked run edge. |
+| Straight |  |  | Draws a straight run: click its start, then its end. |
+| Full-Step Spiral |  |  | Draws a spiral run of all the remaining risers: click its centre, then its start. |
+| Center-Ends Spiral |  |  | Draws a spiral run: click its centre, its start and its end. |
+| L-Shape Winder |  |  | Places an L-shaped run with winders at the turn; Space rotates it. |
+| U-Shape Winder |  |  | Places a U-shaped run with winders at both turns; Space rotates it. |
+| Create Sketch |  |  | Sketches a run with boundary, riser and stair path lines. |
+| Pick Two Runs |  |  | Creates the landing that joins two runs you pick. |
+| Create Sketch |  |  | Sketches a landing's boundary. |
+| Pick Edges |  |  | Adds a support along the run edges you pick. |
+| Boundary |  |  | Draws the boundary lines of a sketched run. |
+| Riser |  |  | Draws the riser lines of a sketched run. |
+| Stair Path |  |  | Draws the stair path of a sketched run, from the bottom to the top. |
+| Railing |  |  | Chooses the railing type the stair gets (or None) and whether it sits on the treads or the stringer. |
+| Flip |  |  | Reverses the stair's up direction. |
+| Pick Stair |  |  | Adds the outline of the stair you pick to the shaft sketch. |
 
 ### Structure
 

@@ -375,7 +375,7 @@ enum Essentials {
                          description: "Frameless wall cabinet: pair of Shaker doors, two adjustable shelves; hang with its base at 54\"") { k in
             shaker(k)
             try k.carcass(CarcassSpec(panel: whitePanel, top: .inside("3/4\" Painted MDF Shelf (White)"), base: .floor,
-                                      columns: [CarcassColumn(CarcassRow(.pair, shelves: 2))], shelf: "3/4\" Painted MDF Shelf (White)",
+                                      columns: [CarcassColumn(CarcassRow(.pair, shelves: 2, handle: .bottom))], shelf: "3/4\" Painted MDF Shelf (White)",
                                       pairType: "Shaker White Pair - Bar Pull"))
         }
     }
@@ -385,7 +385,7 @@ enum Essentials {
                          description: "Tall pantry: pairs of Shaker doors over adjustable shelves, a fixed shelf between, toe kick") { k in
             shaker(k, pulls: "192 mm")
             try k.carcass(CarcassSpec(panel: whitePanel, top: .inside("3/4\" Painted MDF Shelf (White)"), base: .plinth(height: 4, setback: 3),
-                                      columns: [CarcassColumn(CarcassRow(.pair, height: 30, shelves: 1), CarcassRow(.pair, shelves: 3))],
+                                      columns: [CarcassColumn(CarcassRow(.pair, height: 30, shelves: 1), CarcassRow(.pair, shelves: 3, handle: .bottom))],
                                       shelf: "3/4\" Painted MDF Shelf (White)", pairType: "Shaker White Pair - Bar Pull"))
         }
     }
