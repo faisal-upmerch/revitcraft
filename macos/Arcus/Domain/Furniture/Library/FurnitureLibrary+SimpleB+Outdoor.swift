@@ -156,9 +156,10 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A hanging egg chair on a stand: a cross base under a round base plate, a pole with an arm over the chair, a chain and a
-    /// rattan basket (a revolve open at the front) with a seat cushion. FMG1: the base plate's sketch is locked to the planes
-    /// (its edge keeps its distance in from the Right), the basket grows with Width and hangs from the Top.
+    /// A hanging egg chair on a stand: a cross base under a round base plate, a pole with an arm over the chair, a
+    /// chain and a rattan basket (a revolve open at the front) with a seat cushion. FMG1: the base plate's sketch is
+    /// locked to the planes (its edge keeps its distance in from the Right); the basket grows with Width and hangs from
+    /// the Top.
     static func hangingChair() throws -> BIMModel {
         let p = try SBBuilder("Hanging Chair", .furniture, [SBSize(40, 40, 78), SBSize(36, 36, 74)], material: "Rattan")
         try p.step("Stand, Basket and Cushion") { s in
