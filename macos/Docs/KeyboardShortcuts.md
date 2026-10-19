@@ -468,6 +468,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Load as Group… |  |  | Loads the model of another Arcus project as a model group, placed at the internal origin. |
 | Insert Views from File… |  |  | Copies drafting views, legends and schedules (with their 2D content) from another project file. |
 | Insert 2D Elements from File… |  |  | Copies the 2D elements of a drafting view or legend in another project into the current view. |
+| Load Furniture… |  |  | Shows the Furniture Library (bundled pieces and your furniture templates) to load a piece as a family and place it. |
 
 ### Annotate
 
@@ -813,6 +814,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Export DWG… |  |  | Exports views and sheets as 2D DWG drawings (AutoCAD 2000 to 2018 formats), one file each. |
 | New Furniture… |  |  | Creates a Furniture document: a custom piece with parameters, cut lists and shop drawings. |
 | CNC Export |  |  | Writes DXF or DWG programs per part or per nested sheet (outline, drilling, grooves, pockets, grain, labels) and a CSV part list. |
+| Save as Furniture Template… |  |  | Saves this piece with a preview in your Furniture Templates, under a room, so it appears on Home ▸ Furniture and in Load Furniture. |
 
 ### Arcus
 
