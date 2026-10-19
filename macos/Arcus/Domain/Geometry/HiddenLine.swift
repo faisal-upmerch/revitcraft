@@ -162,13 +162,63 @@ public enum HiddenLineRenderer {
             }
             var firstVertex: [Int: Int] = [:]
             for (i, w) in wid.enumerated() where firstVertex[w] == nil { firstVertex[w] = i }
+            var boundary: [(key: SIMD2<Int>, ia: Int, ib: Int, tri: Int)] = []
             for key in edgeOrder {
                 let tris = edgeTris[key] ?? []
                 let ia = firstVertex[key.x] ?? 0, ib = firstVertex[key.y] ?? 0
                 if tris.count == 1 {
-                    add(key, ia, ib, silhouette: false)
+                    boundary.append((key, ia, ib, tris[0]))
                 } else if tris.contains(where: { front[$0] }) && tris.contains(where: { !front[$0] }) {
                     add(key, ia, ib, silhouette: true)
+                }
+            }
+            // HOUSE: T-junctions inside a flat face (a long edge on one side, collinear shorter edges on the other, as
+            // when two wall openings share a sill line) leave "boundary" edges that are not edges of the shape. The
+            // parts of a boundary edge covered by coplanar boundary edges of the same face are dropped.
+            func unitNormal(_ t: Int) -> Vec3 {
+                let pa = m.positions[Int(m.indices[3 * t])], pb = m.positions[Int(m.indices[3 * t + 1])], pc = m.positions[Int(m.indices[3 * t + 2])]
+                return (pb - pa).cross(pc - pa).normalized
+            }
+            func lineKey(_ a: Vec3, _ b: Vec3) -> SIMD4<Int>? {
+                var d = (b - a).normalized
+                guard d.length > 0.5 else { return nil }
+                if d.x < -1e-9 || (abs(d.x) <= 1e-9 && (d.y < -1e-9 || (abs(d.y) <= 1e-9 && d.z < 0))) { d = d * -1 }
+                let p0 = a - d * a.dot(d)
+                let q = 1e4
+                return SIMD4(Int((d.x * 1e3).rounded()) &* 4_000 &+ Int((d.y * 1e3).rounded()), Int((p0.x * q).rounded()), Int((p0.y * q).rounded()), Int((p0.z * q).rounded()))
+            }
+            var byLine: [SIMD4<Int>: [Int]] = [:]
+            for (i, e) in boundary.enumerated() {
+                if let k = lineKey(m.positions[e.ia], m.positions[e.ib]) { byLine[k, default: []].append(i) }
+            }
+            for (i, e) in boundary.enumerated() {
+                let a = m.positions[e.ia], b = m.positions[e.ib]
+                let len = a.distance(to: b)
+                var covered: [(Double, Double)] = []
+                if len > Tolerance.length, let k = lineKey(a, b), let group = byLine[k], group.count > 1 {
+                    let n = unitNormal(e.tri), d = (b - a) / len
+                    for j in group where j != i {
+                        let f = boundary[j]
+                        let fa = m.positions[f.ia], fb = m.positions[f.ib]
+                        guard unitNormal(f.tri).dot(n) > 1 - 1e-9, abs((fa - a).dot(n)) <= Tolerance.length else { continue }
+                        // Both ends on this edge's line.
+                        guard (fa - a - d * (fa - a).dot(d)).length <= Tolerance.length, (fb - a - d * (fb - a).dot(d)).length <= Tolerance.length else { continue }
+                        let t0 = max(0, min((fa - a).dot(d), (fb - a).dot(d))), t1 = min(len, max((fa - a).dot(d), (fb - a).dot(d)))
+                        if t1 - t0 > Tolerance.length { covered.append((t0, t1)) }
+                    }
+                }
+                guard !covered.isEmpty else { add(e.key, e.ia, e.ib, silhouette: false); continue }
+                covered.sort { $0.0 < $1.0 }
+                var pieces: [(Double, Double)] = [], at = 0.0
+                for (t0, t1) in covered {
+                    if t0 - at > Tolerance.length { pieces.append((at, t0)) }
+                    at = max(at, t1)
+                }
+                if len - at > Tolerance.length { pieces.append((at, len)) }
+                let excluded = (edgeTris[e.key] ?? []).map { $0 + sourceBase }
+                let va = view[e.ia], vb = view[e.ib]
+                for (t0, t1) in pieces {
+                    local.append(Candidate(tag: input.tag, a: va + (vb - va) * (t0 / len), b: va + (vb - va) * (t1 / len), silhouette: false, excluded: excluded))
                 }
             }
             candidates.append(contentsOf: local)

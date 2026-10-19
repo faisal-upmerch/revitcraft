@@ -129,7 +129,7 @@ struct CommandRouter {
         perform(id)
     }
 
-    private var alwaysAllowed: Set<CommandID> { [.modify, .commandSearch, .preferences, .about, .onboarding, .keyboardShortcuts] }
+    private var alwaysAllowed: Set<CommandID> { [.modify, .commandSearch, .preferences, .about, .onboarding, .keyboardShortcuts, .designWithClaude] }
 
     func makeTool(_ id: CommandID) -> (any InteractiveTool)? {
         if let t = s3d2MakeTool(id) { return t } // S3D2: on a 3D view's reference-plane or face work plane

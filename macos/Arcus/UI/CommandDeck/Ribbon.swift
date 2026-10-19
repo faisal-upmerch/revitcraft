@@ -61,6 +61,7 @@ struct RibbonItem: Hashable {
         case .siteLibrary where size == .large: return "Site\nLibrary" // W2-LIB
         case .viewTemplatesManage where split: return size == .large ? "View\nTemplates" : "View Templates" // BL-VG
         case .userInterface where split: return "User\nInterface" // BL-VG
+        case .designWithClaude: return "Claude" // MCP
         case .foundationIsolated where split: return "Foundation" // BL-VG
         case .joinSolids where split: return "Join" // BL-VG
         case .cutGeometry where split: return "Cut" // BL-VG
@@ -250,7 +251,8 @@ enum RibbonContent {
                     RibbonPanel(title: "Manage Project", items: [.large(.manageLinks), .small(.decalTypes), .large(.startingView), .small(.familyEditor)], tint: manage), // F11: Starting View; F67: Decal Types
                     RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
                     RibbonPanel(title: "Selection", items: [.small(.saveSelection), .small(.loadSelection), .small(.editSelection)], tint: manage), // F11
-                    RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage)] // BL-VG
+                    RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage), // BL-VG
+                    RibbonPanel(title: "Add-Ins", items: [.large(.designWithClaude)], tint: manage)] // MCP: Design with Claude
         }
     }
 

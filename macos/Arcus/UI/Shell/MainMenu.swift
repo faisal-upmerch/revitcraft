@@ -54,7 +54,7 @@ enum MainMenuBuilder {
         ])
         NSApp.windowsMenu = window.submenu
         main.addItem(window)
-        let help = submenu("Help", commands([.onboarding, .keyboardShortcuts, .commandSearch]))
+        let help = submenu("Help", commands([.onboarding, .designWithClaude, .keyboardShortcuts, .commandSearch])) // MCP: Design with Claude
         NSApp.helpMenu = help.submenu
         main.addItem(help)
         return main
