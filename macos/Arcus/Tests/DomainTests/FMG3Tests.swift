@@ -508,7 +508,8 @@ struct FMG3Tests {
         #expect(try leaves("B21").1 == 1 && leaves("B24").1 == 2)
         // Properties: Leaf Count follows the parameter (its own value locked), Leaves shows the count now.
         let entries = Parameters.instanceEntries(t30[door.id]!, t30)
-        #expect(entries.first { $0.name == "Leaf Count Parameter" }?.value?.textValue == "Leaf Count")
+        #expect(FurnitureAssociations.association(FurnitureFrontParameters.leafCount.id, t30[door.id]!) == "Leaf Count") // FMG4: the = button, no text row
+        #expect(!entries.contains { $0.name == "Leaf Count Parameter" })
         #expect(entries.first { $0.name == "Leaves" }?.value?.intValue == 2)
         #expect(entries.first { $0.name == "Leaf Count" }?.isReadOnly == true || entries.first { $0.name == "Leaf Count" } != nil)
 

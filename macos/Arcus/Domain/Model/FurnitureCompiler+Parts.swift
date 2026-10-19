@@ -79,6 +79,8 @@ extension FurnitureCompiler {
         var nestedNames: [String: String] = [:] // family content → nested family name
         for part in parts {
             let e = overrides[part.id] ?? part
+            let (s0, n0) = (f.solids.count, f.nestedInstances.count) // FMG4: Visible
+            defer { FurnitureAssociations.apply(part, solidsFrom: s0, nestedFrom: n0, to: &f) }
             var ps = FurniturePartSolids.solids(e, m, ctx)
             for h in m.hosted(by: part.id) where h.furnitureEdgeProfile != nil { ps.placed += FurniturePartSolids.solids(h, m, ctx).placed }
             let label = m.type(of: e)?.name ?? (e.mark.isEmpty ? e.category.singularName : e.mark)

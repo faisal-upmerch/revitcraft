@@ -126,3 +126,94 @@ struct FMG4AutoScaleTests {
         #expect(m[dim.id]?.params[FurnitureAutoScale.rowParam] == nil)
     }
 }
+
+/// FMG4: Associate Family Parameter (the = button): Leaf Count with an Integer or Yes/No parameter (a new one made in
+/// the dialog too), Visible of parts and fronts with a Yes/No parameter (an optional seat cushion), unassociating, and
+/// the compiled family showing the part by the parameter.
+@Suite("FMG4 associate family parameter") @MainActor
+struct FMG4AssociateTests {
+    @Test func leafCountAssociatesWithANewOrExistingParameter() throws {
+        let m = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" }).build()
+        let door = try #require(m.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .door })
+        let lc = FurnitureFrontParameters.leafCount.id
+        #expect(FurnitureAssociations.compatibleTypes(lc, door) == [.integer, .bool])
+        #expect(FurnitureAssociations.compatibleParameters(lc, door, m).map(\.name).contains("Leaf Count"))
+        let s = DocumentSession(model: m)
+        // A new Yes/No parameter, made and associated in one step: Yes in every type, so every type is a pair.
+        _ = s.perform("Associate") { tx in
+            try FurnitureAssociations.associate([door.id], lc, with: "Pair", adding: FamilyParameter(name: "Pair", type: .bool, group: .construction), in: tx)
+        }
+        #expect(s.lastError == nil)
+        #expect(FurnitureAssociations.association(lc, s.model[door.id]!) == "Pair")
+        #expect(FurnitureFronts.leafCount(s.model[door.id]!, s.model) == 2)
+        let entry = Parameters.instanceEntries(s.model[door.id]!, s.model).first { $0.name == "Leaf Count" }
+        #expect(entry?.isReadOnly == true && entry?.readOnlyReason?.contains("Pair") == true)
+        // A Length parameter isn't compatible; an existing name can't be made again.
+        _ = s.perform("Bad") { tx in try FurnitureAssociations.associate([door.id], lc, with: "Width", in: tx) }
+        #expect(s.lastError != nil)
+        _ = s.perform("Twice") { tx in
+            try FurnitureAssociations.associate([door.id], lc, with: "Pair", adding: FamilyParameter(name: "Pair", type: .bool, group: .construction), in: tx)
+        }
+        #expect(s.lastError != nil)
+        // <None>: the door's own (type's) count again.
+        _ = s.perform("None") { tx in try FurnitureAssociations.associate([door.id], lc, with: nil, in: tx) }
+        #expect(FurnitureAssociations.association(lc, s.model[door.id]!) == nil)
+    }
+
+    @Test func theEntrywayBenchCushionIsOptionalByType() throws {
+        let m = try #require(FurnitureLibrary.essentials.first { $0.name == "Entryway Bench" }).build()
+        #expect(LibraryKit.buildError(m) == nil)
+        let setup = try #require(m.furnitureSetup)
+        #expect(setup.family.types.map(\.name) == ["36\"", "48\"", "60\""])
+        #expect(setup.family.parameter(named: "Seat Cushion")?.type == .bool)
+        let cushion = try #require(m.elements(.furnitureForms).first { FurnitureAssociations.association(FurnitureAssociations.visible, $0) == "Seat Cushion" })
+        #expect(Parameters.instanceEntries(cushion, m).first { $0.name == "Visible" }?.isReadOnly == true)
+        var f = FurnitureCompiler.family(from: m)
+        func top(_ f: FamilyDefinition) -> Double { FamilyEvaluator.evaluate(f, typeName: f.types[0].name, units: .imperial).solids.filter { !$0.isVoid }.map(\.bounds.max.z).max() ?? 0 }
+        #expect(abs(top(f) - 18 * 0.0254) < 1e-3, "\(top(f) / 0.0254)")
+        f.types[0].values["Seat Cushion"] = .bool(false)
+        #expect(abs(top(f) - 16 * 0.0254) < 1e-3, "\(top(f) / 0.0254)")
+    }
+
+    @Test func aPartNotVisibleIsLeftOutOfTheLoadedFamily() throws {
+        let m = try #require(FurnitureLibrary.essentials.first { $0.name == "Entryway Bench" }).build()
+        let s = DocumentSession(model: m)
+        let cushion = try #require(m.elements(.furnitureForms).first)
+        _ = s.perform("None") { tx in try FurnitureAssociations.associate([cushion.id], FurnitureAssociations.visible, with: nil, in: tx) }
+        s.setParameter(FurnitureAssociations.visible, value: .bool(false), on: [cushion.id], name: "Visible")
+        let f = FurnitureCompiler.family(from: s.model)
+        let ev = FamilyEvaluator.evaluate(f, typeName: f.types[0].name, units: .imperial)
+        #expect((ev.solids.filter { !$0.isVoid }.map(\.bounds.max.z).max() ?? 0) < 16.01 * 0.0254)
+    }
+}
+
+/// FMG4: drawers on a side face get the stock slide length that fits as the loaded piece flexes (their depth runs
+/// along X), as front drawers do along Y.
+@Suite("FMG4 side drawers flex") @MainActor
+struct FMG4SideDrawerTests {
+    static let i = 0.0254
+
+    @Test func sideDrawerBoxesTakeTheSlideThatFits() throws {
+        let s = try FMG3Tests.sideOpenBox()
+        let left = try #require(BayFrame(view: try FMG3Tests.view(s.model, "Left").view))
+        var drawers: [ElementID] = []
+        _ = s.perform("Drawers") { tx in
+            let bay = try FurnitureBays.createBay(face: .front, at: Vec2(0, 9 * Self.i), frame: left, in: tx)
+            drawers = try FurnitureFronts.createFront(.drawer, in: bay, in: tx)
+        }
+        #expect(s.lastError == nil && drawers.count == 1)
+        let mark = try #require(s.model[drawers[0]]?.mark)
+        let f = FurnitureCompiler.family(from: s.model)
+        func box(_ width: Double) throws -> Double {
+            var g = f
+            g.types[0].values["Width"] = .double(width * Self.i)
+            let ev = FamilyEvaluator.evaluate(g, typeName: g.types[0].name, units: .imperial)
+            #expect(ev.errors.isEmpty, "\(ev.errors.prefix(2))")
+            let side = try #require(ev.solids.first { $0.name == "\(mark) Box Left Side" })
+            return side.bounds.size.x / Self.i
+        }
+        let wide = try box(60), narrow = try box(21)
+        #expect(abs(wide - 24) < 1e-3, "60\" wide: a 24\" slide, got \(wide)")
+        #expect(abs(narrow - 20) < 1e-3, "21\" wide (20 3/4\" clear): a 20\" slide, got \(narrow)")
+    }
+}

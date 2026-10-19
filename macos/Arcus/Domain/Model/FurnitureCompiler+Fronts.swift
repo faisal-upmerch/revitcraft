@@ -66,11 +66,14 @@ extension FurnitureCompiler {
         var slideLengths: [ElementID: String] = [:] // FM8: drawers' stock slide length by bay depth
         var frontSolidIDs: [String] = [] // FMG3: what hinge cups bore
         for (front, mm, visibility) in work {
+            let (s0, n0) = (f.solids.count, f.nestedInstances.count) // FMG4: Visible
+            defer { FurnitureAssociations.apply(front, solidsFrom: s0, nestedFrom: n0, to: &f) }
             var ps = FurnitureFrontSolids.solids(front, mm, ctx, boxDetail: [.fine], frontDetail: [.medium, .fine])
             let label = "\(front.furnitureFront?.kind.rawValue ?? "Front") \(mm.type(of: front)?.name ?? "")"
-            if let (length, start) = slideLengthFormula(front, mm, f), let box = FurnitureFronts.drawerBox(front, mm) { // FM8
-                slideLengths[front.id] = length
-                flexDrawerBox(&ps.solids, mark: front.mark.isEmpty ? (front.furnitureFront?.kind.rawValue ?? "Front") : front.mark, length: length, start: start, back: box.back)
+            if let sl = slideLengthFormula(front, mm, f), let box = FurnitureFronts.drawerBox(front, mm) { // FM8 (FMG4: any square face)
+                slideLengths[front.id] = sl.formula
+                flexDrawerBox(&ps.solids, mark: front.mark.isEmpty ? (front.furnitureFront?.kind.rawValue ?? "Front") : front.mark, length: sl.formula, start: sl.start,
+                              back: box.back, axis: sl.axis, sign: sl.sign)
             }
             for var s in ps.solids {
                 s.visibleAt = s.visibleAt.intersection([.medium, .fine])

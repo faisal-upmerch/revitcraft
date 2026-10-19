@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import AppKit
+import SwiftUI
 @testable import ArcusDomain
 @testable import ArcusApplication
 @testable import ArcusUI
@@ -29,5 +30,57 @@ struct FMG4HomeTests {
         home.pickFurnitureTemplate(Self.item("Kitchen Cart", "Furniture"))
         #expect(home.furnitureName == "Mudroom Bench")
         #expect(home.furnitureCategory == .furniture)
+    }
+}
+
+/// FMG4: the Associate Family Parameter dialog and the = button in Properties, rendered offscreen to /tmp/arcus-fmg4/
+/// (light and dark): a Kitchen Cabinet door's Leaf Count (the list, and New Parameter), the Entryway Bench cushion's
+/// Visible (associated), and Properties with the = buttons.
+@MainActor
+@Suite("FMG4 associate UI", .serialized)
+struct FMG4AssociateUITests {
+    static let out = URL(fileURLWithPath: "/tmp/arcus-fmg4")
+
+    static func render<V: View>(_ view: V, width: CGFloat, _ name: String, height: CGFloat? = nil) async throws -> CGSize {
+        _ = NSApplication.shared
+        let h = NSHostingView(rootView: view.background(Color(nsColor: .windowBackgroundColor)))
+        let fit = h.fittingSize
+        let size = CGSize(width: width, height: height ?? max(60, fit.height))
+        let w = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        h.frame = NSRect(origin: .zero, size: size)
+        w.contentView = h
+        for _ in 0..<6 { h.layoutSubtreeIfNeeded(); try? await Task.sleep(for: .milliseconds(30)) }
+        h.displayIfNeeded()
+        let rep = try #require(h.bitmapImageRepForCachingDisplay(in: h.bounds))
+        h.cacheDisplay(in: h.bounds, to: rep)
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        try rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(name + ".png"))
+        return fit
+    }
+
+    @Test func theDialogAndTheButtonRender() async throws {
+        _ = NSApplication.shared
+        let cabinet = try #require(FurnitureLibrary.essentials.first { $0.name == "Kitchen Cabinet" }).build()
+        let state = DocumentState(session: DocumentSession(model: cabinet))
+        let door = try #require(cabinet.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .door })
+        let bench = try #require(FurnitureLibrary.essentials.first { $0.name == "Entryway Bench" }).build()
+        let benchState = DocumentState(session: DocumentSession(model: bench))
+        let cushion = try #require(bench.elements(.furnitureForms).first)
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            NSApp.appearance = NSAppearance(named: appearance)
+            let tag = appearance == .aqua ? "light" : "dark"
+            let fit = try await Self.render(AssociateFamilyParameterDialog(state: state, elements: [door.id], property: FurnitureFrontParameters.leafCount.id, propertyName: "Leaf Count"),
+                                            width: 480, "fmg4-associate-leafcount-\(tag)")
+            #expect(fit.height < 520, "the dialog sizes to its content: \(fit)")
+            _ = try await Self.render(AssociateFamilyParameterDialog(state: state, elements: [door.id], property: FurnitureFrontParameters.leafCount.id, propertyName: "Leaf Count",
+                                                                     startAdding: true, newName: "Pair Doors"), width: 480, "fmg4-associate-new-\(tag)")
+            _ = try await Self.render(AssociateFamilyParameterDialog(state: benchState, elements: [cushion.id], property: FurnitureAssociations.visible, propertyName: "Visible"),
+                                      width: 480, "fmg4-associate-visible-\(tag)")
+            state.session.selection.select([door.id])
+            _ = try await Self.render(PropertiesView(state: state), width: 320, "fmg4-properties-door-\(tag)", height: 620)
+            benchState.session.selection.select([cushion.id])
+            _ = try await Self.render(PropertiesView(state: benchState), width: 320, "fmg4-properties-cushion-\(tag)", height: 620)
+        }
+        NSApp.appearance = nil
     }
 }

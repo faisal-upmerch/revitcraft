@@ -179,7 +179,8 @@ enum FurnitureFrontParameters {
         let typed = [BuiltInCatalog.familyName, BuiltInCatalog.typeName, BuiltInCatalog.familyAndType]
         var list: [P] = typed + [host]
         switch e.furnitureFront?.kind ?? .door {
-        case .door: list += [leafCount, leafCountParameter, effectiveLeaves, hingeSide, hinge, hingeCount, handle, handlePosition, handleOffset] // FMG3: Leaf Count
+        case .door: list += [leafCount, effectiveLeaves, // FMG4: associated with the = button (no Leaf Count Parameter row)
+                              hingeSide, hinge, hingeCount, handle, handlePosition, handleOffset] // FMG3: Leaf Count
         case .flap: list += [hinge, hingeCount, handle, handlePosition]
         case .drawer: list += [handle, handlePosition, slide, drawerBox]
         }

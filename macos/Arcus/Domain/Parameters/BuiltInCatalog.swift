@@ -765,11 +765,11 @@ enum BuiltInCatalog {
         case .mass: // F5
             return MassParameters.instance + [name] + identity + phasing + ifc
         case .furniturePanel, .furnitureShelf, .furnitureLeg, .furnitureRail, .furnitureEdgeProfile, .furnitureForm: // FM4
-            return FurniturePartParameters.instance(for: e) + FurnitureJointParameters.part(e) // FM6: Cut Size
+            return FurniturePartParameters.instance(for: e) + FurnitureJointParameters.part(e) + [FurnitureAssociations.visibleProperty] // FM6: Cut Size; FMG4: Visible
         case .furnitureJoint: // FM6
             return FurnitureJointParameters.instance(for: e)
         case .furnitureBay, .furnitureFront, .furnitureBaySeparator: // FM5
-            return FurnitureFrontParameters.instance(for: e)
+            return FurnitureFrontParameters.instance(for: e) + (e.category == .furnitureFronts ? [FurnitureAssociations.visibleProperty] : []) // FMG4: Visible
         default:
             return []
         }
@@ -855,6 +855,7 @@ enum BuiltInCatalog {
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where d[p.id] == nil { d[p.id] = p } // FM4
         for p in FurnitureFrontParameters.allInstance + FurnitureFrontParameters.allType where d[p.id] == nil { d[p.id] = p } // FM5
         for p in FurnitureJointParameters.all where d[p.id] == nil { d[p.id] = p } // FM6
+        d[FurnitureAssociations.visible] = FurnitureAssociations.visibleProperty // FMG4
         return d
     }()
 
@@ -885,6 +886,7 @@ enum BuiltInCatalog {
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM4
         for p in FurnitureFrontParameters.allInstance + FurnitureFrontParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM5
         for p in FurnitureJointParameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // FM6
+        if o[FurnitureAssociations.visible] == nil { o[FurnitureAssociations.visible] = i } // FMG4
         return o
     }()
 }

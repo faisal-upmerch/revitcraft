@@ -458,8 +458,9 @@ enum Essentials {
             oak(k)
             try k.carcass(CarcassSpec(z: 0...16, panel: oakPly, top: .over("1\" Solid White Oak Top", front: 0.5, sides: 0.5), base: .plinth(height: 2.5, setback: 0.75),
                                       back: "1/4\" Plywood", columns: [CarcassColumn(), CarcassColumn(), CarcassColumn()], shelf: "3/4\" Oak Veneer Shelf"))
-            try k.cushion(x: (k.l + 0.75)...(k.r - 0.75), y: (k.f + 0.75)...(k.b - 0.75), z: 16, height: 2, crown: 0.5, radius: 1.25,
+            let cushion = try k.cushion(x: (k.l + 0.75)...(k.r - 0.75), y: (k.f + 0.75)...(k.b - 0.75), z: 16, height: 2, crown: 0.5, radius: 1.25,
                           material: "Fabric - Charcoal Weave")
+            try k.optional([cushion], by: "Seat Cushion") // FMG4: the cushion is a Yes/No type parameter
         }
     }
 
