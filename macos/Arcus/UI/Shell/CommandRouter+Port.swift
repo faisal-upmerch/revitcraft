@@ -9,7 +9,7 @@ extension CommandRouter {
             f1DisabledReason, f2DisabledReason, f34DisabledReason, f5DisabledReason, f67DisabledReason, f810DisabledReason,
             f11DisabledReason, f1415DisabledReason, dwgDisabledReason,
             homeDisabledReason, fesDisabledReason, fm3DisabledReason, fm4DisabledReason, fm5DisabledReason, fm6DisabledReason,
-            fm7DisabledReason, fm8DisabledReason, fm9DisabledReason, stairDisabledReason, polishDisabledReason, fmg1DisabledReason, fmg2DisabledReason, fmg3DisabledReason, fmg4DisabledReason, mcpDisabledReason,
+            fm7DisabledReason, fm8DisabledReason, fm9DisabledReason, stairDisabledReason, polishDisabledReason, fmg1DisabledReason, fmg2DisabledReason, fmg3DisabledReason, fmg4DisabledReason, fm3dDisabledReason, mcpDisabledReason,
         ]
         for b in batches { if let r = b(id) { return r } }
         return nil
@@ -17,7 +17,7 @@ extension CommandRouter {
     func portMakeTool(_ id: CommandID, _ c: ToolContext) -> (any InteractiveTool)? {
         let batches: [(CommandID, ToolContext) -> (any InteractiveTool)?] = [
             f1MakeTool, f2MakeTool, f34MakeTool, f5MakeTool, f67MakeTool, f810MakeTool, f11MakeTool, f1415MakeTool,
-            homeMakeTool, fesMakeTool, fm3MakeTool, fm4MakeTool, fm5MakeTool, fm6MakeTool, fm7MakeTool, fm8MakeTool, fm9MakeTool, stairMakeTool, polishMakeTool, fmg1MakeTool, fmg2MakeTool, fmg3MakeTool, fmg4MakeTool, mcpMakeTool,
+            homeMakeTool, fesMakeTool, fm3MakeTool, fm4MakeTool, fm5MakeTool, fm6MakeTool, fm7MakeTool, fm8MakeTool, fm9MakeTool, stairMakeTool, polishMakeTool, fmg1MakeTool, fmg2MakeTool, fmg3MakeTool, fmg4MakeTool, fm3dMakeTool, mcpMakeTool,
         ]
         for b in batches { if let t = b(id, c) { return t } }
         return nil
@@ -25,7 +25,7 @@ extension CommandRouter {
     func portPerform(_ id: CommandID) -> Bool {
         let batches: [(CommandID) -> Bool] = [
             f1Perform, f2Perform, f34Perform, f5Perform, f67Perform, f810Perform, f11Perform, f1415Perform, dwgPerform,
-            homePerform, fesPerform, fm3Perform, fm4Perform, fm5Perform, fm6Perform, fm7Perform, fm8Perform, fm9Perform, stairPerform, polishPerform, fmg1Perform, fmg2Perform, fmg3Perform, fmg4Perform, mcpPerform,
+            homePerform, fesPerform, fm3Perform, fm4Perform, fm5Perform, fm6Perform, fm7Perform, fm8Perform, fm9Perform, stairPerform, polishPerform, fmg1Perform, fmg2Perform, fmg3Perform, fmg4Perform, fm3dPerform, mcpPerform,
         ]
         return batches.contains { $0(id) }
     }
