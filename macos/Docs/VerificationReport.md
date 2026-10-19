@@ -314,7 +314,7 @@ An expanded Domain/Application suite (236 new tests) found 16 genuine bugs. All 
 13. Typed aliases could lose to title matches in Command Search (`DR` opened Drafting View instead of Door).
 14. Tab cycling skipped a candidate after pointer moves.
 15. Courtyard House GUIDs were not fully deterministic.
-16. The residential template's timber-frame wall lost its membrane layer. Schedule viewports on sheets were one row too tall.
+16. A template timber-frame wall lost its membrane layer (that template was removed later, D57). Schedule viewports on sheets were one row too tall.
 
 Other defects found and fixed in this pass:
 

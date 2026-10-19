@@ -7,7 +7,6 @@ import ArcusPersistence
 import ArcusServices
 
 struct SettingsView: View {
-    @AppStorage("defaultUnits") private var units = "metric"
     @AppStorage("snapRadius") private var snapRadius = 10.0
     @AppStorage("workspace") private var workspace = Workspace.bimFamiliar.rawValue
     @AppStorage("selection.modifiers") private var modifiers = SelectionModel.ModifierStyle.bim.rawValue
@@ -15,8 +14,8 @@ struct SettingsView: View {
     @AppStorage("navigationBar.visible") private var navigationBar = true
     var body: some View {
         Form {
-            Section("New projects") {
-                Picker("Default units", selection: $units) { Text("Metric").tag("metric"); Text("Imperial").tag("imperial") }
+            Section("New projects") { // HOME: Architectural projects start in Imperial
+                Text("New architectural projects and furniture start in Imperial (feet and inches). Change a project's units in Manage ▸ Project Units.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Workspace") {
                 Picker("Layout", selection: $workspace) { ForEach(Workspace.allCases, id: \.rawValue) { Text($0.rawValue).tag($0.rawValue) } }

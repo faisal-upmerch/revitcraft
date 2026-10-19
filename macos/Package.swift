@@ -259,6 +259,7 @@ let package = Package(
         .testTarget(name: "IFCTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusIFC"], path: "Arcus/Tests/IFCTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "CADTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusCAD"], path: "Arcus/Tests/CADTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "OutputTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput"], path: "Arcus/Tests/OutputTests"),
+        .testTarget(name: "HomeUITests", dependencies: ["ArcusDomain", "ArcusApplication", "ArcusUI"], path: "Arcus/Tests/HomeUITests"), // HOME: offscreen renders of Home
         .testTarget(name: "PersistenceTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusPersistence", "ArcusServices"], path: "Arcus/Tests/PersistenceTests", resources: [.copy("Fixtures")]),
     ] + extraTargets,
     swiftLanguageModes: [.v6]

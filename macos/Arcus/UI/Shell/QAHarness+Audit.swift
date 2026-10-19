@@ -226,11 +226,8 @@ extension QAHarness {
             }
             w.close()
         }
-        let hub = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 560), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
-        hub.titlebarAppearsTransparent = true
-        hub.title = "Arcus"
-        hub.isReleasedWhenClosed = false
-        hub.contentViewController = NSHostingController(rootView: ProjectHubView(initialTab: .new))
+        let hub = AppDelegate.makeHubWindow(model: HomeModel(tab: .new)) // HOME: the redesigned Home, Architectural selected
+        hub.title = "Home (QA)"
         hub.center()
         hub.orderFront(nil)
         await pause(700)

@@ -16,7 +16,6 @@ struct TemplateTests {
         #expect(ModelHealth.check(m).isEmpty)
         let expectedLevels: [Double] = switch kind {
         case .architectural: [0, 4, 8]
-        case .residential: [0, 2.8, 5.6]
         case .empty: [0, 3]
         }
         #expect(m.levels.compactMap { $0.level?.elevation } == expectedLevels)
@@ -42,14 +41,10 @@ struct TemplateTests {
         for s in m.schedules { _ = ScheduleEngine.compute(s, m) }
     }
 
-    @Test func residentialTemplateAddsTimberFrameWall() {
-        let (m, ids) = ProjectTemplates.make(.residential, units: .metric)
-        let t = m[ids.wallTypes["Exterior - Timber Frame Clad"]]!.typeData!.assembly!
-        #expect(t.validate() == nil)
-        #expect(Fx.approx(t.totalThickness, 0.02 + 0.14 + 0.09 + 0.0125, 1e-12))
-        #expect(t.layers.contains { m[$0.materialID]?.name == "Membrane" && $0.function == .membrane })
-        #expect(m.sheets[0].sheet?.paper == .a3)
+    @Test func architecturalSheetsFollowTheUnitSystem() {
         #expect(Fx.archMetric.0.sheets[0].sheet?.paper == .a1)
+        let (imperial, _) = ProjectTemplates.make(.architectural, units: .imperial)
+        #expect(imperial.sheets[0].sheet?.paper == .archD)
     }
 
     @Test(arguments: [(Fx.generic, 0.2), (Fx.brick, 0.38), ("Interior - 100mm Partition", 0.1), ("Interior - 150mm Masonry", 0.15), ("Exterior - Concrete 300mm", 0.3)])

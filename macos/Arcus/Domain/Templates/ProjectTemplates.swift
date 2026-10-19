@@ -4,13 +4,12 @@ import ArcusCalc
 
 public enum ProjectTemplateKind: String, CaseIterable, Sendable, Codable {
     case architectural = "Architectural"
-    case residential = "Residential"
+    /// Levels and settings only: used by tests and the stress model, not offered on Home. // HOME
     case empty = "Empty (Units Only)"
 
     public var summary: String {
         switch self {
-        case .architectural: "Commercial and institutional work: masonry and stud walls, concrete floors, A1 sheets, 1:100 plans."
-        case .residential: "Houses and apartments: timber-frame walls, suspended floors, pitched-roof types, A3 sheets, 1:50 plans."
+        case .architectural: "Buildings, sheets and schedules: wall, floor, roof, door and window types, plans, elevations, 3D and a sheet."
         case .empty: "Levels, units and graphics settings only. Load families as you need them."
         }
     }
@@ -46,7 +45,6 @@ public enum ProjectTemplates {
     @discardableResult
     public static func populate(_ tx: TransactionContext, kind: ProjectTemplateKind, units: UnitsSettings, projectName: String) -> Ids {
         var ids = Ids()
-        let residential = kind == .residential
         var info = ProjectInfoData(projectName: projectName, units: units)
         info.sheetNumberPrefix = "A"
         info.organization = "Arcus Studio"
@@ -81,7 +79,7 @@ public enum ProjectTemplates {
         func layer(_ f: LayerFunction, _ m: String, _ t: Double) -> AssemblyLayer { AssemblyLayer(function: f, materialID: mat(m), thickness: t) }
 
         // Wall types (layers exterior → interior).
-        var wallSpecs: [(String, String, [AssemblyLayer])] = [
+        let wallSpecs: [(String, String, [AssemblyLayer])] = [
             ("Generic - 200mm", "Interior", [layer(.structure, "Concrete Masonry Units", 0.2)]),
             ("Interior - 100mm Partition", "Interior", [layer(.finish2, "Plasterboard", 0.0125), layer(.structure, "Timber Stud", 0.075), layer(.finish2, "Plasterboard", 0.0125)]),
             ("Interior - 150mm Masonry", "Interior", [layer(.finish1, "Plaster", 0.013), layer(.structure, "Concrete Masonry Units", 0.124), layer(.finish1, "Plaster", 0.013)]),
@@ -89,10 +87,6 @@ public enum ProjectTemplates {
             ("Exterior - Concrete 300mm", "Exterior", [layer(.structure, "Concrete, Cast-in-Place", 0.25), layer(.thermal, "Rigid Insulation", 0.05)]),
             ("Retaining - 300mm Concrete", "Retaining", [layer(.structure, "Concrete, Cast-in-Place", 0.3)]),
         ]
-        if residential {
-            wallSpecs.insert(("Exterior - Timber Frame Clad", "Exterior", [layer(.finish1, "Timber Cladding", 0.02), layer(.membrane, "Membrane", 0), layer(.thermal, "Mineral Wool", 0.14),
-                                                                            layer(.structure, "Timber Stud", 0.09), layer(.finish2, "Plasterboard", 0.0125)]), at: 0)
-        }
         for (name, function, layers) in wallSpecs {
             var ls = layers
             for i in ls.indices where ls[i].function == .membrane { ls[i].thickness = 0 }
@@ -122,9 +116,9 @@ public enum ProjectTemplates {
             ids.ceilingTypes[name] = tx.create(.elementTypes, name: name, data: .type(TypeData(instanceCategory: .ceilings, systemFamily: .ceiling, familyName: "Compound Ceiling", assembly: CompoundAssembly(layers: layers))))
         }
         // Stairs, railings, columns, beams.
-        ids.systemTypes["Stair"] = tx.create(.elementTypes, name: residential ? "Residential - 190 max riser" : "Monolithic - 175 max riser", data: .type(TypeData(
+        ids.systemTypes["Stair"] = tx.create(.elementTypes, name: "Monolithic - 175 max riser", data: .type(TypeData(
             instanceCategory: .stairs, systemFamily: .stair, familyName: "Assembled Stair",
-            params: [ParameterID("stair.maxRiser"): .double(residential ? 0.19 : 0.175), ParameterID("stair.minTread"): .double(residential ? 0.25 : 0.28),
+            params: [ParameterID("stair.maxRiser"): .double(0.175), ParameterID("stair.minTread"): .double(0.28),
                      ParameterID("stair.treadThickness"): .double(0.04), ParameterID("stair.waist"): .double(0.15),
                      ParameterID("type.material"): .ref(mat("Concrete, Cast-in-Place"))])))
         ids.systemTypes["Railing"] = tx.create(.elementTypes, name: "Guard - 1100mm", data: .type(TypeData(
@@ -193,9 +187,8 @@ public enum ProjectTemplates {
 
         // Levels and views.
         let levelSpecs: [(String, Double)] = kind == .empty ? [("Level 1", 0), ("Level 2", 3.0)]
-            : residential ? [("Ground Floor", 0), ("First Floor", 2.8), ("Roof", 5.6)]
             : [("Level 1", 0), ("Level 2", 4.0), ("Roof", 8.0)]
-        let scale = residential ? 50 : 100
+        let scale = 100
         for (name, elev) in levelSpecs {
             let lid = tx.create(.levels, name: name, data: .level(LevelData(elevation: elev)))
             ids.levels.append(lid)
@@ -243,11 +236,10 @@ public enum ProjectTemplates {
         // Default revision and one sheet.
         tx.create(.revisions, name: "Revision 1", data: .revision(RevisionData(sequence: 1, date: "", description: "Issued for review")))
         if kind != .empty {
-            let tb = residential ? ids.titleBlocks["A3 Title Block"] : ids.titleBlocks["A1 Title Block"]
-            tx.create(.sheets, name: "Unnamed", data: .sheet(SheetData(number: "A101", paper: residential ? .a3 : .a1, titleBlockTypeID: tb)))
+            tx.create(.sheets, name: "Unnamed", data: .sheet(SheetData(number: "A101", paper: .a1, titleBlockTypeID: ids.titleBlocks["A1 Title Block"])))
         }
         for (k, v) in CurtainWallDefaults.populate(tx) { ids.systemTypes[k] = v } // WP3: curtain panel and curtain wall types
-        StandardContent.populate(tx, ids: &ids, kind: kind, units: units) // W2-TYPES: unit-aware materials, assemblies, doors, windows, columns
+        StandardContent.populate(tx, ids: &ids, units: units) // W2-TYPES: unit-aware materials, assemblies, doors, windows, columns
         // W2-ANNOT: the rest of the standard line styles, text and dimension types, and the area and multi-category tags.
         LineStyles.ensureStandard(in: tx)
         for (name, id) in AnnotationTypes.ensureStandard(in: tx, units: units) where AnnotationTypes.textSpecs(units).contains(where: { $0.name == name }) { ids.systemTypes["Text " + name] = id }

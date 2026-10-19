@@ -380,6 +380,7 @@ enum QAHarness {
             AppDelegate.shared?.showHub(tab: .recent)
             await pause(700)
             if let w = NSApp.windows.first(where: { $0.title == "Home" && $0.contentViewController is NSHostingController<ProjectHubView> }) { await shot(w, "hub-\(suffix)") }
+            await homeScreenshots(suffix) // HOME: each Start card, Recent and its filter, default and minimum size
             _ = await auditAppWindowCaptures(suffix: suffix) // W4-AUDIT: Settings (all sections) and the hub's New tab
             await step("Open Courtyard House (\(suffix))") {
                 let t0 = CFAbsoluteTimeGetCurrent()
