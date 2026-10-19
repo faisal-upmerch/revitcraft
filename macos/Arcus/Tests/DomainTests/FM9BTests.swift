@@ -121,7 +121,7 @@ struct FM9BTests {
         let rooms = Set(Self.specs.flatMap(\.rooms))
         #expect(rooms.isSubset(of: ["Living Room", "Bedroom", "Dining Room", "Kitchen", "Home Office", "Bathroom", "Outdoor & Balcony",
                                     "Kids' Room & Nursery", "Decorative & Accent", "Multipurpose & Space-Saving", "Storage & Utility"]), "\(rooms)")
-        for s in Self.specs { #expect((1...2).contains(s.sizes.count) && s.libraryPiece.detail == .simple, "\(s.name)") }
+        for s in Self.specs { #expect((1...2).contains(s.sizes.count) && s.libraryPiece().detail == .simple && !(FurnitureLibrary.simpleAKeywords[s.name] ?? []).isEmpty, "\(s.name)") }
     }
 
     @Test(arguments: names) func buildsFlexesChecksAndCompiles(_ name: String) throws {
