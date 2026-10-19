@@ -29,7 +29,7 @@ public enum MultistoryStairs {
     /// The paths of a railing hosted on a multistory stair, one per storey; nil otherwise.
     public static func railingPaths(_ e: Element, _ model: BIMModel) -> [[Vec3]]? {
         guard let r = e.railing, r.followsHost, let host = model[e.hostID], let storeys = storeys(of: host, model) else { return nil }
-        return storeys.map { StairGeometry.railingPath($0, model, leftSide: r.hostSideLeft) }
+        return storeys.map { StairRailings.layout(e, stair: $0, model)?.base ?? [] } // STAIR
     }
 
     /// Levels a stair can repeat up to: those above its top level.

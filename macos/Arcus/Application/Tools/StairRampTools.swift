@@ -55,8 +55,7 @@ public final class StairTool: BaseTool, InteractiveTool {
         guard let e = probe(i.point), let l = StairGeometry.layout(e, ctx.model) else { return }
         for r in l.runs { preview.primitives.append(.polyline(l.runRect(r).points, closed: true, ctx.previewHeavy)) }
         for land in l.landings { preview.primitives.append(.polyline(land.polygon.points, closed: true, ctx.previewStroke)) }
-        let lines = StairGeometry.planLines(e, ctx.model, cutZ: .infinity)
-        for s in lines.treads { preview.primitives.append(ctx.line(s.start, s.end)) }
+        for r in l.runs { for t in r.treads { preview.primitives.append(ctx.line(t.front.start, t.front.end)) } }
         preview.tempDims = [TemporaryDimension(from: start!, to: i.point, text: "\(l.riserCount) risers, \(ctx.format(l.riserHeight)) each", isAngle: false, isActive: false)]
     }
 
@@ -358,7 +357,7 @@ public final class EditStairTool: BaseTool, InteractiveTool {
         guard let e = probe, let l = StairGeometry.layout(e, ctx.model) else { return }
         for r in l.runs { preview.primitives.append(.polyline(l.runRect(r).points, closed: true, ctx.previewHeavy)) }
         for land in l.landings { preview.primitives.append(.polyline(land.polygon.points, closed: true, ctx.previewStroke)) }
-        for s in StairGeometry.planLines(e, ctx.model, cutZ: .infinity).treads { preview.primitives.append(ctx.line(s.start, s.end)) }
+        for r in l.runs { for t in r.treads { preview.primitives.append(ctx.line(t.front.start, t.front.end)) } }
         let size = ctx.pixel * 4
         for (h, p) in handles() {
             let r = Rect2(points: [p - Vec2(size, size), p + Vec2(size, size)])

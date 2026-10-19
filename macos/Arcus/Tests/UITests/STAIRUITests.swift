@@ -71,6 +71,12 @@ struct STAIRUITests {
         let crop = Rect2(min: Vec2(-3, -3), max: Vec2(24, 10))
         #expect(Self.draw(m, Self.cropPlan(m, ids, level: 0, crop), "audit-plan-L1") > 0)
         #expect(Self.draw(m, Self.cropPlan(m, ids, level: 1, crop), "audit-plan-L2") > 0)
+        for (k, name) in ["straight", "l", "u", "multistory"].enumerated() {
+            let x = [0.0, 6, 12, 20][k]
+            let r = Rect2(min: Vec2(x - 3.5, -1.5), max: Vec2(x + 4, 7.5))
+            Self.draw(m, Self.cropPlan(m, ids, level: 0, r), "audit-\(name)-L1", width: 900)
+            Self.draw(m, Self.cropPlan(m, ids, level: 1, r), "audit-\(name)-L2", width: 900)
+        }
         #expect(Self.draw(m, Self.section(Vec3(0, -4, 0), Vec2(0, 1), crop: Rect2(min: Vec2(-3, -1), max: Vec2(24, 9))), "audit-section-across") > 0)
         #expect(Self.draw(m, Self.section(Vec3(0.1, 0, 0), Vec2(1, 0), crop: Rect2(min: Vec2(-12, -1), max: Vec2(12, 9))), "audit-section-along") > 0)
     }

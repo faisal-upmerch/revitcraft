@@ -390,6 +390,30 @@ public struct StairData: Hashable, Codable, Sendable {
     /// F2: multistory stairs (Connect Levels): the stair repeats, level to level, up to this level. Optional, so older
     /// documents decode.
     public var multistoryTopLevelID: ElementID?
+    // STAIR: component stairs (StairComponents.swift). Every field is optional, so older documents decode; a stair
+    // without runs is read as the runs and landings its shape describes.
+    /// Runs drawn with the Create Stair Run tools, bottom to top.
+    public var runs: [StairRun]?
+    /// Landings; nil = an automatic landing between every two runs.
+    public var landings: [StairLanding]?
+    /// Supports added with Pick Edges.
+    public var supports: [StairSupport]?
+    /// Actual Tread Depth (nil = the type's Minimum Tread Depth).
+    public var treadDepth: Double?
+    /// Begin with Riser / End with Riser (nil = true): false starts (ends) the stair with a tread instead.
+    public var beginWithRiser: Bool?
+    public var endWithRiser: Bool?
+    /// Graphics: Up Text / Down Text (nil = "UP" / "DN") and their switches (nil = on).
+    public var upText: String?
+    public var downText: String?
+    public var upLabel: Bool?
+    public var upArrow: Bool?
+    public var downLabel: Bool?
+    public var downArrow: Bool?
+    /// Show Up Arrow in All Views (nil = off: the up arrow shows on the base level's plan only).
+    public var upArrowInAllViews: Bool?
+    /// Tread/Riser Start Number (nil = 1).
+    public var treadNumberStart: Int?
     public init(shape: StairShape = .straight, origin: Vec2, direction: Double, width: Double = 1.1, topLevelID: ElementID? = nil) {
         self.shape = shape; self.origin = origin; self.direction = direction; self.width = width
         self.baseOffset = 0; self.topLevelID = topLevelID; self.topOffset = 0; self.unconnectedHeight = 3
@@ -405,6 +429,12 @@ public struct RailingData: Hashable, Codable, Sendable {
     public var followsHost: Bool
     /// Which side of the stair when hosted (true = left).
     public var hostSideLeft: Bool
+    /// STAIR: on a stair, where the railing sits (nil = Treads) and its Offset from Path (nil = the type's).
+    public var stairPosition: StairRailingPosition?
+    public var offsetFromPath: Double?
+    /// STAIR: Edit Path of a stair's railing: the sketched plan path replaces the stair edge, still following the
+    /// stair's height. nil = the stair's edge.
+    public var editedHostPath: [Vec2]?
     public init(path: [Curve2], baseOffset: Double = 0) {
         self.path = path; self.baseOffset = baseOffset; self.followsHost = false; self.hostSideLeft = false
     }
