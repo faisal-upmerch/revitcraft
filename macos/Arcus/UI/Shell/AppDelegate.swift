@@ -17,6 +17,8 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
         (NSApp.keyWindow?.windowController as? DocumentWindowController ?? NSApp.mainWindow?.windowController as? DocumentWindowController)?.toggleSidebar(sender)
     }
     private var hubWindow: NSWindow?
+    /// The Home window's state (QA selects cards through it). // HOME
+    private(set) var hubModel: HomeModel?
     private var onboardingWindow: NSWindow?
     private var aboutWindow: NSWindow?
     private var settingsWindow: NSWindow?
@@ -137,17 +139,45 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     enum HubTab { case recent, new }
 
+    /// Shows Home: `.recent` with no card selected, `.new` with the Architectural card selected. // HOME
     @MainActor
     func showHub(tab: HubTab) {
-        if let w = hubWindow { w.makeKeyAndOrderFront(nil); return }
-        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 880, height: 560), styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false)
-        w.titlebarAppearsTransparent = true
-        w.title = "Home"
-        w.isReleasedWhenClosed = false
-        w.contentViewController = NSHostingController(rootView: ProjectHubView(initialTab: tab))
+        if let w = hubWindow, let m = hubModel {
+            m.apply(tab)
+            m.reload()
+            w.makeKeyAndOrderFront(nil)
+            return
+        }
+        let m = HomeModel(tab: tab)
+        let w = Self.makeHubWindow(model: m)
         w.center()
         w.makeKeyAndOrderFront(nil)
         hubWindow = w
+        hubModel = m
+    }
+
+    /// The Home window: 1040 × 660, resizable from 920 × 600 to 1600 × 1100, full-size content under a transparent
+    /// title bar. QA finds it by its title, "Home". // HOME
+    @MainActor
+    static func makeHubWindow(model: HomeModel) -> NSWindow {
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1040, height: 660),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView], backing: .buffered, defer: false)
+        w.titlebarAppearsTransparent = true
+        w.titleVisibility = .hidden
+        w.title = "Home"
+        w.isReleasedWhenClosed = false
+        w.tabbingMode = .disallowed
+        w.isMovableByWindowBackground = true
+        // An empty unified toolbar gives the taller title bar, so the traffic lights sit inside the floating sidebar.
+        w.toolbar = NSToolbar(identifier: "ArcusHome")
+        w.toolbarStyle = .unified
+        let host = NSHostingController(rootView: ProjectHubView(model: model))
+        host.sizingOptions = []
+        w.contentViewController = host
+        w.setContentSize(NSSize(width: 1040, height: 660))
+        w.contentMinSize = NSSize(width: 920, height: 600)
+        w.contentMaxSize = NSSize(width: 1600, height: 1100)
+        return w
     }
 
     @MainActor
