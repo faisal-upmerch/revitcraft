@@ -13,7 +13,7 @@ DWG import, link, open and export through the engines bundled in Arcus.app ([DWG
 
 | Check | Result |
 |---|---|
-| `swift test --filter CADTests` | 145 tests pass, including 14 in `BundledDWGEngineTests` (real engines) |
+| `swift test --filter CADTests` | 146 tests pass, including 15 in `BundledDWGEngineTests` (real engines; memory cap, time cap and usage exit codes included) |
 | `swift test --filter DomainTests` | 901 tests pass |
 | Arcus's own export, every version | The Courtyard House ground-floor plan and first sheet, written by `DXFWriter` with AIA layers and exported as DWG 2018, 2013, 2010, 2007, 2004 and 2000, read back with the same entity count, entity types and layer table in every version; a small plan also reads back in LibreDWG |
 | Hostile input | 20 kB of random bytes behind an `AC1032` header and a sample cut to a third fail with a plain message; the helper never crashed |
