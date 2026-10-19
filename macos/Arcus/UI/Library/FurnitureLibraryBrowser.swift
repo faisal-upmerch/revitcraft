@@ -14,30 +14,41 @@ struct FurnitureLibraryBrowser: View {
     var items: [FurnitureLibraryCatalog.Item]? = nil
 
     @State private var query = ""
-    @State private var selected: URL?
+    /// FM9: the selected piece (room and file) and the room the grid is limited to (nil = All Pieces).
+    @State private var selected: String?
+    @State private var room: String?
     @State private var all: [FurnitureLibraryCatalog.Item] = []
     @FocusState private var searchFocused: Bool
 
-    static let columns = [GridItem(.adaptive(minimum: 148, maximum: 168), spacing: 14, alignment: .top)]
-    static let thumbnail = CGSize(width: 148, height: 108)
-
-    var rooms: [FurnitureLibraryCatalog.Room] { FurnitureLibraryCatalog.rooms(all, matching: query) }
+    var rooms: [FurnitureLibraryCatalog.Room] { FurnitureRoomList.rooms(all, room: room, query: query) }
     var visible: [FurnitureLibraryCatalog.Item] { rooms.flatMap(\.items) }
-    var selectedItem: FurnitureLibraryCatalog.Item? { visible.first { $0.url == selected } ?? visible.first }
+    var selectedItem: FurnitureLibraryCatalog.Item? { visible.first { $0.id == selected } ?? visible.first }
 
     var body: some View {
         VStack(spacing: 0) {
             header
             Divider()
-            content.frame(maxWidth: .infinity, maxHeight: .infinity)
+            HStack(spacing: 0) {
+                if !all.isEmpty {
+                    FurnitureRoomList(items: all, room: $room).frame(width: 196)
+                    Divider()
+                }
+                content.frame(maxWidth: .infinity, maxHeight: .infinity)
+                if let s = selectedItem {
+                    Divider()
+                    FurniturePieceDetail(item: s).frame(width: 280)
+                }
+            }
             Divider()
             footer
         }
-        .frame(width: 900, height: 620)
+        .frame(width: 1120, height: 680)
         .onAppear {
             all = items ?? FurnitureLibraryCatalog.all()
             searchFocused = true
         }
+        .onChange(of: room) { _, _ in selected = visible.first?.id }
+        .onChange(of: query) { _, _ in if !visible.contains(where: { $0.id == selected }) { selected = visible.first?.id } }
     }
 
     // MARK: Header
@@ -47,13 +58,14 @@ struct FurnitureLibraryBrowser: View {
             Image(systemName: "chair.lounge").font(.system(size: 20)).foregroundStyle(Color.accentColor).frame(width: 30)
             VStack(alignment: .leading, spacing: 1) {
                 Text("Load Furniture").font(.title3.weight(.semibold))
-                Text("\(all.count) piece\(all.count == 1 ? "" : "s") · Furniture Library and your templates · loads as a family")
+                let pieces = Set(all.map(\.url)).count
+                Text("\(pieces) piece\(pieces == 1 ? "" : "s") · Furniture Library and your templates · loads as a family")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
             }
             Spacer(minLength: 12)
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                TextField("Search pieces or rooms", text: $query)
+                TextField("Search pieces, rooms or materials", text: $query)
                     .textFieldStyle(.plain)
                     .focused($searchFocused)
                     .onSubmit { placeSelected() }
@@ -65,7 +77,7 @@ struct FurnitureLibraryBrowser: View {
             }
             .padding(.horizontal, 9).padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.06)))
-            .frame(width: 280)
+            .frame(width: 300)
         }
         .padding(.horizontal, 18).padding(.vertical, 14)
     }
@@ -77,46 +89,13 @@ struct FurnitureLibraryBrowser: View {
             emptyState(symbol: "books.vertical", title: "No furniture yet",
                        message: "Pieces you save with File ▸ Save as Furniture Template appear here, by room. Browse… loads any furniture file.")
         } else if rooms.isEmpty {
-            emptyState(symbol: "magnifyingglass", title: "No pieces match “\(query)”", message: "Try another name or room.")
+            emptyState(symbol: "magnifyingglass", title: "No pieces match “\(query)”", message: "Try another name, room or material.")
         } else {
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 18) {
-                    ForEach(rooms) { room in
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(room.name).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
-                            LazyVGrid(columns: Self.columns, alignment: .leading, spacing: 14) {
-                                ForEach(room.items) { item in tile(item) }
-                            }
-                        }
-                    }
-                }
-                .padding(18)
+                FurnitureLibraryGrid(rooms: rooms, selectedID: selectedItem?.id, onSelect: { selected = $0.id }, onOpen: { place($0.url) })
+                    .padding(18)
             }
         }
-    }
-
-    func tile(_ item: FurnitureLibraryCatalog.Item) -> some View {
-        let isSelected = selectedItem?.url == item.url
-        return VStack(alignment: .leading, spacing: 6) {
-            FurnitureFileThumbnail(url: item.url, size: Self.thumbnail)
-                .frame(width: Self.thumbnail.width, height: Self.thumbnail.height)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(Color.primary.opacity(0.04)))
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: isSelected ? 2 : 1))
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                Text(item.isUser ? "My template" : item.room).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1)
-            }
-            .padding(.horizontal, 2)
-        }
-        .frame(width: Self.thumbnail.width)
-        .contentShape(Rectangle())
-        .onTapGesture(count: 2) { selected = item.url; place(item.url) }
-        .onTapGesture { selected = item.url }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(item.name), \(item.room)")
-        .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     func emptyState(symbol: String, title: String, message: String) -> some View {

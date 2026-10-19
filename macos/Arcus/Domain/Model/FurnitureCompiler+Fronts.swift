@@ -138,7 +138,7 @@ extension FurnitureCompiler {
     /// A coordinate as a length expression of the family's parameters ("(Height) - 0.01905 m", or "0.12 m").
     static func lengthExpression(_ v: PartValue, _ f: FamilyDefinition) -> String {
         let e = expression(v, f)
-        return Double(e.trimmingCharacters(in: .whitespaces)) != nil ? "\(e) m" : e
+        return Double(e.trimmingCharacters(in: .whitespaces)).map { "\(FurnitureFormLocks.num($0)) m" } ?? e // FM9: no exponents in formulas
     }
 
     /// The model with every bay face on an EQ divider bound to the divider's centre plane (the plane the compiled family

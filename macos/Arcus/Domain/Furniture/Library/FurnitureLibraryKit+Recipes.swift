@@ -180,6 +180,16 @@ extension LibraryBuilder {
             }
             rowRanges.append(ranges)
         }
+        // Under a top that overhangs, a front stretcher in each column carries it and closes the top row's opening, so
+        // fronts sit on the carcass and not under the overhang.
+        if case .over = s.top {
+            let core = tx.model[FurniturePartTypes.Values(tx.model[type(.furniturePanels, s.panel)]?.typeData).material]?.name ?? "Plywood"
+            let st = "3/4\" x 2 1/2\" Top Stretcher (\(core))"
+            railType(st, width: 0.75, height: 2.5, material: core)
+            for col in out.columns {
+                out.shelves.append(try rail(from: Vec2(col.lowerBound, cy.lowerBound + 0.375), to: Vec2(col.upperBound, cy.lowerBound + 0.375), z: sideTop, type: st))
+            }
+        }
         // Fronts in each row's bay.
         try commit()
         for (ci, col) in s.columns.enumerated() {
@@ -248,9 +258,13 @@ public struct TableSpec: Sendable {
     public var stretchers: (type: String, height: Double)?
     /// A drawer in the front apron: clear width and height of the opening, and its front type.
     public var drawer: (width: Double, height: Double, type: String?)?
+    /// The drawer's runners (panel type; nil = 3/4" plywood).
+    public var drawerPanel: String?
     public init(top: String = "1 1/2\" Butcher Block", x: ClosedRange<Double>? = nil, y: ClosedRange<Double>? = nil, z: Double? = nil,
                 leg: String = "Square Tapered 1 3/4\"", legInset: Double = 1.5, apron: String? = "3/4\" x 3\" Apron", apronSetback: Double = 0.25,
-                shelf: (type: String, height: Double)? = nil, stretchers: (type: String, height: Double)? = nil, drawer: (width: Double, height: Double, type: String?)? = nil) {
+                shelf: (type: String, height: Double)? = nil, stretchers: (type: String, height: Double)? = nil, drawer: (width: Double, height: Double, type: String?)? = nil,
+                drawerPanel: String? = nil) {
+        self.drawerPanel = drawerPanel
         self.top = top; self.x = x; self.y = y; self.z = z; self.leg = leg; self.legInset = legInset; self.apron = apron; self.apronSetback = apronSetback
         self.shelf = shelf; self.stretchers = stretchers; self.drawer = drawer
     }
@@ -294,7 +308,7 @@ extension LibraryBuilder {
             if let dr = s.drawer {
                 // The front apron is cut round the drawer: two short aprons, a rail under the opening, runners and a kicker.
                 let dx0 = -dr.width / 2, dx1 = dr.width / 2
-                let runner = "3/4\" Plywood"
+                let runner = s.drawerPanel ?? "3/4\" Plywood"
                 let rt = thickness(type(.furniturePanels, runner))
                 out.aprons.append(try rail(from: Vec2(ax0, fy), to: Vec2(dx0 - rt, fy), z: under, type: apron))
                 out.aprons.append(try rail(from: Vec2(dx1 + rt, fy), to: Vec2(ax1, fy), z: under, type: apron))
@@ -426,17 +440,23 @@ extension LibraryBuilder {
         switch s.back {
         case .none: break
         case .slats(let count, let t):
+            // Upright slats are drawn in the front elevation: the type's width runs front to back, so a face-on slat is
+            // the type turned (its height becomes the width seen from the front).
             let (sw, sh) = railSize(t)
-            let top = try railXZ(from: Vec2(bxL + bw / 2, h - 1.5), to: Vec2(bxR - bw / 2, h - 1.5), y: by, type: "3/4\" x 3\" Apron")
+            let upright = t + " (Upright)"
+            railType(upright, width: min(sw, sh), height: max(sw, sh), material: tx.model[FurniturePartTypes.Values(tx.model[type(.furnitureRails, t)]?.typeData).material]?.name ?? "Solid Oak")
+            // The crest rail (the seat rail's type) and a lower back rail (the stretchers' type, else the seat rail's).
+            let crestH = railSize(s.rail).height
+            let top = try railXZ(from: Vec2(bxL + bw / 2, h - crestH / 2), to: Vec2(bxR - bw / 2, h - crestH / 2), y: by, type: s.rail)
             out.back.append(top)
-            let low = try railXZ(from: Vec2(bxL + bw / 2, br.lowerBound), to: Vec2(bxR - bw / 2, br.lowerBound), y: by, type: "3/4\" x 1 1/2\" Stretcher")
+            let lowType = s.stretchers?.type ?? s.rail
+            let low = try railXZ(from: Vec2(bxL + bw / 2, br.lowerBound), to: Vec2(bxR - bw / 2, br.lowerBound), y: by, type: lowType)
             out.back.append(low)
             let span = bxR - bxL - bw
             for k in 0..<count {
                 let x = bxL + bw / 2 + span * Double(k + 1) / Double(count + 1)
-                out.back.append(try railXZ(from: Vec2(x, br.lowerBound + 0.75), to: Vec2(x, h - 3), y: by, type: t))
+                out.back.append(try railXZ(from: Vec2(x, br.lowerBound + railSize(lowType).height / 2), to: Vec2(x, h - crestH), y: by, type: upright))
             }
-            _ = (sw, sh)
         case .rails(let count, let t):
             for k in 0..<count {
                 let z = br.lowerBound + (br.upperBound - br.lowerBound) * Double(k) / Double(max(1, count - 1))
@@ -679,7 +699,8 @@ extension LibraryBuilder {
         let frameRail = "3/4\" Plywood"
         let ft = thickness(type(.furniturePanels, frameRail))
         out.frame.append(try board(x: (l + aw + 0.5)...(r - aw - 0.5), y: (f + 1)...(f + 1 + ft), z: (lh + 0.5)...(deck - 1.5), type: frameRail))
-        out.frame.append(try board(x: (l + aw + 0.5)...(r - aw - 0.5), y: (b - bt + 0.5)...(b - bt + 0.5 + ft), z: (lh + 0.5)...(deck - 1.5), type: frameRail))
+        let backRail = bt > 0 ? b - bt + 0.5 : b - 1 - ft
+        out.frame.append(try board(x: (l + aw + 0.5)...(r - aw - 0.5), y: backRail...(backRail + ft), z: (lh + 0.5)...(deck - 1.5), type: frameRail))
         // The upholstered base box: round-cornered in plan, from the legs' top to the deck.
         let baseLoop = FurnitureForms.roundedRect(Vec2((l + r) / 2, (f + b) / 2), w, d, 1)
         out.base.append(try extrusion(baseLoop, plane: .xy, w: lh...deck, material: fab))
