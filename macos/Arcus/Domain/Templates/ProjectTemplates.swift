@@ -129,6 +129,8 @@ public enum ProjectTemplates {
             instanceCategory: .railings, systemFamily: .railing, familyName: "Railing",
             params: [ParameterID("railing.height"): .double(0.9), ParameterID("railing.balusterSpacing"): .double(0.8), ParameterID("railing.balusterSize"): .double(0.03),
                      ParameterID("railing.railSize"): .double(0.045), ParameterID("type.material"): .ref(mat("Hardwood"))])))
+        StairDefaults.populate(tx, imperial: units.system == .imperial, stairType: ids.systemTypes["Stair"], // STAIR: run, landing, support and stair types
+                               railingTypes: [ids.systemTypes["Railing"], ids.systemTypes["Handrail"]].compactMap { $0 })
         for (name, w, d, dia) in [("Concrete Column 400 x 400", 0.4, 0.4, 0.0), ("Concrete Column Round 350", 0.0, 0.0, 0.35), ("Timber Post 150 x 150", 0.15, 0.15, 0.0)] {
             ids.systemTypes[name] = tx.create(.elementTypes, name: name, data: .type(TypeData(
                 instanceCategory: .columns, familyName: "Column",

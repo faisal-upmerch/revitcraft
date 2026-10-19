@@ -250,47 +250,7 @@ enum BuiltInCatalog {
 
     // MARK: Stairs & railings
 
-    static let stairBaseOffset = P("stair.baseOffset", "Base Offset", .length, .constraints,
-                                   get: { e, _ in e.stair.map { .double($0.baseOffset) } },
-                                   set: { e, v, _ in e.stair?.baseOffset = try finite(v, "Base Offset") })
-    static let stairTopLevel = P("stair.topLevel", "Top Level", .elementRef(.levels), .constraints,
-                                 get: { e, _ in .ref(e.stair?.topLevelID) },
-                                 set: { e, v, ctx in e.stair?.topLevelID = try levelRef(v, ctx, allowNone: true) })
-    static let stairTopOffset = P("stair.topOffset", "Top Offset", .length, .constraints,
-                                  get: { e, _ in e.stair.map { .double($0.topOffset) } },
-                                  set: { e, v, _ in e.stair?.topOffset = try finite(v, "Top Offset") })
-    static let stairHeight = P("stair.height", "Desired Stair Height", .length, .constraints,
-                               get: { e, ctx in ctx.quantities(e).height.map { .double($0) } },
-                               set: { e, v, _ in e.stair?.unconnectedHeight = try positive(v, "Desired Stair Height") },
-                               locked: { e, _ in e.stair?.topLevelID != nil ? "The height comes from the Top Level." : nil })
-    static let stairWidth = P("stair.width", "Actual Run Width", .length, .dimensions,
-                              get: { e, _ in e.stair.map { .double($0.width) } },
-                              set: { e, v, _ in
-                                  let w = try positive(v, "Actual Run Width")
-                                  guard w >= 0.6 else { throw err("A stair run must be at least 600 mm wide.") }
-                                  e.stair?.width = w
-                              })
-    static let stairShape = P("stair.shape", "Shape", .choice(StairShape.allCases.map(\.rawValue)), .construction,
-                              get: { e, _ in .text(e.stair?.shape.rawValue ?? "") },
-                              set: { e, v, _ in
-                                  guard let s = StairShape(rawValue: text(v)) else { throw err("Unknown stair shape.") }
-                                  e.stair?.shape = s
-                              })
-    static let stairTurnsLeft = P("stair.turnsLeft", "Turns Left", .bool, .construction,
-                                  get: { e, _ in e.stair.map { .bool($0.turnsLeft) } },
-                                  set: { e, v, _ in e.stair?.turnsLeft = try bool(v) })
-    static let stairDesiredRisers = P("stair.desiredRisers", "Desired Number of Risers", .integer, .dimensions,
-                                      get: { e, ctx in .int(e.stair?.desiredRiserCount ?? StairGeometry.layout(e, ctx.model)?.riserCount ?? 0) },
-                                      set: { e, v, _ in
-                                          guard let n = v.intValue, n >= 2, n <= 60 else { throw err("Risers must be between 2 and 60.") }
-                                          e.stair?.desiredRiserCount = n
-                                      })
-    static let stairActualRisers = P("stair.actualRisers", "Actual Number of Risers", .integer, .dimensions,
-                                     get: { e, ctx in StairGeometry.layout(e, ctx.model).map { .int($0.riserCount) } })
-    static let stairRiserHeight = P("stair.actualRiserHeight", "Actual Riser Height", .length, .dimensions,
-                                    get: { e, ctx in StairGeometry.layout(e, ctx.model).map { .double($0.riserHeight) } })
-    static let stairTreadDepth = P("stair.actualTreadDepth", "Actual Tread Depth", .length, .dimensions,
-                                   get: { e, ctx in StairGeometry.layout(e, ctx.model).map { .double($0.treadDepth) } })
+    // STAIR: stair instance and type parameters are in StairParameters.swift.
     static let railingBaseOffset = P("railing.baseOffset", "Base Offset", .length, .constraints,
                                      get: { e, _ in e.railing.map { .double($0.baseOffset) } },
                                      set: { e, v, _ in e.railing?.baseOffset = try finite(v, "Base Offset") })
@@ -662,10 +622,6 @@ enum BuiltInCatalog {
                      e.typeData?.params[id] = .int(n)
                  })
     }
-    static let stairMaxRiser = typeLength("stair.maxRiser", "Maximum Riser Height", .construction, min: 0.1)
-    static let stairMinTread = typeLength("stair.minTread", "Minimum Tread Depth", .construction, min: 0.18)
-    static let stairTreadThickness = typeLength("stair.treadThickness", "Tread Thickness", .construction, min: 0.01)
-    static let stairWaist = typeLength("stair.waist", "Structural Depth", .construction, min: 0.05)
     static let railingHeight = typeLength("railing.height", "Railing Height", .construction, min: 0.3)
     static let railingBalusterSpacing = typeLength("railing.balusterSpacing", "Baluster Spacing", .construction, min: 0.05)
     static let railingBalusterSize = typeLength("railing.balusterSize", "Baluster Size", .construction, min: 0.005)
@@ -726,10 +682,9 @@ enum BuiltInCatalog {
             return typed + [levelParam, roofBaseOffset] + (e.roof?.extrusion != nil ? roofExtrusionParameters : [roofSlope, roofFascia, roofGutter])
                 + [quantityArea, quantityVolume, quantityThickness, quantityElevTop] + identity + phasing + ifc
         case .stair:
-            return typed + [levelParam, stairBaseOffset, stairTopLevel, stairTopOffset, stairHeight] + F2Parameters.stair + [stairShape, stairTurnsLeft, // F2: Multistory Top Level
-                            stairWidth, stairDesiredRisers, stairActualRisers, stairRiserHeight, stairTreadDepth] + identity + phasing + ifc
+            return typed + StairParameters.instance(e) + identity + phasing + ifc // STAIR: Revit's stair Properties (F2: Multistory Top Level)
         case .railing:
-            return typed + [levelParam, railingBaseOffset, quantityLength] + identity + phasing + ifc
+            return typed + [levelParam, railingBaseOffset] + StairParameters.railingInstance(e) + [quantityLength] + identity + phasing + ifc // STAIR: placement on a stair
         case .ramp:
             return typed + [levelParam] + rampInstanceParameters + [quantityLength, quantityArea, quantityVolume] + identity + phasing + ifc
         case .room:
@@ -827,8 +782,11 @@ enum BuiltInCatalog {
         case .floors, .ceilings, .roofs, .buildingPads: return [assemblyThicknessDefault, typeFunction] + typeCoarseFillParams + identity // W4-HATCH
         case .filledRegions: return regionTypeParams + identity // W4-HATCH
         case .topography: return [assemblyThicknessDefault] + identity // BL-SITE: toposolid types
-        case .stairs: return [stairMaxRiser, stairMinTread, stairTreadThickness, stairWaist, materialParam] + identity
-        case .railings: return [railingHeight, railingBalusterSpacing, railingBalusterSize, railingRailSize, materialParam] + identity
+        case .stairs: return StairParameters.stairType(td) + [materialParam] + identity // STAIR
+        case .stairRuns: return StairParameters.runTypeList + identity // STAIR
+        case .stairLandings: return StairParameters.landingTypeList + identity // STAIR
+        case .stairSupports: return StairParameters.supportTypeList + identity // STAIR
+        case .railings: return [railingHeight, railingBalusterSpacing, railingBalusterSize, railingRailSize] + StairParameters.railingType + [materialParam] + identity // STAIR: stair railing settings
         case .ramps: return rampTypeParameters + [materialParam] + identity
         case .doors, .windows: return [typeFireRating] + identity
         case .textNotes: return annotTextTypeParams // W2-ANNOT
@@ -889,6 +847,7 @@ enum BuiltInCatalog {
         for p in F1Parameters.all where d[p.id] == nil { d[p.id] = p } // F1
         for p in MassParameters.instance where d[p.id] == nil { d[p.id] = p } // F5
         for p in F2Parameters.all where d[p.id] == nil { d[p.id] = p } // F2
+        for p in StairParameters.all where d[p.id] == nil { d[p.id] = p } // STAIR
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where d[p.id] == nil { d[p.id] = p } // FM4
         for p in FurnitureJointParameters.all where d[p.id] == nil { d[p.id] = p } // FM6
         return d
@@ -917,6 +876,7 @@ enum BuiltInCatalog {
         for e in ReinforcementParameters.probes { for p in instance(for: e) where o[p.id] == nil { o[p.id] = i; i += 1 } } // F34
         for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         for p in F2Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F2
+        for p in StairParameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // STAIR
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM4
         for p in FurnitureJointParameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // FM6
         return o

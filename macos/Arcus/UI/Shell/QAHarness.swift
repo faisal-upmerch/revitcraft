@@ -155,6 +155,7 @@ enum QAHarness {
             click(ComponentTool(ctx: s.toolContext(for: l1.id), category: .furniture, commandID: .component), Vec2(4, 6))
             let st = StairTool(ctx: s.toolContext(for: l1.id), shape: .straight)
             click(st, Vec2(9.5, 1)); click(st, Vec2(9.5, 6))
+            try check(st.finish(), "Create Stair did not finish") // STAIR: sketch mode
             let room = s.model.elements(.rooms).first
             try check(room.map { RoomGeometry.boundary($0, s.model).state == .bounded } ?? false, "Room not bounded")
             try check(s.model.elements(.stairs).count == 1 && s.model.elements(.railings).count == 2, "Stair/railings missing")

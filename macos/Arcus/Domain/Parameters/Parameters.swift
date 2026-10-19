@@ -294,7 +294,7 @@ public enum Parameters {
             }
         case .elementRef(let c):
             if t.isEmpty || t == "<None>" || t == "Unconnected" { return .ref(nil) }
-            let candidates = model.elements(c)
+            let candidates = [.stairRuns, .stairLandings, .stairSupports].contains(c) ? model.types(for: c) : model.elements(c) // STAIR: types
             if let e = candidates.first(where: { $0.name == t }) { return .ref(e.id) }
             // Accept the formatted forms produced by `format`: "Family: Type" and "A101 - Sheet Name".
             if let e = candidates.first(where: { e in

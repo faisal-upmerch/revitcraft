@@ -70,6 +70,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FM8 categories:
     // FM9 categories:
     // STAIR categories:
+    case stairRuns, stairLandings, stairSupports // STAIR: run, landing and support types of stair types
 
 
 
@@ -113,6 +114,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .renderings: return .internal_ // F810: Render Gallery images
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
         case .furnitureJoints: return .internal_ // FM6: user-set joints have no graphics of their own
+        case .stairRuns, .stairLandings, .stairSupports: return .internal_ // STAIR: types only (their pieces draw as the stair)
         }
     }
 
@@ -254,6 +256,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureEdgeProfiles: "Edge Profiles"
         case .furnitureForms: "Forms"
         case .furnitureJoints: "Joints" // FM6
+        case .stairRuns: "Stair Runs" // STAIR
+        case .stairLandings: "Stair Landings"
+        case .stairSupports: "Stair Supports"
         }
     }
 
@@ -372,6 +377,9 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureEdgeProfiles: "Edge Profile"
         case .furnitureForms: "Form"
         case .furnitureJoints: "Joint" // FM6
+        case .stairRuns: "Run" // STAIR
+        case .stairLandings: "Landing"
+        case .stairSupports: "Support"
         }
     }
 

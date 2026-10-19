@@ -119,7 +119,7 @@ public enum NewElementProperties {
         case .structuralFraming: return .beam(BeamData(curve: .line(unit)))
         case .floors, .ceilings, .buildingPads: return .slab(SlabData(boundary: Sketch(loops: [])))
         case .roofs: return .roof(RoofData(footprint: Sketch(loops: []), edgeSlopes: []))
-        case .stairs: return .stair(StairData(origin: .zero, direction: 0))
+        case .stairs: return .stair((tool as? StairTool)?.draft ?? StairData(origin: .zero, direction: 0)) // STAIR: the stair being sketched
         case .railings: return .railing(RailingData(path: []))
         case .ramps: return .ramp(RampData(path: []))
         default:

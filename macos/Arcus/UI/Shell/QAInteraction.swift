@@ -603,7 +603,7 @@ extension QAHarness {
         await toolRun("structural column", "CL", [Vec2(3, 5)], expect: [.structuralColumns])
         await toolRun("component", "CM", [Vec2(9, 5)])
         await toolRun("beam", "BM", [Vec2(1, 6.5), Vec2(11, 6.5)], expect: [.structuralFraming])
-        await toolRun("stair", "", [Vec2(10, 1), Vec2(10, 5)], expect: [.stairs], command: .stairStraight) // BL-KEYS: SR is Snap to Remote Objects
+        await toolRun("stair", "", [Vec2(10, 1), Vec2(10, 5)], finish: true, expect: [.stairs], command: .stair) // STAIR: Create Stair, Finish // BL-KEYS: SR is Snap to Remote Objects
         await toolRun("room separator", "RS", [Vec2(8, 0.2), Vec2(8, 7.8)], expect: [.roomSeparationLines])
         await toolRun("floor sketch", "FL", [Vec2(0, 0), Vec2(12, 0), Vec2(12, 8), Vec2(0, 8), Vec2(0, 0)], finish: true, expect: [.floors])
         if let rcp1 {
