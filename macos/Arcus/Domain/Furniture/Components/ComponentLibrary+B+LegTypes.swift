@@ -34,7 +34,8 @@ public enum ComponentLegTypes {
         f.nestedFamilies = [d.family]
         var inst = NestedFamilyInstance(familyName: d.family.name, typeName: typeName, z: .expr("Height"))
         inst.id = "component-leg"
-        if d.family.parameter(named: "Height") != nil { inst.bindings["Height"] = "Height" }
+        // The component's height parameter (group B writes "Height"; others may write "Leg Height").
+        if let h = ["Height", "Leg Height", "Overall Height"].first(where: { d.family.parameter(named: $0) != nil }) { inst.bindings[h] = "Height" }
         if tv.material != nil, d.family.parameter(named: ComponentLibrary.legMaterial) != nil { inst.bindings[ComponentLibrary.legMaterial] = "Material" }
         f.nestedInstances = [inst]
         return f

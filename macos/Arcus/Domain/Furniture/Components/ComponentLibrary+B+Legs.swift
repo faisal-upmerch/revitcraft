@@ -4,12 +4,13 @@ import ArcusGeometry
 // COMPB: 07 Legs, Feet & Bases. Plan frame (ComponentKit): the origin is the leg's top centre on the underside of the
 // part it carries, Z up, so the leg hangs from Z = 0 down to Z = -Height and its foot is on the floor. Legs, feet and
 // bases carry the Leg Type role: they are offered in the Leg tool's Type Selector (its Height follows the leg), and
-// as components under bottoms, tops and shelves (at the corners, inset from the edges).
+// as components under bottoms, tops and shelves (at the corners, inset from the edges). The list's Sofa Legs are
+// group C's Sofa Leg (13 Sofa & Upholstery Hardware lists them too), also a Leg Type.
 
 extension ComponentLibrary {
     static var groupBLegs: [ComponentDefinition] {
         [roundLeg(), squareLeg(), taperedLeg(), angledLeg(), hairpinLeg(), turnedLeg(), tubeLeg(), adjustableCabinetLeg(), glideUpgrade(),
-         hiddenLevelingFoot(), plasticCabinetFoot(), stainlessLeg(), sofaLeg(), tableLeg(), deskLegFrame(), pedestalBase(), crossBase(), tBase(),
+         hiddenLevelingFoot(), plasticCabinetFoot(), stainlessLeg(), tableLeg(), deskLegFrame(), pedestalBase(), crossBase(), tBase(),
          uBase(), sledBase(), cantileverBase(), plinthBase(), toeKick(), decorativeFoot(), foldingLeg(), telescopicLeg(), lockableLeg(),
          heightAdjustableDeskFrame()]
     }
@@ -379,38 +380,6 @@ extension ComponentLibrary {
         b.type("Cabinet Foot - 25 mm", [:], flags: ["Square": false], cost: 0.45, model: "PCF-25", isDefault: true)
         b.type("Cabinet Foot - 40 mm", ["Height": mm(40), "Diameter": mm(45)], flags: ["Square": false], cost: 0.65, model: "PCF-40")
         b.type("Cabinet Foot - 50 mm Square", ["Height": mm(50), "Diameter": mm(40)], flags: ["Square": true], cost: 0.85, model: "PCF-50S")
-        return b.build()
-    }
-
-    static func sofaLeg() -> ComponentDefinition {
-        var b = legBuilder("Sofa Leg", "Sofa Legs", "Short sofa or chair leg on a hanger bolt: tapered round, or a bun.", .walnut, height: ComponentKit.inch(4), heightInstance: false,
-                           inset: ComponentKit.inch(2))
-        b.tags("sofa leg", "couch leg", "short leg", "tapered", "bun", "upholstery", "4 inch", "6 inch")
-        b.aliases("couch leg", "sofa foot", "settee leg", "ottoman leg", "chair leg short", "bun foot")
-        b.length("Top Diameter", ComponentKit.inch(2))
-        b.length("Foot Diameter", ComponentKit.inch(1.25))
-        b.flag("Bun", false, instance: false)
-        b.flag("Tapered", true, formula: "not(Bun)")
-        b.material("Ferrule Material", .brass)
-        b.flag("Ferrule", false, instance: false)
-        b.shown(by: "Tapered") { b in
-            b.turn("Leg", base: "-Height", [(CX.zero, CX.zero), ("Foot Diameter / 2", CX.zero), ("Top Diameter / 2", "Height"), (CX.zero, "Height")])
-        }
-        b.shown(by: "Bun") { b in
-            let pts = (0...12).map { k -> (String, String) in
-                let t = Double(k) / 12, a = -Double.pi / 2 + .pi * t
-                return ("Top Diameter / 2 * \(LX.num(0.55 + 0.45 * cos(a)))", "Height * \(LX.num(0.5 + 0.5 * sin(a)))")
-            }
-            b.turn("Bun", base: "-Height", [(CX.zero, CX.zero)] + pts + [(CX.zero, "Height")])
-        }
-        b.shown(by: "Ferrule") { b in
-            b.slot("Ferrule Material") { b in b.rod("Ferrule", r: "Foot Diameter / 2 + 0.0005 m", from: "-Height", to: "-Height + 0.012 m") }
-        }
-        roundLegSymbols(&b, d: "Top Diameter", foot: "Foot Diameter")
-        hangerBolt(&b)
-        b.type("Sofa Leg - 4\" Tapered", [:], flags: ["Bun": false, "Ferrule": false], cost: 6.50, model: "SOL-4T", isDefault: true)
-        b.type("Sofa Leg - 6\" Tapered Brass Tip", ["Height": ComponentKit.inch(6)], flags: ["Bun": false, "Ferrule": true], cost: 9.50, model: "SOL-6TB")
-        b.type("Sofa Leg - 3\" Bun", ["Height": ComponentKit.inch(3), "Top Diameter": ComponentKit.inch(3)], flags: ["Bun": true, "Ferrule": false], cost: 7.50, model: "SOL-3B")
         return b.build()
     }
 

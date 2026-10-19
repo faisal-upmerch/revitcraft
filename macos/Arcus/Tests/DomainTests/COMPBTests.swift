@@ -35,7 +35,7 @@ struct COMPBTests {
         var counts: [ComponentCategory: Int] = [:]
         for d in Self.defs { counts[d.category, default: 0] += 1 }
         #expect(counts[.connectors] == 27)
-        #expect(counts[.legs] == 28)
+        #expect(counts[.legs] == 27, "Sofa Legs are group C's Sofa Leg")
         #expect(counts[.shelving] == 17)
         #expect(counts[.wardrobe] == 30)
         #expect(counts[.mobility] == 16)
