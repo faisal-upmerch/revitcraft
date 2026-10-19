@@ -134,6 +134,29 @@ public enum FurnitureJointOperations {
         try FurnitureParameters.edit(tx) { $0.jointRules = rules }
     }
 
+    // MARK: Tags
+
+    /// The Cut Size Tag: Mark over the cut size (W x L), for every part category (idempotent).
+    public static func ensureCutSizeTag(in tx: TransactionContext) {
+        guard tx.model.isFurniture, !tx.model.elements(.families).contains(where: { $0.name == "Cut Size Tag" }) else { return }
+        var f = FamilyDefinition(name: "Cut Size Tag", template: .tag)
+        f.taggedCategories = Category.furnitureParts
+        f.types = [FamilyTypeDefinition(name: "Mark and Cut Size", values: [:])]
+        let w = "0.0105", h = "0.0035"
+        f.annotationLines = [
+            FamilyLine(shape: .line(FamilyPoint("-\(w)", "-\(h)"), FamilyPoint(w, "-\(h)"))), FamilyLine(shape: .line(FamilyPoint(w, "-\(h)"), FamilyPoint(w, h))),
+            FamilyLine(shape: .line(FamilyPoint(w, h), FamilyPoint("-\(w)", h))), FamilyLine(shape: .line(FamilyPoint("-\(w)", h), FamilyPoint("-\(w)", "-\(h)"))),
+            FamilyLine(shape: .line(FamilyPoint("-\(w)", "0"), FamilyPoint(w, "0"))),
+        ]
+        f.fills = [FamilyFill(points: [FamilyPoint("-\(w)", "-\(h)"), FamilyPoint(w, "-\(h)"), FamilyPoint(w, h), FamilyPoint("-\(w)", h)], isMasking: true)]
+        f.labels = [
+            FamilyLabel(position: FamilyPoint("0", "0.0017"), parameterName: "Mark", height: 0.0022, bold: true, sample: "P1"),
+            FamilyLabel(position: FamilyPoint("0", "-0.0018"), parameterName: "Cut Size", height: 0.0018, sample: "11 3/4\" x 34 1/2\""),
+        ]
+        let fid = tx.create(.families, name: f.name, data: .family(f))
+        tx.create(.elementTypes, name: "Mark and Cut Size", data: .type(TypeData(instanceCategory: .tags, familyID: fid, familyName: f.name)))
+    }
+
     // MARK: Regeneration
 
     /// Joint elements whose parts are gone (or copies that lost them) go.

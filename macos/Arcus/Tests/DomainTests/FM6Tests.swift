@@ -315,6 +315,60 @@ struct FM6Tests {
         #expect(Self.approx(w.bounds.max.x - w.bounds.min.x, 48 * Self.inch, 1e-6))
     }
 
+    // MARK: Joint tool
+
+    @Test func jointToolShowsMarkersPicksAndSetsAJoint() throws {
+        let (m, ids) = Self.bookcase()
+        let s = DocumentSession(model: m)
+        let front = try #require(s.model.views.first { $0.name == "Front" })
+        let ctx = ToolContext(session: s, viewID: front.id)
+        ctx.pixel = 0.001
+        let tool = FurnitureJointTool(ctx: ctx)
+        let joints = FurnitureJoints.joints(s.model)
+        // A marker per joint while the tool runs (fills and outlines), and in 3D.
+        #expect(tool.preview.primitives.count == 2 * joints.count)
+        #expect(tool.worldMarkers.count == joints.count)
+        let map = try #require(FurnitureSketchMap.of(front.view))
+        let target = try #require(FurnitureJoints.joint(ids["left"]!, ids["top"]!, s.model))
+        let at = map.project(target.marker)
+        tool.pointerMoved(ToolInput(point: at, rawPoint: at))
+        #expect(tool.hovered == target.key && tool.preview.highlight == [ids["left"]!, ids["top"]!])
+        tool.pointerDown(ToolInput(point: at, rawPoint: at))
+        #expect(tool.picked == target.key)
+        let opts = tool.options.map(\.id)
+        #expect(opts.contains("type") && opts.contains("through") && opts.contains("next") && opts.contains("param.Spacing"), "\(opts)")
+        // Next swaps the part that runs through; the joint is now set (a square marker, an element Properties shows).
+        tool.setOption("next", .bool(true))
+        let j = try #require(FurnitureJoints.joint(ids["left"]!, ids["top"]!, s.model))
+        #expect(j.throughID == ids["top"] && j.isUserSet)
+        #expect(s.selection.ids == [j.elementID!])
+        #expect(tool.worldMarkers.contains { $0.square && $0.emphasis == 2 })
+        let props = Parameters.instanceEntries(s.model[j.elementID!]!, s.model)
+        #expect(props.contains { $0.name == "Joint" && $0.value?.textValue == "Dowel" } && props.contains { $0.name == "Runs Through" })
+        // The type picker, a size, By Rule.
+        tool.setOption("type", .text("Cam Lock"))
+        #expect(FurnitureJoints.joint(ids["left"]!, ids["top"]!, s.model)?.type == .camLock)
+        tool.setOption("param.Spacing", .double(4 * Self.inch))
+        #expect(Self.approx(FurnitureJoints.joint(ids["left"]!, ids["top"]!, s.model)?.parameters.spacing, 4 * Self.inch))
+        tool.setOption("byRule", .bool(true))
+        #expect(FurnitureJoints.joint(ids["left"]!, ids["top"]!, s.model)?.isUserSet == false && s.model.elements(.furnitureJoints).isEmpty)
+        // Esc drops the joint, then ends the tool.
+        #expect(tool.escape() == .stayInTool && tool.picked == nil && tool.options.isEmpty)
+        #expect(tool.escape() == .exitTool)
+    }
+
+    @Test func machiningShowsAsHiddenHolesInFineElevations() throws {
+        let (m, _) = Self.bookcase()
+        let s = DocumentSession(model: m)
+        let side = try #require(s.model.views.first { $0.name == "Left" || $0.name == "Right" })
+        _ = s.perform("Fine") { tx in tx.update(side.id) { $0.view?.detailLevel = .fine } }
+        let fine = ViewGraphicsBuilder(model: s.model, view: s.model[side.id]!).furnitureJointGraphics()
+        let circles = fine.flatMap(\.primitives).filter { if case .arc = $0 { return true }; return false }
+        #expect(circles.count >= 4 * 2 * 9, "shelf pins seen end on: \(circles.count)")
+        _ = s.perform("Medium") { tx in tx.update(side.id) { $0.view?.detailLevel = .medium } }
+        #expect(ViewGraphicsBuilder(model: s.model, view: s.model[side.id]!).furnitureJointGraphics().isEmpty)
+    }
+
     @Test func oldFilesDecodeAndJointsRoundTrip() throws {
         let d = JointData(parts: [ElementID(9), ElementID(4)], type: .dado, throughPartID: ElementID(4), parameters: JointParameters(depth: 0.005))
         let back = try JSONDecoder().decode(JointData.self, from: JSONEncoder().encode(d))

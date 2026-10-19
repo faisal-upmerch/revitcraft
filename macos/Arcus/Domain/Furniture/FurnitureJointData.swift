@@ -78,8 +78,8 @@ public struct JointParameters: Hashable, Codable, Sendable {
         let i = inch
         switch type {
         case .butt, .miter: return JointParameters()
-        case .dado: return JointParameters(depth: 0.25 * i, clearance: 1.0 / 64 * i)
-        case .groove: return JointParameters(depth: 0.25 * i, clearance: 1.0 / 32 * i)
+        case .dado: return JointParameters(depth: 0.25 * i, clearance: 1.0 / 32 * i)
+        case .groove: return JointParameters(depth: 0.25 * i, clearance: 1.0 / 16 * i)
         case .rabbet: return JointParameters(depth: 0.375 * i)
         case .dowel: return JointParameters(diameter: 0.008, length: 0.030, spacing: 6 * i, edgeDistance: 1.5 * i)
         case .camLock: return JointParameters(diameter: 0.015, spacing: 12 * i, edgeDistance: 0.037)

@@ -180,6 +180,7 @@ public enum FurnitureTemplates {
             tx.create(.viewports, data: .viewport(ViewportData(viewID: view, center: center, detailNumber: number)), ownerViewID: sheet)
         }
         FurniturePartTypes.ensureStandard(in: tx) // FM4: standard part types and the Part Tag
+        FurnitureJointOperations.ensureCutSizeTag(in: tx) // FM6: the Cut Size Tag
         // FM7 schedules: Part List, Hardware Schedule and Material Takeoff are added by the fabrication milestone.
     }
 

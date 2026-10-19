@@ -279,6 +279,7 @@ enum RibbonContent {
         let site = siteSelectionItems(sel, m); if let t = site.title { title = t }; items += site.items // BL-SITE
         let f2 = f2SelectionItems(sel, m); if let t = f2.title { title = t }; items += f2.items // F2: stairs (Connect Levels)
         let fm4 = fm4SelectionItems(sel, m); if let t = fm4.title { title = t }; items += fm4.items // FM4: furniture parts
+        items += fm6SelectionItems(sel) // FM6: Joint, Allow/Disallow Join for parts
         if sel.count == 1, Parameters.familyDefinition(for: sel[0], m) != nil { items += [.large(.familyEditor)] }
         return items.isEmpty ? nil : RibbonPanel(title: title, items: items, tint: build)
     }
@@ -321,6 +322,7 @@ extension RibbonContent {
     @MainActor static func contextualTitle(_ state: DocumentState) -> String? {
         if let t = keysContextualTitle(state) { return t } // BL-KEYS: Modify tools keep "Modify | <Category>"; pre-selection
         if let t = state.activeTool as? SketchTool { return t.ribbonTitle(state.model) } // BL-CANVAS: "Modify | Create Floor Boundary"
+        if state.activeTool is FurnitureJointTool { return "Modify | Joints" } // FM6: as Wall Joins
         if let t = state.activeTool { return "\(t.isSketchMode ? "Modify | Sketch" : "Modify | Place") \(t.title)" }
         if let s = scheduleContextualTitle(state) { return s } // BL-SCHED
         if let s = f810ContextualTitle(state) { return s } // F810: Edit Walkthrough
@@ -460,6 +462,7 @@ struct RibbonView: View {
             if let level = tool as? LevelTool { LevelPlanViewsPanel(state: state, tool: level) } // BL-BROWSER
             else { RibbonToolOptionsPanel(state: state, tool: tool) } // BL-KEYS: 2026 arrangement of tool options
             ForEach(RibbonContent.f2ToolPanels(tool, state)) { p in panelView(p, contextual: true) } // F2: stair, roof, column panels
+            ForEach(RibbonContent.fm6ToolPanels(tool)) { p in panelView(p, contextual: true) } // FM6: Joint Rules while the Joint tool runs
             if [.door, .window, .component].contains(tool.commandID) {
                 panelView(RibbonPanel(title: "Mode", items: [.large(.loadFamily)] + (tool.commandID == .component ? [.large(.componentLibrary)] : []), tint: RibbonContent.build), contextual: true) // W2-LIB
             }
@@ -825,8 +828,11 @@ struct OptionControl: View {
     @State private var text = ""
     var body: some View {
         HStack(spacing: 5) {
-            Text(option.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).fixedSize() // W4-AUDIT: never wrap
+            if option.kind != .button { Text(option.label).font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).fixedSize() } // W4-AUDIT: never wrap
             switch option.kind {
+            case .button: // FM6: Previous / Next
+                Button(option.label) { tool.setOption(option.id, .bool(true)); state.toolChangedState() }
+                    .controlSize(.small).fixedSize()
             case .bool:
                 Toggle("", isOn: Binding(get: { option.value.boolValue ?? false }, set: { tool.setOption(option.id, .bool($0)); state.toolChangedState() }))
                     .toggleStyle(.checkbox).labelsHidden()

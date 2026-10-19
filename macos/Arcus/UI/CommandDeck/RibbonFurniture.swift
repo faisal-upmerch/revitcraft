@@ -28,7 +28,7 @@ extension RibbonContent {
         case .fabricate: return furnitureFabricatePanels
         case .view: return withoutArchitecture(tabPanels(.view))
         case .manage: return furnitureManagePanels
-        case .modify: return tabPanels(.modify) + [familyEditorPanel]
+        case .modify: return fm6ModifyPanels(tabPanels(.modify)) + [familyEditorPanel] // FM6: Joint on Modify ▸ Geometry
         default: return withoutArchitecture(tabPanels(tab))
         }
     }
@@ -136,10 +136,35 @@ extension RibbonContent {
     static var fm5ModelItems: [RibbonItem] { [] }
 
     // FM6 panels: Joint and Joint Rules on Fabricate.
-    static var fm6FabricatePanels: [RibbonPanel] { [] }
+    static var fm6FabricatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Joints", items: [.large(.furnitureJoint), .large(.furnitureJointRules), .small(.furnitureAllowJoin), .small(.furnitureDisallowJoin)], tint: furniture)]
+    }
 
     // FM6 panels: Joint Rules on Manage.
-    static var fm6ManagePanels: [RibbonPanel] { [] }
+    static var fm6ManagePanels: [RibbonPanel] { [RibbonPanel(title: "Joints", items: [.large(.furnitureJointRules)], tint: manage)] }
+
+    /// FM6: Modify ▸ Geometry in Furniture documents has Joint and Allow/Disallow Join for parts where projects have the
+    /// walls' Allow/Disallow Join (as Wall Joins sits there in Revit).
+    static func fm6ModifyPanels(_ panels: [RibbonPanel]) -> [RibbonPanel] {
+        panels.map { p in
+            guard p.title == "Geometry" else { return p }
+            var items = p.items.filter { $0.id != .joinGeometry }
+            items.insert(.large(.furnitureJoint), at: 0)
+            items.append(.small(.furnitureAllowJoin, [.furnitureAllowJoin, .furnitureDisallowJoin]))
+            return RibbonPanel(title: p.title, items: items, tint: p.tint)
+        }
+    }
+
+    /// FM6: the contextual tab's joint items for selected parts.
+    static func fm6SelectionItems(_ sel: [Element]) -> [RibbonItem] {
+        sel.contains(where: { $0.category.isFurniturePart && $0.furnitureEdgeProfile == nil && $0.furnitureForm == nil })
+            ? [.large(.furnitureJoint), .small(.furnitureAllowJoin), .small(.furnitureDisallowJoin)] : []
+    }
+
+    /// FM6: the contextual Modify | Joints tab's panel while the Joint tool runs.
+    static func fm6ToolPanels(_ tool: any InteractiveTool) -> [RibbonPanel] {
+        tool is FurnitureJointTool ? [RibbonPanel(title: "Joints", items: [.large(.furnitureJointRules)], tint: furniture)] : []
+    }
 
     // FM7 panels: Part List, Hardware Schedule, Material Takeoff, Nesting, CNC Export, Check Parts on Fabricate.
     static var fm7FabricatePanels: [RibbonPanel] { [] }

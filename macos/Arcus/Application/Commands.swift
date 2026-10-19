@@ -114,6 +114,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FM5 commands:
 
     // FM6 commands:
+    case furnitureJoint, furnitureJointRules, furnitureAllowJoin, furnitureDisallowJoin // FM6
 
     // FM7 commands:
 
