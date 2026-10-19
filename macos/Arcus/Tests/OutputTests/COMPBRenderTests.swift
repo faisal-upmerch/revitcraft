@@ -131,4 +131,7 @@ struct COMPBRenderTests {
 
     @Test func connectorsSheet() throws { try Self.sheets("06 Connectors", ComponentLibrary.groupBConnectors) }
     @Test func legsSheet() throws { try Self.sheets("07 Legs", ComponentLibrary.groupBLegs) }
+    @Test func wardrobeSheet() throws { try Self.sheets("09 Wardrobe", ComponentLibrary.groupBWardrobe) }
+    @Test func mobilitySheet() throws { try Self.sheets("15 Mobility", ComponentLibrary.groupBMobility) }
+    @Test func shelvingSheet() throws { try Self.sheets("08 Shelving", ComponentLibrary.groupBShelving) }
 }
