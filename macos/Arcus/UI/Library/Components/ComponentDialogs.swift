@@ -51,8 +51,13 @@ struct ComponentActionDialog: View {
                 } else {
                     VStack(alignment: .leading, spacing: 0) {
                         ForEach(Array(p.lines.enumerated()), id: \.offset) { k, l in
-                            DialogListRow(icon: action.symbol, iconTint: .brown, title: l)
-                            if k < p.lines.count - 1 { Divider() }
+                            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                Image(systemName: action.symbol).foregroundStyle(.brown).frame(width: 18)
+                                Text(l).lineLimit(3).fixedSize(horizontal: false, vertical: true)
+                                Spacer(minLength: 0)
+                            }
+                            .padding(.horizontal, 10).padding(.vertical, 7)
+                            if k < p.lines.count - 1 { Divider().padding(.leading, 36) }
                         }
                     }
                 }
@@ -99,6 +104,7 @@ struct ComponentAssemblyDialog: View {
                         ForEach(ComponentAssembly.builtIn) { a in
                             Button { chosen = a.id } label: {
                                 DialogListRow(icon: a.symbol, iconTint: chosen == a.id ? .accentColor : .secondary, title: a.name, subtitle: a.summary)
+                                    .padding(.horizontal, 10)
                                     .background(chosen == a.id ? Color.accentColor.opacity(0.14) : .clear)
                                     .contentShape(Rectangle())
                             }
@@ -111,8 +117,9 @@ struct ComponentAssemblyDialog: View {
                 VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
                     DialogSection("Adds", rows: false) {
                         VStack(alignment: .leading, spacing: 6) {
-                            ForEach(preview.lines, id: \.self) { l in Label(l, systemImage: "plus.circle").font(.system(size: 12)) }
+                            ForEach(preview.lines, id: \.self) { l in Label(l, systemImage: "plus.circle").font(.system(size: 12)).fixedSize(horizontal: false, vertical: true) }
                         }
+                        .padding(10)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     ForEach(preview.notes, id: \.self) { n in DialogNotice(.warning, n) }
@@ -267,7 +274,8 @@ struct UpdateComponentsDialog: View {
                     VStack(spacing: 0) {
                         ForEach(outdated, id: \.familyID) { l in
                             DialogListRow(icon: "arrow.down.circle", iconTint: .accentColor, title: state.model[l.familyID]?.name ?? l.definitionID,
-                                          subtitle: "Version \(l.loadedVersion) → \(l.libraryVersion ?? l.loadedVersion)")
+                                          subtitle: l.loadedVersion == 0 ? "New types from the library" : "Version \(l.loadedVersion) → \(l.libraryVersion ?? l.loadedVersion)")
+                                .padding(.horizontal, 10)
                         }
                     }
                 }

@@ -102,7 +102,7 @@ struct ComponentsPanel: View {
             }
             .frame(minWidth: 420, maxWidth: .infinity)
             Divider()
-            ComponentDetail(model: model, state: state, previewHeight: 260)
+            ScrollView { ComponentDetail(model: model, state: state, previewHeight: 260, showsDetails: true) }
                 .frame(width: 320)
                 .frame(maxHeight: .infinity, alignment: .top)
         }
@@ -395,6 +395,8 @@ struct ComponentDetail: View {
     @Bindable var model: ComponentPanelModel
     @Bindable var state: DocumentState
     var previewHeight: CGFloat
+    /// The browser also shows the description, the type's sizes and the search tags.
+    var showsDetails = false
 
     var body: some View {
         if let d = model.selected {
@@ -448,6 +450,7 @@ struct ComponentDetail: View {
                 }
                 .font(.system(size: 11.5))
                 .controlSize(.small)
+                if showsDetails { details(d) }
                 HStack(spacing: 6) {
                     Button("Insert") { ComponentPanelActions.insert(state) }
                         .keyboardShortcut(.defaultAction).buttonStyle(.borderedProminent)
@@ -475,6 +478,29 @@ struct ComponentDetail: View {
                 Spacer()
             }
             .frame(maxWidth: .infinity)
+        }
+    }
+}
+
+extension ComponentDetail {
+    /// Description, the selected type's sizes and the search tags.
+    func details(_ d: ComponentDefinition) -> some View {
+        let t = d.type(named: model.selectedType ?? "") ?? d.defaultType
+        let sizes: [(String, String)] = d.parameters.filter { !$0.isInstance && ($0.type == .length || $0.type == .angle) }.prefix(8).compactMap { p in
+            guard let v = t?.values[p.name]?.doubleValue else { return nil }
+            return (p.name, p.type == .angle ? String(format: "%.0f°", v * 180 / .pi) : FurnitureSizeText.inches(v))
+        }
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(d.description).font(.system(size: 11.5)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            if !sizes.isEmpty {
+                Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 3) {
+                    ForEach(sizes, id: \.0) { s in GridRow { Text(s.0).foregroundStyle(.secondary); Text(s.1).monospacedDigit() } }
+                }
+                .font(.system(size: 11))
+            }
+            if !d.tags.isEmpty {
+                Text(d.tags.prefix(8).joined(separator: " · ")).font(.system(size: 10.5)).foregroundStyle(.tertiary).lineLimit(2)
+            }
         }
     }
 }

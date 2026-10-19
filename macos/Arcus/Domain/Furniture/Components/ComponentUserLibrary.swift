@@ -67,6 +67,16 @@ public enum ComponentUserLibrary {
     /// (plan frame, placed on the level or on a part), with the piece's Width/Depth/Height and types.
     public static func fromSelection(_ ids: [ElementID], in m: BIMModel, name: String, category: ComponentCategory, subcategory: String,
                                      tags: [String] = []) throws(TransactionError) -> ComponentDefinition {
+        // A component family made in the Family Editor (New Component) and loaded: saved as it is, face-based.
+        if ids.count == 1, let e = m[ids[0]], e.category == .furnitureHardware, !e.isType, ComponentDocument.definition(of: e, m) == nil,
+           let tid = e.typeID, let fid = m[tid]?.typeData?.familyID, var fam = m[fid]?.family {
+            fam.name = name
+            var b = ComponentBuilder(wrapping: fam, category, subcategory, id: "user.\(UUID().uuidString.lowercased())", frame: .face)
+            b.definition.tags = tags.isEmpty ? ComponentSearchIndex.tokens(name).filter { $0.count > 2 } : tags
+            b.definition.isUserComponent = true
+            b.host(ComponentHostKind.fronts + ComponentHostKind.carcass, faces: [.front, .inside, .top], align: .center)
+            return b.build()
+        }
         guard m.isFurniture else { throw TransactionError("Save Selection as Component works in Furniture documents.") }
         let picked = Set(ids)
         let kinds: Set<Category> = [.furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms, .furnitureFronts, .furnitureHardware,

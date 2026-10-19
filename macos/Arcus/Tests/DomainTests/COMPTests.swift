@@ -541,3 +541,21 @@ struct COMPFrontIntegrationTests {
         #expect(screws.allSatisfy { $0.partID == bay.bottom }, "into the bottom, not the sides")
     }
 }
+
+@Suite("COMP in projects")
+struct COMPProjectTests {
+    @Test func componentsPlaceInArchitecturalProjects() throws {
+        let (m0, _) = ProjectTemplates.make(.architectural, units: .imperial)
+        #expect(!m0.isFurniture)
+        let leg = try #require(COMPFixtures.catalog.first { $0.name == "Adjustable Cabinet Leg" })
+        let tx = TransactionContext(model: m0, name: "Place")
+        let ids = try ComponentPlacement.place(leg, hostID: nil, levelPoint: Vec3(1, 2, 0), in: tx)
+        let m = try tx.commit().model
+        let e = try #require(m[ids[0]])
+        #expect(e.category == .furnitureHardware && e.levelID != nil)
+        #expect(!ElementMeshes.parts(e, m, detail: .fine).isEmpty)
+        #expect(ComponentDocument.definition(of: e, m)?.id == leg.id)
+        // Read-mostly: the furniture-only tools stay out of projects.
+        #expect(ComponentFabrication.bom(m).isEmpty)
+    }
+}

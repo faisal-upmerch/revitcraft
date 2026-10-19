@@ -12,7 +12,7 @@ extension CommandRouter {
     /// Why one of this batch's commands can't run now, or nil.
     func compDisabledReason(_ id: CommandID) -> String? {
         guard Self.compIDs.contains(id) else { return nil }
-        let furnitureOnly: Set<CommandID> = [.componentAssembly, .componentHardwareRules, .componentSaveSelection, .componentBOM, .componentPowerSummary]
+        let furnitureOnly: Set<CommandID> = [.componentAssembly, .componentHardwareRules, .componentBOM, .componentPowerSummary]
         if furnitureOnly.contains(id), state.mode != .furniture { return "Only in Furniture documents." }
         switch id {
         case .componentPlace:
@@ -65,13 +65,9 @@ extension CommandRouter {
             session.perform("Open \(name)") { tx in sid = ComponentSchedules.ensure(name, in: tx) }
             if let e = session.lastError { state.show(e.message, error: true) } else if let sid { state.open(sid) }
         case .componentNewFamily:
-            do {
-                try ComponentLibraryStore.shared.addUserComponent(ComponentUserLibrary.template(name: "New Component"))
-                panel.isShown = true
-                panel.section = .mine
-                state.onWorkspaceChange?()
-                state.show("Added New Component to My Components: duplicate, edit its family in the Family Editor, or place it.")
-            } catch { state.show(DialogErrorText.describe(error), error: true) }
+            // The Furniture Hardware / Component template in the Family Editor: forms, parameters, material slots and types
+            // as in any family; Load into Project, place it, then Save Selection as Component adds it to My Components.
+            FamilyEditorWindowController.open(new: ComponentUserLibrary.template(name: "Component").family, state: state)
         default:
             guard let a = CommandCatalog.compAction(id) else { return false }
             state.presented = .comp(.action(a, compSelectedHosts))

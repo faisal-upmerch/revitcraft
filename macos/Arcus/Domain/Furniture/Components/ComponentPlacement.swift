@@ -432,6 +432,11 @@ public enum ComponentPlacement {
             let (data, values) = Self.data(d, on: f, at: p, s, mirrored: e.component?.mirrored ?? false, tx.model, levelZ: levelZ)
             write(e, data, values, tx)
         }
+        // Live warnings: the rules of components placed, edited or whose host changed in this transaction.
+        for e in all where touchedSet.contains(e.id) || (e.hostID.map(touchedSet.contains) ?? false) {
+            guard let now = tx.model[e.id] else { continue }
+            ComponentChecks.check(instance: now, tx.model).forEach(tx.warn)
+        }
     }
 
     static func write(_ e: Element, _ data: ComponentData, _ values: [String: ParamValue], _ tx: TransactionContext, settings: ComponentSettings? = nil) {
