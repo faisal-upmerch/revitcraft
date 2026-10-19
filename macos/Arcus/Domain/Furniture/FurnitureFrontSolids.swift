@@ -20,6 +20,10 @@ public enum FurnitureFrontSolids {
         guard let g = FurnitureFronts.geometry(e, m) else { return out }
         let tv = FurnitureFrontTypes.values(of: e, m)
         let base = e.mark.isEmpty ? g.kind.rawValue : e.mark
+        // FMG3: a front on another face is written in its bay's frame and turned into the model as it's written.
+        let savedFrame = ctx.frame
+        ctx.frame = g.frame.isIdentity ? nil : g.frame
+        defer { ctx.frame = savedFrame }
         for (li, leaf) in g.leaves.enumerated() {
             let name = g.leaves.count > 1 ? "\(base) Leaf \(li + 1)" : base
             let style: FrontStyle = g.face == .front ? tv.style : .slab
@@ -31,7 +35,7 @@ public enum FurnitureFrontSolids {
                     for edge in [PartEdge(axis: .x, firstAtMax: false, secondAtMax: false), PartEdge(axis: .x, firstAtMax: false, secondAtMax: true),
                                  PartEdge(axis: .z, firstAtMax: false, secondAtMax: false), PartEdge(axis: .z, firstAtMax: true, secondAtMax: false)] {
                         if let v = FurniturePartSolids.edgeVoid(name: "\(name) Edge", host: host, edge: edge, shape: shape, size: size, depth: 0, offset: 0,
-                                                                inSecondFace: false, ctx: ctx) { out.placed.append(v) }
+                                                                inSecondFace: false, ctx: ctx) { out.placed.append(g.frame.placed(v)) } // FMG3
                     }
                 }
                 continue

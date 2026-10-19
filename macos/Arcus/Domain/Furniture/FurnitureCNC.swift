@@ -141,6 +141,11 @@ public enum FurnitureCNC {
         let (u, v, w) = ((lf.u.0.value, lf.u.1.value), (lf.v.0.value, lf.v.1.value), (lf.w.0.value, lf.w.1.value))
         func mn(_ a: (Double, Double)) -> Double { min(a.0, a.1) }
         func mx(_ a: (Double, Double)) -> Double { max(a.0, a.1) }
+        if g.face == .front, !g.frame.isIdentity { // FMG3: a leaf on another face, in the model (canted faces: outlines only)
+            guard g.frame.isSquare else { return nil }
+            let b = g.frame.worldBox(FurniturePartSolids.PartBox(x: (PartValue(mn(u)), PartValue(mx(u))), y: (PartValue(mn(w)), PartValue(mx(w))), z: (PartValue(mn(v)), PartValue(mx(v))))).box
+            return Frame(lo: b.min, hi: b.max)
+        }
         if g.face == .front { return Frame(lo: Vec3(mn(u), mn(w), mn(v)), hi: Vec3(mx(u), mx(w), mx(v))) }
         return Frame(lo: Vec3(mn(u), mn(v), mn(w)), hi: Vec3(mx(u), mx(v), mx(w)))
     }

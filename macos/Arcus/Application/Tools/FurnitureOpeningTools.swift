@@ -9,24 +9,37 @@ import ArcusDomain
 // and Flap (FP) place like Door: hover a bay, Space flips the hinge side, Tag on Placement; Drawer's Number stacks that
 // many drawers (EQ). Hardware (HW) places a hardware type like Component. Pick New Host moves a front to another bay.
 
-/// Picking bays in a view: Front/Back elevations see bays from the front (x, z), plans from above (x, y).
+/// FMG3: how a view's points map to the faces bays are seen on: plans see top-access bays (x, y); every elevation and
+/// section sees the face it looks at, in that face's frame (u along the view's right, z up), square to the piece or not.
+public struct FurnitureFaceMap: Sendable, Equatable {
+    public var face: BayFace
+    public var frame: BayFrame
+    /// Vertical views: the face's u at the view's u = 0.
+    var shift: Double
+
+    public func toLocal(_ p: Vec2) -> Vec2 { face == .top ? p : Vec2(p.x + shift, p.y) }
+    public func toView(_ p: Vec2) -> Vec2 { face == .top ? p : Vec2(p.x - shift, p.y) }
+
+    public static func of(_ v: ViewData?) -> FurnitureFaceMap? {
+        guard let v else { return nil }
+        if v.kind.isPlan { return FurnitureFaceMap(face: .top, frame: .front, shift: 0) }
+        guard let frame = BayFrame(view: v), let o = v.planeOrigin, let r = v.rightVector?.normalized else { return nil }
+        return FurnitureFaceMap(face: .front, frame: frame, shift: o.xy.dot(r))
+    }
+}
+
+/// Picking bays in a view: elevations and sections see bays on the face they look at (u, z), plans from above (x, y).
 @MainActor
 enum FurnitureOpeningPick {
-    static func face(_ map: FurnitureSketchMap?) -> BayFace? {
-        switch map?.plane {
-        case .xz?: .front
-        case .xy?: .top
-        default: nil
-        }
-    }
+    static func face(_ map: FurnitureFaceMap?) -> BayFace? { map?.face }
 
     /// A view point in the face's coordinates.
-    static func point(_ p: Vec2, _ map: FurnitureSketchMap) -> Vec2 { map.toSketch(p) }
+    static func point(_ p: Vec2, _ map: FurnitureFaceMap) -> Vec2 { map.toLocal(p) }
 
-    /// The innermost bay at a face point: the smallest undivided bay whose opening holds it.
-    static func bay(at p: Vec2, face: BayFace, _ m: BIMModel, undividedOnly: Bool = true) -> Element? {
+    /// The innermost bay at a face point: the smallest undivided bay whose opening holds it (FMG3: on the view's face).
+    static func bay(at p: Vec2, face: BayFace, frame: BayFrame = .front, _ m: BIMModel, undividedOnly: Bool = true) -> Element? {
         m.elements(.furnitureBays).filter { b in
-            guard let d = b.furnitureBay, d.face == face, let o = d.opening else { return false }
+            guard let d = b.furnitureBay, d.face == face, face == .top || BayFrame(d) == frame, let o = d.opening else { return false }
             if undividedOnly, d.division != nil { return false }
             return FurnitureBays.outline(o, face).contains(p)
         }.min { a, b in
@@ -36,10 +49,10 @@ enum FurnitureOpeningPick {
     }
 
     /// A face rectangle as view corners.
-    static func corners(_ r: Rect2, _ map: FurnitureSketchMap) -> [Vec2] { Rect2(points: [map.toView(r.min), map.toView(r.max)]).corners }
+    static func corners(_ r: Rect2, _ map: FurnitureFaceMap) -> [Vec2] { Rect2(points: [map.toView(r.min), map.toView(r.max)]).corners }
 
     /// Where a tag goes on a bay or front: centred, a third of the way up (clear of drawer handles).
-    static func tagHead(_ r: Rect2, _ map: FurnitureSketchMap) -> Vec2 { map.toView(Vec2(r.center.x, r.min.y + r.height * 0.32)) }
+    static func tagHead(_ r: Rect2, _ map: FurnitureFaceMap) -> Vec2 { map.toView(Vec2(r.center.x, r.min.y + r.height * 0.32)) }
 
     static func highlightFill() -> GFill { GFill(pattern: .solid, color: RGBColor(0.25, 0.5, 0.8), transparency: 0.82) }
 }
@@ -51,16 +64,16 @@ public final class FurnitureBayTool: BaseTool, InteractiveTool {
     public let commandID: CommandID = .furnitureBay
     public var title: String { "Bay" }
     public var tagOnPlacement = true
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
 
-    public override init(ctx: ToolContext) { map = FurnitureSketchMap.of(ctx.viewData); super.init(ctx: ctx) }
+    public override init(ctx: ToolContext) { map = FurnitureFaceMap.of(ctx.viewData); super.init(ctx: ctx) }
 
     var face: BayFace? { FurnitureOpeningPick.face(map) }
     public var prompt: String {
         switch face {
         case .front?: "Click inside a region bounded by parts or bay separators to place a bay."
         case .top?: "Click inside a box (sides, front and back) to place a top-access bay."
-        default: "Bays are placed in the Front or Back elevation, or in plan for top-access bays."
+        default: "Bays are placed in an elevation or section looking at the face, or in plan for top-access bays."
         }
     }
     public var options: [ToolOption] { [ToolOption(id: "tag", label: "Tag on Placement", kind: .bool, value: .bool(tagOnPlacement))] }
@@ -70,7 +83,7 @@ public final class FurnitureBayTool: BaseTool, InteractiveTool {
         preview = ToolPreview()
         guard let map, let face else { return }
         let p = FurnitureOpeningPick.point(i.point, map)
-        guard let o = FurnitureBays.opening(face: face, at: p, ctx.model) else { preview.cursor = .crosshair; return }
+        guard let o = FurnitureBays.opening(face: face, at: p, frame: map.frame, ctx.model) else { preview.cursor = .crosshair; return }
         let pts = FurnitureOpeningPick.corners(FurnitureBays.outline(o, face), map)
         preview.primitives = [.fill([Polygon2(pts)], FurnitureOpeningPick.highlightFill()), .polyline(pts, closed: true, ctx.previewHeavy)]
         preview.highlight = Set(o.parts)
@@ -84,7 +97,7 @@ public final class FurnitureBayTool: BaseTool, InteractiveTool {
         let view = ctx.viewID
         var created: ElementID?
         ctx.session.perform("Place Bay") { tx in
-            let id = try FurnitureBays.createBay(face: face, at: p, in: tx)
+            let id = try FurnitureBays.createBay(face: face, at: p, frame: map.frame, in: tx)
             if let tt = tagType, let o = tx.model[id]?.furnitureBay?.opening {
                 tx.create(.tags, data: .tag(TagData(taggedID: id, head: FurnitureOpeningPick.tagHead(FurnitureBays.outline(o, face), map))), typeID: tt, ownerViewID: view)
             }
@@ -102,15 +115,15 @@ public final class FurnitureBaySeparatorTool: BaseTool, InteractiveTool {
     public let commandID: CommandID = .furnitureBaySeparator
     public var title: String { "Bay Separator" }
     public var chain = true
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
     var start: Vec2?
     var current: Vec2?
 
-    public override init(ctx: ToolContext) { map = FurnitureSketchMap.of(ctx.viewData); super.init(ctx: ctx) }
+    public override init(ctx: ToolContext) { map = FurnitureFaceMap.of(ctx.viewData); super.init(ctx: ctx) }
 
     var face: BayFace? { FurnitureOpeningPick.face(map) }
     public var prompt: String {
-        guard face != nil else { return "Draw bay separators in the Front or Back elevation, or in plan." }
+        guard face != nil else { return "Draw bay separators in an elevation or section, or in plan." }
         return start == nil ? "Click to start the separator." : "Click to end it (square to the piece), or type a length."
     }
     public var numericLabel: String? { start != nil ? "Length" : nil }
@@ -138,7 +151,7 @@ public final class FurnitureBaySeparatorTool: BaseTool, InteractiveTool {
     @discardableResult
     func create(_ a: Vec2, _ b: Vec2) -> Bool {
         guard let map, let face else { return false }
-        ctx.session.perform("Create Bay Separator") { tx in try FurnitureBays.createSeparator(face: face, from: map.toSketch(a), to: map.toSketch(b), in: tx) }
+        ctx.session.perform("Create Bay Separator") { tx in try FurnitureBays.createSeparator(face: face, from: map.toLocal(a), to: map.toLocal(b), frame: map.frame, in: tx) }
         if let e = ctx.session.lastError { message(e.message); return false }
         return true
     }
@@ -165,16 +178,16 @@ public final class FurnitureBayDivideTool: BaseTool, InteractiveTool {
     public let commandID: CommandID = .furnitureBayDivide
     public var title: String { "Bay Divide" }
     public var division = BayDivision(direction: .rows, count: 3)
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
 
     public init(ctx: ToolContext, bay: ElementID? = nil) {
-        map = FurnitureSketchMap.of(ctx.viewData)
+        map = FurnitureFaceMap.of(ctx.viewData)
         super.init(ctx: ctx)
         if let d = ctx.model[bay]?.furnitureBay?.division { division = d }
     }
 
     var face: BayFace? { FurnitureOpeningPick.face(map) }
-    public var prompt: String { face == nil ? "Divide bays in the Front or Back elevation, or in plan." : "Click a bay to divide it into \(division.count) \(division.direction.rawValue.lowercased())." }
+    public var prompt: String { face == nil ? "Divide bays in an elevation or section, or in plan." : "Click a bay to divide it into \(division.count) \(division.direction.rawValue.lowercased())." }
     public var options: [ToolOption] {
         var o = [ToolOption(id: "direction", label: "Divide Into", kind: .choice(BayDivision.Direction.allCases.map(\.rawValue)), value: .text(division.direction.rawValue)),
                  ToolOption(id: "layout", label: "Layout", kind: .choice(BayDivision.Layout.allCases.map(\.rawValue)), value: .text(division.layout.rawValue)),
@@ -197,14 +210,14 @@ public final class FurnitureBayDivideTool: BaseTool, InteractiveTool {
 
     func target(_ p: Vec2) -> Element? {
         guard let map, let face else { return nil }
-        return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, ctx.model)
+        return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, frame: map.frame, ctx.model)
     }
 
     public func pointerMoved(_ i: ToolInput) {
         preview = ToolPreview()
         guard let map, let face, let b = target(i.point), let d = b.furnitureBay, let o = d.opening else { return }
         preview.primitives = [.polyline(FurnitureOpeningPick.corners(FurnitureBays.outline(o, face), map), closed: true, ctx.previewHeavy)]
-        for (k, c) in FurnitureBays.cells(o, face, division, number: d.number).enumerated() where k > 0 {
+        for (k, c) in FurnitureBays.cells(o, face, division, number: d.number, frame: BayFrame(d)).enumerated() where k > 0 {
             let r = FurnitureBays.outline(c, face)
             let (a, e) = division.direction == .rows ? (Vec2(r.min.x, r.min.y), Vec2(r.max.x, r.min.y)) : (Vec2(r.min.x, r.min.y), Vec2(r.min.x, r.max.y))
             preview.primitives.append(ctx.line(map.toView(a), map.toView(e), heavy: true))
@@ -232,10 +245,10 @@ public final class FurnitureFrontTool: BaseTool, InteractiveTool {
     public var tagOnPlacement = false
     public var hingeRight = false
     public var count = 1
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
     var current: Vec2?
 
-    public init(ctx: ToolContext, kind: FrontKind) { self.kind = kind; map = FurnitureSketchMap.of(ctx.viewData); super.init(ctx: ctx) }
+    public init(ctx: ToolContext, kind: FrontKind) { self.kind = kind; map = FurnitureFaceMap.of(ctx.viewData); super.init(ctx: ctx) }
 
     var face: BayFace? { FurnitureOpeningPick.face(map) }
     var typeID: ElementID? {
@@ -243,7 +256,7 @@ public final class FurnitureFrontTool: BaseTool, InteractiveTool {
         return FurnitureFrontTypes.firstType(kind, ctx.model)
     }
     public var prompt: String {
-        guard face != nil else { return "Place \(kind.rawValue.lowercased())s in the Front or Back elevation (lids: in plan)." }
+        guard face != nil else { return "Place \(kind.rawValue.lowercased())s in an elevation or section looking at the bay (lids: in plan)." }
         return kind == .door ? "Click a bay to place the door. Space flips the hinge side." : "Click a bay to place the \(kind.rawValue.lowercased())."
     }
     public var options: [ToolOption] {
@@ -269,9 +282,9 @@ public final class FurnitureFrontTool: BaseTool, InteractiveTool {
         guard let map, let face else { return nil }
         let q = FurnitureOpeningPick.point(p, map)
         // A divided bay takes the drawer stack (or a front per cell) when Number asks for its cells.
-        if kind == .drawer, count > 1, let b = FurnitureOpeningPick.bay(at: q, face: face, ctx.model, undividedOnly: false),
+        if kind == .drawer, count > 1, let b = FurnitureOpeningPick.bay(at: q, face: face, frame: map.frame, ctx.model, undividedOnly: false),
            b.furnitureBay?.parentID == nil, FurnitureBays.cellIDs(of: b.id, ctx.model).isEmpty { return b }
-        return FurnitureOpeningPick.bay(at: q, face: face, ctx.model)
+        return FurnitureOpeningPick.bay(at: q, face: face, frame: map.frame, ctx.model)
     }
 
     public func pointerMoved(_ i: ToolInput) {
@@ -279,7 +292,7 @@ public final class FurnitureFrontTool: BaseTool, InteractiveTool {
         preview = ToolPreview()
         guard let map, let b = bay(at: i.point), let bd = b.furnitureBay, let o = bd.opening else { preview.cursor = face == nil ? .notAllowed : .crosshair; return }
         let tv = FurnitureFrontTypes.Values(ctx.model[typeID]?.typeData)
-        let cells: [BayOpening] = kind == .drawer && count > 1 ? FurnitureBays.cells(o, bd.face, BayDivision(direction: .rows, count: count), number: bd.number) : [o]
+        let cells: [BayOpening] = kind == .drawer && count > 1 ? FurnitureBays.cells(o, bd.face, BayDivision(direction: .rows, count: count), number: bd.number, frame: BayFrame(bd)) : [o]
         let taken = ctx.model.hosted(by: b.id).contains { $0.furnitureFront != nil }
         for c in cells {
             guard let g = FurnitureFronts.geometry(FrontData(kind: kind, hingeFlipped: hingeRight), type: tv, bay: bd, opening: c) else { continue }
@@ -338,59 +351,62 @@ public final class FurnitureHardwareTool: BaseTool, InteractiveTool {
     public var title: String { "Hardware" }
     public var elevation = 0.0
     public var mirrored = false
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
     var current: Vec2?
 
-    public override init(ctx: ToolContext) { map = FurnitureSketchMap.of(ctx.viewData); super.init(ctx: ctx) }
+    public override init(ctx: ToolContext) { map = FurnitureFaceMap.of(ctx.viewData); super.init(ctx: ctx) }
 
     var typeID: ElementID? {
         if let t = ctx.currentTypes[.furnitureHardware], ctx.model[t]?.typeData?.instanceCategory == .furnitureHardware { return t }
         return FurnitureHardware.types(.handle, ctx.model).first?.id ?? ctx.model.types(for: .furnitureHardware).first?.id
     }
     public var prompt: String {
-        guard let map, map.plane != .yz else { return "Place hardware in a plan or the Front/Back elevation." }
+        guard map != nil else { return "Place hardware in a plan, or in an elevation or section looking at the face." }
         return "Click to place the hardware. Space mirrors it."
     }
     public var options: [ToolOption] {
-        map?.plane == .xy ? [ToolOption(id: "elevation", label: "Elevation", kind: .length, value: .double(elevation))] : []
+        map?.face == .top ? [ToolOption(id: "elevation", label: "Elevation", kind: .length, value: .double(elevation))] : []
     }
     public func setOption(_ id: String, _ value: ParamValue) { if id == "elevation" { elevation = value.doubleValue ?? 0 } }
 
-    /// The world point a click puts the hardware at: in plan at the Elevation; in a Front/Back elevation on the
-    /// carcass's front face.
+    /// The world point a click puts the hardware at: in plan at the Elevation; in an elevation or section on the face
+    /// of the front under the pointer (FMG3: any face), else on the carcass's front face.
     func world(_ p: Vec2) -> Vec3? {
         guard let map else { return nil }
-        if map.plane == .xy { return Vec3(p.x, p.y, elevation) }
-        guard map.plane == .xz else { return nil }
-        let s = map.toSketch(p)
+        if map.face == .top { return Vec3(p.x, p.y, elevation) }
+        let s = map.toLocal(p)
         let front = ctx.model.elements(.furnitureFronts).compactMap { FurnitureFronts.geometry($0, ctx.model) }.filter { g in
-            g.face == .front && g.leaves.contains { $0.rect.contains(s) }
+            g.face == .front && g.frame == map.frame && g.leaves.contains { $0.rect.contains(s) }
         }.first?.outerFace
+        guard front != nil || map.frame.isIdentity else { return nil }
         let carcass = FurniturePlanes.positionsByName(ctx.model)["Front"] ?? 0
-        return Vec3(s.x, front ?? carcass, s.y)
+        return map.frame.world(Vec3(s.x, front ?? carcass, s.y))
     }
+
+    /// FMG3: hardware placed on a turned face turns with it.
+    var rotation: Double { map?.face == .front ? (map?.frame.angle ?? 0) : 0 }
 
     public func pointerMoved(_ i: ToolInput) {
         current = i.point
         preview = ToolPreview()
         guard let w = world(i.point), let t = typeID else { preview.cursor = .notAllowed; return }
-        let probe = Element(id: ElementID(UInt64.max - 1), category: .furnitureHardware, data: .component(ComponentData(location: w.xy, offset: w.z, mirrored: mirrored)),
+        let probe = Element(id: ElementID(UInt64.max - 1), category: .furnitureHardware, data: .component(ComponentData(location: w.xy, rotation: rotation, offset: w.z, mirrored: mirrored)),
                             typeID: t, levelID: ctx.model.levels.first?.id)
         let mesh = ElementMeshes.parts(probe, ctx.model, detail: .fine).reduce(into: Mesh()) { $0.append($1.mesh) }
         guard !mesh.isEmpty, let map else { return }
-        // `project` gives view coordinates (plans: x, y; elevations: u, z).
-        let r = Rect2(points: mesh.bounds.corners.map(map.project))
+        // View coordinates: plans x, y; elevations and sections u, z.
+        let r = Rect2(points: mesh.positions.map { map.face == .top ? $0.xy : map.toView(Vec2(map.frame.local($0).x, $0.z)) })
         preview.primitives = [.polyline(r.corners, closed: true, ctx.previewHeavy)]
         preview.cursor = .crosshairPlus
     }
 
     public func pointerDown(_ i: ToolInput) {
         guard let w = world(i.point), let t = typeID else { message(prompt); return }
-        let m = mirrored
+        let m = mirrored, rot = rotation
         var id: ElementID?
         ctx.session.perform("Place Hardware") { tx in
             let levelZ = tx.model.elevation(ofLevel: tx.model.levels.first?.id)
-            id = tx.create(.furnitureHardware, data: .component(ComponentData(location: w.xy, offset: w.z - levelZ, mirrored: m)), typeID: t, levelID: tx.model.levels.first?.id)
+            id = tx.create(.furnitureHardware, data: .component(ComponentData(location: w.xy, rotation: rot, offset: w.z - levelZ, mirrored: m)), typeID: t, levelID: tx.model.levels.first?.id)
         }
         if let e = ctx.session.lastError { message(e.message) } else if let id { ctx.session.selection.select([id]) }
     }
@@ -410,9 +426,9 @@ public final class FurniturePickBayTool: BaseTool, InteractiveTool {
     public let purpose: Purpose
     public var commandID: CommandID { if case .tag = purpose { return .furnitureBayTag }; return .furniturePickNewHost }
     public var title: String { if case .tag = purpose { return "Bay Tag" }; return "Pick New Host" }
-    let map: FurnitureSketchMap?
+    let map: FurnitureFaceMap?
 
-    public init(ctx: ToolContext, purpose: Purpose) { self.purpose = purpose; map = FurnitureSketchMap.of(ctx.viewData); super.init(ctx: ctx) }
+    public init(ctx: ToolContext, purpose: Purpose) { self.purpose = purpose; map = FurnitureFaceMap.of(ctx.viewData); super.init(ctx: ctx) }
 
     var face: BayFace? { FurnitureOpeningPick.face(map) }
     public var prompt: String {
@@ -422,8 +438,8 @@ public final class FurniturePickBayTool: BaseTool, InteractiveTool {
 
     func bay(_ p: Vec2) -> Element? {
         guard let map, let face else { return nil }
-        if case .tag = purpose { return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, ctx.model, undividedOnly: false) }
-        return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, ctx.model)
+        if case .tag = purpose { return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, frame: map.frame, ctx.model, undividedOnly: false) }
+        return FurnitureOpeningPick.bay(at: FurnitureOpeningPick.point(p, map), face: face, frame: map.frame, ctx.model)
     }
 
     public func pointerMoved(_ i: ToolInput) {

@@ -152,7 +152,13 @@ extension FurnitureCompiler {
                   let hinge = g.leaves[li].hinge, let ht = FurnitureFronts.hingeType(front, m), !FurnitureHardware.Values(m[ht]?.typeData).isPiano else { continue }
             let leaf = g.leaves[li]
             let vertical = hinge == .left || hinge == .right
-            let ends = vertical ? leaf.v : leaf.u
+            // FMG3: hinges along u on a turned face run along its model axis (the set is the same either way round).
+            let fr = g.frame
+            if !vertical, !fr.isSquare { continue }
+            let along = vertical ? (axis: FamilyAxis.z, sign: 1.0) : (fr.uAxis ?? (.x, 1))
+            var ends = vertical ? leaf.v : leaf.u
+            ends = (ends.0.scaled(along.sign), ends.1.scaled(along.sign))
+            if ends.0.value > ends.1.value { ends = (ends.1, ends.0) }
             guard let lo = stableExpression(ends.0, f, stable), let hi = stableExpression(ends.1, f, stable) else { continue }
             let inset = FurnitureFrontTypes.values(of: front, m).hingeInset
             let mark = front.mark.isEmpty ? "Front \(front.id.raw)" : front.mark
@@ -170,7 +176,7 @@ extension FurnitureCompiler {
                     var inst = f.nestedInstances[first.index]
                     inst.id = UUID().uuidString
                     let at: FamilyBound = .expr("(\(a)) + ((\(b)) - (\(a))) * \(k) / \(n - 1)")
-                    if vertical { inst.z = at } else { inst.x = at }
+                    switch along.axis { case .z: inst.z = at; case .y: inst.y = at; case .x: inst.x = at } // FMG3
                     inst.visibilityParameter = shown
                     set.append(inst)
                 }
@@ -193,7 +199,7 @@ extension FurnitureCompiler {
     /// standard length that fits with its rear clearance), so a loaded cabinet made shallower or deeper gets the slides
     /// and drawer boxes that fit. nil when the bay's depth doesn't follow formula planes.
     static func slideLengthFormula(_ front: Element, _ m: BIMModel, _ f: FamilyDefinition) -> (formula: String, start: String)? {
-        guard let g = FurnitureFronts.geometry(front, m), let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil }
+        guard let g = FurnitureFronts.geometry(front, m), g.frame.isIdentity, let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil } // FMG3: front faces
         let sv = FurnitureHardware.Values(m[st]?.typeData)
         let tv = FurnitureFrontTypes.values(of: front, m)
         let stable = stablePlanes(f)
@@ -234,15 +240,16 @@ extension FurnitureCompiler {
         let stable = stablePlanes(f)
         for r in records {
             guard let front = m[r.front], let g = FurnitureFronts.geometry(front, m), let li = Int(r.slot.split(separator: ".").last ?? ""),
-                  g.leaves.indices.contains(li), let p = FurnitureFronts.hardware(front, m).first(where: { $0.slot == r.slot }) else { continue }
+                  g.leaves.indices.contains(li), g.frame.isSquare, let p = FurnitureFronts.localHardware(front, m).first(where: { $0.slot == r.slot }) else { continue } // FMG3
             let leaf = g.leaves[li]
-            func share(_ c: PartValue, _ ends: (PartValue, PartValue)) -> FamilyBound? {
+            let along = g.frame.uAxis ?? (.x, 1)
+            func share(_ c: PartValue, _ ends: (PartValue, PartValue), sign: Double = 1) -> FamilyBound? {
                 guard c.plane == nil, ends.1.value - ends.0.value > Tolerance.length,
-                      let lo = stableExpression(ends.0, f, stable), let hi = stableExpression(ends.1, f, stable) else { return nil }
+                      let lo = stableExpression(ends.0.scaled(sign), f, stable), let hi = stableExpression(ends.1.scaled(sign), f, stable) else { return nil }
                 let k = PartSolidContext.number((c.value - ends.0.value) / (ends.1.value - ends.0.value))
                 return .expr("(\(lo)) + ((\(hi)) - (\(lo))) * \(k)")
             }
-            if let x = share(p.at.x, leaf.u) { f.nestedInstances[r.index].x = x }
+            if let x = share(p.at.x, leaf.u, sign: along.sign) { if along.axis == .y { f.nestedInstances[r.index].y = x } else { f.nestedInstances[r.index].x = x } }
             if g.face == .front { if let z = share(p.at.z, leaf.v) { f.nestedInstances[r.index].z = z } }
             else if let y = share(p.at.y, leaf.v) { f.nestedInstances[r.index].y = y }
         }

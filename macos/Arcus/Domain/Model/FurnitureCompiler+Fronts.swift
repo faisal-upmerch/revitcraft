@@ -23,18 +23,23 @@ extension FurnitureCompiler {
         for bay in m.elements(.furnitureBays).sorted(by: { $0.id < $1.id }) {
             guard let d = bay.furnitureBay, let div = d.division, div.layout == .equal, div.count > 1, let o = d.opening else { continue }
             let rows = div.direction == .rows
+            let frame = BayFrame(d) // FMG3: columns on a turned face are planes along its u in the model; canted ones aren't planes
+            if !rows, !frame.isSquare { continue }
             let (kLo, kHi) = rows ? (d.face == .front ? ("z0", "z1") : ("y0", "y1")) : ("x0", "x1")
-            let axis: FamilyAxis = rows ? (d.face == .front ? .z : .y) : .x
-            let lo = lengthExpression(o.value(kLo), f), hi = lengthExpression(o.value(kHi), f)
-            let cells = FurnitureBays.cells(o, d.face, div, number: d.number)
+            let axis: FamilyAxis = rows ? (d.face == .front ? .z : .y) : (frame.uAxis?.axis ?? .x)
+            let sign = rows ? 1 : (frame.uAxis?.sign ?? 1)
+            let lo = lengthExpression(o.value(kLo).scaled(sign), f), hi = lengthExpression(o.value(kHi).scaled(sign), f)
+            let cells = FurnitureBays.cells(o, d.face, div, number: d.number, frame: frame)
             for k in 1..<cells.count {
                 let name = FurnitureBays.lineName(d.number, k)
-                eqPlanes.append((name, axis, rows ? (d.face == .front ? cells[k].z0 : cells[k].y0) : cells[k].x0))
+                eqPlanes.append((name, axis, sign * (rows ? (d.face == .front ? cells[k].z0 : cells[k].y0) : cells[k].x0)))
                 eqFormulas[name] = "(\(lo)) + ((\(hi)) - (\(lo))) * \(k) / \(cells.count)"
             }
         }
         for p in eqPlanes { known.insert(p.name) }
         ctx.knownPlanes = known
+        let planeOffsets = Dictionary(f.referencePlanes.map { ($0.name, $0.offset) }, uniquingKeysWith: { a, _ in a }).merging(eqFormulas) { a, _ in a }
+        ctx.planeFormula = { planeOffsets[$0] } // FMG3: canted faces write their coordinates as formulas of these planes
 
         var materialParams: [String: String] = [:]
         func materialParameter(_ id: ElementID?, label: String) -> String? {
@@ -78,7 +83,7 @@ extension FurnitureCompiler {
                 f.nestedInstances.append(inst)
             }
             f.planLines += planSwings(front, m)
-            f.modelLines += elevationSwings(front, m)
+            addElevationSwings(front, m, to: &f) // FMG3: on every face
         }
 
         // Hardware: nested families, owned instances on the front's planes, the others where they are.
@@ -159,9 +164,14 @@ extension FurnitureCompiler {
                                                                      ("outer1", o.right, o.outer1, .x), ("z0", o.bottom, o.z0, .z), ("outerLow", o.bottom, o.outerLow, .z),
                                                                      ("z1", o.top, o.z1, .z), ("outerHigh", o.top, o.outerHigh, .z)]
             var changed = false
+            let frame = BayFrame(d)
             for (key, part, value, axis) in faces where o.bounds[key] == nil {
-                guard let id = part, let c = centres[id], c.axis == axis, d.face == .front else { continue }
-                o.bounds[key] = .plane(c.name, offset: value - c.at)
+                guard let id = part, let c = centres[id], d.face == .front else { continue }
+                // FMG3: on a turned face, u runs along the model axis `uAxis` (negated when it runs against it).
+                let along: (axis: FamilyAxis, sign: Double)? = axis == .z ? (.z, 1) : frame.uAxis
+                guard let along, c.axis == along.axis else { continue }
+                let local = PartValue(along.sign * value, plane: c.name, offset: along.sign * value - c.at).scaled(along.sign)
+                o.bounds[key] = local.plane.map { .plane($0, offset: local.offset) }
                 changed = true
             }
             guard changed else { continue }
@@ -222,7 +232,7 @@ extension FurnitureCompiler {
 
     /// Elevation swings: the dashed hinge triangles on the front face (model lines on the front's plane).
     static func elevationSwings(_ front: Element, _ m: BIMModel) -> [FamilyModelLine] {
-        guard let g = FurnitureFronts.geometry(front, m), g.face == .front else { return [] }
+        guard let g = FurnitureFronts.geometry(front, m), g.face == .front, g.frame.isIdentity else { return [] }
         return FurnitureSwings.elevation(front, m).map { seg in
             var l = FamilyModelLine(plane: .xz, offset: .expr(PartSolidContext.number(g.outerFace - 0.0005)),
                                     start: FamilyPoint(PartSolidContext.number(seg.start.x), PartSolidContext.number(seg.start.y)),
@@ -251,7 +261,14 @@ public enum FurnitureSwings {
             let start: Double = h == .left ? -.pi / 2 : .pi
             out.append(.arc(Arc2(center: hinge, radius: w, startAngle: start, sweep: .pi / 2)))
         }
-        return out
+        return out.map(g.frame.worldCurve) // FMG3: turned with the bay's face
+    }
+
+    /// FMG3: the elevation swing as model segments on the front face (its leaves' face, a hair in front of it).
+    public static func elevationLines(_ front: Element, _ m: BIMModel) -> [(Vec3, Vec3)] {
+        guard let g = FurnitureFronts.geometry(front, m), g.face == .front else { return [] }
+        let y = g.outerFace - 0.0005
+        return elevation(front, m).map { (g.frame.world(Vec3($0.start.x, y, $0.start.y)), g.frame.world(Vec3($0.end.x, y, $0.end.y))) }
     }
 
     /// The elevation swing of each leaf (model x, z, on the front face): the two dashed lines from the far corners to

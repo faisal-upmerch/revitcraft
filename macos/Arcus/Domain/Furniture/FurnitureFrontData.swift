@@ -107,6 +107,9 @@ public struct BayData: Hashable, Codable, Sendable {
     public var division: BayDivision?
     /// The opening found at the last regeneration (nil = not enclosed).
     public var opening: BayOpening?
+    /// FMG3: bays seen from a side: the angle of the face's frame (radians; nil = the front, π the back, -π/2 the
+    /// left, π/2 the right, others a canted face). The seed and the opening are in that frame (see BayFrame).
+    public var facing: Double?
 
     public init(face: BayFace = .front, seed: Vec2, elevation: Double? = nil, number: String) {
         self.face = face; self.seed = seed; self.elevation = elevation; self.number = number
@@ -119,6 +122,8 @@ public struct BaySeparatorData: Hashable, Codable, Sendable {
     public var face: BayFace
     public var start: Vec2
     public var end: Vec2
+    /// FMG3: separators seen from a side: their face's frame angle (as `BayData.facing`; the ends are in that frame).
+    public var facing: Double?
     public init(face: BayFace = .front, start: Vec2, end: Vec2) { self.face = face; self.start = start; self.end = end }
     public var isVertical: Bool { abs(end.x - start.x) <= abs(end.y - start.y) }
 }

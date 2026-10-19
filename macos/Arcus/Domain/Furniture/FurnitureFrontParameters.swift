@@ -33,7 +33,8 @@ enum FurnitureFrontParameters {
                                get: { e, _ in e.furnitureBay.flatMap { b in b.opening.map { .double(b.face == .front ? $0.height : $0.depth) } } })
     static let clearDepth = P("furniture.bay.depth", "Clear Depth", .length, .dimensions,
                               get: { e, _ in e.furnitureBay.flatMap { b in b.opening.map { .double(b.face == .front ? $0.depth : $0.height) } } })
-    static let bayFace = P("furniture.bay.face", "Seen From", .text, .constraints, get: { e, _ in e.furnitureBay.map { .text($0.face.rawValue) } })
+    static let bayFace = P("furniture.bay.face", "Seen From", .text, .constraints,
+                           get: { e, _ in e.furnitureBay.map { .text($0.face == .top ? $0.face.rawValue : BayFrame($0).name) } }) // FMG3: Front, Back, Left, Right, Angled
     static let bayBounded = P("furniture.bay.bounded", "Enclosed", .bool, .constraints, get: { e, _ in e.furnitureBay.map { .bool($0.opening != nil) } })
     static let bayBoundedBy = P("furniture.bay.boundedBy", "Bounded By", .text, .constraints, tooltip: "The parts round the opening: left, right, bottom, top and back.",
                                 get: { e, ctx in
@@ -88,7 +89,8 @@ enum FurnitureFrontParameters {
 
     static let separatorLength = P("furniture.separator.length", "Length", .length, .dimensions,
                                    get: { e, _ in e.furnitureBaySeparator.map { .double($0.start.distance(to: $0.end)) } })
-    static let separatorFace = P("furniture.separator.face", "Seen From", .text, .constraints, get: { e, _ in e.furnitureBaySeparator.map { .text($0.face.rawValue) } })
+    static let separatorFace = P("furniture.separator.face", "Seen From", .text, .constraints,
+                                 get: { e, _ in e.furnitureBaySeparator.map { .text($0.face == .top ? $0.face.rawValue : BayFrame(angle: $0.facing ?? 0).name) } }) // FMG3
 
     // MARK: Fronts
 

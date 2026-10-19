@@ -19,31 +19,37 @@ public enum FurnitureBays {
         var isSeparator: Bool
     }
 
-    /// The parts and separators that bound bays in a model.
+    /// The parts and separators that bound bays in a model, seen in a face's frame (FMG3: the front's unless a bay
+    /// faces another way; boxes are the parts' extents in that frame).
     struct Scene {
         var bounders: [Bounder]
         var planes: [String: Double]
         var model: BIMModel
+        var frame: BayFrame
 
-        init(_ m: BIMModel) {
+        init(_ m: BIMModel, frame: BayFrame = .front) {
             model = m
+            self.frame = frame
             planes = FurniturePlanes.positionsByName(m)
             var list: [Bounder] = []
-            for (id, b) in FurniturePartBinder.boxes(m) {
+            let boxes = FurniturePartBinder.boxes(m)
+            for (id, b) in boxes {
                 guard let e = m[id], e.furniturePanel?.role != .back else { continue }
                 if e.furnitureShelf?.adjustable == true { continue } // FM9: adjustable shelves sit behind the fronts; they don't bound bays
                 let role = e.furniturePartKind
-                list.append(Bounder(id: id, box: b, shared: role == .divider || role == .shelf, isSeparator: false))
+                list.append(Bounder(id: id, box: frame.localBox(b), shared: role == .divider || role == .shelf, isSeparator: false)) // FMG3
             }
+            if !frame.isSquare { list += FurnitureBays.cantedBounders(m, frame, skipping: Set(boxes.keys)) } // FMG3
             for s in m.elements(.furnitureBaySeparators) {
                 guard let d = s.furnitureBaySeparator else { continue }
+                if d.face == .front, BayFrame(angle: d.facing ?? 0) != frame { continue } // FMG3: separators of this face only
                 let lo = Vec2(min(d.start.x, d.end.x), min(d.start.y, d.end.y)), hi = Vec2(max(d.start.x, d.end.x), max(d.start.y, d.end.y))
                 // A separator is a zero-thickness box in its face.
                 let far = 100.0
                 let box: FurniturePartSolids.PartBox
                 switch d.face {
                 case .front: box = .init(x: (PartValue(lo.x), PartValue(hi.x)), y: (PartValue(-far), PartValue(far)), z: (PartValue(lo.y), PartValue(hi.y)))
-                case .top: box = .init(x: (PartValue(lo.x), PartValue(hi.x)), y: (PartValue(lo.y), PartValue(hi.y)), z: (PartValue(-far), PartValue(far)))
+                case .top: box = frame.localBox(.init(x: (PartValue(lo.x), PartValue(hi.x)), y: (PartValue(lo.y), PartValue(hi.y)), z: (PartValue(-far), PartValue(far))))
                 }
                 list.append(Bounder(id: s.id, box: box, shared: true, isSeparator: true))
             }
@@ -51,6 +57,21 @@ public enum FurnitureBays {
         }
 
         func plane(_ n: String) -> PartValue? { planes[n].map { PartValue($0, plane: n, offset: 0) } }
+
+        /// FMG3: the opening's face when nothing bounds it on that side: the framing planes (Left/Right, Front/Back,
+        /// Bottom/Top) seen in the frame. Keys as BayOpening's ("x0", "x1", "y0", "y1", "z0", "z1").
+        func fallback(_ key: String) -> PartValue? {
+            let names = ["x0": "Left", "x1": "Right", "y0": "Front", "y1": "Back", "z0": "Bottom", "z1": "Top"]
+            if frame.isIdentity || key.hasPrefix("z") { return names[key].flatMap(plane) }
+            guard let l = plane("Left"), let r = plane("Right"), let f = plane("Front"), let b = plane("Back") else { return nil }
+            let lb = frame.localBox(.init(x: (l, r), y: (f, b), z: (PartValue(0), PartValue(0))))
+            switch key {
+            case "x0": return lb.x.0
+            case "x1": return lb.x.1
+            case "y0": return lb.y.0
+            default: return lb.y.1
+            }
+        }
     }
 
     // MARK: Finding
@@ -75,18 +96,31 @@ public enum FurnitureBays {
             }
         }
         guard left != nil || right != nil || below != nil || above != nil else { return nil }
-        guard let lx = left?.box.x.1 ?? s.plane("Left"), let rx = right?.box.x.0 ?? s.plane("Right"),
-              let bz = below?.box.z.1 ?? s.plane("Bottom"), let tz = above?.box.z.0 ?? s.plane("Top"),
+        guard let lx = left?.box.x.1 ?? s.fallback("x0"), let rx = right?.box.x.0 ?? s.fallback("x1"),
+              let bz = below?.box.z.1 ?? s.fallback("z0"), let tz = above?.box.z.0 ?? s.fallback("z1"),
               rx.value - lx.value > Tolerance.length, tz.value - bz.value > Tolerance.length else { return nil }
         // Depth: from the front edges of the parts round it to the back panel (or their back edges).
         let parts = [left, right, below, above].compactMap { $0 }.filter { !$0.isSeparator }
-        let y0 = parts.map(\.box.y.0).min { $0.value < $1.value } ?? s.plane("Front") ?? PartValue(-0.3)
-        var y1 = parts.map(\.box.y.1).max { $0.value < $1.value } ?? s.plane("Back") ?? PartValue(0.3)
+        let y0 = parts.map(\.box.y.0).min { $0.value < $1.value } ?? s.fallback("y0") ?? PartValue(-0.3)
+        var y1 = parts.map(\.box.y.1).max { $0.value < $1.value } ?? s.fallback("y1") ?? PartValue(0.3)
         var backID: ElementID?
         let mid = Vec2((lx.value + rx.value) / 2, (bz.value + tz.value) / 2)
+        // FMG3: seen from another face, a part across the opening at that face (a side panel seen from the side)
+        // closes it: the region is behind the part, not a bay. A part across it further in is its back.
+        if !s.frame.isIdentity {
+            let round = Set([left, right, below, above].compactMap { $0?.id })
+            for c in s.bounders where !c.isSeparator && !round.contains(c.id) {
+                let bx = c.box.box
+                guard bx.min.x <= mid.x, bx.max.x >= mid.x, bx.min.z <= mid.y, bx.max.z >= mid.y else { continue }
+                if bx.min.y <= y0.value + 1e-6 { return nil }
+                if bx.min.y < y1.value { y1 = c.box.y.0; backID = c.id }
+            }
+        }
         for e in s.model.elements(.furniturePanels) where e.furniturePanel?.role == .back {
-            guard let b = FurniturePartSolids.partBox(e, s.model) else { continue }
+            guard let b = FurniturePartSolids.partBox(e, s.model).map(s.frame.localBox) else { continue } // FMG3
             let bx = b.box
+            // FMG3: seen from another face, a back panel at that face closes the opening (the bay is behind it).
+            if !s.frame.isIdentity, bx.min.x <= mid.x, bx.max.x >= mid.x, bx.min.z <= mid.y, bx.max.z >= mid.y, bx.min.y <= y0.value + 1e-6 { return nil }
             if bx.min.x <= mid.x, bx.max.x >= mid.x, bx.min.z <= mid.y, bx.max.z >= mid.y, bx.min.y < y1.value + 1e-6, bx.min.y > y0.value {
                 y1 = b.y.0; backID = e.id
             }
@@ -153,10 +187,9 @@ public enum FurnitureBays {
         return o
     }
 
-    /// The opening of a bay at its seed.
-    public static func opening(face: BayFace, at p: Vec2, _ m: BIMModel) -> BayOpening? {
-        let s = Scene(m)
-        return face == .front ? front(at: p, s) : top(at: p, s)
+    /// The opening of a bay at its seed (FMG3: seen in `frame` for bays on a side).
+    public static func opening(face: BayFace, at p: Vec2, frame: BayFrame = .front, _ m: BIMModel) -> BayOpening? {
+        face == .front ? front(at: p, Scene(m, frame: frame)) : top(at: p, Scene(m))
     }
 
     /// The centre of an opening in its face's coordinates.
@@ -181,7 +214,7 @@ public enum FurnitureBays {
     public static func lineName(_ number: String, _ k: Int) -> String { "Bay \(number) Line \(k)" }
 
     /// The openings of a divided bay's cells, from the bottom (rows) or the left (columns).
-    public static func cells(_ o: BayOpening, _ face: BayFace, _ d: BayDivision, number: String) -> [BayOpening] {
+    public static func cells(_ o: BayOpening, _ face: BayFace, _ d: BayDivision, number: String, frame: BayFrame = .front) -> [BayOpening] {
         let rows = d.direction == .rows
         // Seen from above, "rows" run front to back.
         let (lo, hi): (Double, Double) = rows ? (face == .front ? (o.z0, o.z1) : (o.y0, o.y1)) : (o.x0, o.x1)
@@ -196,7 +229,17 @@ public enum FurnitureBays {
             // Inner lines: EQ lines follow a named plane the compile makes; lines by dimension keep their distance
             // from the low face's plane.
             func lineBound(_ index: Int, _ v: Double) -> FurnitureBound? {
-                if d.layout == .equal { return .plane(lineName(number, index), offset: 0) }
+                if d.layout == .equal {
+                    // FMG3: on a turned face a column line is a plane of the model (followed negated when the face's u
+                    // runs against its axis); on a canted face it is its share of the bay's two faces.
+                    if !rows, !frame.isSquare {
+                        let t = Double(index) / Double(spans.count)
+                        let p = PartValue.sum(o.value(kLo).scaled(1 - t), o.value(kHi).scaled(t))
+                        return p.plane.map { .plane($0, offset: p.offset) }
+                    }
+                    if !rows, (frame.uAxis?.sign ?? 1) < 0, let n = PlaneTerms.name([lineName(number, index): -1]) { return .plane(n, offset: 0) }
+                    return .plane(lineName(number, index), offset: 0)
+                }
                 if case .plane(let n, let off)? = low { return .plane(n, offset: off + (v - lo)) }
                 return nil
             }
@@ -228,32 +271,37 @@ public enum FurnitureBays {
         return String((used.max() ?? 0) + 1)
     }
 
-    /// Places a bay round `point` (front: x, z in a Front/Back elevation; top: x, y in plan), as Room places a room.
+    /// Places a bay round `point` (front: u, z in an elevation or section looking at the face, in its `frame`; top:
+    /// x, y in plan), as Room places a room.
     @discardableResult
-    public static func createBay(face: BayFace, at point: Vec2, in tx: TransactionContext) throws(TransactionError) -> ElementID {
+    public static func createBay(face: BayFace, at point: Vec2, frame: BayFrame = .front, in tx: TransactionContext) throws(TransactionError) -> ElementID {
         guard tx.model.isFurniture else { throw TransactionError("Bays are placed in Furniture documents.") }
-        guard let o = opening(face: face, at: point, tx.model) else {
+        let frame = face == .front ? frame : .front
+        guard let o = opening(face: face, at: point, frame: frame, tx.model) else {
             throw TransactionError(face == .front ? "Click inside a region bounded by parts or bay separators." : "Click inside a box bounded by sides, a front and a back.",
                                    resolution: "Add panels or shelves round the opening, or draw Bay Separators.")
         }
         for b in tx.model.elements(.furnitureBays) {
-            guard let d = b.furnitureBay, d.parentID == nil, d.face == face, let bo = d.opening else { continue }
+            guard let d = b.furnitureBay, d.parentID == nil, d.face == face, BayFrame(d) == frame, let bo = d.opening else { continue } // FMG3: same face
             if outline(bo, face).contains(point) { throw TransactionError("\(b.name) is already in this region.", elements: [b.id]) }
         }
         let number = nextNumber(tx.model)
         var d = BayData(face: face, seed: center(o, face), elevation: face == .top ? o.z1 : nil, number: number)
+        d.facing = frame.stored // FMG3
         d.opening = o
         return tx.create(.furnitureBays, name: "Bay \(number)", data: .furnitureBay(d), levelID: level(tx.model))
     }
 
     /// Draws a Bay Separator (front: x, z; top: x, y). Lines snap square to the piece.
     @discardableResult
-    public static func createSeparator(face: BayFace, from a: Vec2, to b: Vec2, in tx: TransactionContext) throws(TransactionError) -> ElementID {
+    public static func createSeparator(face: BayFace, from a: Vec2, to b: Vec2, frame: BayFrame = .front, in tx: TransactionContext) throws(TransactionError) -> ElementID {
         guard tx.model.isFurniture else { throw TransactionError("Bay separators are drawn in Furniture documents.") }
         guard a.distance(to: b) > Tolerance.shortCurve else { throw TransactionError("The separator is too short.") }
         var e = b
         if abs(b.x - a.x) >= abs(b.y - a.y) { e.y = a.y } else { e.x = a.x }
-        return tx.create(.furnitureBaySeparators, data: .furnitureBaySeparator(BaySeparatorData(face: face, start: a, end: e)), levelID: level(tx.model))
+        var d = BaySeparatorData(face: face, start: a, end: e)
+        if face == .front { d.facing = frame.stored } // FMG3
+        return tx.create(.furnitureBaySeparators, data: .furnitureBaySeparator(d), levelID: level(tx.model))
     }
 
     /// Bay Divide: splits the bay into cells (sub-bays), or removes the division with nil. A front already in the bay
@@ -292,7 +340,7 @@ public enum FurnitureBays {
             else { for c in existing { tx.propagate(c.id) { $0.furnitureBay?.opening = nil } } }
             return
         }
-        let cells = cells(o, d.face, division, number: d.number)
+        let cells = cells(o, d.face, division, number: d.number, frame: BayFrame(d)) // FMG3
         var byCell: [Int: Element] = [:]
         for c in existing {
             if let k = c.furnitureBay?.cell, k < cells.count, byCell[k] == nil { byCell[k] = c } else { tx.delete(c.id) }
@@ -300,13 +348,13 @@ public enum FurnitureBays {
         for (k, co) in cells.enumerated() {
             let number = "\(d.number).\(k + 1)"
             if let c = byCell[k], var cd = c.furnitureBay {
-                cd.opening = co; cd.seed = center(co, d.face); cd.number = number; cd.face = d.face
+                cd.opening = co; cd.seed = center(co, d.face); cd.number = number; cd.face = d.face; cd.facing = d.facing // FMG3
                 let rename = c.name == "Bay \(c.furnitureBay?.number ?? "")"
                 tx.propagate(c.id) { $0.furnitureBay = cd; if rename { $0.name = "Bay \(number)" } }
                 syncCells(c.id, in: tx)
             } else {
                 var cd = BayData(face: d.face, seed: center(co, d.face), elevation: d.elevation, number: number)
-                cd.parentID = bayID; cd.cell = k; cd.opening = co
+                cd.parentID = bayID; cd.cell = k; cd.opening = co; cd.facing = d.facing // FMG3
                 tx.create(.furnitureBays, name: "Bay \(number)", data: .furnitureBay(cd), levelID: bay.levelID, hostID: bayID)
             }
         }
@@ -323,10 +371,16 @@ public enum FurnitureBays {
     static func regenerate(_ tx: TransactionContext) {
         let tops = tx.model.elements(.furnitureBays).filter { $0.furnitureBay?.parentID == nil }
         guard !tops.isEmpty else { return }
-        let scene = Scene(tx.model)
+        var scenes: [BayFrame: Scene] = [:] // FMG3: one per face
+        func scene(_ f: BayFrame) -> Scene {
+            if let s = scenes[f] { return s }
+            let s = Scene(tx.model, frame: f)
+            scenes[f] = s
+            return s
+        }
         for bay in tops.sorted(by: { $0.id < $1.id }) {
             guard var d = tx.model[bay.id]?.furnitureBay else { continue }
-            let o = d.face == .front ? front(at: d.seed, scene) : top(at: d.seed, scene)
+            let o = d.face == .front ? front(at: d.seed, scene(BayFrame(d))) : top(at: d.seed, scene(.front))
             d.opening = o
             if let o { d.seed = center(o, d.face); if d.face == .top { d.elevation = o.z1 } }
             else {
@@ -335,5 +389,6 @@ public enum FurnitureBays {
             if d != bay.furnitureBay { tx.propagate(bay.id) { $0.furnitureBay = d } }
             syncCells(bay.id, in: tx)
         }
+        warnShared(tx) // FMG3: a bay moved into another's region
     }
 }
