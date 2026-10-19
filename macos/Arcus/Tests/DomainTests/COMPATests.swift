@@ -94,3 +94,14 @@ struct COMPATests {
         #expect(abs(b.max.z - 0.02) < 1e-6 && abs(b.max.x - 0.02) < 1e-6)
     }
 }
+
+/// COMPA: every Group A definition is valid.
+@Suite("COMPA definitions")
+struct COMPADefinitionTests {
+    @Test func everyDefinitionValidates() {
+        for d in GroupA.all {
+            let problems = ComponentKit.validate(d)
+            #expect(problems.isEmpty, "\(d.name): \(problems)")
+        }
+    }
+}
