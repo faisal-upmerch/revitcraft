@@ -165,4 +165,50 @@ struct STAIRUITests {
         Self.draw(ctx.model, Self.cropPlan(ctx.model, ids, level: 0, crop), "mode-selected-run", overlay: t.preview.primitives, width: 800)
         #expect(t.selection == .run(0))
     }
+
+    static func renderView<V: View>(_ view: V, size: CGSize, _ name: String) async throws {
+        _ = NSApplication.shared
+        let w = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.borderless], backing: .buffered, defer: false)
+        let h = NSHostingView(rootView: view.frame(width: size.width, height: size.height).background(Color(nsColor: .windowBackgroundColor)))
+        h.frame = NSRect(origin: .zero, size: size)
+        w.contentView = h
+        for _ in 0..<6 { h.layoutSubtreeIfNeeded(); try? await Task.sleep(for: .milliseconds(30)) }
+        h.displayIfNeeded()
+        let rep = try #require(h.bitmapImageRepForCachingDisplay(in: h.bounds))
+        h.cacheDisplay(in: h.bounds, to: rep)
+        try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+        try rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent(name + ".png"))
+    }
+
+    /// The Architecture tab's Circulation panel, Modify | Create Stair (Components, Draw, Tools, Mode), its Options Bar,
+    /// the Railing dialog, light and dark.
+    @Test func ribbonOptionsBarAndRailingDialogRender() async throws {
+        _ = NSApplication.shared
+        let (m, ids) = ProjectTemplates.make(.architectural, units: .metric)
+        let state = DocumentState(session: DocumentSession(model: m))
+        let arch = RibbonContent.panels(.architecture)
+        let circulation = try #require(arch.first { $0.title == "Circulation" })
+        #expect(circulation.items.map(\.id).contains(.stair))
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            NSApp.appearance = NSAppearance(named: appearance)
+            let suffix = appearance == .aqua ? "light" : "dark"
+            state.open(ids.planViews[ids.levels[0]]!)
+            state.ribbonTab = .architecture
+            state.ribbonShowsContextual = false
+            try await Self.renderView(RibbonView(state: state), size: CGSize(width: 2000, height: 120), "ui-ribbon-architecture-\(suffix)")
+            CommandRouter(state: state).run(.stair)
+            let tool = try #require(state.activeTool as? StairTool)
+            state.ribbonShowsContextual = true
+            #expect(RibbonContent.contextualTitle(state) == "Modify | Create Stair")
+            try await Self.renderView(RibbonView(state: state), size: CGSize(width: 2000, height: 120), "ui-create-stair-ribbon-\(suffix)")
+            try await Self.renderView(OptionsBarView(state: state), size: CGSize(width: 1100, height: 44), "ui-create-stair-options-\(suffix)")
+            CommandRouter(state: state).run(.stairComponentLanding)
+            #expect(tool.component == .landing)
+            try await Self.renderView(RibbonView(state: state), size: CGSize(width: 2000, height: 120), "ui-create-stair-landing-ribbon-\(suffix)")
+            try await Self.renderView(StairRailingDialogView(model: state.model, typeID: tool.railingTypeID, position: tool.railingPosition) { _ in },
+                                      size: CGSize(width: 360, height: 210), "ui-railing-dialog-\(suffix)")
+            state.cancelTool()
+        }
+        NSApp.appearance = nil
+    }
 }

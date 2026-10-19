@@ -313,7 +313,8 @@ extension PlanGraphics {
         if model.tags(of: e.id).contains(where: { $0.ownerViewID == builder.view.id && $0.tag?.kind == .stairPath }) { return [] }
         var path = v.walkPath
         guard path.count >= 2 else { return [] }
-        let down = v.relation == .arrival
+        // Show Up Arrow in All Views: the arrival plan shows the stair going up too.
+        let down = v.relation == .arrival && !(sd.upArrowInAllViews ?? false)
         if down {
             guard sd.downArrow ?? true || sd.downLabel ?? true else { return [] }
             path.reverse()
