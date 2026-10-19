@@ -6,6 +6,6 @@ import ArcusGeometry
 // Write definitions with ComponentBuilder (ComponentKit.swift) and list them here.
 
 extension ComponentLibrary {
-    /// Group A's component definitions, in browser order.
-    static var groupA: [ComponentDefinition] { [] }
+    /// Group A's component definitions, in browser order (definitions in Components/A/).
+    static var groupA: [ComponentDefinition] { GroupA.all }
 }
