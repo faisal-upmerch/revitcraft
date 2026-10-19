@@ -175,6 +175,11 @@ sheets open the Sheet Title dialog for number and name), and `⇧`/`⌘`-click s
 sheet (on the canvas or on the sheet's row) to place them: the viewport follows the pointer and a click places it.
 `⌃⇥` and `⌃⇧⇥` (Window menu) show the next and previous view tab.
 
+**Family Editor.** In the plan and elevation views, snapping works as in project views. While a tool is active,
+`Tab` cycles the snaps under the pointer, and the typed snap overrides `SE` `SM` `SI` `SN` `SC` `SP` `ST` `SQ` `SX`
+`SR` `SZ` `SO` `SS` apply to the next pick. `Return` finishes a sketch, `Delete` removes its last point, and `Esc` ends
+the rubber band or chain.
+
 ## Commands
 
 ### Modify
