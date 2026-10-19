@@ -6,50 +6,80 @@ import ArcusGeometry
 // stringers or carriages), landings of the landing type's thickness, and supports. Every piece is a closed solid of
 // its own, so sections cut each one cleanly.
 
-public enum StairMeshes {
-    public static func meshParts(_ e: Element, _ model: BIMModel) -> [MeshPart] {
-        if let storeys = MultistoryStairs.storeys(of: e, model) { return storeys.flatMap { meshParts(single: $0, model) } } // F2
-        return meshParts(single: e, model)
-    }
+/// A piece of a stair's 3D: one run, landing or support, with its parts by material (IFC exports each run as a flight
+/// and each landing as a slab).
+public struct StairPiece: Sendable {
+    public enum Kind: Sendable, Equatable { case run(Int), landing(Int), support(Int) }
+    public var kind: Kind
+    public var parts: [MeshPart]
+    /// The storey of a multistory stair (0: the stair itself).
+    public var storey: Int
+}
 
-    static func meshParts(single e: Element, _ model: BIMModel) -> [MeshPart] {
-        guard let l = StairGeometry.layout(e, model) else { return [] }
+public enum StairMeshes {
+    /// 3D of the stair, every storey of a multistory stair, merged by material.
+    public static func meshParts(_ e: Element, _ model: BIMModel) -> [MeshPart] {
         var groups: [ElementID?: Mesh] = [:]
         var order: [ElementID?] = []
-        func add(_ m: Mesh, _ mat: ElementID?) {
-            guard !m.isEmpty else { return }
-            if groups[mat] == nil { order.append(mat) }
-            groups[mat, default: Mesh()].append(m)
+        for piece in pieces(e, model) {
+            for p in piece.parts where !p.mesh.isEmpty {
+                if groups[p.materialID] == nil { order.append(p.materialID) }
+                groups[p.materialID, default: Mesh()].append(p.mesh)
+            }
+        }
+        return order.map { MeshPart(mesh: groups[$0]!, materialID: $0) }
+    }
+
+    /// The stair's runs, landings and supports as separate pieces (every storey of a multistory stair).
+    public static func pieces(_ e: Element, _ model: BIMModel) -> [StairPiece] {
+        let storeys = MultistoryStairs.storeys(of: e, model) ?? [e] // F2
+        return storeys.enumerated().flatMap { k, s in pieces(single: s, model).map { var p = $0; p.storey = k; return p } }
+    }
+
+    static func pieces(single e: Element, _ model: BIMModel) -> [StairPiece] {
+        guard let l = StairGeometry.layout(e, model) else { return [] }
+        var out: [StairPiece] = []
+        func piece(_ kind: StairPiece.Kind, _ meshes: [(Mesh, ElementID?)]) {
+            var groups: [ElementID?: Mesh] = [:], order: [ElementID?] = []
+            for (m, mat) in meshes where !m.isEmpty {
+                if groups[mat] == nil { order.append(mat) }
+                groups[mat, default: Mesh()].append(m)
+            }
+            if !order.isEmpty { out.append(StairPiece(kind: kind, parts: order.map { MeshPart(mesh: groups[$0]!, materialID: $0) }, storey: 0)) }
         }
         let rt = l.type.run
         for r in l.runs {
+            var meshes: [(Mesh, ElementID?)] = []
             if rt.monolithic {
-                for m in monolithicRun(r, l) { add(m, rt.material) }
-                if rt.tread { for t in r.treads { add(treadSlab(t, r, l, thickness: rt.treadThickness, top: t.z + rt.treadThickness), rt.treadMaterial) } }
+                // A tread finish on a monolithic run: the structure stops under it, the finish's top is the walking surface.
+                let finish = rt.tread ? rt.treadThickness : 0
+                meshes += monolithicRun(r, l, lowered: finish).map { ($0, rt.material) }
+                if rt.tread { meshes += r.treads.map { (treadSlab($0, r, l, thickness: finish, top: $0.z), rt.treadMaterial) } }
             } else {
-                for t in r.treads { add(treadSlab(t, r, l, thickness: rt.treadThickness, top: t.z), rt.treadMaterial) }
-                if rt.riser { for k in r.riserLines { add(riser(k, r, l), rt.riserMaterial) } }
+                meshes += r.treads.map { (treadSlab($0, r, l, thickness: rt.treadThickness, top: $0.z), rt.treadMaterial) }
+                if rt.riser { meshes += r.riserLines.map { (riser($0, r, l), rt.riserMaterial) } }
             }
+            piece(.run(r.index), meshes)
         }
         let lt = l.type.landing
-        for land in l.landings {
-            let top = rt.monolithic && lt.tread ? land.z + lt.treadThickness : land.z
+        for (k, land) in l.landings.enumerated() {
+            let prof = Profile2(outer: land.polygon)
             if lt.tread {
-                add(MeshBuilder.extrude(Profile2(outer: land.polygon), bottom: top - lt.treadThickness, top: top), lt.treadMaterial)
-                add(MeshBuilder.extrude(Profile2(outer: land.polygon), bottom: top - lt.treadThickness - lt.thickness, top: top - lt.treadThickness), lt.material)
+                piece(.landing(k), [(MeshBuilder.extrude(prof, bottom: land.z - lt.treadThickness, top: land.z), lt.treadMaterial),
+                                    (MeshBuilder.extrude(prof, bottom: land.z - lt.treadThickness - lt.thickness, top: land.z - lt.treadThickness), lt.material)])
             } else {
-                add(MeshBuilder.extrude(Profile2(outer: land.polygon), bottom: land.z - lt.thickness, top: land.z), lt.material)
+                piece(.landing(k), [(MeshBuilder.extrude(prof, bottom: land.z - lt.thickness, top: land.z), lt.material)])
             }
         }
-        for s in l.supports { for m in supportMeshes(s, l) { add(m, s.info.material ?? rt.material) } }
-        return order.map { MeshPart(mesh: groups[$0]!, materialID: $0) }
+        for (k, s) in l.supports.enumerated() { piece(.support(k), supportMeshes(s, l).map { ($0, s.info.material ?? rt.material) }) }
+        return out
     }
 
     // MARK: Monolithic runs
 
     /// A monolithic run: straight runs as one stepped profile with a sloped soffit; other shapes tread by tread, each
     /// down to the soffit under it.
-    static func monolithicRun(_ r: StairLayout.Run, _ l: StairLayout) -> [Mesh] {
+    static func monolithicRun(_ r: StairLayout.Run, _ l: StairLayout, lowered: Double = 0) -> [Mesh] {
         let depth = l.type.run.structuralDepth
         let rh = l.riserHeight, slope = rh / max(l.treadDepth, 1e-6)
         let cosA = 1 / (1 + slope * slope).squareRoot()
@@ -61,17 +91,18 @@ public enum StairMeshes {
             var zNow = r.baseZ
             for t in r.treads {
                 let x0 = (t.front.midpoint - r.startEdge.midpoint).dot(d), x1 = (t.back.midpoint - r.startEdge.midpoint).dot(d)
-                if t.z > zNow + 1e-9 { pts.append(Vec2(x0, t.z)) }
-                pts.append(Vec2(x1, t.z))
-                zNow = t.z
+                let z = t.z - lowered
+                if z > zNow + 1e-9 { pts.append(Vec2(x0, z)) }
+                pts.append(Vec2(x1, z))
+                zNow = z
             }
             // The last riser: a landing after the run forms it; at the top of the stair the run carries it with a
             // bearing one tread deep under the floor it meets.
             var endX = length
-            if r.topZ > zNow + 1e-9, r.index == l.runs.last?.index {
-                pts.append(Vec2(length, r.topZ))
+            if r.topZ - lowered > zNow + 1e-9, r.index == l.runs.last?.index {
+                pts.append(Vec2(length, r.topZ - lowered))
                 endX = length + l.treadDepth
-                pts.append(Vec2(endX, r.topZ))
+                pts.append(Vec2(endX, r.topZ - lowered))
             }
             // Soffit parallel to the line through the tread-riser corners (z = base + x · slope), `drop` below it.
             let soffit = { (x: Double) in r.baseZ + x * slope - drop }
@@ -91,7 +122,7 @@ public enum StairMeshes {
         for (k, t) in r.treads.enumerated() {
             let soffitZ = r.baseZ + Double(k) * rh + rh * 0.5 - drop
             let g = t.walkDirection.normalized
-            let top = PlaneZ.flat(t.z)
+            let top = PlaneZ.flat(t.z - lowered)
             var bottom = PlaneZ(a: g.x * slope, b: g.y * slope, c: soffitZ - slope * g.dot(t.walkPoint))
             let minZ = t.polygon.points.map { bottom.z(at: $0) }.min() ?? soffitZ
             let maxZ = t.polygon.points.map { bottom.z(at: $0) }.max() ?? soffitZ
