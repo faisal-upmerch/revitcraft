@@ -208,7 +208,7 @@ final class RecentDocumentsMenu: NSObject, NSMenuDelegate {
 
     func fill(_ menu: NSMenu) {
         menu.removeAllItems()
-        let urls = NSDocumentController.shared.recentDocumentURLs
+        let urls = RecentDocuments.urls()
         for url in urls {
             let item = NSMenuItem(title: url.deletingPathExtension().lastPathComponent, action: #selector(openRecent(_:)), keyEquivalent: "")
             item.target = self
