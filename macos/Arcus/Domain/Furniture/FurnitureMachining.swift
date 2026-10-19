@@ -19,7 +19,7 @@ public enum MachiningSource: Hashable, Sendable {
     case shelfPins(ElementID)
 }
 
-/// One machining operation, in model coordinates (feet, like the rest of the model). `axis` is the unit direction
+/// One machining operation, in model coordinates (meters, like the rest of the model). `axis` is the unit direction
 /// into the material from the face being machined.
 public enum MachiningOp: Hashable, Sendable {
     case drill(center: Vec3, axis: Vec3, diameter: Double, depth: Double)

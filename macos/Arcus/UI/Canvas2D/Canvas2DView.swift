@@ -178,6 +178,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
             let near = crop.expanded(by: max(crop.width, crop.height) * 0.25)
             for item in g.items where item.layer == .annotation && !item.bounds.isEmpty && near.contains(item.bounds.center) {
                 r = r.union(item.bounds.intersection(near))
+                for case .text(let t) in item.primitives { r = r.union(textExtent(t).intersection(near)) }
             }
         }
         if r.isEmpty { r = Rect2(center: .zero, halfSize: Vec2(10, 10)) }
@@ -189,6 +190,18 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         center = centered(r.center, in: fit)
         didFit = true
         needsDisplay = true
+    }
+
+    /// The model-space box a text run covers (item bounds only include its anchor point), so Zoom to Fit keeps long
+    /// labels such as "Center (Left/Right)" clear of the floating chrome. Width is estimated at 0.6 × height per glyph.
+    func textExtent(_ t: GText) -> Rect2 {
+        let h = t.height * scaleDenominator
+        let w = h * 0.6 * Double(t.string.count)
+        let d = Vec2(cos(t.rotation), sin(t.rotation)), n = Vec2(-d.y, d.x)
+        let start: Double = switch t.alignment { case .left: 0; case .center: -w / 2; case .right: -w }
+        let base = -t.verticalAnchor * h
+        let a = t.position + d * start + n * base
+        return Rect2(points: [a, a + d * w, a + n * h, a + d * w + n * h])
     }
 
     func zoom(to r: Rect2) {

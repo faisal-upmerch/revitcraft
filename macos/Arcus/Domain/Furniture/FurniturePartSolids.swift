@@ -88,8 +88,14 @@ public enum FurniturePartSolids {
         PartValue(value, FurniturePartBounds.bounds(of: e)[key])
     }
 
-    /// The part's solids (none for elements that aren't parts).
+    /// The part's solids (none for elements that aren't parts), with its joints applied (FM6: trims, miters, and the
+    /// tongues, tenons, grooves and mortises shown at Fine).
     public static func solids(_ e: Element, _ m: BIMModel, _ ctx: PartSolidContext) -> PartSolids {
+        FurnitureJoints.applyJoints(rawSolids(e, m, ctx), e, m, ctx) // FM6
+    }
+
+    /// The part's solids as drawn, before joints.
+    static func rawSolids(_ e: Element, _ m: BIMModel, _ ctx: PartSolidContext) -> PartSolids {
         switch e.data {
         case .furniturePanel(let p): return panel(e, p, m, ctx)
         case .furnitureShelf(let s): return shelf(e, s, m, ctx)
@@ -357,9 +363,9 @@ public enum FurniturePartSolids {
         }
         // The single box solid, written once with numbers and once with planes: together they give each face's value
         // and the plane it follows.
-        let num = solids(e, m, PartSolidContext(symbolic: false))
+        let num = rawSolids(e, m, PartSolidContext(symbolic: false)) // FM6: the box as drawn (joints are solved from it)
         let sym = PartSolidContext(symbolic: true, knownPlanes: Set(FurniturePlanes.positionsByName(m).keys))
-        let bound = solids(e, m, sym)
+        let bound = rawSolids(e, m, sym)
         let a = num.solids.filter { !$0.isVoid }, b = bound.solids.filter { !$0.isVoid }
         guard a.count == 1, b.count == 1, num.placed.isEmpty, case .rectangle(let nx0, let nx1, let ny0, let ny1) = a[0].profile,
               case .rectangle(let bx0, let bx1, let by0, let by1) = b[0].profile else { return nil }

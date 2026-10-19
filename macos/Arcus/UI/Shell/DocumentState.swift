@@ -34,6 +34,7 @@ enum DialogKind: Identifiable, Equatable {
     case f5(F5Dialog) // F5: Model In-place (Dialogs/F5MassingDialogs.swift)
     case f810(F810Dialog) // F810: Title Block, Guide Grid, Rendering, Render Gallery
     case fm3(FM3Dialog) // FM3: Family Types, Family Category and Parameters, Flex, Load into Project (FurnitureDialogs.swift)
+    case fm6(FM6Dialog) // FM6: Joint Rules (FurnitureJointRulesDialog.swift)
     var id: String { String(describing: self) }
 }
 

@@ -210,6 +210,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     func prefersSurface(_ tool: any InteractiveTool) -> Bool { // S3D: internal for Tab snap cycling
         tool is InsertTool || tool is SplitTool || tool is PickHostTool || tool is TagTool || tool is AlignTool || tool is TrimExtendTool
             || tool is WallRevealTool // F1
+            || tool is FurnitureJointTool // FM6: joints are picked on the parts' faces
     }
 
     // MARK: Input
@@ -567,6 +568,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         if let t = tool { prims += t.preview.primitives; guides += t.preview.guides; dims += t.preview.tempDims }
         if dragging, let st = dragTool { prims += st.preview.primitives; guides += st.preview.guides; dims += st.preview.tempDims }
         for p in prims { draw(p, cg, seg: seg, pt: pt) }
+        if let mk = tool as? any ToolWorldMarkers { drawWorldMarkers(mk.worldMarkers, cg, viewport: v) } // FM6: joint markers on the model
         drawGuides(guides, cg, seg: seg)
         for d in dims { drawTempDim(d, cg, seg: seg) }
         if let s = snap, !(tool is InsertTool) { drawSnap3D(s, cg, bounds: bounds, plane: frame) } // S3D: plan markers, on the model

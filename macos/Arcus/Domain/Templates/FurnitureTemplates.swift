@@ -181,6 +181,7 @@ public enum FurnitureTemplates {
         }
         FurniturePartTypes.ensureStandard(in: tx) // FM4: standard part types and the Part Tag
         FurnitureFrontTypes.ensureStandard(in: tx) // FM5: hardware families, door/drawer/flap types, Bay and Front Tags
+        FurnitureJointOperations.ensureCutSizeTag(in: tx) // FM6: the Cut Size Tag
         // FM7 schedules: Part List, Hardware Schedule and Material Takeoff are added by the fabrication milestone.
     }
 

@@ -29,7 +29,7 @@ struct FM5RenderTests {
         let fv = try #require(front.view), origin = try #require(fv.planeOrigin), right = try #require(fv.rightVector)
         for b in m.elements(.furnitureBays) where b.furnitureBay?.division == nil {
             guard let o = b.furnitureBay?.opening else { continue }
-            let head = Vec2((Vec2((o.x0 + o.x1) / 2, o.y0) - origin.xy).dot(right), (o.z0 + o.z1) / 2)
+            let head = Vec2((Vec2((o.x0 + o.x1) / 2, o.y0) - origin.xy).dot(right), o.z0 + (o.z1 - o.z0) * 0.32) // clear of drawer handles, as Tag on Placement
             tx.create(.tags, data: .tag(TagData(taggedID: b.id, head: head)), typeID: tag, ownerViewID: front.id)
         }
         var v = ViewData(kind: .section, scale: 12)

@@ -36,6 +36,7 @@ public struct ViewGraphicsBuilder: Sendable {
         items += furnitureGraphics() // FM3: Furniture reference planes in elevations and sections
         items += furniturePartGraphics() // FM4: parts in plans; hidden lines, grain and edge profiles in elevations and sections
         items += furnitureFrontGraphics() // FM5: bays, separators, door swings and drawer boxes
+        items += furnitureJointGraphics() // FM6: hidden dowel, cam and shelf-pin holes at Fine
         items = f810Graphics(items) // F810: Show Hidden Lines, matchlines, walkthrough paths
         items += AnnotationGraphics(builder: self).build()
         if data.kind != .threeD, data.visualStyle == .wireframe { items = Self.wireframe(items) } // BL-VG: 2D visual style

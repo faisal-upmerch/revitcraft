@@ -115,12 +115,15 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case furnitureBay, furnitureBaySeparator, furnitureBayDivide, furnitureBayTag, furnitureDoor, furnitureDrawer, furnitureFlap, furnitureHardware, furnitureFlipHinge, furniturePickNewHost, furnitureSelectHardware, furnitureRemoveDivide // FM5
 
     // FM6 commands:
+    case furnitureJoint, furnitureJointRules, furnitureAllowJoin, furnitureDisallowJoin // FM6
 
     // FM7 commands:
 
     // FM8 commands:
 
     // FM9 commands:
+
+    // STAIR commands:
 
 }
 
@@ -151,7 +154,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

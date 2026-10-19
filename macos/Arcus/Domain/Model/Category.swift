@@ -66,9 +66,11 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
     // FM5 categories:
     case furnitureBays, furnitureFronts, furnitureBaySeparators, furnitureHardware // FM5
     // FM6 categories:
+    case furnitureJoints // FM6
     // FM7 categories:
     // FM8 categories:
     // FM9 categories:
+    // STAIR categories:
 
 
 
@@ -112,6 +114,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .renderings: return .internal_ // F810: Render Gallery images
         case .furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureEdgeProfiles, .furnitureForms: return .model // FM4
         case .furnitureBays, .furnitureFronts, .furnitureBaySeparators, .furnitureHardware: return .model // FM5: bays like rooms, separators like room separators
+        case .furnitureJoints: return .internal_ // FM6: user-set joints have no graphics of their own
         }
     }
 
@@ -258,6 +261,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureFronts: "Doors and Drawers"
         case .furnitureBaySeparators: "Bay Separation Lines"
         case .furnitureHardware: "Furniture Hardware"
+        case .furnitureJoints: "Joints" // FM6
         }
     }
 
@@ -379,6 +383,7 @@ public enum Category: String, Codable, Sendable, CaseIterable, Comparable {
         case .furnitureFronts: "Front"
         case .furnitureBaySeparators: "Bay Separation Line"
         case .furnitureHardware: "Furniture Hardware"
+        case .furnitureJoints: "Joint" // FM6
         }
     }
 

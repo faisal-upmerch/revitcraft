@@ -466,6 +466,7 @@ enum QAHarness {
             await furnitureScreenshots(suffix) // FM3: a new Furniture document
             await fm4Screenshots(suffix) // FM4: Furniture parts (bookcase, table, part tools)
             await fm5Screenshots(suffix) // FM5: bays, doors, drawers and hardware (base cabinet, Modify | Doors)
+            await fm6Screenshots(suffix) // FM6: joints (sections at Fine, Joint tool markers, Joint Rules)
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)
