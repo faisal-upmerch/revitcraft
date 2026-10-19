@@ -123,7 +123,7 @@ struct StockSheetsEditor: View {
                             }
                         }
                     }
-                    .frame(height: 210)
+                    .frame(height: min(CGFloat(max(settings.sizes.count, 3)) * 34, 210)) // DIALOGS: as tall as the sizes
                     Divider()
                     HStack(spacing: 8) {
                         Button("Add 4' x 8'") { add(StockSheetSize(name: "4' x 8'", length: 96 * 0.0254, width: 48 * 0.0254)) }
@@ -456,10 +456,10 @@ struct CheckPartsDialog: View {
 
     var body: some View {
         let counts = Dictionary(grouping: findings, by: { DialogSeverity($0.severity) }).mapValues(\.count)
-        ArcusDialog(icon: "checklist", tint: .brown, title: "Check Parts", subtitle: summary, size: .large, okTitle: "Close", showCancel: false, height: 560,
+        ArcusDialog(icon: "checklist", tint: .brown, title: "Check Parts", subtitle: summary, size: .large, okTitle: "Close", showCancel: false,
                     onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
             DialogSummaryTiles(tiles: DialogSummaryTiles.severities(counts))
-            CheckPartsList(findings: findings, selection: $selection, model: state.model).frame(maxHeight: .infinity)
+            CheckPartsList(findings: findings, selection: $selection, model: state.model)
         } leading: {
             Button("Show") { show() }.disabled(selected.isEmpty).help("Select the parts and zoom to them")
             Button("Check Again") { findings = FurnitureCheckParts.check(state.model) }
@@ -511,7 +511,7 @@ struct CheckPartsList: View {
                 DialogEmptyState(icon: "checkmark.seal", title: "No Problems", message: "Every part has a material, fits its stock and its hardware.")
             }
         }
-        .frame(minHeight: 280)
+        .frame(height: max(160, min(CGFloat(findings.count) * 46 + 16, 380))) // DIALOGS: as tall as the findings
     }
 
     static func title(_ code: String) -> String {

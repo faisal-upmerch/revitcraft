@@ -370,7 +370,7 @@ struct RevisionsDialog: View {
         let _ = state.session.changeCounter
         let revs = state.model.revisions
         DialogFrameWithActions(title: "Sheet Issues/Revisions", icon: "cloud", tint: .orange, size: .large, subtitle: "Issued revisions are locked. Sheets list the revisions clouded on them.", okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
-            DialogListBox(count: revs.count, rowHeight: 30, minRows: 6, maxRows: 10, isEmpty: revs.isEmpty) {
+            DialogListBox(count: revs.count + 1, rowHeight: 32, minRows: 3, maxRows: 10, isEmpty: revs.isEmpty) {
             Table(revs) {
                 TableColumn("#") { r in Text(RevisionQueries.label(r, state.model)).monospacedDigit() }.width(30)
                 TableColumn("Numbering") { r in
@@ -477,19 +477,23 @@ struct PurgeDialog: View {
     }
     var body: some View {
         let items = unused
-        DialogFrameWithActions(title: "Purge Unused", icon: "trash", tint: .gray, subtitle: "Unused types, families and materials. Purging can be undone.",
+        DialogFrame(title: "Purge Unused", icon: "trash", tint: .gray, subtitle: "Unused types, families and materials. Purging can be undone.",
                                okTitle: chosen.isEmpty ? "Purge" : "Purge \(chosen.count)", okDisabled: chosen.isEmpty, disabledReason: "Check the items to purge", state: state) {
             let ids = chosen.sorted()
             state.session.perform("Purge Unused") { tx in for i in ids { tx.delete(i) } }
             state.presented = nil
         } content: {
+            DialogSection("Unused items", boxed: false) {
             DialogCheckList(items: items.map { e in
                 DialogCheckItem(id: e.id, title: "\(e.typeData.map { "\($0.familyName): " } ?? "")\(e.name)",
                                 detail: e.typeData.map { $0.instanceCategory.displayName } ?? e.category.singularName)
             }, checked: $chosen, maxRows: 10, noun: "items", emptyTitle: "Nothing to purge", emptyMessage: "Every type, family and material is in use.", emptyIcon: "checkmark.seal")
-        } actions: {
-            Button("Check All") { chosen = Set(items.map(\.id)) }.disabled(items.isEmpty)
-            Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
+            } accessory: {
+                HStack(spacing: 4) {
+                    Button("Check All") { chosen = Set(items.map(\.id)) }.disabled(items.isEmpty)
+                    Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
+                }
+            }
         }
     }
 }

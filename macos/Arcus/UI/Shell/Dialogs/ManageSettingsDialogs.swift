@@ -34,7 +34,7 @@ struct ObjectStylesDialog: View {
 
     var body: some View {
         ArcusDialog(icon: "paintbrush", tint: .indigo, title: "Object Styles", subtitle: "Line weights, colours, patterns and materials every view starts from.",
-                    size: .wide, height: 640, onCancel: { state.presented = nil }, onOK: { save(); state.presented = nil }) {
+                    size: .extraWide, height: 640, onCancel: { state.presented = nil }, onOK: { save(); state.presented = nil }) {
             Picker("", selection: $tab) { Text("Model Objects").tag(0); Text("Annotation Objects").tag(1); Text("Imported Objects").tag(2) }
                 .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
             Table(rows, children: \.children, selection: $selection) {
@@ -150,7 +150,7 @@ struct WarningsDialog: View {
         let counts = Dictionary(grouping: state.healthWarnings, by: { DialogSeverity($0.severity) }).mapValues(\.count)
         ArcusDialog(icon: "exclamationmark.triangle", tint: .orange, title: "Warnings",
                     subtitle: n == 0 ? "The model has no warnings." : "\(n) warning\(n == 1 ? "" : "s"). Expand one to see its elements; check elements to delete them.",
-                    size: .large, okTitle: "Close", showCancel: false, height: 560, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
+                    size: .large, okTitle: "Close", showCancel: false, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
             DialogSummaryTiles(tiles: DialogSummaryTiles.severities(counts))
             List(nodes, children: \.children, selection: $selection) { n in
                 switch n.kind {
@@ -176,7 +176,7 @@ struct WarningsDialog: View {
                     DialogEmptyState(icon: "checkmark.seal", title: "No Warnings", message: "The model has no warnings.")
                 }
             }
-            .frame(maxHeight: .infinity)
+            .frame(height: max(150, min(CGFloat(nodes.count) * 26 + 120, 420))) // DIALOGS: room to expand a few groups
         } leading: {
             Button("Show") { show() }.disabled(elements(for: selection).isEmpty).help("Select the elements and zoom to them")
             Button("Delete Checked") { deleteChecked() }.disabled(checked.isEmpty)

@@ -150,17 +150,21 @@ struct PasteToLevelsDialog: View {
     var body: some View {
         let m = state.model
         let levels = m.levels.sorted { ($0.level?.elevation ?? 0) > ($1.level?.elevation ?? 0) }
-        DialogFrameWithActions(title: "Paste Aligned to Selected Levels", icon: "doc.on.clipboard", subtitle: "The clipboard is pasted at the same place on each level.",
-                               okDisabled: chosen.isEmpty, disabledReason: "Choose at least one level", state: state) {
+        DialogFrame(title: "Paste Aligned to Selected Levels", icon: "doc.on.clipboard", subtitle: "The clipboard is pasted at the same place on each level.",
+                    okDisabled: chosen.isEmpty, disabledReason: "Choose at least one level", state: state) {
             Clipboard(state: state).paste(mode: .levels(chosen.sorted()))
             state.presented = nil
         } content: {
-            DialogCheckList(items: levels.map { l in
-                DialogCheckItem(id: l.id, title: l.name, icon: "square.3.layers.3d", detail: Parameters.format(.double(l.level?.elevation ?? 0), type: .length, model: m))
-            }, checked: $chosen, maxRows: 9, noun: "levels", emptyTitle: "No levels", emptyIcon: "square.3.layers.3d")
-        } actions: {
-            Button("Check All") { chosen = Set(levels.map(\.id)) }
-            Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
+            DialogSection("Levels", boxed: false) {
+                DialogCheckList(items: levels.map { l in
+                    DialogCheckItem(id: l.id, title: l.name, icon: "square.3.layers.3d", detail: Parameters.format(.double(l.level?.elevation ?? 0), type: .length, model: m))
+                }, checked: $chosen, maxRows: 9, noun: "levels", emptyTitle: "No levels", emptyIcon: "square.3.layers.3d")
+            } accessory: {
+                HStack(spacing: 4) {
+                    Button("Check All") { chosen = Set(levels.map(\.id)) }
+                    Button("Check None") { chosen = [] }.disabled(chosen.isEmpty)
+                }
+            }
         }
     }
 }
@@ -260,9 +264,10 @@ private struct OptionalColorRow: View {
     let label: String
     @Binding var color: RGBColor?
     var body: some View {
-        DialogRow(label) {
+        DialogRow(label, alignment: .center) {
             HStack(spacing: 10) {
-                Toggle("Override", isOn: Binding(get: { color != nil }, set: { color = $0 ? (color ?? .black) : nil }))
+                Toggle("", isOn: Binding(get: { color != nil }, set: { color = $0 ? (color ?? .black) : nil })).labelsHidden()
+                    .help("Override the colour").accessibilityLabel("Override \(label)")
                 ColorPicker("", selection: Binding(get: { (color ?? .black).color }, set: { color = RGBColor.from(NSColor($0)) }), supportsOpacity: false)
                     .labelsHidden()
                     .disabled(color == nil)

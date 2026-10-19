@@ -68,7 +68,7 @@ struct FurnitureTypesDialog: View {
 
     var body: some View {
         let s = setup ?? model.furnitureSetup
-        ArcusDialog(icon: "square.grid.2x2", tint: .brown, title: "Family Types", subtitle: s?.name ?? "", size: .wide, height: 600,
+        ArcusDialog(icon: "square.grid.2x2", tint: .brown, title: "Family Types", subtitle: s?.name ?? "", size: .wide, height: 540,
                     onCancel: { state.presented = nil }, onOK: { apply(); state.presented = nil }) {
             if let s {
                 DialogSection { typeRow(s) }

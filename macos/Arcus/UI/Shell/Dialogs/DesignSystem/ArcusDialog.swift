@@ -5,8 +5,9 @@ import UniformTypeIdentifiers
 // DIALOGS: the container every modal uses (Docs/Dialogs.md). Layout, top to bottom:
 //   header   icon tile · title (.title3 semibold) · one-line subtitle (secondary)
 //   content  sections on the window background, 20 pt from the edges, 16 pt apart
-//   footer   full-width separator; secondary actions on the left (Copy, Check All, Help…); on the right an optional
-//            reason the default button is disabled, extra buttons (Apply), Cancel (Esc) and the default button (Return)
+//   footer   full-width separator; secondary actions on the left (Copy, Check All, Help…); on the right the reason
+//            the default button is disabled (inline when there are no secondary actions, else its help tag), extra
+//            buttons (Apply), Cancel (Esc) and the default button (Return)
 // The dialog is opaque, as wide as its size class and as tall as its content; content taller than the class's maximum
 // scrolls when `scrolls` is set (lists and tables size themselves instead).
 
@@ -203,7 +204,8 @@ struct DialogFooter<Leading: View, Trailing: View>: View {
             HStack(spacing: DialogStyle.itemSpacing) {
                 HStack(spacing: DialogStyle.itemSpacing) { leading }.fixedSize()
                 Spacer(minLength: 12)
-                if okDisabled, let disabledReason, !disabledReason.isEmpty {
+                // The reason shows inline when the footer has room (no secondary actions); otherwise on hover.
+                if okDisabled, Leading.self == EmptyView.self, let disabledReason, !disabledReason.isEmpty {
                     Label(disabledReason, systemImage: "info.circle")
                         .font(.callout)
                         .foregroundStyle(.secondary)

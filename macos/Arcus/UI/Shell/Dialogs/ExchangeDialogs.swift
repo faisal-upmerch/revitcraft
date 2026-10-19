@@ -239,7 +239,7 @@ struct ImportCADDialog: View {
                     DialogSection("Layers", boxed: false) {
                         DialogCheckList(items: doc.layers.map { l in
                             DialogCheckItem(id: l.name, title: l.name, detail: !l.isOn || l.isFrozen ? "off" : nil, swatch: l.color.color)
-                        }, checked: $layers, minRows: 7, maxRows: 7, noun: "layers", emptyTitle: "No layers")
+                        }, checked: $layers, minRows: 6, maxRows: 6, noun: "layers", emptyTitle: "No layers")
                     } accessory: {
                         HStack(spacing: 4) { Button("All") { layers = Set(doc.layers.map(\.name)) }; Button("None") { layers = [] } }
                     }
@@ -446,7 +446,7 @@ struct ManageLinksDialog: View {
             } empty: { // W4-AUDIT: an empty table otherwise shows only blank striped rows
                 DialogEmptyState(icon: "link", title: "No CAD links or imports", message: "Use Insert ▸ Link CAD or Import CAD to add one.")
             }
-            HStack {
+            if !links.isEmpty { HStack {
                 Button("Reload") { if let s = selected { LinkActions(state: state).reload([s]) } }.disabled(selected == nil)
                 Button("Reload From…") { if let s = selected, let e = state.model[s] { LinkActions(state: state).locate(s, name: e.link?.sourceName ?? "") } }.disabled(selected == nil)
                 Button("Unload") { if let s = selected { state.session.perform("Unload Link") { tx in tx.update(s) { $0.link?.isLoaded = false } } } }.disabled(selected == nil)
@@ -454,7 +454,7 @@ struct ManageLinksDialog: View {
                 Spacer()
                 Button("Remove", role: .destructive) { if let s = selected { state.session.delete([s]); selected = nil } }.disabled(selected == nil)
             }
-            .controlSize(.small)
+            .controlSize(.small) }
             F67ManageLinksSection(state: state) // F67: linked models, IFC, point clouds, topography, DWF markups
         } actions: {
             EmptyView()

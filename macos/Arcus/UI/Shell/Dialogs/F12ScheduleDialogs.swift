@@ -90,7 +90,7 @@ struct ScheduleShadingDialog: View {
             state.session.editSchedule(scheduleID, "Shading") { ScheduleFormattingEdits.style(keys, &$0) { $0.shading = rgb } }
             state.presented = nil
         } content: {
-            DialogSection { DialogRow("Color") { ColorPicker("", selection: $color, supportsOpacity: false).labelsHidden() } }
+            DialogSection { DialogRow("Color", alignment: .center) { ColorPicker("", selection: $color, supportsOpacity: false).labelsHidden() } }
         }
         .onAppear {
             if let k = keys.first, let s = state.model[scheduleID]?.schedule?.formatting.style(k).shading { color = Color(nsColor: s.nsColor) }
@@ -105,7 +105,7 @@ struct ScheduleBordersDialog: View {
     @State private var edges: [ScheduleBorder] = [.thin, .thin, .thin, .thin]
     static let names = ["Top", "Right", "Bottom", "Left"]
     var body: some View {
-        DialogFrame(title: "Edit Borders", icon: "square.dashed", tint: .green, size: .small, subtitle: "Line weight of each edge of the selected cells.", state: state) {
+        DialogFrame(title: "Edit Borders", icon: "square.dashed", tint: .green, subtitle: "Line weight of each edge of the selected cells.", state: state) {
             let e = edges
             state.session.editSchedule(scheduleID, "Borders") { ScheduleFormattingEdits.style(keys, &$0) { s in
                 if Set(e).count == 1 { s.border = e[0]; s.edges = nil } else { s.border = nil; s.edges = e }
@@ -161,7 +161,7 @@ struct ScheduleFontDialog: View {
                 DialogRow("Style") {
                     HStack(spacing: 14) { Toggle("Bold", isOn: $font.bold); Toggle("Italic", isOn: $font.italic); Toggle("Underline", isOn: $font.underline) }
                 }
-                DialogRow("Color") { ColorPicker("", selection: $color, supportsOpacity: false).labelsHidden() }
+                DialogRow("Color", alignment: .center) { ColorPicker("", selection: $color, supportsOpacity: false).labelsHidden() }
             }
         }
         .onAppear {

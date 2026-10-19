@@ -473,6 +473,7 @@ enum QAHarness {
             await fm8Screenshots(suffix) // FM8: pieces in a project at Coarse/Fine, Load Furniture, Edit Family, the reload prompt
             await fm9Screenshots(suffix) // FM9: every essential in 3D, Home ▸ Furniture, Load Furniture, the Component Library's Furniture Library
             await mcpScreenshots(suffix) // MCP: Home's Design with Claude card, the Set Up window, the bottom bar pill
+            await dialogsScreenshots(s, w, suffix: suffix) // DIALOGS: the ten dialogs of the owner's review, as sheets
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)

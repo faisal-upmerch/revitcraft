@@ -73,7 +73,7 @@ struct SchedulePropertiesDialog: View {
     @State private var sample: Element?
 
     var body: some View {
-        DialogFrame(title: "Schedule Properties", icon: "tablecells", tint: .green, size: .wide, subtitle: state.model[scheduleID]?.name ?? "", labelWidth: 120, height: 600, state: state) {
+        DialogFrame(title: "Schedule Properties", icon: "tablecells", tint: .green, size: .wide, subtitle: state.model[scheduleID]?.name ?? "", labelWidth: 120, state: state) {
             let d = def
             state.session.perform("Edit Schedule") { tx in tx.update(scheduleID) { $0.schedule = d } }
             if let e = state.session.lastError { state.show(e.message, error: true); state.session.clearError() } else { state.presented = nil }
@@ -84,14 +84,14 @@ struct SchedulePropertiesDialog: View {
                 .accessibilityLabel("Schedule Properties tab")
             Group {
                 switch ScheduleTab(rawValue: tab) ?? .fields {
-                case .fields: fieldsTab
+                case .fields: fieldsTab.frame(height: 430)
                 case .filter: filterTab
                 case .sorting: sortTab
-                case .formatting: formatTab
+                case .formatting: formatTab.frame(height: 400).onAppear { if selectedField == nil { selectedField = def.fields.first?.id } }
                 case .appearance: appearanceTab
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading) // DIALOGS: each tab as tall as its content, as Settings panes are
         }
         .onAppear {
             def = state.model[scheduleID]?.schedule ?? def
@@ -312,7 +312,7 @@ struct SchedulePropertiesDialog: View {
                         if def.fields[i].conditionalFormat != nil {
                             DialogRow("When value") { Picker("", selection: Binding(get: { def.fields[i].conditionalFormat!.op }, set: { def.fields[i].conditionalFormat!.op = $0 })) { ForEach(FilterRule.Op.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
                             DialogRow("Compare to") { TextField("", text: Binding(get: { def.fields[i].conditionalFormat!.value.textValue ?? "" }, set: { def.fields[i].conditionalFormat!.value = .text($0) })).labelsHidden() }
-                            DialogRow("Background") { ColorPicker("", selection: Binding(get: { def.fields[i].conditionalFormat!.background.color }, set: { def.fields[i].conditionalFormat!.background = RGBColor.from(NSColor($0)) })).labelsHidden() }
+                            DialogRow("Background", alignment: .center) { ColorPicker("", selection: Binding(get: { def.fields[i].conditionalFormat!.background.color }, set: { def.fields[i].conditionalFormat!.background = RGBColor.from(NSColor($0)) })).labelsHidden() }
                         }
                     }
                 }

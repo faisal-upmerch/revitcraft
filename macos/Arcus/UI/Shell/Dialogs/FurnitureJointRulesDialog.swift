@@ -29,7 +29,7 @@ struct FurnitureJointRulesDialog: View {
 
     var body: some View {
         ArcusDialog(icon: "square.split.diagonal", tint: .brown, title: "Joint Rules", subtitle: (category == .casework ? "Casework" : "Furniture") + " · joints you set with the Joint tool keep their settings.",
-                    size: .wide, onCancel: { state.presented = nil }, onOK: commit) {
+                    size: .extraWide, onCancel: { state.presented = nil }, onOK: commit) {
             if rules != nil {
                 JointRulesEditor(rules: Binding(get: { rules ?? .defaults(category) }, set: { rules = $0 }), model: state.model, category: category)
             }

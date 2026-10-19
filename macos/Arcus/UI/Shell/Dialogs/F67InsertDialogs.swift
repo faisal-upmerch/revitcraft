@@ -320,8 +320,9 @@ struct TransferStandardsDialog: View {
                 DialogSection {
                     DialogRow("Copy from") {
                         HStack {
-                            Picker("", selection: $sourceID) { ForEach(sources) { Text($0.name).tag($0.id) } }.labelsHidden().frame(maxWidth: 260)
-                                .disabled(sources.isEmpty)
+                            if sources.isEmpty { Text("No other project is open").foregroundStyle(.secondary) }
+                            else { Picker("", selection: $sourceID) { ForEach(sources) { Text($0.name).tag($0.id) } }.labelsHidden().frame(maxWidth: 260) }
+                            Spacer()
                             Button("Choose File…") { chooseFile() }
                         }
                     }
@@ -587,7 +588,7 @@ struct F67ManageLinksSection: View {
             } empty: {
                 DialogEmptyState(icon: "link", title: "No linked models or point clouds", message: "Use Insert ▸ Link Model, Link IFC, Point Cloud or DWF Markup.")
             }
-            HStack {
+            if !links.isEmpty { HStack {
                 Button("Reload") { if let s = selected { F67Links(state: state).reload([s]) } }.disabled(selected == nil)
                 Button("Reload From…") { if let s = selected { F67Links(state: state).locate(s) } }.disabled(selected == nil)
                 Button("Unload") { if let s = selected { state.session.perform("Unload Link") { tx in InsertOperations.setLoaded(s, false, in: tx) } } }.disabled(!canToggle(true))
@@ -595,7 +596,7 @@ struct F67ManageLinksSection: View {
                 Spacer()
                 Button("Remove", role: .destructive) { if let s = selected { state.session.delete([s]); selected = nil } }.disabled(selected == nil)
             }
-            .controlSize(.small)
+            .controlSize(.small) }
         }
     }
 

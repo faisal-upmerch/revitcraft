@@ -462,7 +462,7 @@ struct NewAreaPlanDialog: View {
 
     var body: some View {
         let m = state.model
-        DialogFrame(title: "New Area Plan", icon: "square.dashed", tint: .orange, subtitle: "Shows the areas of one scheme. Boundary lines decide where areas are measured.",
+        DialogFrame(title: "New Area Plan", icon: "square.dashed", tint: .orange, subtitle: "Areas of one scheme, measured to its boundary lines.",
                     okDisabled: chosen.isEmpty || (scheme == nil && newScheme == nil), disabledReason: "Choose at least one level", state: state) {
             create()
         } content: {

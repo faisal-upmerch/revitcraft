@@ -70,7 +70,7 @@ struct PlaceViewDialog: View {
                 }
             }
         } leading: {
-            Text(chosen.isEmpty ? "No view selected" : "\(chosen.count) selected").font(.callout).foregroundStyle(.secondary)
+            if !chosen.isEmpty { Text("\(chosen.count) selected").font(.callout).foregroundStyle(.secondary) }
         }
         .onAppear { searchFocused = true }
     }

@@ -21,7 +21,7 @@ struct FamilyTypesDialog: View {
     var sorted: [FamilyParameter] { model.family.parameters.sorted { ($0.group, $0.name) < ($1.group, $1.name) } }
 
     var body: some View {
-        ArcusDialog(icon: "square.grid.2x2", tint: .purple, title: "Family Types", subtitle: model.family.name, size: .wide, height: 600,
+        ArcusDialog(icon: "square.grid.2x2", tint: .purple, title: "Family Types", subtitle: model.family.name, size: .extraWide, height: 600,
                     onCancel: { // F1415
                         if let o = opened, o.family != model.family {
                             model.edit("Cancel Family Types") { $0 = o.family }
