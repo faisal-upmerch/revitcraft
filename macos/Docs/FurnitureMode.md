@@ -157,7 +157,7 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM2 | ✅ Family Editor on the main shell + clipping fixes (port/FES; minimum window 1200 × 700) | — |
 | FM3 | ✅ Furniture document: kind, `.arcusfurniture`, template, mode ribbon/browser/menus, parametric planes, Family Types/Category in the shell, Flex, basic compile + Load into Project (port/FM3). Open: labelling a new dimension from the UI; Forms use the in-place tool until FM4 | — |
 | FM4 | ✅ Parts: Panel (PA: PN is Revit's Pin), Shelf (SH), Top (TP), Back, Divider, Leg + At Corners, Rail + Slats, Plinth, Edge Profile, Groove; Forms + Cushion; types, constraints, grips, graphics, Properties, compile (port/FM4). Open: dimensions to part faces don't follow moved parts; Blend has no separate Edit Top; Sweep paths are plan-only | FM3 |
-| FM5 | Bays, Bay Divide, Doors/Drawers/Flaps, hardware families and auto-placement | FM4 |
+| FM5 | ✅ Bays (BY), Bay Divide (BD), Doors (DF)/Drawers (DW)/Flaps (FP: FL is Floor), 17 hardware families (HW) with cost and auto-placement (port/FM5). Open: hinge count fixed in compiled families; bays drawn in Front-facing views only; lids are slab only; bays can't be moved | FM4 |
 | FM6 | ✅ Joints: solver, Joint Rules, Joint tool (JT), machining geometry, cut sizes (port/FM6). Open: Properties shows only joints you set; panels with Edit Profile or openings, round rails and slats aren't joined; a back grooved on four sides leaves its 3D corners open | FM4 |
 | FM7 | Fabrication: Part List, Hardware Schedule, Material Takeoff with cost, Stock Sheets, nesting engine and views, CNC Export, shop drawing sheet | FM5, FM6 |
 | FM8 | Full compile, Edit Family round trip, projects load `.arcusfurniture` | FM5, FM6 |

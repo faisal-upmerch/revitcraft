@@ -274,6 +274,10 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Detach Top/Base |  |  | Detaches the selected panels and legs from their shelf or top. |
 | Opening |  |  | Cuts a rectangular opening in a panel: pick two corners on its face in an elevation. |
 | Flip Panel |  |  | Swaps the outside and inside faces of the selected panels. |
+| Remove Bay Divide |  |  | Removes the selected bays' divisions (and the fronts of their cells). |
+| Flip Hinge |  |  | Flips the selected doors to hinge on the other side (Space does the same). |
+| Pick New Host |  |  | Moves the selected front to another bay: click the bay. |
+| Select Hardware |  |  | Selects the hardware of the selected fronts. |
 | Joint |  | `JT` | Shows a marker at every joint; pick one to set its type (butt, miter, dado, dowel, cam lock…), which part runs through, and its sizes. |
 | Allow Join |  |  | Lets the selected parts join at their ends again. |
 | Disallow Join |  |  | Stops the selected parts joining at their ends: they stay as drawn. |
@@ -389,6 +393,13 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Void Revolve |  |  | A revolve that cuts the parts it reaches. |
 | Void Sweep |  |  | A sweep that cuts the parts it reaches. |
 | Void Swept Blend |  |  | A swept blend that cuts the parts it reaches. |
+| Bay |  | `BY` | Places a bay like a room: click inside a region bounded by parts in the Front elevation (or a box in plan, for a top-access bay). It follows the parts as they move. |
+| Bay Separator |  | `BYS` | Draws lines that bound bays without a part, as Room Separator. |
+| Bay Divide |  | `BD` | Splits a bay into equal (EQ) or sized rows or columns, as a curtain grid: each cell takes its own door or drawer. |
+| Door |  | `DF` | Places a cabinet front that hinges in a bay: full or half overlay, or inset; single or pair. Space flips the hinge side. |
+| Drawer |  | `DW` | Places drawers in a bay: the front, its box and slides sized from the bay. Number stacks that many drawers (EQ). |
+| Flap |  | `FP` | Places a lift-up or drop-down flap in a bay (in plan: a lid on a top-access bay), with its hinges and stays. |
+| Hardware |  | `HW` | Places a hardware type (hinge, slide, handle, glide, caster, pin, connector) as a component. Doors and drawers place their own. |
 
 ### Structure
 
@@ -514,6 +525,7 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Linear Multi-Rebar Annotation |  |  | Dimensions the bars of a rebar set horizontally or vertically, with its tag. |
 | Space Tag |  |  | Tags a space with its name and number. |
 | Keynoting Settings |  |  | Chooses the keynote table and how keynote tags read. |
+| Bay Tag |  |  | Tags a bay with its name and clear opening, as Room Tag. |
 
 ### View
 
