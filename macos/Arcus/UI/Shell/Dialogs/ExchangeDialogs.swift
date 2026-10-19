@@ -37,42 +37,47 @@ struct ExportPDFDialog: View {
     var items: [Element] { state.model.sheets + (includeViews ? state.model.views.filter { $0.view?.kind != .threeD || true } : []) }
 
     var body: some View {
-        DialogFrame(title: "Export PDF", subtitle: "Vector PDF with live text, bookmarks and links between view markers and sheets.", okTitle: "Export…", okDisabled: chosen.isEmpty, state: state) {
+        let list = items
+        DialogFrameWithActions(title: "Export PDF", icon: "doc.richtext", tint: .red, subtitle: "Vector PDF with live text, bookmarks and linked view markers.", okTitle: "Export…",
+                               okDisabled: chosen.isEmpty, disabledReason: "Check at least one sheet or view", scrolls: true, labelWidth: 120, state: state) {
             chooseFolder()
         } content: {
-            HStack {
+            DialogSection(includeViews ? "Sheets and views" : "Sheets", rows: false) {
+                DialogCheckList(items: list.map { e in
+                    DialogCheckItem(id: e.id, title: e.sheet.map { "\($0.number) – \(e.name)" } ?? e.name, subtitle: e.sheet == nil ? e.view?.kind.rawValue : nil,
+                                    icon: e.sheet == nil ? "rectangle.on.rectangle" : "doc.richtext")
+                }, checked: $chosen, maxRows: 7, noun: includeViews ? "items" : "sheets", emptyTitle: "No sheets", emptyMessage: "Create a sheet, or include views.", emptyIcon: "doc.richtext")
+            } accessory: {
                 Toggle("Include views", isOn: $includeViews)
-                Spacer()
-                Button("Select All") { chosen = Set(items.map(\.id)) }
-                Button("Select None") { chosen = [] }
             }
-            List(items, id: \.id) { e in
-                Toggle(isOn: Binding(get: { chosen.contains(e.id) }, set: { if $0 { chosen.insert(e.id) } else { chosen.remove(e.id) } })) {
-                    Text(e.sheet.map { "\($0.number) – \(e.name)" } ?? "\(e.view?.kind.rawValue ?? "View"): \(e.name)")
+            DialogSection("Output") {
+                DialogRow("Files") {
+                    Picker("", selection: $combined) { Text("One combined PDF").tag(true); Text("Separate files").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize()
                 }
-            }.frame(minHeight: 220)
-            Picker("Output", selection: $combined) { Text("One combined PDF").tag(true); Text("Separate files").tag(false) }.pickerStyle(.radioGroup)
-            if combined { FormRow(label: "File name") { TextField("", text: $fileName).textFieldStyle(.roundedBorder) } }
-            else {
-                Picker("File naming", selection: $naming) { Text("Sheet number – Sheet name").tag(0); Text("View or sheet name").tag(1); Text("Project number – Sheet number").tag(2) }
-            }
-            DisclosureGroup("Options") { // F13: as RevitCraft's PDF export options
-                HStack(alignment: .top, spacing: 24) {
-                    VStack(alignment: .leading) {
-                        Toggle("Hide reference/work planes", isOn: $setup.hideReferencePlanes)
-                        Toggle("Hide scope boxes", isOn: $setup.hideScopeBoxes)
-                        Toggle("Hide crop boundaries", isOn: $setup.hideCropBoundaries)
-                        Toggle("Hide unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
-                    }
-                    VStack(alignment: .leading) {
-                        Picker("Colors", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
-                        Picker("Views on", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
-                        Picker("Zoom", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.frame(width: 200)
+                if combined { DialogRow("File name") { TextField("", text: $fileName).labelsHidden() } }
+                else {
+                    DialogRow("File naming") {
+                        Picker("", selection: $naming) { Text("Sheet number – Sheet name").tag(0); Text("View or sheet name").tag(1); Text("Project number – Sheet number").tag(2) }.labelsHidden().fixedSize()
                     }
                 }
             }
+            DialogSection("Options") { // F13: as RevitCraft's PDF export options
+                DialogRow("Colors") { Picker("", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Views on") { Picker("", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Zoom") { Picker("", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
+                DialogRow("Hide", alignment: .top) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Toggle("Reference/work planes", isOn: $setup.hideReferencePlanes)
+                        Toggle("Scope boxes", isOn: $setup.hideScopeBoxes)
+                        Toggle("Crop boundaries", isOn: $setup.hideCropBoundaries)
+                        Toggle("Unreferenced view tags", isOn: $setup.hideUnreferencedViewTags)
+                    }
+                }
+            }
+        } actions: {
+            Button("Select All") { chosen = Set(list.map(\.id)) }.disabled(list.isEmpty)
+            Button("Select None") { chosen = [] }.disabled(chosen.isEmpty)
         }
-        .frame(minWidth: 560, idealWidth: 560)
         .onAppear { chosen = Set(state.model.sheets.map(\.id)); fileName = "\(state.model.projectInfo.projectName).pdf"; setup = state.model.manageData.printSetup ?? PrintSetup() }
     }
 
@@ -135,26 +140,33 @@ struct ExportIFCDialog: View {
     @State private var options = IFCExportOptions()
     @State private var visibleOnly = false
     var body: some View {
-        DialogFrame(title: "Export IFC", subtitle: "Architectural subset. Unsupported items are listed in the export report.", okTitle: "Export…", state: state) {
+        DialogFrame(title: "Export IFC", icon: "square.and.arrow.up", tint: .teal, subtitle: "Architectural subset. Unsupported items are listed in the report.", okTitle: "Export…", labelWidth: 140, state: state) {
             export()
         } content: {
-            Form {
-                Picker("Schema", selection: $options.schema) {
-                    Text("IFC4 Reference View").tag(IFCSchema.ifc4); Text("IFC2x3 Coordination View 2.0").tag(IFCSchema.ifc2x3)
+            DialogSection("Format") {
+                DialogRow("Schema") {
+                    Picker("", selection: $options.schema) {
+                        Text("IFC4 Reference View").tag(IFCSchema.ifc4); Text("IFC2x3 Coordination View 2.0").tag(IFCSchema.ifc2x3)
+                    }.labelsHidden().fixedSize()
                 }
+                DialogRow("Coordinate base") {
+                    Picker("", selection: $options.coordinateBase) {
+                        Text("Internal origin").tag(IFCCoordinateBase.internalOrigin); Text("Project base point").tag(IFCCoordinateBase.projectBasePoint); Text("Shared coordinates (survey point)").tag(IFCCoordinateBase.sharedCoordinates)
+                    }.labelsHidden().fixedSize()
+                }
+            }
+            DialogSection("Content") {
                 Toggle("Only elements visible in the active view", isOn: $visibleOnly)
                 Toggle("Split by storey (one file per level)", isOn: $options.splitByStorey)
                 Toggle("Base quantities", isOn: $options.includeBaseQuantities)
                 Toggle("Property sets (common and Arcus parameters)", isOn: $options.includePropertySets)
                 Toggle("Classification", isOn: $options.includeClassification)
-                Picker("Coordinate base", selection: $options.coordinateBase) {
-                    Text("Internal origin").tag(IFCCoordinateBase.internalOrigin); Text("Project base point").tag(IFCCoordinateBase.projectBasePoint); Text("Shared coordinates (survey point)").tag(IFCCoordinateBase.sharedCoordinates)
-                }
-                TextField("Author", text: $options.authorName)
-                TextField("Organization", text: $options.organization)
+            }
+            DialogSection("Header") {
+                DialogRow("Author") { TextField("", text: $options.authorName).labelsHidden() }
+                DialogRow("Organization") { TextField("", text: $options.organization).labelsHidden() }
             }
         }
-        .frame(minWidth: 520, idealWidth: 520)
         .onAppear { options.organization = state.model.projectInfo.organization; options.fileName = "\(state.model.projectInfo.projectName).ifc" }
     }
     func export() {
@@ -211,63 +223,63 @@ struct ImportCADDialog: View {
     @State private var readCancel = CancelBox() // W2-DWG
 
     var body: some View {
-        DialogFrame(title: "\(isLink ? "Link" : "Import") \(isDWG ? "DWG" : "DXF"): \(url.lastPathComponent)",
-                    subtitle: (isLink ? "A link stays connected to the file and can be reloaded. The source file is never modified." : "An import stores a snapshot in the project. The source file is never modified.")
-                        + (isDWG ? " " + DWGStatus.conversionNote : ""), // W2-DWG
-                    okTitle: isLink ? "Link" : "Import", okDisabled: doc == nil || layers.isEmpty, state: state) {
+        DialogFrame(title: "\(isLink ? "Link" : "Import") \(isDWG ? "DWG" : "DXF")", file: url, size: .large,
+                    subtitle: url.lastPathComponent + (doc.map { d in " · \(d.versionName.isEmpty ? d.version : d.versionName) · \(d.layers.count) layers · \(d.entityCounts.values.reduce(0, +)) entities" } ?? ""),
+                    okTitle: isLink ? "Link" : "Import", okDisabled: doc == nil || layers.isEmpty, disabledReason: doc == nil ? nil : "Check at least one layer", labelWidth: 100, state: state) {
             place()
         } content: {
-            if let error { Label(error, systemImage: "exclamationmark.triangle").foregroundStyle(.red) }
+            if let error { DialogNotice(.error, title: "The file can't be read", error) }
             if let doc {
-                Text(verbatim: "\(doc.versionName.isEmpty ? doc.version : doc.versionName) · \(doc.layers.count) layers · \(doc.entityCounts.values.reduce(0, +)) entities · units: \(String(describing: doc.units))")
-                    .font(.caption).foregroundStyle(.secondary)
-                HStack(alignment: .top, spacing: 14) {
-                    VStack(alignment: .leading) {
-                        HStack { Text("Layers").font(.headline); Spacer(); Button("All") { layers = Set(doc.layers.map(\.name)) }; Button("None") { layers = [] } }
-                        List(doc.layers, id: \.name) { l in
-                            Toggle(isOn: Binding(get: { layers.contains(l.name) }, set: { if $0 { layers.insert(l.name) } else { layers.remove(l.name) } })) {
-                                HStack { Circle().fill(l.color.color).frame(width: 9, height: 9); Text(l.name); if !l.isOn || l.isFrozen { Text("off").font(.caption2).foregroundStyle(.secondary) } }
-                            }
-                        }.frame(width: 250, height: 220)
+                HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
+                    DialogSection("Layers", rows: false) {
+                        DialogCheckList(items: doc.layers.map { l in
+                            DialogCheckItem(id: l.name, title: l.name, detail: !l.isOn || l.isFrozen ? "off" : nil, swatch: l.color.color)
+                        }, checked: $layers, minRows: 7, maxRows: 7, noun: "layers", emptyTitle: "No layers")
+                    } accessory: {
+                        HStack(spacing: 4) { Button("All") { layers = Set(doc.layers.map(\.name)) }; Button("None") { layers = [] } }
                     }
-                    Form {
-                        Picker("Units", selection: $units) {
-                            Text("From file (\(String(describing: doc.units)))").tag(CADUnits?.none)
-                            ForEach([CADUnits.millimeters, .centimeters, .meters, .inches, .feet], id: \.self) { Text(String(describing: $0)).tag(Optional($0)) }
+                    .frame(width: 280)
+                    DialogSection("Placement", footnote: (isLink ? "A link stays connected to the file and can be reloaded." : "An import stores a snapshot in the project.") + " The source file is never modified."
+                                  + (isDWG ? " " + DWGStatus.conversionNote : "")) { // W2-DWG
+                        DialogRow("Units") {
+                            Picker("", selection: $units) {
+                                Text("From file (\(String(describing: doc.units)))").tag(CADUnits?.none)
+                                ForEach([CADUnits.millimeters, .centimeters, .meters, .inches, .feet], id: \.self) { Text(String(describing: $0)).tag(Optional($0)) }
+                            }.labelsHidden()
                         }
-                        Picker("Layout", selection: $options.layout) {
-                            Text("Model space").tag(String?.none)
-                            ForEach(doc.layouts.filter { !$0.isModelSpace }.map(\.name), id: \.self) { Text($0).tag(Optional($0)) }
+                        DialogRow("Layout") {
+                            Picker("", selection: $options.layout) {
+                                Text("Model space").tag(String?.none)
+                                ForEach(doc.layouts.filter { !$0.isModelSpace }.map(\.name), id: \.self) { Text($0).tag(Optional($0)) }
+                            }.labelsHidden()
                         }
-                        Picker("Positioning", selection: $positioning) {
-                            Text("Origin to origin").tag(0); Text("Center to center").tag(1); Text("Shared coordinates (survey point)").tag(2)
+                        DialogRow("Positioning") {
+                            Picker("", selection: $positioning) {
+                                Text("Origin to origin").tag(0); Text("Center to center").tag(1); Text("Shared coordinates").tag(2)
+                            }.labelsHidden()
                         }
                         Toggle("Current view only", isOn: Binding(get: { options.currentViewOnly != nil }, set: { options.currentViewOnly = $0 ? state.activeViewID : nil }))
                         Toggle("Explode blocks", isOn: $options.explodeBlocks)
                     }
                 }
                 if !dependencies.isEmpty {
-                    GroupBox("Referenced files") {
-                        VStack(alignment: .leading, spacing: 3) {
-                            ForEach(dependencies, id: \.self) { d in
-                                HStack {
-                                    Image(systemName: d.status == .found ? "checkmark.circle" : "exclamationmark.triangle").foregroundStyle(d.status == .found ? .green : .orange)
-                                    Text("\(d.kind.rawValue): \(d.name)").lineLimit(1)
-                                    Text(d.status.rawValue).font(.caption).foregroundStyle(.secondary)
-                                    Spacer()
-                                    if d.status != .found { Button("Locate…") { locate(d) } }
-                                }
+                    DialogSection("Referenced files", footnote: "Arcus only looks next to the drawing. Missing references are listed in the import report.") {
+                        ForEach(dependencies, id: \.self) { d in
+                            DialogListRow(icon: d.status == .found ? "checkmark.circle.fill" : "exclamationmark.triangle.fill", iconTint: d.status == .found ? .green : .orange,
+                                          title: d.name, subtitle: "\(d.kind.rawValue) · \(d.status.rawValue)") {
+                                if d.status != .found { Button("Locate…") { locate(d) }.controlSize(.small) }
                             }
-                            Text("Arcus only looks next to the drawing. Missing references are listed in the import report.").font(.caption2).foregroundStyle(.secondary)
                         }
                     }
                 }
             } else if error == nil {
-                ProgressView(isDWG ? "Converting \(url.lastPathComponent) to DXF…" : "Reading \(url.lastPathComponent)…", value: readProgress) // W2-DWG
-                    .frame(maxWidth: .infinity, minHeight: 280) // W4-AUDIT: same footprint as the loaded layout, so the sheet needn't grow after reading
+                DialogSection(rows: false) {
+                    ProgressView(isDWG ? "Converting \(url.lastPathComponent) to DXF…" : "Reading \(url.lastPathComponent)…", value: readProgress) // W2-DWG
+                        .padding(20)
+                        .frame(maxWidth: .infinity, minHeight: 240) // W4-AUDIT: same footprint as the loaded layout, so the sheet needn't grow after reading
+                }
             }
         }
-        .frame(minWidth: 640, idealWidth: 640)
         .task { await read() }
         .onDisappear { readCancel.cancelled = true } // W2-DWG: stops a running converter
     }
@@ -364,11 +376,15 @@ struct ImportIFCDialog: View {
     let url: URL
     @State private var mapToNative = true
     var body: some View {
-        DialogFrame(title: "Import IFC: \(url.lastPathComponent)", subtitle: "Recognised walls, floors, rooms, doors, windows, columns and beams become native elements; everything else stays as immutable reference geometry with its IFC data.", okTitle: "Import", state: state) {
+        DialogFrame(title: "Import IFC", file: url, subtitle: url.lastPathComponent + DialogFileInfo.sizeSuffix(url), okTitle: "Import", state: state) {
             run()
         } content: {
-            Toggle("Convert recognised elements to native Arcus elements", isOn: $mapToNative)
-            Text("From Revit, the Arcus Bridge export (Insert ▸ Import Revit Model) keeps more data editable than IFC. Arcus does not open .rvt or .rfa files directly.").font(.caption).foregroundStyle(.secondary)
+            DialogSection("Options", footnote: mapToNative ? "Walls, floors, rooms, doors, windows, columns and beams become native. The rest stays as reference geometry with its IFC data."
+                                                            : "Everything stays as reference geometry with its IFC data.") {
+                Toggle("Convert recognised elements to native Arcus elements", isOn: $mapToNative)
+            }
+            DialogNotice(.info, title: "Coming from Revit?", "The Arcus Bridge export keeps more data editable than IFC.",
+                         detail: "In Revit, install the Arcus Bridge add-in and choose Add-Ins ▸ Arcus ▸ Export to Arcus. Then use Insert ▸ Import Revit Model in Arcus. Arcus does not open .rvt or .rfa files directly.")
         }
     }
     func run() {
@@ -411,7 +427,8 @@ struct ManageLinksDialog: View {
     var body: some View {
         let _ = state.session.changeCounter
         let links = state.model.elements(.importedCAD)
-        DialogFrame(title: "Manage Links", okTitle: "Done", showCancel: false, state: state) { state.presented = nil } content: {
+        DialogFrameWithActions(title: "Manage Links", icon: "link", tint: .blue, size: .large, subtitle: "Linked and imported files in this project.", okTitle: "Done", showCancel: false, scrolls: true, state: state) { state.presented = nil } content: {
+            DialogListBox(count: links.count, rowHeight: 26, minRows: 4, maxRows: 7, isEmpty: links.isEmpty) {
             Table(links, selection: $selected) {
                 TableColumn("Name") { e in Text(e.link?.sourceName ?? e.name) }
                 TableColumn("Type") { e in Text("\(e.link?.format.rawValue ?? "") \(e.link?.isLinked == true ? "Link" : "Import")") }.width(90)
@@ -421,11 +438,8 @@ struct ManageLinksDialog: View {
                 }.width(80)
                 TableColumn("Path") { e in Text(e.link?.sourcePath ?? "").lineLimit(1).truncationMode(.middle) }
             }
-            .frame(minHeight: 200)
-            .overlay { // W4-AUDIT: an empty table otherwise shows only blank striped rows
-                if links.isEmpty {
-                    Text("No linked or imported files.\nUse Insert ▸ Link CAD, Import CAD or Link IFC to add one.").multilineTextAlignment(.center).font(.callout).foregroundStyle(.secondary)
-                }
+            } empty: { // W4-AUDIT: an empty table otherwise shows only blank striped rows
+                DialogEmptyState(icon: "link", title: "No CAD links or imports", message: "Use Insert ▸ Link CAD or Import CAD to add one.")
             }
             HStack {
                 Button("Reload") { if let s = selected { LinkActions(state: state).reload([s]) } }.disabled(selected == nil)
@@ -435,9 +449,11 @@ struct ManageLinksDialog: View {
                 Spacer()
                 Button("Remove", role: .destructive) { if let s = selected { state.session.delete([s]); selected = nil } }.disabled(selected == nil)
             }
+            .controlSize(.small)
             F67ManageLinksSection(state: state) // F67: linked models, IFC, point clouds, topography, DWF markups
+        } actions: {
+            EmptyView()
         }
-        .frame(minWidth: 680, idealWidth: 680)
     }
 }
 
@@ -451,13 +467,21 @@ struct UnderlayDialog: View {
     @State private var scaleDenominator = 100.0
     @State private var opacity = 0.6
     var body: some View {
-        DialogFrame(title: "\(isPDF ? "PDF" : "Image") Underlay: \(url.lastPathComponent)", subtitle: "Underlays are reference pictures, not BIM geometry.", okTitle: "Place", state: state) {
+        DialogFrame(title: "\(isPDF ? "PDF" : "Image") Underlay", file: url, subtitle: url.lastPathComponent + " · a reference picture, not BIM geometry", okTitle: "Place", state: state) {
             place()
         } content: {
-            Form {
-                if isPDF { Stepper("Page \(page) of \(pageCount)", value: $page, in: 1...max(pageCount, 1)) }
-                TextField(isPDF ? "Drawing scale 1 :" : "Meters per 1000 pixels", value: $scaleDenominator, format: .number)
-                Slider(value: $opacity, in: 0.1...1) { Text("Opacity") }
+            DialogSection {
+                if isPDF { DialogRow("Page") { Stepper("\(page) of \(pageCount)", value: $page, in: 1...max(pageCount, 1)).monospacedDigit() } }
+                DialogRow(isPDF ? "Drawing scale" : "Size") {
+                    HStack(spacing: 6) {
+                        if isPDF { Text("1 :").foregroundStyle(.secondary) }
+                        TextField("", value: $scaleDenominator, format: .number).labelsHidden().multilineTextAlignment(.trailing).frame(width: 90)
+                        if !isPDF { Text("m per 1000 pixels").foregroundStyle(.secondary) }
+                    }
+                }
+                DialogRow("Opacity") {
+                    HStack { Slider(value: $opacity, in: 0.1...1).labelsHidden(); Text("\(Int((opacity * 100).rounded())) %").monospacedDigit().foregroundStyle(.secondary).frame(width: 44, alignment: .trailing) }
+                }
             }
         }
         .onAppear {
