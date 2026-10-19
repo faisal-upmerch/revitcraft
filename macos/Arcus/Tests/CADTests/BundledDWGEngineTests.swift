@@ -88,6 +88,26 @@ struct BundledDWGEngineTests {
         do { _ = try p.read(cut, options: .init(), progress: { _ in }, isCancelled: { false }) } catch let e as CADError { #expect(!e.message.isEmpty) }
     }
 
+    @Test(.enabled(if: hasAcadrust)) func helperStopsAtItsMemoryAndTimeCaps() throws {
+        let helper = try #require(Self.helpers.acadrust)
+        let dir = try Self.temp("x").deletingLastPathComponent()
+        func run(_ args: [String]) throws -> ExternalProcessRunner.Outcome {
+            try ExternalProcessRunner.run(helper, arguments: args, workingDirectory: dir, logDirectory: dir, timeout: 30, isCancelled: { false })
+        }
+        let mem = try run(["to-dxf", Self.dwg("acadsharp_export_sample.dwg").path, dir.appendingPathComponent("m.dxf").path, "--max-memory-mb", "1"])
+        #expect(mem.exitCode == BundledDWGEngine.exitMemory)
+        #expect(BundledDWGEngine.message(mem, doing: "reading x").contains("more memory"))
+        #expect(!FileManager.default.fileExists(atPath: dir.appendingPathComponent("m.dxf").path))
+        // A FIFO never delivers data, so only the watchdog ends the run.
+        let fifo = dir.appendingPathComponent("never.dwg")
+        #expect(mkfifo(fifo.path, 0o600) == 0)
+        let slow = try run(["to-dxf", fifo.path, dir.appendingPathComponent("t.dxf").path, "--timeout", "1"])
+        #expect(slow.exitCode == BundledDWGEngine.exitTimeout)
+        #expect(BundledDWGEngine.message(slow, doing: "reading x").contains("did not finish in time"))
+        let usage = try run(["from-dxf", "a.dxf", "b.dwg", "--version", "AC1009"])
+        #expect(usage.exitCode == BundledDWGEngine.exitUsage)
+    }
+
     // MARK: The route chain
 
     /// A stand-in route that always fails or always returns a fixed document.

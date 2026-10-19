@@ -58,10 +58,14 @@ struct CappedAllocator;
 static USED: AtomicUsize = AtomicUsize::new(0);
 static LIMIT: AtomicUsize = AtomicUsize::new(usize::MAX);
 
+static DYING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
 fn die_raw(message: &str, code: Exit) -> ! {
-    // No allocation here: this runs from inside the allocator and the watchdog.
+    // No allocation here: this runs from inside the allocator and the watchdog. Only the first caller reports.
     unsafe {
-        libc::write(2, message.as_ptr() as *const libc::c_void, message.len());
+        if !DYING.swap(true, Ordering::SeqCst) {
+            libc::write(2, message.as_ptr() as *const libc::c_void, message.len());
+        }
         libc::_exit(code as i32);
     }
 }
@@ -358,7 +362,7 @@ fn main() {
             std::process::exit(f.code as i32);
         }
     };
-    LIMIT.store(o.max_memory_mb.max(64).saturating_mul(1 << 20), Ordering::Relaxed);
+    LIMIT.store(o.max_memory_mb.max(1).saturating_mul(1 << 20), Ordering::Relaxed);
     let timeout = Duration::from_secs(o.timeout_s.max(1));
     std::thread::spawn(move || {
         std::thread::sleep(timeout);
