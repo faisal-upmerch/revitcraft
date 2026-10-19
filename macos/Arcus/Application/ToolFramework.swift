@@ -127,6 +127,9 @@ public final class ToolContext {
     /// Lines the pointer passed over recently (newest last). Drawing can then snap parallel or perpendicular to them
     /// anywhere in the view, not only near them, as BIM users expect. Cleared when the tool changes.
     public var acquiredLines: [(dir: Vec2, id: ElementID?)] = []
+    /// SFE: names for snapped geometry that isn't a model element (the Family Editor's forms, lines and planes), used by
+    /// `elementLabel` before the model is consulted.
+    public var elementLabelProvider: ((ElementID) -> String?)? // SFE
 
     func acquireLine(near raw: Vec2, settings: SnapSettings) {
         guard settings.snapsOn, let (seg, id) = snapIndex.nearestSegment(raw, radius: settings.pixelRadius * pixel, visibleOnly: true),
