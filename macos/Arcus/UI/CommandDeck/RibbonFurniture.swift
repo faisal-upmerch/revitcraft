@@ -71,7 +71,7 @@ extension RibbonContent {
 
     static var furnitureFabricatePanels: [RibbonPanel] {
         fm6FabricatePanels + fm7FabricatePanels
-            + [RibbonPanel(title: "Schedules", items: [.large(.materialTakeoff), .large(.schedule)], tint: view),
+            + [RibbonPanel(title: "Schedules", items: [.large(.schedule)], tint: view), // FM7: Material Takeoff opens the piece's takeoff (Part List panel)
                RibbonPanel(title: "Export", items: [.large(.exportPDF), .small(.exportDXF), .small(.exportDWG), .small(.exportImage)], tint: sheet)]
     }
 
@@ -197,10 +197,17 @@ extension RibbonContent {
     }
 
     // FM7 panels: Part List, Hardware Schedule, Material Takeoff, Nesting, CNC Export, Check Parts on Fabricate.
-    static var fm7FabricatePanels: [RibbonPanel] { [] }
+    static var fm7FabricatePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Part List", items: [.large(.furniturePartList), .large(.furnitureHardwareSchedule), .small(.furnitureMaterialTakeoff),
+                                                 .small(.furnitureEdgeBanding), .small(.furnitureCost)], tint: view),
+         RibbonPanel(title: "Nesting", items: [.large(.furnitureNesting), .large(.furnitureStockSheets)], tint: furniture),
+         RibbonPanel(title: "Output", items: [.large(.furnitureCNCExport), .large(.furnitureShopDrawings), .large(.furnitureCheckParts)], tint: sheet)]
+    }
 
     // FM7 panels: Stock Sheets and Hardware Catalog on Manage.
-    static var fm7ManagePanels: [RibbonPanel] { [] }
+    static var fm7ManagePanels: [RibbonPanel] {
+        [RibbonPanel(title: "Fabrication", items: [.large(.furnitureStockSheets), .large(.furnitureHardwareCatalog), .small(.furnitureCheckParts)], tint: manage)]
+    }
 
     // FM9 panels: Load Furniture on Insert ▸ Load from Library.
     static var fm9InsertItems: [RibbonItem] { [] }

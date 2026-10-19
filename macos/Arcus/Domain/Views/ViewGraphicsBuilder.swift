@@ -32,6 +32,7 @@ public struct ViewGraphicsBuilder: Sendable {
         case .elevation, .section, .detail: items = VerticalGraphics(builder: self).build()
         case .drafting, .legend: items = []
         case .threeD: items = ThreeDGraphics(builder: self).build()
+        case .nesting: items = nestingGraphics() // FM7: stock sheets with their parts
         }
         items += furnitureGraphics() // FM3: Furniture reference planes in elevations and sections
         items += furniturePartGraphics() // FM4: parts in plans; hidden lines, grain and edge profiles in elevations and sections

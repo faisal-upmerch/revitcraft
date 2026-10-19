@@ -149,6 +149,7 @@ public enum ScheduleEditing {
         case .material: return readOnly("Material quantities are measured from the model.")
         case .roomParameter: return readOnly("Room values are edited on the room itself.")
         case .combined: return readOnly("“\(f.heading)” combines several parameters; edit them in their own columns.") // F12
+        case .fabrication: return readOnly("“\(f.heading)” is calculated from the parts. Edit the parts, their types or the materials.") // FM7
         case .parameter(let p):
             let type = ScheduleEngine.fieldType(f, def, model)
             if p == typeNameID { return typeSwapTarget(elements, heading: f.heading, model: model) }
@@ -174,6 +175,7 @@ public enum ScheduleEditing {
             case .material: return (false, false, "Material quantities are measured from the model.")
             case .roomParameter: return (false, false, "Room values are edited on the room itself.")
             case .combined: return (false, false, "“\(f.heading)” combines several parameters.") // F12
+            case .fabrication: return (false, false, "“\(f.heading)” is calculated from the parts.") // FM7
             case .parameter: return (false, false, "“\(f.heading)” is read-only.")
             }
         }

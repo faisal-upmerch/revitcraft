@@ -118,6 +118,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case furnitureJoint, furnitureJointRules, furnitureAllowJoin, furnitureDisallowJoin // FM6
 
     // FM7 commands:
+    case furniturePartList, furnitureHardwareSchedule, furnitureMaterialTakeoff, furnitureEdgeBanding, furnitureCost, furnitureStockSheets, furnitureHardwareCatalog, furnitureNesting, furnitureCNCExport, furnitureCheckParts, furnitureShopDrawings // FM7
 
     // FM8 commands:
 

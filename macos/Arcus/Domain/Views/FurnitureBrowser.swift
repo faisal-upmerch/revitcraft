@@ -35,7 +35,11 @@ public enum FurnitureBrowserTree {
         if var sheets = node("sheets") { sheets.title = "Sheets"; out.append(sheets) }
         if var schedules = node("schedules") { schedules.title = "Schedules"; out.append(schedules) }
         // FM7 nesting views list here.
-        out.append(BrowserNode(id: "nesting", title: "Nesting", kind: .folder, symbol: "square.grid.3x3.square", children: []))
+        let nesting = FurnitureNestingViews.views(m).filter { matches($0.name) }.map { v in
+            BrowserNode(id: ProjectBrowserTree.viewNodeID(v.id), title: v.name, kind: .view, elementID: v.id, symbol: ViewKind.nesting.symbolName,
+                        subtitle: m.sheet(containing: v.id).flatMap { $0.sheet?.number }.map { "on \($0)" } ?? "")
+        }
+        out.append(BrowserNode(id: "nesting", title: "Nesting", kind: .folder, symbol: "square.grid.3x3.square", children: nesting))
         if var families = node("families") {
             // The title blocks and tags every document carries stay out of the way at the end.
             let kids = families.children ?? []
