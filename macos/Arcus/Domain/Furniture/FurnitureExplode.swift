@@ -31,7 +31,7 @@ public enum FurnitureExplode {
     public static func set(_ viewID: ElementID, on: Bool, distance: Double? = nil, tags: Bool? = nil, in tx: TransactionContext) throws(TransactionError) {
         guard tx.model.isFurniture else { throw TransactionError("Explode Parts works in Furniture documents.") }
         guard tx.model[viewID]?.view?.kind == .threeD else { throw TransactionError("Explode Parts works in 3D views.", resolution: "Open a 3D view.") }
-        if let d = distance, !(d >= 0 && d <= maximumDistance + 1e-9) { throw TransactionError("The distance must be between 0\" and \(Int(maximumDistance / inch))\".") }
+        if let d = distance, !(d >= 0 && d <= maximumDistance + 1e-9) { throw TransactionError("The distance must be between 0\" and \(Int((maximumDistance / inch).rounded()))\".") }
         tx.update(viewID) { v in
             v.params[onParam] = .bool(on)
             if let distance { v.params[distanceParam] = .double(distance) }

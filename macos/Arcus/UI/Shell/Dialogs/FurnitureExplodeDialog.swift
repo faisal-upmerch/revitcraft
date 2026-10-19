@@ -64,7 +64,7 @@ struct ExplodePartsOptions: View {
             FormRow(label: "Distance") {
                 Slider(value: $inches, in: 0...Self.maximumInches, step: 0.5) {
                     Text("Distance")
-                } minimumValueLabel: { Text("0\"").font(.caption) } maximumValueLabel: { Text("\(Int(Self.maximumInches))\"").font(.caption) }
+                } minimumValueLabel: { Text("0\"").font(.caption) } maximumValueLabel: { Text("\(Int(Self.maximumInches.rounded()))\"").font(.caption) }
                     .labelsHidden()
                     .frame(width: 190)
                     .accessibilityValue(FurnitureSizeText.inches(inches * 0.0254))
