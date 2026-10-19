@@ -12,6 +12,7 @@ public enum MultistoryStairs {
         var first = e
         first.stair?.multistoryTopLevelID = nil
         var out = [first]
+        let firstHeight = StairGeometry.numbers(first, model).map { $0.top - $0.base }
         let levels = model.levels.compactMap { l in l.level.map { (l.id, $0.elevation) } }.sorted { $0.1 < $1.1 }
         while let z = model[cur]?.level?.elevation, z < topZ - Tolerance.length {
             guard let next = levels.first(where: { $0.1 > z + Tolerance.length }) else { break }
@@ -20,6 +21,14 @@ public enum MultistoryStairs {
             copy.stair?.baseOffset = 0
             copy.stair?.topLevelID = next.0
             copy.stair?.topOffset = 0
+            // STAIR: a storey of another height gets the risers it needs (its own riser layout), as Revit groups a
+            // multistory stair's storeys by height.
+            if let h0 = firstHeight, let n = StairGeometry.numbers(copy, model), abs((n.top - n.base) - h0) > 0.001 {
+                copy.stair?.desiredRiserCount = nil
+                if let runs = copy.stair?.runs, !runs.isEmpty, let need = StairGeometry.numbers(copy, model)?.desired {
+                    copy.stair?.runs = StairComponents.redistribute(runs, to: need)
+                }
+            }
             out.append(copy)
             cur = next.0
         }
