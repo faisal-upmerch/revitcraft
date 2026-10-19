@@ -16,11 +16,14 @@ public struct FurnitureLibraryPiece: Sendable {
     /// Furniture or Casework.
     public var category: FamilyTemplate
     public var detail: Detail
+    /// Extra search words (materials, styles, other names: "nightstand", "walnut", "mid-century").
+    public var keywords: [String]
     /// Builds the Furniture document (Imperial, parametric, with its types).
     public var build: @Sendable () -> BIMModel
 
-    public init(_ name: String, rooms: [String], category: FamilyTemplate = .furniture, detail: Detail, build: @escaping @Sendable () -> BIMModel) {
-        self.name = name; self.rooms = rooms; self.category = category; self.detail = detail; self.build = build
+    public init(_ name: String, rooms: [String], category: FamilyTemplate = .furniture, detail: Detail, keywords: [String] = [],
+                build: @escaping @Sendable () -> BIMModel) {
+        self.name = name; self.rooms = rooms; self.category = category; self.detail = detail; self.keywords = keywords; self.build = build
     }
 }
 
