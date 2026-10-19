@@ -1,7 +1,41 @@
 import Foundation
 
-// FM9C: this batch's library pieces (see FurnitureLibrary.swift).
+// FM9C: this batch's library pieces (see FurnitureLibrary.swift): the simple pieces of part B, by room, in
+// FurnitureLibrary+SimpleB+<Room>.swift, built with the helpers in FurnitureLibrary+SimpleBKit.swift.
 
 extension FurnitureLibrary {
-    static var simpleB: [FurnitureLibraryPiece] { [] }
+    static var simpleB: [FurnitureLibraryPiece] {
+        SimpleB.pieces.map { p in FurnitureLibraryPiece(p.name, rooms: p.rooms, category: p.category, detail: .simple) { SimpleB.model(p) } }
+    }
+}
+
+/// The part B simple pieces.
+enum SimpleB {
+    /// One piece: its name, rooms (the first is its folder), category and builder.
+    struct Piece: Sendable {
+        var name: String
+        var rooms: [String]
+        var category: FamilyTemplate
+        var make: @Sendable () throws -> BIMModel
+        init(_ name: String, _ rooms: [String], _ category: FamilyTemplate, _ make: @escaping @Sendable () throws -> BIMModel) {
+            self.name = name; self.rooms = rooms; self.category = category; self.make = make
+        }
+        init(_ name: String, _ rooms: [String], _ make: @escaping @Sendable () throws -> BIMModel) { self.init(name, rooms, .furniture, make) }
+    }
+
+    static var pieces: [Piece] { entryway + kids + outdoor + storage + multipurpose + decorative }
+
+    /// The piece's document (a blank one of its category if it can't be built, which the FM9C tests rule out).
+    static func model(_ p: Piece) -> BIMModel {
+        (try? p.make()) ?? FurnitureTemplates.blank(category: p.category, name: p.name)
+    }
+
+    /// Pieces with parts that keep their size when the piece flexes, and why (Flex still passes: nothing breaks).
+    static let partialFlex: [String: String] = [
+        "Umbrella Stand": "revolved body",
+        "Coat Stand": "revolved foot and finial, extruded hooks",
+    ]
+
+    static let entry = "Entryway & Hallway", kidsRoom = "Kids' Room & Nursery", outdoorRoom = "Outdoor & Balcony"
+    static let storageRoom = "Storage & Utility", multi = "Multipurpose & Space-Saving", decor = "Decorative & Accent"
 }

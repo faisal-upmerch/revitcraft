@@ -104,7 +104,7 @@ extension FurnitureCompiler {
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
                 if let span = p.span {
                     let key = nf.parameter(named: "Height") != nil ? "Height" : "Length"
-                    inst.bindings[key] = "(\(expression(span.end, f))) - (\(expression(span.start, f)))"
+                    inst.bindings[key] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" // FM9C: lengths when a plane is a number
                 }
                 if nf.parameter(named: "Material") != nil, let mp = materialParameter(p.material, label: label) { inst.bindings["Material"] = mp }
                 f.nestedInstances.append(inst)
