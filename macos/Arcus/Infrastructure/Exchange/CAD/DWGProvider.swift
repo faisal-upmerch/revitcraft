@@ -5,7 +5,8 @@ import ArcusDomain
 import ArcusDWGBridge
 #endif
 
-/// Reads DWG files into a `CADDocument`. DWG is a proprietary format; Arcus reads it only through a licensed SDK.
+/// Reads DWG files into a `CADDocument`: Arcus's bundled engines (BundledDWGEngine.swift), a converter the user installed
+/// (ExternalDWGConverter.swift) or the licensed ODA SDK build.
 public protocol DWGImportProvider: Sendable {
     var isAvailable: Bool { get }
     /// Truthful, user-facing explanation when DWG import is not available.
@@ -17,18 +18,18 @@ public protocol DWGImportProvider: Sendable {
     func read(_ url: URL, options: CADReadOptions, progress: @Sendable (Double) -> Void, isCancelled: @Sendable () -> Bool) throws -> CADDocument
 }
 
-/// The provider used when Arcus was built without the ODA Drawings SDK.
+/// The provider used when no DWG route is available (no bundled engine, no installed converter, no ODA SDK).
 public struct UnavailableDWGProvider: DWGImportProvider {
     public init() {}
     public var isAvailable: Bool { false }
     /// Why the external converter route is not in use (e.g. a chosen converter that is missing); appended to the reason.
     public var converterProblem: String? = nil
     public var unavailableReason: String? {
-        var s = "DWG import is not available: Arcus has no DWG reader of its own, and no DWG converter was found on this Mac. "
-            + "Arcus can run a free converter you install yourself (ODA File Converter from the Open Design Alliance, or LibreDWG's "
-            + "dwg2dxf), which converts the drawing to DXF on this Mac. You can also save the drawing as DXF from your CAD "
-            + "application and link the DXF, or build Arcus with the licensed ODA Drawings SDK (not bundled) as described in "
-            + "Docs/DWGSDKSetup.md."
+        var s = "DWG import is not available: the DWG engines that come with Arcus are missing from this copy of Arcus, and no "
+            + "DWG converter was found on this Mac. Reinstall Arcus (its build script bundles the engines), or install a free "
+            + "converter yourself (ODA File Converter from the Open Design Alliance, or LibreDWG's dwg2dxf), which converts the "
+            + "drawing to DXF on this Mac. You can also save the drawing as DXF from your CAD application and link the DXF, or "
+            + "build Arcus with the licensed ODA Drawings SDK (not bundled) as described in Docs/DWGSDKSetup.md."
         if let converterProblem { s += " " + converterProblem }
         return s
     }
@@ -41,16 +42,29 @@ public struct UnavailableDWGProvider: DWGImportProvider {
 }
 
 public enum DWGProviders {
-    /// The DWG provider of this build: the ODA-backed provider when compiled with the SDK, otherwise `UnavailableDWGProvider`.
-    /// Without the SDK, a converter the user installed (chosen in Settings or detected; see ExternalDWGConverter.swift) is
-    /// used when present. // W2-DWG
+    /// The DWG reader of this copy of Arcus: every available route, tried in order (DWG):
+    /// 1. Arcus's bundled acadrust engine, 2. the bundled LibreDWG, 3. a converter the user installed (chosen in Settings
+    /// or detected; see ExternalDWGConverter.swift), 4. the ODA Drawings SDK when Arcus was built with it.
     public static var current: any DWGImportProvider {
         if let o = providerOverride { return o }
+        return chain(helpers: .standard, converter: DWGConverterPreferences.resolveFromDefaults())
+    }
+
+    /// The route chain for the given bundled helpers and converter preference. // DWG
+    public static func chain(helpers: BundledDWGHelpers, converter: Result<ExternalDWGConverter, DWGConverterPreferences.ConverterProblem>?) -> DWGEngineChain {
+        var routes: [any DWGImportProvider] = []
+        if let a = helpers.acadrust { routes.append(BundledAcadrustDWGProvider(helper: a)) }
+        if let l = helpers.libreDWG { routes.append(BundledLibreDWGProvider(executable: l)) }
+        var unavailable = UnavailableDWGProvider()
+        switch converter {
+        case .success(let c)?: routes.append(ExternalConverterDWGProvider(converter: c))
+        case .failure(let p)?: unavailable.converterProblem = p.message
+        case nil: break
+        }
         #if ARCUS_HAS_ODA
-        return ODADWGProvider()
-        #else
-        return external(DWGConverterPreferences.resolveFromDefaults())
+        routes.append(ODADWGProvider())
         #endif
+        return DWGEngineChain(routes: routes, unavailable: unavailable)
     }
 
     /// Replaces `current` within a task (tests, and a one-off choice in the UI). // W2-DWG
