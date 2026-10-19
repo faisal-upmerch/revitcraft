@@ -87,6 +87,7 @@ public enum FurniturePartMeshes {
         let tv = FurniturePartTypes.values(of: e, m)
         for id in [tv.coreMaterial, tv.faceMaterial].compactMap({ $0 }) { s.insert(id) }
         s.formUnion(FurnitureJoints.inputs(of: e, m)) // FM6: the parts it joins, its joints and the Joint Rules
+        s.formUnion(FurnitureFormLocks.inputs(of: e, m)) // FM9: the planes a locked form follows
         return s
     }
 

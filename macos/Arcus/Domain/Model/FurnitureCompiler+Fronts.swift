@@ -73,7 +73,7 @@ extension FurnitureCompiler {
                 f.nestedFamilies.append(nf)
                 var inst = NestedFamilyInstance(familyName: nf.name, typeName: nf.types.first?.name, x: ctx.bound(p.x), y: ctx.bound(p.y), z: ctx.bound(p.z),
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
-                if let span = p.span, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" } // FM9C
+                if let span = p.span, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" } // FM9: lengths on both sides
                 inst.visibleAt = [.medium, .fine]
                 f.nestedInstances.append(inst)
             }
@@ -116,7 +116,7 @@ extension FurnitureCompiler {
             // A slide pair spans its opening: its width follows the bay's sides.
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let front = m[owner], let o = m[front.hostID]?.furnitureBay?.opening,
                nested.parameter(named: "Opening Width") != nil {
-                inst.bindings["Opening Width"] = "(\(lengthExpression(o.value("x1"), f))) - (\(lengthExpression(o.value("x0"), f)))" // FM9C
+                inst.bindings["Opening Width"] = "(\(lengthExpression(o.value("x1"), f))) - (\(lengthExpression(o.value("x0"), f)))" // FM9: lengths on both sides
                 if let length = slideLengths[owner], nested.parameter(named: "Slide Length") != nil { inst.bindings["Slide Length"] = length } // FM8
             }
             inst.visibleAt = [.medium, .fine]
