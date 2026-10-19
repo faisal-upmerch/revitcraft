@@ -120,6 +120,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FM7 commands:
 
     // FM8 commands:
+    case loadFurniture, saveAsFurnitureTemplate // FM8
 
     // FM9 commands:
 

@@ -33,8 +33,15 @@ enum HomeFamilyStart {
         var family = FamilyTemplates.make(category)
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         family.name = trimmed.isEmpty ? category.rawValue : trimmed
+        open(family: family)
+    }
+
+    /// Opens the Family Editor on `family` for the open project, or for a hidden new one (FM8: File ▸ Open and Finder
+    /// open .arcusfamily files this way, with `fileURL` for Save As).
+    static func open(family: FamilyDefinition, fileURL: URL? = nil) {
         if let state = openProject {
             FamilyEditorWindowController.open(new: family, state: state)
+            FamilyEditorWindowController.open.last?.model.fileURL = fileURL // FM8
             AppDelegate.shared?.closeHub()
             return
         }
@@ -43,6 +50,7 @@ enum HomeFamilyStart {
         guard let state = doc.state else { return }
         FamilyEditorWindowController.open(new: family, state: state)
         guard let wc = FamilyEditorWindowController.open.last, wc.model.state === state, let window = wc.window else { return }
+        wc.model.fileURL = fileURL // FM8
         let host = Host(document: doc)
         let key = ObjectIdentifier(window)
         host.handler = state.session.onChange { change in

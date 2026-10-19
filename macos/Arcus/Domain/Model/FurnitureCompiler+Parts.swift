@@ -87,7 +87,9 @@ extension FurnitureCompiler {
             }
             for p in ps.placed {
                 var nf = p.family
-                let content = (try? JSONEncoder().encode(nf.solids)).map { String(decoding: $0, as: UTF8.self) } ?? nf.name
+                // FM8: compared without the solids' ids (fresh for every part), so identical legs share one family.
+                let keyed = nf.solids.map { var s = $0; s.id = ""; return s }
+                let content = (try? JSONEncoder().encode(keyed)).map { String(decoding: $0, as: UTF8.self) + "|\(nf.types.map(\.values))" } ?? nf.name
                 if let existing = nestedNames[content] {
                     nf.name = existing
                 } else {

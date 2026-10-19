@@ -123,18 +123,22 @@ public enum FurnitureLoading {
         }
         mapMaterials(&f)
         let fid = FamilyProjectLoader.load(f, replacing: existing, mode: mode, in: tx)
-        setCosts(FurnitureCostEstimate.costs(byType: source), family: fid, mode: mode, in: tx) // FM8
+        setIdentity(FurnitureCostEstimate.costs(byType: source), f, family: fid, mode: mode, in: tx) // FM8
         return fid
     }
 
-    /// FM8: the project types' Cost (Identity Data) from the piece's estimate: new types and Overwrite Parameter
-    /// Values take it; types that keep their values keep a cost already set in the project.
-    static func setCosts(_ costs: [String: Double], family fid: ElementID, mode: FamilyReloadMode, in tx: TransactionContext) {
-        let key = ParameterID("type.cost")
+    /// FM8: the project types' Identity Data from the piece: Cost from its estimate, Description and Manufacturer from
+    /// Family Category and Parameters. New types and Overwrite (with parameter values) take them; types that keep their
+    /// values keep what is already set in the project.
+    static func setIdentity(_ costs: [String: Double], _ f: FamilyDefinition, family fid: ElementID, mode: FamilyReloadMode, in tx: TransactionContext) {
+        let cost = ParameterID("type.cost")
+        let text: [(ParameterID, String)] = [(ParameterID("type.description"), f.description), (ParameterID("type.manufacturer"), f.manufacturer)]
         for t in tx.model.elements(.elementTypes) where t.typeData?.familyID == fid {
-            guard let c = costs[t.name], c > 0 else { continue }
-            if mode == .keepProjectValues, let old = t.typeData?.params[key]?.doubleValue, old > 0 { continue }
-            _ = tx.update(t.id) { $0.typeData?.params[key] = .double(c) }
+            let keep = mode == .keepProjectValues
+            _ = tx.update(t.id) { e in
+                if let c = costs[t.name], c > 0, !(keep && (e.typeData?.params[cost]?.doubleValue ?? 0) > 0) { e.typeData?.params[cost] = .double(c) }
+                for (k, v) in text where !v.isEmpty && !(keep && !(e.typeData?.params[k]?.textValue ?? "").isEmpty) { e.typeData?.params[k] = .text(v) }
+            }
         }
     }
 }

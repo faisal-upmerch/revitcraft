@@ -149,6 +149,7 @@ extension Canvas2DView {
     }
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if let op = fm8DragOperation(sender) { return op } // FM8: furniture files from Finder
         let ids = draggedElements(sender)
         guard !ids.isEmpty else { return [] }
         // BL-BROWSER: say at once when a view is already on a sheet.
@@ -157,12 +158,14 @@ extension Canvas2DView {
         return .copy
     }
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if let op = fm8DragOperation(sender) { return op } // FM8
         let ids = draggedElements(sender)
         return ids.contains { SheetPlacement.refusal($0, onSheet: viewID, state.model) == nil } ? .copy : []
     }
 
     /// BL-BROWSER: a drop starts viewport placement — the viewport follows the cursor and a click places it.
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if let done = fm8PerformDrop(sender) { return done } // FM8
         let ids = draggedElements(sender)
         guard !ids.isEmpty, state.beginViewportPlacement(ids, onSheet: viewID) else { return false }
         let p = toView(convert(sender.draggingLocation, from: nil))

@@ -73,6 +73,8 @@ struct RibbonItem: Hashable {
         case .loadAsGroup where size == .large: return "Load as\nGroup" // F67
         case .linkModel where size == .large: return "Link\nModel" // F67
         case .linkIFC where size == .large: return "Link\nIFC" // F67
+        case .loadFurniture: return size == .large ? "Load\nFurniture" : "Load Furniture" // FM8
+        case .saveAsFurnitureTemplate: return "Save as Template" // FM8
         default: break
         }
         let title = CommandCatalog.info(id).title
@@ -178,7 +180,7 @@ enum RibbonContent {
                                                        .small(.pointCloud), .small(.coordinationModel), .small(.linkPDF), .small(.linkImage)], tint: build),
                     RibbonPanel(title: "Import", items: [.large(.importCAD), .small(.importGbXML), .small(.importPDF), .small(.importImage),
                                                          .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
-                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .large(.loadAsGroup),
+                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), .large(.loadFurniture), .large(.loadAsGroup), // FM8: Load Furniture
                                                                     .large(.insertViewsFromFile, [.insertViewsFromFile, .insert2DElementsFromFile]),
                                                                     .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
         case .annotate:

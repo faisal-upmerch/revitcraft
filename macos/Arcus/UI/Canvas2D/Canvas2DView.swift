@@ -74,7 +74,7 @@ final class Canvas2DView: NSView, NSTextFieldDelegate {
         setAccessibilityRole(.group)
         setUpMetal()
         observeSelection()
-        if state.model[viewID]?.sheet != nil { registerForDraggedTypes([.string]) } // WP6a: drop views onto sheets
+        if state.model[viewID]?.sheet != nil { registerForDraggedTypes([.string]) } else { registerForDraggedTypes([.fileURL]) } // WP6a: drop views onto sheets; FM8: furniture from Finder
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(displayOptionsChanged),
                                                           name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(displayOptionsChanged), name: .arcusCanvasSettingsChanged, object: nil) // BL-CANVAS

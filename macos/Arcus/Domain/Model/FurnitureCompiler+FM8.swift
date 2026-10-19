@@ -185,3 +185,66 @@ extension FurnitureCompiler {
         for p in params where f.parameter(named: p.name) == nil { f.parameters.append(p) }
     }
 }
+
+// MARK: - Drawer depth
+
+extension FurnitureCompiler {
+    /// The stock slide length a drawer gets as a formula of its bay's depth, as the document picks it (the longest
+    /// standard length that fits with its rear clearance), so a loaded cabinet made shallower or deeper gets the slides
+    /// and drawer boxes that fit. nil when the bay's depth doesn't follow formula planes.
+    static func slideLengthFormula(_ front: Element, _ m: BIMModel, _ f: FamilyDefinition) -> (formula: String, start: String)? {
+        guard let g = FurnitureFronts.geometry(front, m), let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil }
+        let sv = FurnitureHardware.Values(m[st]?.typeData)
+        let tv = FurnitureFrontTypes.values(of: front, m)
+        let stable = stablePlanes(f)
+        let start = tv.overlay == .inset ? g.opening.value("y0").shifted(tv.thickness) : g.opening.value("y0")
+        guard let y0 = stableExpression(start, f, stable), let y1 = stableExpression(g.opening.value("y1"), f, stable) else { return nil }
+        let available = "((\(y1)) - (\(y0)))"
+        var formula = "\(PartSolidContext.number(box.depth)) m"
+        for l in FurnitureHardware.slideLengths.sorted() {
+            formula = "if(\(available) >= \(PartSolidContext.number(l * 0.0254 + sv.rearClearance)) m, \(PartSolidContext.number(l * 0.0254)) m, \(formula))"
+        }
+        return (formula, y0)
+    }
+
+    /// Rewrites a drawer's box solids so their depth is `length` (a formula) from the box front at `start`.
+    static func flexDrawerBox(_ solids: inout [FamilySolid], mark: String, length: String, start: String, back: Double) {
+        let b = PartSolidContext.number(back)
+        for i in solids.indices {
+            guard solids[i].name.hasPrefix("\(mark) Box "), case .rectangle(let x0, let x1, _, _) = solids[i].profile else { continue }
+            let y: (String, String)? = switch solids[i].name.dropFirst(mark.count + 5) {
+            case "Left Side", "Right Side": ("(\(start))", "(\(start)) + (\(length))")
+            case "Front": ("(\(start))", "(\(start)) + \(b) m")
+            case "Back": ("(\(start)) + (\(length)) - \(b) m", "(\(start)) + (\(length))")
+            case "Bottom": ("(\(start)) + \(b) m", "(\(start)) + (\(length)) - \(b) m")
+            default: nil
+            }
+            guard let y else { continue }
+            solids[i].profile = .rectangle(xMin: x0, xMax: x1, yMin: .expr(y.0), yMax: .expr(y.1))
+        }
+    }
+}
+
+// MARK: - Handles
+
+extension FurnitureCompiler {
+    /// Handles placed at a share of their leaf (a drawer pull centred on its front) rather than at a distance from a
+    /// face: the share is kept as a formula of the leaf's edges, so they stay centred as a loaded piece flexes.
+    static func anchorHandles(_ records: [HingeRecord], _ m: BIMModel, to f: inout FamilyDefinition) {
+        let stable = stablePlanes(f)
+        for r in records {
+            guard let front = m[r.front], let g = FurnitureFronts.geometry(front, m), let li = Int(r.slot.split(separator: ".").last ?? ""),
+                  g.leaves.indices.contains(li), let p = FurnitureFronts.hardware(front, m).first(where: { $0.slot == r.slot }) else { continue }
+            let leaf = g.leaves[li]
+            func share(_ c: PartValue, _ ends: (PartValue, PartValue)) -> FamilyBound? {
+                guard c.plane == nil, ends.1.value - ends.0.value > Tolerance.length,
+                      let lo = stableExpression(ends.0, f, stable), let hi = stableExpression(ends.1, f, stable) else { return nil }
+                let k = PartSolidContext.number((c.value - ends.0.value) / (ends.1.value - ends.0.value))
+                return .expr("(\(lo)) + ((\(hi)) - (\(lo))) * \(k)")
+            }
+            if let x = share(p.at.x, leaf.u) { f.nestedInstances[r.index].x = x }
+            if g.face == .front { if let z = share(p.at.z, leaf.v) { f.nestedInstances[r.index].z = z } }
+            else if let y = share(p.at.y, leaf.v) { f.nestedInstances[r.index].y = y }
+        }
+    }
+}
