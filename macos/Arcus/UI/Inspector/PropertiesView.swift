@@ -240,7 +240,7 @@ struct PropertiesView: View {
         case .wallByFace, .curtainSystemByFace: .walls // F5
         case .floorByFace: .floors // F5
         case .roofByFace: .roofs // F5
-        default: fm4PropertiesCategory(cmd) // FM4: furniture parts
+        default: fm4PropertiesCategory(cmd) ?? fm5PropertiesCategory(cmd) // FM4: furniture parts; FM5: fronts and hardware
         }
     }
 
@@ -395,6 +395,7 @@ struct ParamRow: View {
             options = cat.map { model.types(for: $0) } ?? []
         case .levels: options = model.levels
         case .curtainPanels: options = model.types(for: .curtainPanels) // WP3: panel types
+        case .furnitureHardware: options = model.types(for: .furnitureHardware) // FM5: hardware types (handle, hinge…)
         case .phases: options = model.phases
         default: options = model.elements(c).sorted { $0.name < $1.name }
         }

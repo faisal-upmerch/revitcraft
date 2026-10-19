@@ -112,6 +112,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case furniturePanel, furnitureShelf, furnitureTop, furnitureBack, furnitureDivider, furnitureLeg, furnitureLegsAtCorners, furnitureRail, furnitureSlats, furniturePlinth, furnitureEdgeProfile, furnitureGroove, furnitureEditProfile, furnitureResetProfile, furnitureAttach, furnitureDetach, furniturePanelOpening, furnitureFlipPanel, furnitureExtrusion, furnitureBlend, furnitureRevolve, furnitureSweep, furnitureSweptBlend, furnitureCushion, furnitureVoidExtrusion, furnitureVoidBlend, furnitureVoidRevolve, furnitureVoidSweep, furnitureVoidSweptBlend // FM4
 
     // FM5 commands:
+    case furnitureBay, furnitureBaySeparator, furnitureBayDivide, furnitureBayTag, furnitureDoor, furnitureDrawer, furnitureFlap, furnitureHardware, furnitureFlipHinge, furniturePickNewHost, furnitureSelectHardware, furnitureRemoveDivide // FM5
 
     // FM6 commands:
     case furnitureJoint, furnitureJointRules, furnitureAllowJoin, furnitureDisallowJoin // FM6

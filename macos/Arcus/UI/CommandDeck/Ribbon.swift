@@ -279,6 +279,7 @@ enum RibbonContent {
         let site = siteSelectionItems(sel, m); if let t = site.title { title = t }; items += site.items // BL-SITE
         let f2 = f2SelectionItems(sel, m); if let t = f2.title { title = t }; items += f2.items // F2: stairs (Connect Levels)
         let fm4 = fm4SelectionItems(sel, m); if let t = fm4.title { title = t }; items += fm4.items // FM4: furniture parts
+        let fm5 = fm5SelectionItems(sel, m); if let t = fm5.title { title = t }; items += fm5.items // FM5: bays, doors, drawers
         items += fm6SelectionItems(sel) // FM6: Joint, Allow/Disallow Join for parts
         if sel.count == 1, Parameters.familyDefinition(for: sel[0], m) != nil { items += [.large(.familyEditor)] }
         return items.isEmpty ? nil : RibbonPanel(title: title, items: items, tint: build)
@@ -287,6 +288,7 @@ enum RibbonContent {
     static func selectionTitle(_ state: DocumentState) -> String? {
         let sel = state.session.selection.ids.compactMap { state.model[$0] }
         guard !sel.isEmpty else { return nil }
+        if let t = fm5SelectionTitle(sel) { return t } // FM5: Modify | Doors, Drawers, Flaps
         let cats = Set(sel.map(\.category))
         return cats.count == 1 ? cats.first!.displayName : "Multi-Select"
     }

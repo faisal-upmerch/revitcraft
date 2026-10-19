@@ -364,6 +364,7 @@ struct HomeCategoryTile: View {
         case .entourage: "figure.stand"
         case .parking: "car.side"
         case .site: "mountain.2"
+        case .furnitureHardware: "gearshape.2" // FM5
         }
     }
 }

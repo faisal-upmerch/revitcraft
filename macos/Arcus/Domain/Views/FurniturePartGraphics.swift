@@ -12,7 +12,7 @@ extension ViewGraphicsBuilder {
         guard Category.furnitureParts.contains(where: { !model.elements($0).isEmpty }) else { return [] }
         let parts = visibleModelElements().filter { $0.0.category.isFurniturePart }
         guard !parts.isEmpty else { return [] }
-        if data.kind.isPlan { return partPlanItems(parts) }
+        if data.kind.isPlan { return partPlanItems(parts + fm5PlanParts()) } // FM5: fronts and hardware are cut and seen with the parts
         if data.kind.isVerticalCut, let fr = VerticalGraphics.frame(data) { return partVerticalItems(parts, fr) }
         return []
     }

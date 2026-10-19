@@ -713,7 +713,7 @@ enum BuiltInCatalog {
         case .insert:
             return typed + [levelParam, sillHeight, headHeight, hostName, fromRoom, toRoom] + identity + phasing + ifc + [designOption]
         case .component:
-            return typed + [levelParam, componentOffset, componentRotation, componentRoom] + identity + phasing + ifc + [designOption]
+            return typed + [levelParam, componentOffset, componentRotation, componentRoom] + FurnitureFrontParameters.hardwareInstance(e) + identity + phasing + ifc + [designOption] // FM5: hardware's owner
         case .column:
             return typed + [levelParam, columnBaseOffset, columnTopLevel, columnTopOffset, columnHeight, columnRotation, columnRoomBounding,
                             quantityVolume] + (e.column?.topLocation != nil ? F2Parameters.column : []) + identity + phasing + ifc // F2: Column Style of slanted columns
@@ -813,6 +813,8 @@ enum BuiltInCatalog {
             return FurniturePartParameters.instance(for: e) + FurnitureJointParameters.part(e) // FM6: Cut Size
         case .furnitureJoint: // FM6
             return FurnitureJointParameters.instance(for: e)
+        case .furnitureBay, .furnitureFront, .furnitureBaySeparator: // FM5
+            return FurnitureFrontParameters.instance(for: e)
         default:
             return []
         }
@@ -839,6 +841,7 @@ enum BuiltInCatalog {
             return td.familyID == nil ? [beamWidth, beamDepth, materialParam] + identity : identity
         case .structuralRebar, .fabricReinforcement: return ReinforcementParameters.typeParameters(td) + [materialParam] + identity // F34
         case let c where c.isFurniturePart: return FurniturePartParameters.type(for: td) + identity // FM4
+        case .furnitureFronts: return FurnitureFrontParameters.type(for: td) + identity // FM5
         default: return identity
         }
     }
@@ -850,6 +853,7 @@ enum BuiltInCatalog {
         }
         for td in wp3TypeProbes { for p in type(for: td) { s.insert(p.id) } } // WP3
         for p in FurniturePartParameters.allType { s.insert(p.id) } // FM4: tops and grooves
+        for p in FurnitureFrontParameters.allType { s.insert(p.id) } // FM5: door, drawer and flap types
         return s
     }()
     static func isTypeParameter(_ id: ParameterID) -> Bool { typeParameterIDs.contains(id) }
@@ -890,6 +894,7 @@ enum BuiltInCatalog {
         for p in MassParameters.instance where d[p.id] == nil { d[p.id] = p } // F5
         for p in F2Parameters.all where d[p.id] == nil { d[p.id] = p } // F2
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where d[p.id] == nil { d[p.id] = p } // FM4
+        for p in FurnitureFrontParameters.allInstance + FurnitureFrontParameters.allType where d[p.id] == nil { d[p.id] = p } // FM5
         for p in FurnitureJointParameters.all where d[p.id] == nil { d[p.id] = p } // FM6
         return d
     }()
@@ -918,6 +923,7 @@ enum BuiltInCatalog {
         for p in F1Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F1
         for p in F2Parameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // F2
         for p in FurniturePartParameters.allInstance + FurniturePartParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM4
+        for p in FurnitureFrontParameters.allInstance + FurnitureFrontParameters.allType where o[p.id] == nil { o[p.id] = i; i += 1 } // FM5
         for p in FurnitureJointParameters.all where o[p.id] == nil { o[p.id] = i; i += 1 } // FM6
         return o
     }()
