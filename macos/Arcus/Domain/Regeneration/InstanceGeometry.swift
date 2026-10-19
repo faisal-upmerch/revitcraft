@@ -176,6 +176,7 @@ public enum InsertGeometry {
 
 public enum ComponentGeometry {
     public static func placement(_ e: Element, _ model: BIMModel) -> (plan: Transform2, world: Transform3)? {
+        if let p = sketchPlacement(e) { return p } // S3D2: components on a work plane
         let loc: Vec2, rot: Double, mirrored: Bool
         switch e.data {
         case .component(let c): loc = c.location; rot = c.rotation; mirrored = c.mirrored

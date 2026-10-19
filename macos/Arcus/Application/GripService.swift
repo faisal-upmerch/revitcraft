@@ -45,10 +45,13 @@ public enum GripService {
         if let g = annotationGrips(for: e, model) { return g }
         switch e.data {
         case .wall(let w): return [Grip(elementID: e.id, kind: .start, position: w.location.start), Grip(elementID: e.id, kind: .end, position: w.location.end)]
+        case .modelLine(let l) where l.sketchPlane != nil: return [] // S3D2: on another work plane: moved, not stretched in plan
         case .modelLine(let l): return [Grip(elementID: e.id, kind: .start, position: l.curve.start), Grip(elementID: e.id, kind: .end, position: l.curve.end)]
         case .beam(let b): return [Grip(elementID: e.id, kind: .start, position: b.curve.start), Grip(elementID: e.id, kind: .end, position: b.curve.end)]
         case .grid(let g): return viewKind?.isPlan == true ? gridGrips(e.id, g, viewID: viewID) : []
+        case .referencePlane(let r) where r.plane3D != nil: return [] // S3D2
         case .referencePlane(let r): return [Grip(elementID: e.id, kind: .start, position: r.line.start), Grip(elementID: e.id, kind: .end, position: r.line.end)]
+        case .component(let c) where c.sketchPlane != nil: return [] // S3D2
         case .component(let c): return [Grip(elementID: e.id, kind: .point, position: c.location)]
         case .column(let c): return [Grip(elementID: e.id, kind: .point, position: c.location)]
         case .room(let r): return [Grip(elementID: e.id, kind: .point, position: r.point)]

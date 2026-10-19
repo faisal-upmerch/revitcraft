@@ -17,17 +17,39 @@ final class Viewport3DSnapping {
     var pick: Snap3DPick?
     /// Snaps stepped through with Tab; the chosen one holds while the pointer stays within 3 points of where Tab was pressed.
     var tab: (picks: [Snap3DPick], index: Int, at: CGPoint)?
+    /// S3D2: datum traces on a work plane, and a work plane's 2D snap index, per plane and model revision.
+    private var traceCache: (frame: WorkPlaneFrame, revision: UInt64, lines: [Snap3DExtraLine])?
+    private var planeCache: (frame: WorkPlaneFrame, revision: UInt64, index: SnapIndex)?
 
     /// The viewport got a new scene: the index is rebuilt from it on the next query.
     func sceneChanged(_ s: Viewport3DScene) {
         scene = s
         index = nil
+        planeCache = nil
     }
 
     /// The index of the current scene (built lazily; it only records element bounds until a query reaches an element).
     var snapIndex: Snap3DIndex? {
         if index == nil, let s = scene, !s.elements.isEmpty { index = Snap3DIndex(scene: s) }
         return index
+    }
+
+    /// S3D2: where visible grids, levels and reference planes cross the plane `f` (snappable lines in it).
+    func traces(_ f: WorkPlaneFrame, model: BIMModel, view: Element?) -> [Snap3DExtraLine] {
+        if let c = traceCache, c.frame == f, c.revision == model.revision { return c.lines }
+        let resolver = view.map { VisibilityResolver(model: model, view: $0) }
+        let lines = Lines3D.traces(on: f, model: model, visible: { e in resolver?.resolve(e) != nil })
+            .map { Snap3DExtraLine(segment: $0.segment, id: $0.id, category: $0.category) }
+        traceCache = (f, model.revision, lines)
+        return lines
+    }
+
+    /// S3D2: the 2D snap index of a work plane other than a level (edges lying in it, datum traces).
+    func planeIndex(_ f: WorkPlaneFrame, model: BIMModel, view: Element?) -> SnapIndex {
+        if let c = planeCache, c.frame == f, c.revision == model.revision { return c.index }
+        let idx = (snapIndex ?? Snap3DIndex(sources: [])).planeSnapIndex(f, traces: traces(f, model: model, view: view))
+        planeCache = (f, model.revision, idx)
+        return idx
     }
 
     func reset() {
@@ -37,8 +59,8 @@ final class Viewport3DSnapping {
 }
 
 extension Snap3DIndex {
-    /// Everything a 3D view draws: model elements, linked models, imports and point clouds. Ghosted and glass parts
-    /// snap but do not hide what is behind them.
+    /// Everything a 3D view draws: model elements, linked models, imports, point clouds and (S3D2) the line elements:
+    /// datums, model lines and 2D CAD. Ghosted and glass parts snap but do not hide what is behind them.
     convenience init(scene: Viewport3DScene) {
         let sources = scene.elements.map { e in
             Snap3DSource(id: e.id, category: e.category, meshes: e.parts.map(\.mesh), opaque: e.parts.map { $0.color.a > 0.98 }, bounds: e.bounds)
@@ -48,23 +70,41 @@ extension Snap3DIndex {
 }
 
 extension Viewport3DToolController {
+    /// S3D2: the work plane of this view when it isn't a level (a reference plane or a picked face, Work Plane ▸ Set):
+    /// tools that can sit on any plane draw on it.
+    var activeSketchPlane: WorkPlaneHost? {
+        let m = state.model
+        guard let w = m[viewID]?.view?.workPlane else { return nil }
+        if case .level = w { return nil }
+        guard let f = WorkPlanes.frame(w, m) else { return nil }
+        return WorkPlaneHost(frame: f, reference: w)
+    }
+
+    /// S3D2: the plane previews and snaps are drawn on: the running tool's work plane, else the level's plane.
+    var drawFrame: WorkPlaneFrame {
+        if dragTool == nil, let sp = (state.activeTool as? BaseTool)?.ctx.sketchPlane { return sp.frame }
+        return .level(planeZ)
+    }
+
     /// The snap query at a view point with the viewport's camera, section box and visual style.
     func snapQuery(at p: CGPoint) -> Snap3DQuery? {
         guard let v = viewport else { return nil }
         var q = Snap3DQuery(pointer: Vec2(Double(p.x), Double(p.y)), camera: v.screenProjection)
         q.clip = v.sectionBox
         q.occlusion = v.visualStyle != .wireframe && v.visualStyle != .transparent
+        q.includeLineElements = v.drawsEdges // S3D2: datums, model lines and CAD snap where they are drawn
         return q
     }
 
     /// The tool input for a pointer sample, snapped to the model geometry of the view and to the work plane.
     func snappedInput(_ s: WorkPlane3D.PointerSample, at p: CGPoint, planeZ z: Double, ctx: ToolContext, graphics: ViewGraphics?,
                       snapFrom: Vec2?, preferSurface: Bool = false, orthoOnly: Bool = false, constrainOrtho: Bool = false) -> ToolInput? {
-        guard let q = snapQuery(at: p) else {
+        guard var q = snapQuery(at: p) else {
             snapping3D.pick = nil
             return WorkPlane3D.toolInput(s, planeZ: z, ctx: ctx, graphics: graphics, snapFrom: snapFrom, preferSurface: preferSurface,
                                          orthoOnly: orthoOnly, constrainOrtho: constrainOrtho)
         }
+        q.extraLines = snapping3D.traces(.level(z), model: state.model, view: state.model[viewID]) // S3D2
         if let t = snapping3D.tab {
             if hypot(p.x - t.at.x, p.y - t.at.y) <= 3, let raw = WorkPlane3D.planPoint(s, planeZ: z, preferSurface: preferSurface)?.xy {
                 let pick = t.picks[t.index]
@@ -82,27 +122,74 @@ extension Viewport3DToolController {
         return r.input
     }
 
+    /// S3D2: the pointer sample at a view point, with the viewport's pick.
+    func pointerSample(at p: CGPoint, flags: NSEvent.ModifierFlags = [], clickCount: Int = 1) -> WorkPlane3D.PointerSample? {
+        guard let v = viewport else { return nil }
+        let ray = v.pointerRay(at: p)
+        let hit = v.pick(at: p)
+        var s = WorkPlane3D.PointerSample(origin: ray.origin, direction: ray.direction, pickedID: hit.id, pickedPoint: hit.position)
+        s.shift = flags.contains(.shift); s.command = flags.contains(.command); s.option = flags.contains(.option)
+        s.clickCount = clickCount
+        return s
+    }
+
+    /// S3D2: input for a tool drawing on its sketch plane (a reference plane, a face, a named plane): the pointer ray
+    /// meets the plane, points are in the plane's coordinates, and the plane's own snap index (edges in it, datum
+    /// traces) gives tracking, extension, parallel and perpendicular snaps there, competing with 3D snaps.
+    func sketchToolInput(_ event: NSEvent, at p: CGPoint, tool: any InteractiveTool) -> ToolInput? {
+        guard let ctx = (tool as? BaseTool)?.ctx, let sp = ctx.sketchPlane, let v = viewport,
+              let s = pointerSample(at: p, flags: event.modifierFlags, clickCount: event.type == .mouseMoved ? 1 : event.clickCount),
+              var q = snapQuery(at: p) else { return nil }
+        let f = sp.frame
+        guard let w = f.intersect(origin: s.origin, direction: s.direction) ?? s.pickedPoint else { return nil }
+        // Screen tolerances on the plane: a little larger where it is seen at a grazing angle.
+        ctx.pixel = max(v.worldPerPoint(at: w), 1e-6) / max(abs(v.cameraAxes.forward.dot(f.normal)), 0.3).squareRoot()
+        ctx.snapIndex = snapping3D.planeIndex(f, model: state.model, view: state.model[viewID])
+        q.extraLines = snapping3D.traces(f, model: state.model, view: state.model[viewID])
+        planePoint = f.local(w)
+        if let t = snapping3D.tab {
+            if hypot(p.x - t.at.x, p.y - t.at.y) <= 3 {
+                let pick = t.picks[t.index]
+                snapping3D.pick = pick
+                return Snap3DInput.input(s, raw: f.local(w), pick: pick, ctx: ctx, graphics: nil, preferSurface: false)
+            }
+            snapping3D.tab = nil
+        }
+        guard let r = Snap3DInput.toolInput(s, plane: f, ctx: ctx, snapFrom: tool.snapFrom, index: snapping3D.snapIndex, query: q,
+                                            constrainOrtho: event.modifierFlags.contains(.shift)) else { snapping3D.pick = nil; return nil }
+        snapping3D.pick = r.pick
+        return r.input
+    }
+
     /// Tab while a tool runs: steps through the snaps under the pointer (model geometry and work plane), as in plan.
     /// Returns the input the tool was given, or nil when there is at most one snap here.
     func cycleSnap3D() -> ToolInput? {
-        guard let tool = state.activeTool, let ctx = (tool as? BaseTool)?.ctx, let p = lastMouse, let v = viewport, let q = snapQuery(at: p) else { return nil }
+        guard let tool = state.activeTool, let ctx = (tool as? BaseTool)?.ctx, let p = lastMouse, var q = snapQuery(at: p),
+              let s = pointerSample(at: p) else { return nil }
         let surface = prefersSurface(tool)
-        let ray = v.pointerRay(at: p)
-        let hit = v.pick(at: p)
-        let s = WorkPlane3D.PointerSample(origin: ray.origin, direction: ray.direction, pickedID: hit.id, pickedPoint: hit.position)
-        guard let raw = WorkPlane3D.planPoint(s, planeZ: planeZ, preferSurface: surface)?.xy else { return nil }
+        let f: WorkPlaneFrame = ctx.sketchPlane?.frame ?? .level(planeZ)
+        let raw: Vec2
+        if ctx.sketchPlane != nil {
+            guard let w = f.intersect(origin: s.origin, direction: s.direction) ?? s.pickedPoint else { return nil }
+            raw = f.local(w)
+            ctx.snapIndex = snapping3D.planeIndex(f, model: state.model, view: state.model[viewID])
+        } else {
+            guard let q = WorkPlane3D.planPoint(s, planeZ: planeZ, preferSurface: surface) else { return nil }
+            raw = q.xy
+        }
+        q.extraLines = snapping3D.traces(f, model: state.model, view: state.model[viewID])
         if var t = snapping3D.tab, hypot(p.x - t.at.x, p.y - t.at.y) <= 3 {
             t.index = (t.index + 1) % t.picks.count
             snapping3D.tab = t
         } else {
-            let found = ctx.snap3DCandidates(raw, planeZ: planeZ, index: snapping3D.snapIndex, query: q, from: tool.snapFrom)
+            let found = ctx.snap3DCandidates(raw, plane: f, index: snapping3D.snapIndex, query: q, from: tool.snapFrom)
             guard found.count > 1 else { return nil }
             snapping3D.tab = (found, 1, p)
         }
         guard let t = snapping3D.tab else { return nil }
         let pick = t.picks[t.index]
         snapping3D.pick = pick
-        let g = state.graphics.graphics(ctx.viewID).map { WorkPlane3D.modelGraphics($0, model: state.model) }
+        let g = ctx.sketchPlane != nil ? nil : state.graphics.graphics(ctx.viewID).map { WorkPlane3D.modelGraphics($0, model: state.model) }
         let i = Snap3DInput.input(s, raw: raw, pick: pick, ctx: ctx, graphics: g, preferSurface: surface)
         tool.pointerMoved(i)
         state.snapDescription = pick.snap?.description
@@ -122,17 +209,18 @@ extension Viewport3DToolController {
     /// Draws the snap as in plan (Canvas2DView.drawSnap): its tracking guides on the work plane, the magenta marker of
     /// its kind at the snapped point (on the model for 3D snaps, with a dashed line down or up to the work plane where
     /// the tool takes it) and its label beside it.
-    func drawSnap3D(_ s: SnapResult, _ cg: CGContext, bounds: CGRect, planeZ z: Double) {
+    func drawSnap3D(_ s: SnapResult, _ cg: CGContext, bounds: CGRect, plane: WorkPlaneFrame) {
         guard let v = viewport else { return }
         let feature = snapping3D.pick.flatMap { $0.point.isAlmostEqual(s.point, tolerance: 1e-9) ? $0.feature : nil }
-        let at = feature?.point ?? Vec3(s.point, z: z)
+        let onPlane = plane.point(s.point.x, s.point.y)
+        let at = feature?.point ?? onPlane
         let axis = s.kind == .angle && (s.label == "HORIZONTAL" || s.label == "VERTICAL")
-        drawTrackingGuides(s.guides, cg, z: z, acrossView: axis, bounds: bounds)
+        drawTrackingGuides(s.guides, cg, plane: plane, acrossView: axis, bounds: bounds)
         // Work-plane tools take the projection of a point off the plane (face-hosted tools take the point itself).
         let onFace = state.activeTool.map(prefersSurface) ?? false
-        if let f = feature, f.feature != .face, !onFace, abs(f.point.z - z) > 1e-6 || f.point.xy.distance(to: s.point) > 1e-6 {
-            drawTrackingGuides3D([(f.point, Vec3(s.point, z: z))], cg)
-            if let q = v.viewPoint(of: Vec3(s.point, z: z)) {
+        if let f = feature, f.feature != .face, !onFace, f.point.distance(to: onPlane) > 1e-6 {
+            drawTrackingGuides3D([(f.point, onPlane)], cg)
+            if let q = v.viewPoint(of: onPlane) {
                 cg.saveGState()
                 cg.setStrokeColor(Canvas2DView.snapColor.cgColor)
                 cg.setLineWidth(1.2)
@@ -142,7 +230,7 @@ extension Viewport3DToolController {
         }
         guard feature?.feature != .face, let p = v.viewPoint(of: at), bounds.insetBy(dx: -20, dy: -20).contains(p) else { return }
         var axisDir = CGVector(dx: 1, dy: 0)
-        if axis, let q = v.viewPoint(of: at + (s.label == "HORIZONTAL" ? Vec3.unitX : Vec3.unitY) * v.worldPerPoint(at: at) * 20) {
+        if axis, let q = v.viewPoint(of: at + (s.label == "HORIZONTAL" ? plane.u : plane.v) * v.worldPerPoint(at: at) * 20) {
             let d = CGVector(dx: q.x - p.x, dy: q.y - p.y), l = hypot(d.dx, d.dy)
             if l > 1e-6 { axisDir = CGVector(dx: d.dx / l, dy: d.dy / l) }
         }
@@ -153,13 +241,14 @@ extension Viewport3DToolController {
     }
 
     /// Plan guides (view units on the work plane) in plan's tracking-line style; axis guides run across the view.
-    private func drawTrackingGuides(_ guides: [Segment2], _ cg: CGContext, z: Double, acrossView: Bool, bounds: CGRect) {
+    private func drawTrackingGuides(_ guides: [Segment2], _ cg: CGContext, plane f: WorkPlaneFrame, acrossView: Bool, bounds: CGRect) {
+        func w(_ p: Vec2) -> Vec3 { f.point(p.x, p.y) }
         let segs: [(Vec3, Vec3)] = guides.map { g in
-            guard acrossView, let v = viewport else { return (Vec3(g.start, z: z), Vec3(g.end, z: z)) }
+            guard acrossView, let v = viewport else { return (w(g.start), w(g.end)) }
             // Long enough to cross the view at the guide's depth.
-            let reach = v.worldPerPoint(at: Vec3(g.start, z: z)) * Double(max(bounds.width, bounds.height)) * 2
+            let reach = v.worldPerPoint(at: w(g.start)) * Double(max(bounds.width, bounds.height)) * 2
             let d = (g.end - g.start).normalized
-            return (Vec3(g.start - d * reach, z: z), Vec3(g.end + d * reach, z: z))
+            return (w(g.start - d * reach), w(g.end + d * reach))
         }
         drawTrackingGuides3D(segs, cg)
     }

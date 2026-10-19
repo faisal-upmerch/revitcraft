@@ -84,7 +84,9 @@ struct WorkPlaneDialog: View {
         state.presented = nil
         if pick {
             guard let c = CommandRouter(state: state).ctx() else { return }
-            state.setTool(WorkPlanePickTool(ctx: c))
+            let t = WorkPlanePickTool(ctx: c)
+            t.targetViewID = viewID // S3D2: a 3D view's own work plane (its tools run in a plan context)
+            state.setTool(t)
             return
         }
         guard let w = choice ?? current ?? planes.first else { return }

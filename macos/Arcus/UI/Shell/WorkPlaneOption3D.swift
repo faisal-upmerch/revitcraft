@@ -12,9 +12,12 @@ struct WorkPlaneOption3D: View {
         if let tools = state.active3DTools, state.activeTool != nil {
             let levels = WorkPlane3D.levels(in: state.model)
             let current = (state.activeTool as? BaseTool)?.ctx.levelID ?? tools.workPlaneLevel
+            let sketch = (state.activeTool as? BaseTool)?.ctx.sketchPlane // S3D2: drawing on a reference plane or face
             HStack(spacing: 5) {
                 Text("Work Plane").font(.system(size: 11)).foregroundStyle(.secondary)
-                Picker("", selection: Binding(get: { current ?? ElementID(0) }, set: { tools.setWorkPlane($0) })) {
+                if let sketch { Text(WorkPlanes.name(sketch.reference, state.model)).font(.system(size: 11)) }
+                Picker("", selection: Binding(get: { sketch == nil ? current ?? ElementID(0) : ElementID(0) }, set: { if $0 != ElementID(0) { tools.setWorkPlane($0) } })) {
+                    if sketch != nil { Text("Level…").tag(ElementID(0)) }
                     ForEach(levels, id: \.id) { Text($0.name).tag($0.id) }
                 }
                 .labelsHidden().controlSize(.small).fixedSize()

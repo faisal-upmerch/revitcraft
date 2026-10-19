@@ -116,6 +116,8 @@ public enum ElementMeshes {
                 return Box3(min: Vec3(p.bounds.min, z: z), max: Vec3(p.bounds.max, z: z + RoomGeometry.height(e, model)))
             }
             return Box3(min: Vec3(r.point, z: z), max: Vec3(r.point, z: z))
+        case .modelLine(let l) where l.sketchPlane != nil: // S3D2
+            return Box3(points: l.worldPolyline(baseZ: 0))
         case .modelLine(let l):
             let r = l.drawnBounds // F1
             let z = model.elevation(ofLevel: e.levelID)

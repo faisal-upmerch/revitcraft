@@ -43,6 +43,7 @@ struct CommandRouter {
     }
 
     func disabledReason(_ id: CommandID) -> String? {
+        if let reason = s3d2DisabledReason(id) { return reason } // S3D2: tools on any work plane in 3D views
         if let reason = portDisabledReason(id) { return reason } // RevitCraft port batches (CommandRouter+Port.swift)
         if let reason = w23DDisabledReason(id) { return reason } // W2-3D
         if let reason = keysDisabledReason(id) { return reason } // BL-KEYS
@@ -130,6 +131,7 @@ struct CommandRouter {
     private var alwaysAllowed: Set<CommandID> { [.modify, .commandSearch, .preferences, .about, .onboarding, .keyboardShortcuts] }
 
     func makeTool(_ id: CommandID) -> (any InteractiveTool)? {
+        if let t = s3d2MakeTool(id) { return t } // S3D2: on a 3D view's reference-plane or face work plane
         guard let c = ctx() else { return nil }
         if let t = portMakeTool(id, c) { return t } // RevitCraft port batches
         if let t = annotMakeTool(id, c) { return t } // W2-ANNOT

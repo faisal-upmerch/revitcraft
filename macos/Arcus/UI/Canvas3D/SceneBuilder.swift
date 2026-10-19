@@ -36,7 +36,8 @@ nonisolated public enum SceneBuilder {
             }
         }
         if isCancelled() { return .empty }
-        let elements = results.values()
+        var elements = results.values()
+        elements += lineElements(model: model, view: view, resolver: resolver, sectionBox: sectionBox) // S3D2: datums, model lines, 2D CAD
         return Viewport3DScene(elements: elements, modelRevision: model.revision)
     }
 

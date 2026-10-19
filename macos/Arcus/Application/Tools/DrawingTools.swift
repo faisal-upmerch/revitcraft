@@ -155,14 +155,16 @@ public final class LineTool: BaseTool, InteractiveTool {
             let areaScheme = kind == .areaBoundary ? ctx.viewData?.areaSchemeID ?? AreaPlans.sortedSchemes(ctx.model).first?.id : nil
             ctx.session.perform("Create \(title)") { tx in
                 // Model lines are level-hosted lines without an owner view.
-                tx.create(cat == .genericModels ? .detailLines : cat, data: .modelLine(ModelLineData(curve: c, styleID: styleID, freeform: freeform)), levelID: level) { e in
+                tx.create(cat == .genericModels ? .detailLines : cat, data: ctx.sketched(.modelLine(ModelLineData(curve: c, styleID: styleID, freeform: freeform))), levelID: level) { e in // S3D2
                     if let areaScheme { e.params[AreaPlans.schemeParameter] = .ref(areaScheme) }
                 }
             }
         case .referencePlane:
             guard let s = c.asSegment else { return }
+            let rp = ctx.sketchPlane.map { ReferencePlaneData.drawn(on: $0, from: s.start, to: s.end) } ?? ReferencePlaneData(line: s) // S3D2
+            guard let rp else { message("Draw the reference plane's line across the work plane."); return }
             ctx.session.perform("Create Reference Plane") { tx in
-                tx.create(.referencePlanes, name: "", data: .referencePlane(ReferencePlaneData(line: s)))
+                tx.create(.referencePlanes, name: "", data: .referencePlane(rp))
             }
         case .grid:
             guard ctx.isPlan else { message("Draw grids in a plan view."); return }
