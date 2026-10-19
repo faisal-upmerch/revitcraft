@@ -188,12 +188,8 @@ public enum FurnitureShopDrawings {
         guard tx.model.isFurniture else { return }
         ensureStandard(in: tx)
         tagParts(in: tx)
-        let nestingViews = FurnitureNestingViews.update(in: tx)
+        updateNesting(in: tx)
         if let f101 = sheetID(shopDrawing, tx.model) { arrangeShopDrawing(f101, in: tx) }
-        if let f103 = sheetID(nesting, tx.model) {
-            let n = nestingViews.count
-            arrange(nestingViews, onSheet: f103, columns: n <= 1 ? 1 : (n <= 4 ? 2 : 3), in: tx)
-        }
         if let f104 = sheetID(details, tx.model), let b = tx.model.views.first(where: { $0.name == back3DName }) {
             arrange([b.id], onSheet: f104, columns: 1, area: Rect2(min: Vec2(0.02, 0.01), max: Vec2(0.17, 0.2694)), in: tx)
         }
@@ -205,6 +201,19 @@ public enum FurnitureShopDrawings {
     static func arrangeShopDrawing(_ f101: ElementID, in tx: TransactionContext) {
         let views = ["Ref. Level", sectionName, "{3D}", "Front", "Right"].compactMap { n in tx.model.views.first { $0.name == n && $0.view?.kind != .nesting }?.id }
         arrange(views, onSheet: f101, columns: 3, in: tx)
+    }
+
+    /// Fabricate ▸ Nesting: a Nesting view per material and thickness, arranged on F103. Returns the current groups' views.
+    @discardableResult
+    public static func updateNesting(in tx: TransactionContext) -> [ElementID] {
+        guard tx.model.isFurniture else { return [] }
+        if sheetID(nesting, tx.model) == nil { ensureStandard(in: tx) }
+        let views = FurnitureNestingViews.update(in: tx)
+        if let f103 = sheetID(nesting, tx.model) {
+            let n = views.count
+            arrange(views, onSheet: f103, columns: n <= 1 ? 1 : (n <= 4 ? 2 : 3), in: tx)
+        }
+        return views
     }
 
     static func sheetID(_ number: String, _ m: BIMModel) -> ElementID? { m.sheets.first { $0.sheet?.number == number }?.id }

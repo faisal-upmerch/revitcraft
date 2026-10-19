@@ -59,6 +59,11 @@ public struct CNCPartProgram: Sendable {
     public var faceA: CNCDrawing
     /// Face B operations (nil when there are none).
     public var faceB: CNCDrawing?
+    /// Machining operations on both faces and the edges (outlines, grain and labels aside).
+    public var operationCount: Int {
+        func n(_ d: CNCDrawing?) -> Int { (d?.circles.count ?? 0) + (d?.paths.filter { !["OUTLINE", "GRAIN", "INNER"].contains($0.layer) }.count ?? 0) }
+        return n(faceA) + n(faceB)
+    }
 }
 
 /// One nested sheet's program.

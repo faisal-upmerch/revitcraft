@@ -96,6 +96,7 @@ struct SchedulePropertiesDialog: View {
             let m = state.model
             sample = m.elements(def.categories).first(where: { !$0.isType }) ?? m.elements(def.categories).first
             if let sample { available = Parameters.allEntries(sample, m) }
+            if def.kind.isFabrication || def.kind == .materialTakeoff { available = FabricationSchedules.availableEntries(def.kind) + (def.kind.isFabrication ? [] : available) } // FM7
             var seen = Set<ParameterID>()
             available = available.filter { seen.insert($0.id).inserted }
         }
@@ -104,11 +105,12 @@ struct SchedulePropertiesDialog: View {
     // MARK: Fields
 
     var unscheduled: [ParameterEntry] {
-        available.filter { e in !def.fields.contains { if case .parameter(let p) = $0.source { return p == e.id }; return false } }
+        available.filter { e in !def.fields.contains { if case .parameter(let p) = $0.source { return p == e.id }; return false } && !FabricationSchedules.schedules(def, e) } // FM7
     }
 
     func add(_ e: ParameterEntry) {
-        let f = ScheduleField(source: .parameter(e.id), heading: e.name, width: e.type.isNumeric ? 0.022 : 0.03, alignment: e.type.isNumeric ? .right : .left)
+        let f = FabricationSchedules.field(for: e, def.kind) // FM7: fabrication and material fields
+            ?? ScheduleField(source: .parameter(e.id), heading: e.name, width: e.type.isNumeric ? 0.022 : 0.03, alignment: e.type.isNumeric ? .right : .left)
         def.insertField(f, before: nil)
         selectedField = f.id
         selectedAvailable = nil

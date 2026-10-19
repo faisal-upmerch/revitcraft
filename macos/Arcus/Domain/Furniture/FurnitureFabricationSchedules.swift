@@ -319,3 +319,47 @@ public enum FabricationSchedules {
         return d
     }
 }
+
+// MARK: - Fields dialog
+
+extension FabricationSchedules {
+    static let entryPrefix = "fabrication:", materialPrefix = "material:"
+
+    /// What Schedule Properties ▸ Fields offers beyond element parameters: a fabrication schedule's fields, and a
+    /// Material Takeoff's material fields (Name, Area, Volume, Cost, Cost Unit, Sheet Count).
+    public static func availableEntries(_ kind: ScheduleKind) -> [ParameterEntry] {
+        func entry(_ id: String, _ name: String, _ t: ParamType) -> ParameterEntry {
+            ParameterEntry(id: ParameterID(id), name: name, type: t, group: .other, isType: false, isReadOnly: true, value: nil, formula: nil,
+                           tooltip: "Calculated from the parts.", readOnlyReason: "Calculated from the parts.")
+        }
+        if kind == .materialTakeoff {
+            return ([("Name", ParamType.text), ("Area", .area), ("Volume", .volume)] + takeoffFields.map { ($0.name, $0.type) })
+                .map { entry(materialPrefix + $0.0, "Material: \($0.0)", $0.1) }
+        }
+        return fields(kind).map { entry(entryPrefix + $0.name, $0.name, $0.type) }
+    }
+
+    /// The schedule field for one of `availableEntries`, or nil for an element parameter.
+    public static func field(for entry: ParameterEntry, _ kind: ScheduleKind) -> ScheduleField? {
+        let k = entry.id.key
+        if k.hasPrefix(entryPrefix) { return field(String(k.dropFirst(entryPrefix.count)), kind, entry.type.isNumeric ? 0.02 : 0.03) }
+        if k.hasPrefix(materialPrefix) {
+            let n = String(k.dropFirst(materialPrefix.count))
+            return ScheduleField(source: .material(n), heading: n == "Name" ? "Material" : n, width: entry.type.isNumeric ? 0.022 : 0.03,
+                                 alignment: entry.type.isNumeric ? .right : .left)
+        }
+        return nil
+    }
+
+    /// Whether a definition already schedules `entry`.
+    public static func schedules(_ def: ScheduleDefinition, _ entry: ParameterEntry) -> Bool {
+        let k = entry.id.key
+        return def.fields.contains { f in
+            switch f.source {
+            case .fabrication(let n): return k == entryPrefix + n
+            case .material(let n): return k == materialPrefix + n
+            default: return false
+            }
+        }
+    }
+}

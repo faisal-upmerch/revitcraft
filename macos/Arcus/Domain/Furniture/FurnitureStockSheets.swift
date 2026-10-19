@@ -86,3 +86,25 @@ extension BIMModel {
     /// FM7: the document's Stock Sheets (the defaults when never edited).
     public var stockSheets: FurnitureStockSheets { furnitureSetup?.stockSheets ?? FurnitureStockSheets.defaults(self) }
 }
+
+extension FurnitureStockSheets {
+    /// Why the settings can't be used, or nil: every size must be larger than its trim, the kerf and trim sensible.
+    public func problem() -> String? {
+        if sizes.isEmpty { return "Add at least one stock size." }
+        if kerf < 0 || kerf > 0.5 * Self.inch { return "Enter a kerf between 0\" and 1/2\"." }
+        if edgeTrim < 0 || edgeTrim > 2 * Self.inch { return "Enter an edge trim between 0\" and 2\"." }
+        for s in sizes {
+            if s.name.trimmingCharacters(in: .whitespaces).isEmpty { return "Enter a name for every stock size." }
+            if s.length <= 2 * edgeTrim + kerf + 0.01 || s.width <= 2 * edgeTrim + kerf + 0.01 { return "“\(s.name)” is too small for its edge trim." }
+            if let c = s.cost, c < 0 { return "“\(s.name)”: enter a cost of 0 or more." }
+        }
+        return nil
+    }
+
+    /// Manage ▸ Stock Sheets: replaces the document's settings (one undoable change).
+    public static func set(_ s: FurnitureStockSheets, in tx: TransactionContext) throws(TransactionError) {
+        guard tx.model.isFurniture else { throw TransactionError("Stock Sheets are set in Furniture documents.") }
+        if let p = s.problem() { throw TransactionError(p) }
+        try FurnitureParameters.edit(tx) { $0.stockSheets = s }
+    }
+}
