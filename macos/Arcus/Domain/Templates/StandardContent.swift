@@ -39,6 +39,7 @@ public enum StandardContent {
         for entry in OpeningLibrary.doors(system) + OpeningLibrary.windows(system) + ColumnLibrary.families(system) {
             installer.family(entry, replaceTypes: false)
         }
+        StairDefaults.loadMissing(into: tx) // STAIR: run, landing, support and stair types
         return tx.model.elements(.elementTypes).count - before
     }
 

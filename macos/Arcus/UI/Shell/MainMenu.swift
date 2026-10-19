@@ -18,8 +18,8 @@ enum MainMenuBuilder {
         let byFace = submenu("Model by Face", commands([.curtainSystemByFace, .roofByFace, .wallByFace, .floorByFace])) // F5
         let architecture = submenu("Architecture", commands([.wall, .stackedWall, .wallRectangle, .wallArc, .wallPickLines, .curtainWall, .wallSweep, .wallReveal, nil, .door, .window, .component, .modelInPlace, .column, nil, // F1: Wall: Reveal; F2: Stacked; F5: In-place
                                                       .floor, .floorPickWalls, .ceiling, .roofFootprint, .roofPickWalls, .roofExtrusion, nil,
-                                                      .stairStraight, .stairL, .stairU, .connectLevels, .ramp, .railing, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, .space, .spaceSeparator, nil, // F5: spaces
-                                                      .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
+                                                      .stair, .connectLevels, .ramp, .railing, .stairRailingEditPath, .stairRailingReset, nil, .room, .roomSeparator, .area, .areaBoundary, .placeRoomsAutomatically, .highlightBoundaries, .placeAreasAutomatically, .colorSchemes, .space, .spaceSeparator, nil, // F5: spaces
+                                                      .modelText, .modelLine, .placeModelGroup, nil, .faceOpening, .shaftOpening, .shaftPickStair, .wallOpening, .verticalOpening, .dormerOpening, nil, // F1
                                                       .level, .grid, .gridMultiSegment, .referencePlane, .workPlaneSet, .workPlaneShow, .workPlaneViewer, nil, // F2
                                                       .showMass, .inPlaceMass, nil, .toposurface, .buildingPad, .propertyLine]) + [byFace]) // F5
         main.addItem(architecture)

@@ -34,6 +34,7 @@ struct RibbonItem: Hashable {
         if let c = f11Caption(id, size: size, split: split) { return c } // F11
         if let c = f5Caption(id, size: size) { return c } // F5
         if let c = f2Caption(id, size: size, split: split) { return c } // F2
+        if let c = stairCaption(id, size: size) { return c } // STAIR
         switch id {
         case .roofFootprint where split: return "Roof"
         case .structuralColumn where split: return "Column" // N2: as in RevitCraft's Build and Structure panels
@@ -153,7 +154,7 @@ enum RibbonContent {
                                                         .large(.roofFootprint, [.roofFootprint, .roofExtrusion, .roofSoffit]), .large(.ceiling),
                                                         .large(.floor, [.floor, .structuralFloor, .slabEdge]),
                                                         .small(.curtainGrid), .small(.mullion), .small(.curtainPanel)], tint: build),
-                    RibbonPanel(title: "Circulation", items: [.large(.railing), .large(.ramp), .large(.stairStraight, [.stairStraight, .stairL, .stairU])], tint: circulation),
+                    RibbonPanel(title: "Circulation", items: [.large(.railing), .large(.ramp), .large(.stair)], tint: circulation),
                     RibbonPanel(title: "Model", items: [.small(.modelText), .small(.modelLine), .small(.placeModelGroup, [.placeModelGroup, .createGroup])], tint: build), // F1
                     RibbonPanel(title: "Room & Area", items: [.large(.room, [.room, .placeRoomsAutomatically, .highlightBoundaries]), .small(.roomSeparator), .small(.roomTag, [.roomTag, .tagAll]),
                                                               .large(.area, [.area, .placeAreasAutomatically]), .small(.areaBoundary), .small(.areaTag), .small(.areaPlan),
@@ -280,6 +281,7 @@ enum RibbonContent {
         let annot = annotSelectionItems(sel, m); if let t = annot.title { title = t }; items += annot.items // W2-ANNOT
         let site = siteSelectionItems(sel, m); if let t = site.title { title = t }; items += site.items // BL-SITE
         let f2 = f2SelectionItems(sel, m); if let t = f2.title { title = t }; items += f2.items // F2: stairs (Connect Levels)
+        let stair = stairSelectionItems(sel, m); if let t = stair.title { title = t }; items += stair.items // STAIR: stair railing Edit Path
         let fm4 = fm4SelectionItems(sel, m); if let t = fm4.title { title = t }; items += fm4.items // FM4: furniture parts
         let fm5 = fm5SelectionItems(sel, m); if let t = fm5.title { title = t }; items += fm5.items // FM5: bays, doors, drawers
         items += fm6SelectionItems(sel) // FM6: Joint, Allow/Disallow Join for parts
@@ -325,6 +327,7 @@ extension RibbonContent {
     /// "Modify | Place Wall", "Modify | Sketch Floor", "Modify | Walls" — or nil in plain Modify mode.
     @MainActor static func contextualTitle(_ state: DocumentState) -> String? {
         if let t = keysContextualTitle(state) { return t } // BL-KEYS: Modify tools keep "Modify | <Category>"; pre-selection
+        if let t = stairContextualTitle(state) { return t } // STAIR: Modify | Create Stair
         if let t = state.activeTool as? SketchTool { return t.ribbonTitle(state.model) } // BL-CANVAS: "Modify | Create Floor Boundary"
         if state.activeTool is FurnitureJointTool { return "Modify | Joints" } // FM6: as Wall Joins
         if let t = state.activeTool { return "\(t.isSketchMode ? "Modify | Sketch" : "Modify | Place") \(t.title)" }
@@ -454,6 +457,7 @@ struct RibbonView: View {
         panelView(RibbonPanel(title: "Select", items: [.large(.modify)], tint: RibbonContent.modify), contextual: true)
         panelView(RibbonPanel(title: "Properties", items: [.large(.typeProperties), .large(.toggleProperties)], tint: RibbonContent.modify), contextual: true)
         if let tool {
+            ForEach(RibbonContent.stairToolPanels(tool)) { p in panelView(p, contextual: true) } // STAIR: Components, Draw, Tools; Shaft ▸ Pick Stair
             if let mode = tool.options.first(where: { $0.id == "mode" }), case .choice(let modes) = mode.kind {
                 DrawPanel(state: state, tool: tool, modes: modes, current: mode.value.textValue ?? "",
                           leading: RibbonContent.f2DrawLeading(tool), trailing: RibbonContent.f2DrawTrailing(tool)) // F2
@@ -641,7 +645,7 @@ struct RibbonButton: View {
         let info = CommandCatalog.info(item.id)
         let router = CommandRouter(state: state)
         let reason = router.disabledReason(item.id)
-        let active = RibbonContent.f2IsActive(item.id, state) ?? (state.activeTool?.commandID == item.id || (item.variants.contains { state.activeTool?.commandID == $0 })) // F2: mode toggles
+        let active = RibbonContent.f2IsActive(item.id, state) ?? RibbonContent.stairIsActive(item.id, state) ?? (state.activeTool?.commandID == item.id || (item.variants.contains { state.activeTool?.commandID == $0 })) // F2: mode toggles
         let enabled = reason == nil
         Group {
             if item.variants.isEmpty {

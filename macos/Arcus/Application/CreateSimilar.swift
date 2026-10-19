@@ -40,12 +40,7 @@ public enum CreateSimilar {
             default: return nil
             }
         case .roof: return .roofFootprint
-        case .stair(let s):
-            switch s.shape {
-            case .straight: return .stairStraight
-            case .lShaped: return .stairL
-            case .uShaped: return .stairU
-            }
+        case .stair: return .stair // STAIR: Create Stair
         case .railing: return .railing
         case .room: return e.category == .areas ? .area : e.category == .spaces ? .space : .room // F5: spaces
         case .modelLine:

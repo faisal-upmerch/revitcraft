@@ -48,7 +48,7 @@ extension CommandRouter {
             t.drawMode = .line
             state.setTool(t)
         case .editStair:
-            if let c = ctx(), let s = sel.first, let t = EditStairTool(ctx: c, stairID: s) { state.setTool(t) }
+            if let c = ctx(), let s = sel.first, let t = StairTool(ctx: c, editing: s) { state.setTool(t) } // STAIR: Edit Stairs
         case .modifySubElements, .addShapePoint:
             guard let c = ctx(), let e = sel.first,
                   let t = ShapeEditTool(ctx: c, elementID: e, mode: id == .addShapePoint ? .addPoint : .modify) else { return }

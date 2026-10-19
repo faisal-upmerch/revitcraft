@@ -71,12 +71,8 @@ public enum ElementTransform {
             r.shapePoints = r.shapePoints?.map { ShapePoint(position: t.apply($0.position), offset: $0.offset) }
             r.slopeArrows = r.slopeArrows?.map { var a = $0; a.tail = t.apply(a.tail); a.head = t.apply(a.head); return a } // F2
             e.data = .roof(r)
-        case .stair(var s):
-            s.origin = t.apply(s.origin)
-            let d = t.applyVector(Vec2.fromAngle(s.direction))
-            s.direction = d.angle
-            if mirror { s.turnsLeft.toggle() }
-            e.data = .stair(s)
+        case .stair(let s):
+            e.data = .stair(s.transformed(t)) // STAIR: runs, landings and supports too
         case .ramp(var r):
             r.path = r.path.map(t.apply)
             e.data = .ramp(r)

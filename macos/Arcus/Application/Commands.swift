@@ -126,6 +126,10 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FM9 commands:
 
     // STAIR commands:
+    case stair, stairComponentRun, stairComponentLanding, stairComponentSupport, stairRunStraight, stairRunFullStepSpiral
+    case stairRunCenterEndsSpiral, stairRunLWinder, stairRunUWinder, stairRunSketch, stairLandingPickRuns, stairLandingSketch
+    case stairSupportPickEdges, stairSketchBoundary, stairSketchRiser, stairSketchPath, stairRailingSettings, stairFlip
+    case stairRailingEditPath, stairRailingReset, shaftPickStair
 
 }
 

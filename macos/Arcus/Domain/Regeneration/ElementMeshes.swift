@@ -226,11 +226,13 @@ public enum DependencyGraph {
         case .stair(let st):
             if let t = st.topLevelID { s.insert(t) }
             if st.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2: every storey's levels
+            for t in StairTypeInfo.componentTypeIDs(model.typeData(of: e)) { s.insert(t) } // STAIR: run, landing and support types
         case .ramp(let r):
             if let t = r.topLevelID { s.insert(t) }
         case .railing:
             if let h = model[e.hostID] { s.insert(h.id); addType(h); if let l = h.levelID { s.insert(l) }; if let t = h.stair?.topLevelID ?? h.ramp?.topLevelID { s.insert(t) } }
             if model[e.hostID]?.stair?.multistoryTopLevelID != nil { for l in model.levels { s.insert(l.id) } } // F2
+            if let h = model[e.hostID], h.stair != nil { for t in StairTypeInfo.componentTypeIDs(model.typeData(of: h)) { s.insert(t) } } // STAIR
         case .topography: // BL-SITE: a sub-division follows its host toposolid
             if let h = model[e.hostID], h.topography != nil { s.insert(h.id) }
         case .decal(let d): // F67: the decal type's image
@@ -273,6 +275,10 @@ public enum DependencyGraph {
                     for w in m.elements(.walls) where w.wall?.topLevelID == id { out.insert(w.id) }
                 case .type:
                     for x in m.instances(ofType: id) { out.insert(x.id) }
+                    for x in m.instances(ofType: id) where x.stair != nil { for r in m.hosted(by: x.id) { out.insert(r.id) } } // STAIR: their railings
+                    for st in m.types(for: .stairs) where StairTypeInfo.componentTypeIDs(st.typeData).contains(id) { // STAIR: run, landing, support types
+                        for x in m.instances(ofType: st.id) { out.insert(x.id); for r in m.hosted(by: x.id) { out.insert(r.id) } }
+                    }
                     for t in m.types(for: .walls) where StackedWalls.partTypes(t.typeData).contains(id) { for x in m.instances(ofType: t.id) { out.insert(x.id) } } // F2
                 case .family:
                     for t in m.elements(.elementTypes) where t.typeData?.familyID == id { for x in m.instances(ofType: t.id) { out.insert(x.id) } }
