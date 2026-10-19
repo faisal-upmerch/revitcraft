@@ -135,6 +135,7 @@ public enum ComponentPlacement {
         if hosts.contains(kind) { return true }
         if hosts.contains(.anyPart), ![.bay, .floor, .wall].contains(kind) { return true }
         if kind == .lid, hosts.contains(.flap) { return true }
+        if kind == .drawerFront, hosts.contains(.drawerBox) { return true }
         return false
     }
 
@@ -183,6 +184,14 @@ public enum ComponentPlacement {
                    (.left, Vec3(b.lo.x, c.y, c.z), -Y, Z, -X, d.y, d.z, d.x), (.right, Vec3(b.hi.x, c.y, c.z), Y, Z, X, d.y, d.z, d.x),
                    (.top, Vec3(c.x, c.y, b.hi.z), X, Y, Z, d.x, d.y, d.z), (.bottom, Vec3(c.x, c.y, b.lo.z), X, -Y, -Z, d.x, d.y, d.z)]
         }
+        // A drawer's box: its inside faces (the box is derived from the bay and the slides, not an element).
+        if e.furnitureFront?.kind == .drawer, let db = FurnitureFronts.drawerBox(e, m) {
+            let lo = Vec3(db.x0 + db.side, db.y0 + db.back, db.z0 + db.bottom), hi = Vec3(db.x0 + db.width - db.side, db.y0 + db.depth - db.back, db.z0 + db.height)
+            let c2 = (lo + hi) * 0.5, d2 = hi - lo
+            out += [(.boxBottom, Vec3(c2.x, c2.y, lo.z), X, Y, Z, d2.x, d2.y, d2.z), (.boxLeft, Vec3(lo.x, c2.y, c2.z), Y, Z, X, d2.y, d2.z, d2.x),
+                    (.boxRight, Vec3(hi.x, c2.y, c2.z), -Y, Z, -X, d2.y, d2.z, d2.x), (.boxBack, Vec3(c2.x, hi.y, c2.z), X, Z, -Y, d2.x, d2.z, d2.y),
+                    (.boxFront, Vec3(c2.x, lo.y, c2.z), -X, Z, Y, d2.x, d2.z, d2.y)]
+        }
         let fr = b.frame
         return out.map { f in
             ComponentHostFace(hostID: e.id, face: f.0, origin: fr.world(f.1), u: fr.world(f.2), v: fr.world(f.3), n: fr.world(f.4),
@@ -206,7 +215,7 @@ public enum ComponentPlacement {
         let isBay = e.furnitureBay != nil
         func named(_ f: ComponentFace) -> ComponentHostFace? { all.first { $0.face == f } }
         switch which {
-        case .front, .back, .left, .right, .top, .bottom: return named(which)
+        case .front, .back, .left, .right, .top, .bottom, .boxBottom, .boxLeft, .boxRight, .boxBack, .boxFront: return named(which)
         case .topEdge: return named(.top)
         case .bottomEdge: return named(.bottom)
         case .leftEdge: return named(.left)
@@ -312,6 +321,8 @@ public enum ComponentPlacement {
             if let bay = m[f.hostID]?.furnitureBay, let op = bay.opening {
                 let fr = BayFrame(bay)
                 values["Opening Width"] = .double(op.width)
+                if d.family.parameter(named: "Opening Depth") != nil { values["Opening Depth"] = .double(op.y1 - op.y0) }
+                if d.family.parameter(named: "Opening Height") != nil { values["Opening Height"] = .double(op.z1 - op.z0) }
                 let corner = fr.world(Vec3(op.x0, op.y0, op.z0))
                 return (ComponentData(location: corner.xy, rotation: fr.angle, offset: corner.z - levelZ + s.offsetY, mirrored: false), values)
             }
