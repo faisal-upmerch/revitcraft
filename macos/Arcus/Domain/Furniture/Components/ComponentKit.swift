@@ -421,6 +421,15 @@ public struct ComponentElectrical: Hashable, Sendable, Codable {
     }
 }
 
+/// How a drawer slide mounts, for machining: a pair on the bay's side panels (side-mount, the default), a pair
+/// screwed near the sides' bottom edge under the drawer (undermount), or one rail on the bay's bottom under the drawer's
+/// centre (center-mount).
+public enum ComponentSlideMount: String, Codable, Sendable, Hashable, CaseIterable {
+    case sidePair = "Side Pair", undermount = "Undermount", centerRail = "Center Rail"
+    /// The type parameter (text) slides carry it in, read by drawer machining.
+    public static let parameter = "Slide Mounting"
+}
+
 /// Roles that tie a component into other Furniture tools.
 public enum ComponentRole: String, Codable, Sendable, Hashable, CaseIterable {
     /// Offered in the Leg tool's Type Selector.
@@ -662,6 +671,16 @@ public struct ComponentBuilder {
     public mutating func hardwareKind(_ k: HardwareKind) { definition.hardwareKind = k }
     public mutating func role(_ r: ComponentRole) { definition.roles.insert(r) }
     public mutating func profile(_ pts: [FamilyPoint]) { definition.profile = pts }
+    /// Drawer slides: how the slide mounts (machining drills the side panels, near their bottom edge, or the bay's
+    /// bottom). Adds the "Slide Mounting" type parameter.
+    public mutating func slideMounting(_ m: ComponentSlideMount) {
+        if definition.parameter(named: ComponentSlideMount.parameter) == nil {
+            text(ComponentSlideMount.parameter, m.rawValue, group: .manufacturing)
+        }
+        if let k = definition.parameters.firstIndex(where: { $0.name == ComponentSlideMount.parameter }) { definition.parameters[k].defaultValue = .text(m.rawValue) }
+        for k in definition.types.indices { definition.types[k].values[ComponentSlideMount.parameter] = .text(m.rawValue) }
+    }
+
     /// Records renamed types (old name → new name), for upgrades of existing families.
     public mutating func renames(_ map: [String: String]) { definition.renamedTypes.merge(map) { _, b in b } }
     public mutating func preset(_ name: String, type: String, values: [String: ParamValue] = [:], alignment: ComponentAlignment? = nil) {

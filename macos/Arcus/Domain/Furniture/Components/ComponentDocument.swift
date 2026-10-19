@@ -111,7 +111,7 @@ public enum ComponentDocument {
             let spec = d.type(named: t.name)
             tx.update(t.id) { e in
                 guard var td = e.typeData else { return }
-                let fresh = td.params[ComponentKit.definitionParam] == nil
+                let fresh = td.params[ParameterID("type.cost")] == nil // new types (an upgrade keeps edited identity data)
                 td.params[ComponentKit.definitionParam] = .text(d.id)
                 td.params[ComponentKit.versionParam] = .int(d.version)
                 if let k = d.hardwareKind { td.params[FurnitureHardware.kindParam] = .text(k.rawValue) }
@@ -153,7 +153,14 @@ public enum ComponentDocument {
     /// Every component family in the document with its versions.
     public static func loaded(_ m: BIMModel, catalog: ComponentCatalog = .current) -> [LoadedComponent] {
         m.elements(.families).sorted { $0.id < $1.id }.compactMap { f in
-            guard let id = f.params[ComponentKit.definitionParam]?.textValue else { return nil }
+            guard let id = f.params[ComponentKit.definitionParam]?.textValue else {
+                // A family loaded before the library knew it (FM5's hardware in older files and new pieces): version 0, so
+                // it upgrades when the library's family has other types (renamed or added).
+                guard f.family?.template == .furnitureHardware, let d = catalog.definition(named: f.name) else { return nil }
+                let have = Set(m.elements(.elementTypes).filter { $0.typeData?.familyID == f.id }.map(\.name))
+                guard have != Set(d.types.map(\.name)) else { return nil }
+                return LoadedComponent(familyID: f.id, definitionID: d.id, loadedVersion: 0, libraryVersion: d.version)
+            }
             return LoadedComponent(familyID: f.id, definitionID: id, loadedVersion: f.params[ComponentKit.versionParam]?.intValue ?? 1,
                                    libraryVersion: catalog.definition(id: id)?.version)
         }

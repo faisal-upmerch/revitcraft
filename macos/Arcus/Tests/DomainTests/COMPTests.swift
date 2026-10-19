@@ -486,3 +486,58 @@ struct COMPActionTests {
         #expect(d.tags.contains("shaker"))
     }
 }
+
+@Suite("COMP integration with the fronts")
+struct COMPFrontIntegrationTests {
+    static let inch = 0.0254
+
+    @Test func frontsAfterUpgradingFM5HardwareGetTheirHardware() throws {
+        var (m, bays) = try COMPActionTests.emptyBays()
+        m = try COMPPlacementTests.run(m) { tx in FurnitureHardware.ensureLibrary(in: tx) }
+        // The library's Bar Pull renamed FM5's "128 mm" (group A): the document's FM5 families are offered an upgrade.
+        let bar = try #require(ComponentLibrary.component(named: FurnitureHardware.barPull))
+        let outdated = ComponentDocument.loaded(m).filter(\.isOutdated)
+        #expect(!outdated.isEmpty)
+        m = try COMPPlacementTests.run(m, "Update Components") { tx in _ = ComponentDocument.upgradeAll(in: tx) }
+        if let renamed = bar.renamedTypes["128 mm"] {
+            #expect(m.types(for: .furnitureHardware).contains { $0.typeData?.familyName == FurnitureHardware.barPull && $0.name == renamed })
+            #expect(!m.types(for: .furnitureHardware).contains { $0.typeData?.familyName == FurnitureHardware.barPull && $0.name == "128 mm" })
+            #expect(FurnitureHardware.type(FurnitureHardware.barPull, "128 mm", m) != nil, "the old name still finds the renamed type")
+        }
+        // New front types are made from the standard list (FM5 names): doors and drawers still get handles, hinges and slides.
+        m = try COMPPlacementTests.run(m) { tx in for t in tx.model.types(for: .furnitureFronts) { tx.delete(t.id) } }
+        var door: [ElementID] = [], drawers: [ElementID] = []
+        m = try COMPPlacementTests.run(m) { tx in
+            door = try FurnitureFronts.createFront(.door, in: bays[0], in: tx)
+            drawers = try FurnitureFronts.createDrawers(in: bays[1], count: 3, in: tx)
+        }
+        func slots(_ id: ElementID) -> [String] { m.hosted(by: id).compactMap { $0.params[FurnitureHardware.slotParam]?.textValue } }
+        #expect(slots(door[0]).contains { $0.hasPrefix("handle") } && slots(door[0]).filter { $0.hasPrefix("hinge") }.count == 2, "\(slots(door[0]))")
+        for d in drawers { #expect(slots(d).contains("slides") && slots(d).contains { $0.hasPrefix("handle") }, "\(slots(d))") }
+    }
+
+    @Test func centerMountSlidesDrillTheBayBottom() throws {
+        var m = try COMPPlacementTests.cabinet()
+        let center = try #require(ComponentLibrary.furniture.first { $0.name == "Drawer Slide - Center Mount" }, "group A's center-mount slide")
+        #expect(center.type(named: center.defaultType!.name)?.values[ComponentSlideMount.parameter] == .text("Center Rail"))
+        let drawer = try #require(m.elements(.furnitureFronts).first { $0.furnitureFront?.kind == .drawer })
+        m = try COMPPlacementTests.run(m) { tx in
+            _ = ComponentDocument.load(center, in: tx)
+            let fid = try #require(ComponentDocument.loadedFamily(center, tx.model))
+            let types = tx.model.types(for: .furnitureHardware).filter { $0.typeData?.familyID == fid }
+            let ft = try #require(tx.model[drawer.typeID])
+            tx.update(ft.id) { $0.typeData?.params[FurnitureFrontTypes.slideType] = .ref(types.first?.id) }
+        }
+        let bay = try #require(m[m[drawer.id]?.hostID]?.furnitureBay?.opening)
+        func ofDrawer(_ e: MachiningEntry) -> Bool {
+            switch e.source {
+            case .front(let f): return f == drawer.id
+            case .hardware(let h): return m[h]?.hostID == drawer.id
+            default: return false
+            }
+        }
+        let screws = FurnitureMachining.entries(m).filter { $0.label == "Slide screw" && ofDrawer($0) }
+        #expect(!screws.isEmpty)
+        #expect(screws.allSatisfy { $0.partID == bay.bottom }, "into the bottom, not the sides")
+    }
+}
