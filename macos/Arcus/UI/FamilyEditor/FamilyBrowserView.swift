@@ -29,7 +29,6 @@ struct FamilyBrowserView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             List(selection: selection) {
                 // F1415: as RevitCraft's Project Browser lists a family's views.
                 Section("Floor Plans") { viewRow(.plan) }
@@ -145,6 +144,7 @@ struct FamilyBrowserView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(.hidden) // FES: on the dock's glass
         }
         .frame(minWidth: 210)
     }
@@ -156,16 +156,19 @@ struct FamilyBrowserView: View {
             .help(m.viewTitle)
     }
 
+    /// FES: the dock panel's header, as the project window's Project Browser (the family's name is in the dock header).
     var header: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(model.family.name).font(.headline).lineLimit(1)
-            HStack(spacing: 6) {
-                Text(model.family.template.rawValue).font(.caption).padding(.horizontal, 6).padding(.vertical, 1).background(Capsule().fill(.quaternary))
-                Text(model.familyID == nil ? "Not loaded" : "In project").font(.caption).foregroundStyle(.secondary)
-            }
+        FamilyPanelHeader(title: "Project Browser", symbol: "list.bullet.indent") {
+            Menu {
+                Button("New Type…", systemImage: "plus") { model.newType(copying: false) }
+                Button("Add X Plane", systemImage: "squareshape.split.2x2.dotted") { model.addPlane(.x) }
+                Button("Add Y Plane", systemImage: "squareshape.split.2x2.dotted") { model.addPlane(.y) }
+                Divider()
+                Button("Hide", systemImage: "eye.slash") { model.chrome.toggleBrowser() }
+            } label: { Image(systemName: "ellipsis") }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .accessibilityLabel("Project Browser options")
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
     @ViewBuilder

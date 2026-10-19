@@ -12,7 +12,6 @@ struct FamilyInspectorView: View {
     var body: some View {
         VStack(spacing: 0) {
             header
-            Divider()
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 12) {
                     switch model.selection {
@@ -35,23 +34,24 @@ struct FamilyInspectorView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
-        .frame(minWidth: 300)
         .controlSize(.small)
     }
 
+    /// FES: the dock panel's header, as the project window's Properties, with what is shown under it.
     var header: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Properties").font(.headline)
-                Text(model.selection.map { kind($0) + " · " + model.title($0) } ?? "Family: \(model.family.name)").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+        VStack(alignment: .leading, spacing: 0) {
+            FamilyPanelHeader(title: "Properties", symbol: "slider.horizontal.3") {
+                if let s = model.selection {
+                    Button { model.select(nil) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain).help("Show the family's properties")
+                    Button(role: .destructive) { model.deleteSelection() } label: { Image(systemName: "trash") }.buttonStyle(.plain).help("Delete \(model.title(s))")
+                }
+                Button { model.chrome.toggleProperties() } label: { Image(systemName: "sidebar.trailing").foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).help("Hide Properties (⌥⌘2)").accessibilityLabel("Hide Properties")
             }
-            Spacer()
-            if let s = model.selection {
-                Button { model.select(nil) } label: { Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary) }.buttonStyle(.plain).help("Show the family's properties")
-                Button(role: .destructive) { model.deleteSelection() } label: { Image(systemName: "trash") }.buttonStyle(.plain).help("Delete \(model.title(s))")
-            }
+            Text(model.selection.map { kind($0) + ": " + model.title($0) } ?? "Family: \(model.family.name)")
+                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                .padding(.horizontal, 12).padding(.bottom, 6)
         }
-        .padding(.horizontal, 12).padding(.vertical, 8)
     }
 
     func kind(_ i: FamilyEditing.Item) -> String {

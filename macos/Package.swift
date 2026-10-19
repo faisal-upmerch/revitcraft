@@ -260,6 +260,8 @@ let package = Package(
         .testTarget(name: "CADTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusCAD"], path: "Arcus/Tests/CADTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "OutputTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput"], path: "Arcus/Tests/OutputTests"),
         .testTarget(name: "HomeUITests", dependencies: ["ArcusDomain", "ArcusApplication", "ArcusUI"], path: "Arcus/Tests/HomeUITests"), // HOME: offscreen renders of Home
+        // FES: app-target (ArcusUI) views hosted offscreen: the Family Editor shell's layout regressions and captures.
+        .testTarget(name: "UITests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusApplication", "ArcusUI"], path: "Arcus/Tests/UITests"),
         .testTarget(name: "PersistenceTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusPersistence", "ArcusServices"], path: "Arcus/Tests/PersistenceTests", resources: [.copy("Fixtures")]),
     ] + extraTargets,
     swiftLanguageModes: [.v6]

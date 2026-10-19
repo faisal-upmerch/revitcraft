@@ -12,13 +12,22 @@ import ArcusDomain
 
 struct FamilyCanvas: NSViewRepresentable {
     let model: FamilyEditorModel
+    /// FES: the floating shell's insets; zoom to fit and the canvas's own captions keep to the part not under it.
+    var insets = NSEdgeInsets()
 
     func makeNSView(context: Context) -> FamilyCanvasView {
         let v = FamilyCanvasView()
         v.model = model
+        v.chromeInsets = insets
+        DispatchQueue.main.async { v.window?.makeFirstResponder(v) } // FES: F, Esc and Delete work as soon as the window opens
         return v
     }
     func updateNSView(_ v: FamilyCanvasView, context: Context) {
+        v.chromeInsets = insets // FES
+        if let z = model.chrome.zoomRequest { // FES: the bottom pill's zoom menu
+            DispatchQueue.main.async { model.chrome.zoomRequest = nil }
+            v.zoom(toScale: z)
+        }
         if v.revision != model.drawingRevision {
             v.revision = model.drawingRevision
             v.drawing = FamilyPreviewDrawing.make(model.evaluated, model.family, mode: model.view, detail: model.detail, applyVisibility: model.applyVisibility,
@@ -40,7 +49,11 @@ final class FamilyCanvasView: NSView {
     var selection: FamilyEditing.Item?
     var tool: FamilyCanvasTool?
     var viewMode: FamilyPreviewMode = .plan
-    var camera = FamilyEditing.Camera()
+    var camera = FamilyEditing.Camera() { didSet { if camera.scale != oldValue.scale { reportZoom() } } } // FES: the bottom pill's readout
+    /// FES: the floating shell's insets from the view's edges (top-left origin, the view is flipped).
+    var chromeInsets = NSEdgeInsets() { didSet { needsDisplay = true; refitIfUntouched() } }
+    /// FES: the last zoom to fit; while the camera hasn't moved since, the view stays fitted as the window or shell changes.
+    var lastFit: FamilyCanvasFit.Record?
     var fitted = false
     var fitSeen = 0
     var revision = -1
@@ -78,14 +91,15 @@ final class FamilyCanvasView: NSView {
 
     func zoomToFit() {
         guard bounds.width > 10, bounds.height > 10 else { return }
-        camera = .fitting(drawing.fitBounds, size: size, inset: 64)
+        camera = FamilyCanvasFit.camera(drawing.fitBounds, size: size, insets: chromeInsets) // FES: fits the part not under the shell
+        lastFit = FamilyCanvasFit.Record(size: bounds.size, insets: chromeInsets, camera: camera)
         fitted = true
         needsDisplay = true
     }
 
     override func layout() {
         super.layout()
-        if !fitted { zoomToFit() }
+        if !fitted { zoomToFit() } else { refitIfUntouched() }
     }
 
     /// Snaps a view point like the project's 2D views (endpoints, intersections, reference planes, tracking…), else to the
@@ -308,7 +322,7 @@ final class FamilyCanvasView: NSView {
             ctx.move(to: screen(a)); ctx.addLine(to: screen(b)); ctx.strokePath()
             ctx.setLineDash(phase: 0, lengths: [])
             let name = p.origin ? "\(p.name) ⌖" : p.name
-            let at = p.vertical ? CGPoint(x: screen(a).x + 4, y: 6) : CGPoint(x: 6, y: screen(a).y - 14)
+            let at = p.vertical ? CGPoint(x: screen(a).x + 4, y: chromeInsets.top + 6) : CGPoint(x: chromeInsets.left + 6, y: screen(a).y - 14) // FES: names in view, not under the shell
             text(name, at: at, size: 10, color: sel ? selectColor : planeColor, weight: p.strong ? .semibold : .regular)
         }
 
@@ -392,8 +406,7 @@ final class FamilyCanvasView: NSView {
         ctx.setLineWidth(1)
         ctx.move(to: CGPoint(x: o.x - 8, y: o.y)); ctx.addLine(to: CGPoint(x: o.x + 8, y: o.y))
         ctx.move(to: CGPoint(x: o.x, y: o.y - 8)); ctx.addLine(to: CGPoint(x: o.x, y: o.y + 8)); ctx.strokePath()
-        let stepText = model.map { $0.length(step) } ?? "\(step) m"
-        text("grid \(stepText) · \(Int((camera.scale / 400 * 100).rounded()))%", at: CGPoint(x: 8, y: bounds.height - 18), size: 9, color: NSColor.tertiaryLabelColor)
+        reportGrid(step) // FES: the zoom and grid step read out in the bottom pill
     }
 
     /// Dimension lines stacked outside the content: strings between vertical planes run below it, others to its left.
@@ -529,13 +542,13 @@ final class FamilyCanvasView: NSView {
             if pl.vertical { let x = screen(Vec2(pl.value, 0)).x; ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: bounds.height)) }
             else { let y = screen(Vec2(0, pl.value)).y; ctx.move(to: CGPoint(x: 0, y: y)); ctx.addLine(to: CGPoint(x: bounds.width, y: y)) }
             ctx.strokePath()
-            text("Work Plane: \(n)", at: CGPoint(x: 8, y: bounds.height - 34), size: 10, color: tint)
+            text("Work Plane: \(n)", at: CGPoint(x: chromeInsets.left + 8, y: bounds.height - chromeInsets.bottom - 20), size: 10, color: tint) // FES: above the bottom pill
             return
         }
         ctx.setFillColor(tint.withAlphaComponent(0.05).cgColor)
         ctx.fill(bounds)
         let name = model.workPlane ?? viewFrame.plane.label
-        text("Work Plane: \(name)", at: CGPoint(x: 8, y: bounds.height - 34), size: 10, color: tint)
+        text("Work Plane: \(name)", at: CGPoint(x: chromeInsets.left + 8, y: bounds.height - chromeInsets.bottom - 20), size: 10, color: tint) // FES: above the bottom pill
     }
 
     /// Sketch mode: the loop or path being drawn (magenta), the stages already finished (halftone), a revolve's axis and a
@@ -569,10 +582,10 @@ final class FamilyCanvasView: NSView {
             ctx.setStrokeColor(ink.cgColor); ctx.setLineDash(phase: 0, lengths: [10, 3, 2, 3])
             ctx.move(to: CGPoint(x: x, y: 0)); ctx.addLine(to: CGPoint(x: x, y: bounds.height)); ctx.strokePath()
             ctx.setLineDash(phase: 0, lengths: [])
-            text("Axis", at: CGPoint(x: x + 4, y: 22), size: 9, color: ink)
+            text("Axis", at: CGPoint(x: x + 4, y: chromeInsets.top + 6), size: 9, color: ink) // FES: under the shell
         }
         guard s.frame == viewFrame else {
-            if !s.vertices.isEmpty { text("The sketch is in \(FamilyPreviewMode.view(for: s.frame).viewTitle).", at: CGPoint(x: 8, y: 40), size: 11, color: ink) }
+            if !s.vertices.isEmpty { text("The sketch is in \(FamilyPreviewMode.view(for: s.frame).viewTitle).", at: CGPoint(x: chromeInsets.left + 8, y: chromeInsets.top + 8), size: 11, color: ink) } // FES: under the shell
             return
         }
         let pts = s.vertices.map { screen($0) }

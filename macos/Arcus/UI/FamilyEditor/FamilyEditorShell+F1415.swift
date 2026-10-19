@@ -1,54 +1,7 @@
 import SwiftUI
 import ArcusDomain
 
-// F1415: the view tabs over the family canvas (RevitCraft shows the family's open views as tabs) and Work Plane ▸ Set.
-
-/// Tabs of the family's open views: click to switch, × to close, + to open another.
-struct FamilyViewTabs: View {
-    @Bindable var model: FamilyEditorModel
-    var body: some View {
-        HStack(spacing: 2) {
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 2) {
-                    ForEach(model.openViews) { v in tab(v) }
-                }
-            }
-            Menu {
-                ForEach(FamilyPreviewMode.allCases) { v in
-                    Button(v.viewTitle) { model.view = v }
-                }
-            } label: { Image(systemName: "plus").font(.system(size: 10, weight: .semibold)) }
-            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
-            .help("Open a view")
-        }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .background(.bar)
-    }
-
-    func tab(_ v: FamilyPreviewMode) -> some View {
-        let selected = model.view == v
-        return HStack(spacing: 4) {
-            Image(systemName: v.symbol).font(.system(size: 9))
-            Text(v.tabTitle).font(.system(size: 11, weight: selected ? .semibold : .regular)).lineLimit(1)
-            if model.openViews.count > 1 {
-                Button { close(v) } label: { Image(systemName: "xmark").font(.system(size: 7, weight: .bold)) }
-                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Close \(v.viewTitle)")
-            }
-        }
-        .padding(.horizontal, 8).padding(.vertical, 3)
-        .foregroundStyle(selected ? Color.primary : Color.secondary)
-        .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(selected ? Color.primary.opacity(0.10) : .clear))
-        .contentShape(Rectangle())
-        .onTapGesture { model.view = v }
-        .help(v.viewTitle)
-    }
-
-    func close(_ v: FamilyPreviewMode) {
-        guard model.openViews.count > 1 else { return }
-        model.openViews.removeAll { $0 == v }
-        if model.view == v, let last = model.openViews.last { model.view = last }
-    }
-}
+// F1415: Work Plane ▸ Set. (FES: the view tabs are the shell's view tab pills, FamilyEditorPills.swift.)
 
 /// Work Plane ▸ Set: the named reference plane new sketches, lines and text start from, or the view's own plane.
 struct FamilyWorkPlaneDialog: View {

@@ -14,6 +14,7 @@ public final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuItemValid
 
     /// View ▸ Show/Hide Sidebar for the key document window (see MainMenu).
     @objc func toggleDocumentSidebar(_ sender: Any?) {
+        if let fe = NSApp.keyWindow?.windowController as? FamilyEditorWindowController { fe.toggleSidebar(sender); return } // FES: the Family Editor's left dock
         (NSApp.keyWindow?.windowController as? DocumentWindowController ?? NSApp.mainWindow?.windowController as? DocumentWindowController)?.toggleSidebar(sender)
     }
     private var hubWindow: NSWindow?
