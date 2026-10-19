@@ -134,6 +134,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // POLISH commands:
 
     // FMG1 commands:
+    case furnitureBlendEditTop, furnitureBlendEditBase
 
     // FMG2 commands:
 

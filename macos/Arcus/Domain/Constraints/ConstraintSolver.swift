@@ -11,6 +11,7 @@ public enum ConstraintSolver {
     public static let maxPasses = 24
 
     public static func solve(_ tx: TransactionContext) throws(TransactionError) {
+        try FurnitureDimensionLocks.check(tx) // FMG1: locked dimensions to furniture part faces
         let constraints = activeConstraints(tx.model)
         guard !constraints.isEmpty else { return }
         // Only solve when something relevant changed.
@@ -52,7 +53,7 @@ public enum ConstraintSolver {
         var out: [(ElementID, ConstraintData)] = model.elements(.constraints).compactMap { e in e.constraint.map { (e.id, $0) } }
         // Locked / EQ permanent dimensions act as constraints too.
         for d in model.elements(.dimensions) {
-            guard let dd = d.dimension, dd.references.count >= 2 else { continue }
+            guard let dd = d.dimension, dd.references.count >= 2, !FurnitureDimensionLocks.handles(dd) else { continue } // FMG1: part faces
             if dd.references.count == 2, let v = GlobalParameters.labelledValue(d, model) { // F11: a dimension labelled with a global parameter
                 out.append((d.id, ConstraintData(kind: .lockedDistance, references: dd.references, value: v, dimensionID: d.id)))
                 continue

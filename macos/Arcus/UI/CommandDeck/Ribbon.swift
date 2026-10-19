@@ -465,6 +465,7 @@ struct RibbonView: View {
             if tool.isSketchMode {
                 ModePanel(state: state)
             }
+            ForEach(RibbonContent.fmg1ToolPanels(tool)) { p in panelView(p, contextual: true) } // FMG1: Blend's Edit Top / Edit Base
             // The Level tool's plan-view options get their own panel (with Plan View Types); other tools' ribbon options
             // use the generic panel.
             if let level = tool as? LevelTool { LevelPlanViewsPanel(state: state, tool: level) } // BL-BROWSER
@@ -489,6 +490,7 @@ struct RibbonView: View {
             if let p = RibbonContent.selectionPanel(state) { panelView(p, contextual: true) }
             ForEach(RibbonContent.f810ContextualPanels(state)) { p in panelView(p, contextual: true) } // F810: Edit Walkthrough
             ForEach(RibbonContent.furnitureContextualPanels(state)) { p in panelView(p, contextual: true) } // FM3: Family Editor panel
+            ForEach(RibbonContent.fmg1SelectionPanels(state)) { p in panelView(p, contextual: true) } // FMG1: a selected blend's Edit Top / Edit Base
         }
     }
 }

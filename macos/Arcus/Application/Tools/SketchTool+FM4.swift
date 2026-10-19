@@ -53,6 +53,9 @@ public struct FM4SketchState: Sendable {
     public var start = 0.0
     public var end = 12 * 0.0254
     public var endAngle = 2 * Double.pi
+    /// FMG1: Blend's two sketches (Edit Base / Edit Top): which one is being sketched, and the other one's lines.
+    public var editingTop = false
+    var otherSketch: [Curve2] = []
     public init() {}
 }
 
@@ -121,7 +124,7 @@ extension SketchTool {
                 o.append(ToolOption(id: "fm4.angle", label: "End Angle", kind: .angle, value: .double(fm4.endAngle)))
             case .sweep, .sweptBlend:
                 // FMG1: in a plan the path's height above the level; in an elevation its offset from the work plane.
-                o.append(ToolOption(id: "fm4.start", label: ctx.isPlan ? "Elevation" : "Offset", kind: .length, value: .double(fm4.start)))
+                o.append(ToolOption(id: "fm4.start", label: ctx.isPlan ? "Elevation" : "Offset from Work Plane", kind: .length, value: .double(fm4.start)))
             case .cushion:
                 break
             }
