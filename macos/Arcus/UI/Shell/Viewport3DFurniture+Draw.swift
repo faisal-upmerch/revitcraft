@@ -25,7 +25,7 @@ extension Viewport3DToolController {
                 fm3dDrawBox(b, cg, v)
                 fm3dDrawHandle(h, at: Self.fm3dFaceCenter(b, h.face), cg, v, emphasis: 2)
                 let label = fm3dFormat(abs(value - h.opposite)) + (snap.map { "  (\($0.label))" } ?? "")
-                if let q = v.viewPoint(of: Self.fm3dFaceCenter(b, h.face)) { fm3dDrawValue(label, at: CGPoint(x: q.x, y: q.y + 26), cg) }
+                if let q = v.viewPoint(of: Self.fm3dFaceCenter(b, h.face)) { fm3dDrawValue(label, at: CGPoint(x: q.x + 46, y: q.y + 12), cg) } // beside the arrow
             }
             return
         case .move(_, _, _, let box, let move, let snaps)?:
