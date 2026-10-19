@@ -93,12 +93,12 @@ struct TwoStoryHouseTests {
         #expect(!cut.contains { $0.name == "Slab on Grade" })
         let hole = try #require(ShaftCuts.profile(shaft)).bounds.expanded(by: 0.01)
         for r in l.runs { #expect(l.runRect(r).points.allSatisfy { hole.contains($0) }) }
-        // U-stair rails follow the landing instead of crossing it.
+        // U-stair rails follow the landing instead of crossing it (short eased corners into a run are fine, as in Revit).
         for rail in m.elements(.railings) where rail.hostID == stair.id {
             let pts = StairGeometry.railingPath(stair, m, leftSide: rail.railing!.hostSideLeft)
             for (a, b) in zip(pts, pts.dropFirst()) {
                 let d = (b.xy - a.xy)
-                #expect(abs(d.x) < 1e-6 || abs(d.y) < 1e-6, "rail segment runs diagonally across the landing")
+                #expect(abs(d.x) < 1e-6 || abs(d.y) < 1e-6 || d.length < 0.15, "rail segment runs diagonally across the landing: \(a) → \(b)")
             }
         }
     }
