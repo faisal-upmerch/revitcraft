@@ -152,5 +152,5 @@ extension FurnitureCompiler {
     }
 
     /// "+ 0.0127 m" or "- 0.0127 m": an offset added to a length formula.
-    static func lengthTerm(_ v: Double) -> String { "\(v < 0 ? "-" : "+") \(PartSolidContext.number(abs(v))) m" }
+    static func lengthTerm(_ v: Double) -> String { "\(v < 0 ? "-" : "+") \(FurnitureFormLocks.num(abs(v))) m" } // FM9: no exponents in formulas
 }

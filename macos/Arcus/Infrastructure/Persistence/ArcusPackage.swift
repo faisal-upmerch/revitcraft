@@ -43,6 +43,8 @@ public enum ArcusPackage {
         public var thumbnailPNG: Data?
         /// Marks the package as a project template (manifest `isTemplate`).
         public var isTemplate: Bool = false
+        /// FM9: the modification date to write (nil = now), so generated library files are byte-stable between builds.
+        public var modified: Date? = nil
         public init(documentID: UUID = UUID(), appVersion: String, build: String, created: Date? = nil, thumbnailPNG: Data? = nil) {
             self.documentID = documentID; self.appVersion = appVersion; self.build = build; self.created = created; self.thumbnailPNG = thumbnailPNG
         }
@@ -63,7 +65,7 @@ public enum ArcusPackage {
 
     /// Serialized package contents, manifest last.
     static func files(_ model: BIMModel, info: WriteInfo) throws -> PackageWriter.Files {
-        let now = Date()
+        let now = info.modified ?? Date() // FM9
         let created = info.created ?? now
         var files: PackageWriter.Files = []
         var checksums: [String: String] = [:]

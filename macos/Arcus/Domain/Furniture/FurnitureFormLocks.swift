@@ -18,6 +18,9 @@ public struct FormAxisLock: Hashable, Codable, Sendable {
         case stretch = "Stretch"
         /// Scales every point between the planes (proportional, corners included).
         case scale = "Scale"
+        /// Each end follows its own plane: the low half of the form moves with the low plane, the high half with the
+        /// high plane (a back that runs from the seat to the Top).
+        case span = "Span"
     }
     public var mode: Mode
     public var lowPlane: String
@@ -75,17 +78,22 @@ public enum FurnitureFormLocks {
                 case .stretch:
                     let end = v <= (a + b) / 2 ? a : b
                     return .expr(PartSolidContext.number(p0 + (end - l.low0) * k + (v - end)))
+                case .span:
+                    return .expr(PartSolidContext.number(v <= (a + b) / 2 ? v + p0 - l.low0 : v + p1 - l.high0))
                 }
             }
-            let fl = formulas[l.lowPlane] ?? "\(PartSolidContext.number(l.low0)) m", fh = formulas[l.highPlane] ?? "\(PartSolidContext.number(l.high0)) m"
-            func share(_ x: Double) -> String { PartSolidContext.number(abs(span0) > Tolerance.length ? (x - l.low0) / span0 : 0) }
+            let fl = formulas[l.lowPlane] ?? "\(num(l.low0)) m", fh = formulas[l.highPlane] ?? "\(num(l.high0)) m"
+            func share(_ x: Double) -> String { num(abs(span0) > Tolerance.length ? (x - l.low0) / span0 : 0) }
+            func term(_ d: Double) -> String { "\(d < 0 ? "-" : "+") \(num(abs(d))) m" }
             switch l.mode {
-            case .low: return .expr("(\(fl)) \(FurnitureCompiler.lengthTerm(v - l.low0))")
-            case .high: return .expr("(\(fh)) \(FurnitureCompiler.lengthTerm(v - l.high0))")
+            case .low: return .expr("(\(fl)) \(term(v - l.low0))")
+            case .high: return .expr("(\(fh)) \(term(v - l.high0))")
             case .scale: return .expr("(\(fl)) + ((\(fh)) - (\(fl))) * \(share(v))")
             case .stretch:
                 let end = v <= (a + b) / 2 ? a : b
-                return .expr("(\(fl)) + ((\(fh)) - (\(fl))) * \(share(end)) \(FurnitureCompiler.lengthTerm(v - end))")
+                return .expr("(\(fl)) + ((\(fh)) - (\(fl))) * \(share(end)) \(term(v - end))")
+            case .span:
+                return .expr(v <= (a + b) / 2 ? "(\(fl)) \(term(v - l.low0))" : "(\(fh)) \(term(v - l.high0))")
             }
         }
         return solids.map { map($0, mapped) }
@@ -107,6 +115,15 @@ public enum FurnitureFormLocks {
             out[n] = f
         }
         return out
+    }
+
+    /// A number for a formula: fixed-point (formulas don't read exponents), to 1e-9.
+    static func num(_ v: Double) -> String {
+        guard v.isFinite, abs(v) >= 5e-10 else { return "0" }
+        var s = String(format: "%.9f", v)
+        while s.hasSuffix("0") { s.removeLast() }
+        if s.hasSuffix(".") { s.removeLast() }
+        return s
     }
 
     static func number(_ b: FamilyBound) -> Double? {

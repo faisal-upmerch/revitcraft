@@ -13,6 +13,10 @@ struct FM9Tests {
 
     /// Problems with a library piece: a build error, Check Parts errors, Flex problems, types that don't evaluate or
     /// don't take their size, and a family that doesn't load into a project.
+    /// What stands proud of a piece's Width, Depth and Height besides handles (inches): a vanity's backsplash and faucet
+    /// stand above its counter (its Height).
+    static let above: [String: Double] = ["Bathroom Vanity": 10]
+
     static func problems(_ name: String, _ m: BIMModel) -> [String] {
         var out: [String] = []
         if let e = LibraryKit.buildError(m) { return ["\(name): build failed: \(e)"] }
@@ -30,7 +34,8 @@ struct FM9Tests {
                 guard let v = t.values[param]?.doubleValue else { continue }
                 // Handles and pulls stand proud of the front.
                 let over = size - v
-                if over < -0.75 * inch || over > (param == "Depth" ? 1.75 : 0.75) * inch { out.append("\(name) “\(t.name)”: \(param) \(v / inch)\" but the piece is \(size / inch)\"") }
+                let allowed = param == "Depth" ? 1.75 : param == "Height" ? 0.75 + (Self.above[name] ?? 0) : 0.75
+                if over < -0.75 * inch || over > allowed * inch { out.append("\(name) “\(t.name)”: \(param) \(v / inch)\" but the piece is \(size / inch)\"") }
             }
         }
         // Loads into a project and places an instance of every type.
@@ -51,6 +56,20 @@ struct FM9Tests {
             out.append("\(name): loading failed: \(error)")
         }
         return out
+    }
+
+    // MARK: Essentials
+
+    @Test func everyEssentialBuildsFlexesChecksAndLoads() throws {
+        let essentials = FurnitureLibrary.essentials
+        #expect(essentials.count >= 25)
+        for p in essentials {
+            let m = p.build()
+            #expect(m.furnitureSetup?.name == p.name)
+            #expect((m.furnitureSetup?.family.types.count ?? 0) >= 2, "\(p.name): \(m.furnitureSetup?.family.types.count ?? 0) types")
+            let problems = Self.problems(p.name, m)
+            #expect(problems.isEmpty, "\(problems.prefix(8).joined(separator: "\n"))")
+        }
     }
 
     // MARK: Kit recipes
