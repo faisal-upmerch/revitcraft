@@ -20,7 +20,6 @@ extension ComponentLibrary {
         var b = ComponentBuilder(name, .wardrobe, sub, description, frame: .legacyOpening)
         b.material("Finish Material", finish)
         openingParams(&b, width: width, depth: depth, mount: mount)
-        b.host([.bay], faces: [.inside], align: .full)
         return b
     }
 
@@ -30,7 +29,6 @@ extension ComponentLibrary {
             if round { b.rod("\(n) Support", axis: .x, c: (y, z), r: "(\(size)) / 2", from: x.0, to: x.1) }
             else { b.box("\(n) Support", x: x, y: ("\(y) - (\(size)) / 2", "\(y) + (\(size)) / 2"), z: ("\(z) - (\(size)) * 0.7", "\(z) + (\(size)) * 0.3")) }
         }
-        b.drill("Rod support screw", x: y, y: "\(z) + (\(size)) * 0.3", diameter: CX.mm(3.5), depth: CX.mm(13))
         b.drill("Rod support screw", x: y, y: "\(z) + (\(size)) * 0.3", diameter: CX.mm(3.5), depth: CX.mm(13), target: .counterpart)
     }
 
@@ -41,13 +39,15 @@ extension ComponentLibrary {
         b.symCircle(.side, CBL.all, c: (z, y), r: r)
     }
 
-    /// A slide fixed under the bay's top (or on a side) carrying a pull-out, `length` long: its body and the screws.
-    static func topSlide(_ b: inout ComponentBuilder, x: String, length: String, z: String, width: String = CX.mm(30)) {
+    /// A side-mount slide on the bay's left side carrying a pull-out rack, `length` long, its bracket out to the rack at
+    /// `x`, and its screws.
+    static func sideSlide(_ b: inout ComponentBuilder, x: String, length: String, z: String) {
         b.slot("Slide Material") { b in
-            b.box("Slide", x: ("\(x) - (\(width)) / 2", "\(x) + (\(width)) / 2"), y: (CX.mm(20), "0.02 m + \(length)"), z: ("\(z) - 0.022 m", z))
+            b.box("Slide", x: (CX.zero, CX.mm(12)), y: (CX.mm(20), "0.02 m + \(length)"), z: ("\(z) - 0.035 m", z))
+            b.box("Slide Bracket", x: (CX.mm(12), x), y: ("0.02 m + Rack Offset", "0.04 m + Rack Offset"), z: ("\(z) - 0.02 m", "\(z) - 0.005 m"))
         }
         for f in ["0.15", "0.85"] {
-            b.drill("Slide screw", x: x, y: "0.02 m + (\(length)) * \(f)", diameter: CX.mm(4), depth: CX.mm(12))
+            b.drill("Slide screw", x: "0.02 m + (\(length)) * \(f)", y: "\(z) - 0.017 m", diameter: CX.mm(4), depth: CX.mm(12), target: .counterpart)
         }
     }
 
@@ -102,7 +102,6 @@ extension ComponentLibrary {
         }
         b.material("Support Material", .greyPlastic)
         rodSymbols(&b, y: y, z: z, r: "Rail Width / 2")
-        b.drill("Rail support screw", x: y, y: "\(z) + Rail Height", diameter: CX.mm(3.5), depth: CX.mm(13))
         b.drill("Rail support screw", x: y, y: "\(z) + Rail Height", diameter: CX.mm(3.5), depth: CX.mm(13), target: .counterpart)
         b.type("Oval Rail - 30 x 15 mm", [:], flags: ["Center Support": false], cost: 8.00, model: "OWR-3015", isDefault: true)
         b.type("Oval Rail - 30 x 15 mm with Center Support", [:], flags: ["Center Support": true], numbers: ["Load Rating": 110], cost: 11.00, model: "OWR-3015C")
@@ -126,7 +125,6 @@ extension ComponentLibrary {
         }
         b.material("Socket Material", .chrome)
         rodSymbols(&b, y: y, z: z, r: "Tube Diameter / 2")
-        b.drill("Socket screw", x: y, y: "\(z) + Socket Diameter * 0.3", diameter: CX.mm(3.5), depth: CX.mm(13))
         b.drill("Socket screw", x: y, y: "\(z) + Socket Diameter * 0.3", diameter: CX.mm(3.5), depth: CX.mm(13), target: .counterpart)
         b.type("Round Rail - 19 mm", ["Tube Diameter": ComponentKit.mm(19), "Socket Diameter": ComponentKit.mm(32)], cost: 7.00, model: "RWR-19")
         b.type("Round Rail - 25 mm", [:], cost: 8.50, model: "RWR-25", isDefault: true)
@@ -173,9 +171,7 @@ extension ComponentLibrary {
         b.symLine(.face, CBL.coarse, (CX.zero, "\(pivot.0) - Arm Length"), ("Opening Width", "\(pivot.0) - Arm Length"))
         b.symbol(.side, CBL.mediumFine, dashed: true, .arc(center: FamilyPoint("Mount Height", pivot.0), radius: "Arm Length", startDegrees: "180", sweepDegrees: "90"))
         b.symRect(.side, CBL.coarse, ("Mount Height - Housing Height / 2", "\(pivot.0) - Housing Depth / 2"), ("Mount Height + Housing Height / 2", "\(pivot.0) + Housing Depth / 2"))
-        for x in ["0 m", "Opening Width"] {
-            for dz in ["-0.05 m", "0.05 m"] { b.drill("Lift housing screw", x: pivot.0, y: "Mount Height + \(dz)", diameter: CX.mm(4), depth: CX.mm(13), target: x == "0 m" ? .host : .counterpart) }
-        }
+        for dz in ["-0.05 m", "0.05 m"] { b.drill("Lift housing screw", x: pivot.0, y: "Mount Height + \(dz)", diameter: CX.mm(4), depth: CX.mm(13), target: .counterpart) }
         b.type("Wardrobe Lift - 830-1150 mm", [:], cost: 85.00, model: "WL-8301150", isDefault: true)
         b.type("Wardrobe Lift - 600-830 mm", ["Minimum Width": ComponentKit.mm(600), "Maximum Width": ComponentKit.mm(830), "Opening Width": ComponentKit.inch(28)], cost: 78.00, model: "WL-600830")
         b.type("Wardrobe Lift - 1150-1500 mm Heavy", ["Minimum Width": ComponentKit.mm(1150), "Maximum Width": ComponentKit.mm(1500), "Opening Width": ComponentKit.inch(48)],
@@ -185,7 +181,7 @@ extension ComponentLibrary {
 
     // MARK: Pull-out racks
 
-    /// A pull-out rack hung from a top slide at the side of the bay: the slide, a frame and `body` for its bars or hooks.
+    /// A pull-out rack on a side-mount slide at the bay's left side: the slide, a frame and `body` for its bars or hooks.
     static func pullOutRack(_ name: String, _ sub: String, _ description: String, depth: Double, _ body: (inout ComponentBuilder) -> Void) -> ComponentBuilder {
         var b = bayBuilder(name, sub, description, .aluminum, mount: ComponentKit.inch(72), width: ComponentKit.inch(18))
         b.material("Slide Material", .zinc)
@@ -194,7 +190,7 @@ extension ComponentLibrary {
         b.length("Rack Height", ComponentKit.inch(4))
         b.flag("Extended", false, instance: true)
         b.length("Rack Offset", 0, formula: "if(Extended, -Rack Depth * 0.9, 0 m)")
-        topSlide(&b, x: "Rack Width / 2 + 0.01 m", length: "Rack Depth", z: "Mount Height")
+        sideSlide(&b, x: "Rack Width / 2 + 0.01 m", length: "Rack Depth", z: "Mount Height")
         body(&b)
         b.symRect(.face, CBL.all, (CX.mm(10), CX.mm(20)), ("Rack Width + 0.01 m", "0.02 m + Rack Depth"))
         b.symLine(.face, CBL.coarse, (CX.mm(10), CX.mm(20)), ("Rack Width + 0.01 m", "0.02 m + Rack Depth"))
@@ -374,7 +370,6 @@ extension ComponentLibrary {
         b.symLine(.face, CBL.all, (CX.zero, "Opening Depth - 0.04 m"), ("Opening Width", "Opening Depth - 0.04 m"))
         b.symLine(.side, CBL.all, ("Mount Height", CX.inch(2)), ("Mount Height + Rise", "Opening Depth - 0.04 m"))
         for y in [CX.inch(2), "Opening Depth - 0.04 m"] {
-            b.drill("Shoe rack screw", x: y, y: "Mount Height", diameter: CX.mm(3.5), depth: CX.mm(13))
             b.drill("Shoe rack screw", x: y, y: "Mount Height", diameter: CX.mm(3.5), depth: CX.mm(13), target: .counterpart)
         }
         b.type("Shoe Rack - 1 Tier", [:], flags: ["Two Tiers": false], cost: 18.00, model: "SHR-1", isDefault: true)
@@ -524,7 +519,6 @@ extension ComponentLibrary {
         }
         b.symRect(.face, CBL.all, (x.0, "Front Setback"), (x.1, "Opening Depth"))
         b.symRect(.side, CBL.coarse, ("Mount Height", "Front Setback"), ("Mount Height + Divider Height", "Opening Depth"))
-        for y in ["Opening Depth * 0.25", "Opening Depth * 0.75"] { b.drill("Divider bracket screw", x: "Divider Position", y: y, diameter: CX.mm(3.5), depth: CX.mm(13)) }
         b.type("Wardrobe Divider - 40\"", [:], cost: 22.00, model: "WD-40", isDefault: true)
         b.type("Wardrobe Divider - 60\"", ["Divider Height": ComponentKit.inch(60)], cost: 30.00, model: "WD-60")
         return b.build()
@@ -786,8 +780,8 @@ extension ComponentLibrary {
             b.box(n, x: x, y: ("\(y) - Rail Width * 0.7", "\(y) + Rail Width * 0.7"), z: ("\(z) - Rail Height", "\(z) + Rail Height * 1.4"))
         }
         rodSymbols(&b, y: y, z: z, r: "Rail Width / 2")
-        b.drill("Rail support screw", x: y, y: "\(z) + Rail Height", diameter: CX.mm(3.5), depth: CX.mm(13))
-        b.drill("Cable hole", x: y, y: "\(z) + Rail Height * 2", diameter: CX.mm(8), depth: "Host Thickness", through: true)
+        b.drill("Rail support screw", x: y, y: "\(z) + Rail Height", diameter: CX.mm(3.5), depth: CX.mm(13), target: .counterpart)
+        b.drill("Cable hole", x: y, y: "\(z) + Rail Height * 2", diameter: CX.mm(8), depth: CX.mm(19), target: .counterpart)
         b.type("LED Rail - 30 x 15 mm", [:], cost: 34.00, model: "LHR-3015", isDefault: true)
         b.type("LED Rail - 30 x 15 mm Warm", [:], numbers: ["Power": 1.8], cost: 36.00, model: "LHR-3015W")
         return b.build()
@@ -876,9 +870,6 @@ extension ComponentLibrary {
             b.box("Shelf \(k + 1) Rail", x: x, y: ("\(y.1) - 0.006 m", y.1), z: (z, "\(z) + 0.06 m"))
         }
         bayItemSymbols(&b, x: x, y: y, z: (z0, "\(z0) + Tower Height + 0.05 m"))
-        for f in ["0.2", "0.8"] {
-            b.drill("Tower slide screw", x: "Opening Width / 2", y: "0.02 m + Tower Depth * \(f)", diameter: CX.mm(4), depth: CX.mm(12))
-        }
         b.requires(.fitsDepth("Tower Depth + 0.03 m"))
         b.requires(.fitsHeight("Tower Height + 0.08 m"))
         b.type("Storage Tower - 150 x 500 mm", ["Opening Width": ComponentKit.mm(150)], cost: 140.00, model: "ST-150")
@@ -910,7 +901,6 @@ extension ComponentLibrary {
         b.symbol(.face, CBL.all, .polyline(ComponentKit.points([(s, CX.zero), (s, "Opening Depth - \(s)"), ("Opening Width", "Opening Depth - \(s)")]), closed: false))
         b.symCircle(.face, CBL.mediumFine, c: (s, "Opening Depth - \(s)"), r: "Rail Width * 0.8")
         b.symCircle(.side, CBL.coarse, c: (z, s), r: "Rail Width / 2")
-        b.drill("Corner hanger screw", x: s, y: "Opening Depth - \(s)", diameter: CX.mm(4), depth: CX.mm(13))
         b.type("Corner Rail - 36 x 36\"", [:], cost: 38.00, model: "CWR-3636", isDefault: true)
         b.type("Corner Rail - 48 x 36\"", ["Opening Width": ComponentKit.inch(48)], cost: 44.00, model: "CWR-4836")
         return b.build()
@@ -948,7 +938,6 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.all, c: c, r: "Pole Diameter / 2")
         b.symbol(.face, CBL.mediumFine, dashed: true, .arc(center: FamilyPoint(c.0, c.1), radius: "Carousel Diameter / 2 + 0.05 m", startDegrees: "20", sweepDegrees: "60"))
         b.symRect(.side, CBL.coarse, (CX.zero, "Opening Depth / 2 - Carousel Diameter / 2"), ("Pole Height", "Opening Depth / 2 + Carousel Diameter / 2"))
-        b.drill("Pole flange screw", x: c.0, y: c.1, diameter: CX.mm(5), depth: CX.mm(20))
         b.requires(.fitsWidth("Carousel Diameter + 0.05 m"))
         b.requires(.fitsDepth("Carousel Diameter + 0.05 m"))
         b.type("Carousel - 36\" Two Tier", [:], flags: ["Two Tiers": true], cost: 160.00, model: "RWC-36-2", isDefault: true)

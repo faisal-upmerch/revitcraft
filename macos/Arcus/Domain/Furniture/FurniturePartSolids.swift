@@ -382,7 +382,8 @@ public enum FurniturePartSolids {
             return out
         }
         let fam = FurnitureLegShapes.family(tv, height: l.height)
-        out.placed.append(PlacedLocalFamily(family: fam, x: x, y: y, z: z0, rotation: l.rotation * 180 / .pi, mirrored: false, span: (z0, z1), material: tv.material))
+        let rotation = l.rotation + (ComponentLegTypes.outwardTurn(tv, at: l.location, m) ?? 0) // COMPB: component legs face out of their corner
+        out.placed.append(PlacedLocalFamily(family: fam, x: x, y: y, z: z0, rotation: rotation * 180 / .pi, mirrored: false, span: (z0, z1), material: tv.material))
         return out
     }
 

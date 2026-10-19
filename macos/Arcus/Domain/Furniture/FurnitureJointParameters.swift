@@ -100,11 +100,35 @@ enum FurnitureJointParameters {
     }
     static let values: [P] = JointParameterKey.allCases.map(value)
 
+    // COMPB: the connector component the joint uses, picked from the Component Library's fasteners for its type.
+    static let byJointType = "By Joint Type"
+    static let fastener = P("furniture.joint.fastener", "Fastener", .choice([byJointType] + FurnitureJointFasteners.all.map(\.name)), .construction,
+                            tooltip: "The connector the joint uses (Component Library). By Joint Type drills the joint type's own sizes.",
+                            get: { e, ctx in joint(e, ctx.model).map { .text(FurnitureJointFasteners.fastener($0.parameters.fastener)?.name ?? byJointType) } },
+                            set: { e, v, ctx in
+                                guard let j = joint(e, ctx.model) else { throw ParameterError("The parts no longer join.") }
+                                let name = v.textValue ?? ""
+                                var p = e.furnitureJoint?.parameters ?? JointParameters()
+                                if name.isEmpty || name == byJointType {
+                                    p.fastener = nil
+                                } else {
+                                    guard let f = FurnitureJointFasteners.options(j.type).first(where: { $0.name == name }) else {
+                                        throw ParameterError("\(name) doesn't go in a \(j.type.rawValue) joint.")
+                                    }
+                                    p.fastener = f.key
+                                }
+                                e.furnitureJoint?.parameters = p
+                            },
+                            locked: { e, ctx in
+                                guard let j = joint(e, ctx.model) else { return "The parts no longer join." }
+                                return FurnitureJointFasteners.options(j.type).isEmpty ? "\(j.type.rawValue) joints have no connector to pick." : nil
+                            })
+
     static func instance(for e: Element) -> [P] {
         guard let d = e.furnitureJoint else { return [] }
         guard d.isPair else { return [parts, BuiltInCatalog.comments] }
-        return [jointType, through, byRule, ruleType] + values + [parts, BuiltInCatalog.comments] // FMG2: By Rule
+        return [jointType, through, byRule, ruleType] + values + [fastener, parts, BuiltInCatalog.comments] // FMG2: By Rule; COMPB: Fastener
     }
 
-    static var all: [P] { [cutSize, cutLength, cutWidth, jointType, through, byRule, ruleType, parts] + values } // FMG2: By Rule
+    static var all: [P] { [cutSize, cutLength, cutWidth, jointType, through, byRule, ruleType, parts] + values + [fastener] } // FMG2: By Rule; COMPB: Fastener
 }

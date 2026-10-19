@@ -519,6 +519,7 @@ public enum JointSolver {
         let thick = tHi.value - tLo.value
         let mid = (tLo.value + tHi.value) / 2
         let p = j.parameters
+        let fx = FurnitureJointFasteners.fastener(p.fastener) // COMPB: the connector component the joint uses
         let src = MachiningSource.joint(j.elementID ?? j.otherID)
         func box(along a: (PartValue, PartValue), _ t: (PartValue, PartValue), _ l: (PartValue, PartValue)) -> JBox {
             var lo = [PartValue(0), PartValue(0), PartValue(0)], hi = lo
@@ -534,7 +535,16 @@ public enum JointSolver {
 
         switch j.type {
         case .butt, .miter:
-            break
+            // COMPB: corner blocks and brackets along a butt joint, screwed into both parts' inside faces.
+            guard j.type == .butt, let fx, fx.style == .bracket else { break }
+            let ps = positions(lLo.value, lHi.value, FurnitureJointFasteners.spacing(fx, p))
+            sol.hardware[fx.name, default: 0] += ps.count
+            for s in ps {
+                sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: at(near.value - sign * fx.distance, innerFace, s), axis: intoO, diameter: fx.diameter * 0.6,
+                                                                                    depth: min(fx.length, thick - 0.002)), source: src, label: "Bracket screw"))
+                sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: at(near.value, innerFace + (innerMax ? 1 : -1) * fx.distance, s), axis: into,
+                                                                                      diameter: fx.diameter * 0.6, depth: min(fx.length, tThick - 0.002)), source: src, label: "Bracket screw"))
+            }
         case .dado, .rabbet, .groove, .mortiseTenon:
             let tenon = j.type == .mortiseTenon
             var d = housedDepth(p, tThick: tThick)
@@ -593,27 +603,43 @@ public enum JointSolver {
                                                     source: src, label: j.type.rawValue))
             }
         case .dowel, .camLock, .confirmat, .pocketScrew, .biscuit:
-            let ps = positions(lLo.value, lHi.value, p)
-            let label = hardwareName(j.type, p)
+            let ps = positions(lLo.value, lHi.value, fx.map { FurnitureJointFasteners.spacing($0, p) } ?? p) // COMPB
+            let label = fx?.name ?? hardwareName(j.type, p) // COMPB: counted under the component's name
             sol.hardware[label, default: 0] += ps.count
             for s in ps {
                 let c = at(near.value, mid, s)
                 switch j.type {
                 case .dowel:
-                    let len = p.length ?? 0.03, dia = p.diameter ?? 0.008
+                    let len = fx?.length ?? p.length ?? 0.03, dia = fx?.diameter ?? p.diameter ?? 0.008 // COMPB
                     let face = max(0.004, min(0.4 * len, tThick - 0.003))
                     sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: c, axis: into, diameter: dia, depth: face), source: src, label: "Dowel"))
                     sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: dia, depth: len - face + 0.001), source: src, label: "Dowel"))
                 case .camLock:
-                    let camD = p.diameter ?? 0.015
-                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: c, axis: into, diameter: 0.005, depth: min(0.011, tThick - 0.003)), source: src, label: "Cam bolt"))
-                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: 0.008, depth: 0.034), source: src, label: "Cam bolt hole"))
-                    let cam = at(near.value - sign * 0.024, innerFace, s)
-                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: cam, axis: intoO, diameter: camD, depth: min(0.0127, thick - 0.003)), source: src, label: "Cam lock"))
+                    // COMPB: the cam component's housing, drilling distance and bolt holes (FM6's 15 mm cam without one).
+                    let camD = fx?.diameter ?? p.diameter ?? 0.015
+                    let boltD = fx?.faceHole ?? 0.005, boltDepth = min(fx?.faceHoleDepth ?? 0.011, tThick - 0.003)
+                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: c, axis: into, diameter: boltD, depth: boltDepth), source: src, label: "Cam bolt"))
+                    if (fx?.edgeHole ?? 0.008) > 0 {
+                        sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: fx?.edgeHole ?? 0.008, depth: fx?.edgeHoleDepth ?? 0.034),
+                                                            source: src, label: "Cam bolt hole"))
+                    }
+                    let cam = at(near.value - sign * (fx?.distance ?? 0.024), innerFace, s)
+                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: cam, axis: intoO, diameter: camD, depth: min(fx?.length ?? 0.0127, thick - 0.003)),
+                                                        source: src, label: "Cam lock"))
                 case .confirmat:
-                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: at(far.value, mid, s), axis: into * -1, diameter: p.diameter ?? 0.007, depth: tThick),
+                    if let fx, fx.style == .boltAndNut {
+                        // COMPB: a furniture bolt through the through part into the other part's end, and its cross dowel or barrel nut.
+                        sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: at(far.value, mid, s), axis: into * -1, diameter: fx.faceHole, depth: tThick),
+                                                            source: src, label: "Bolt clearance"))
+                        sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: fx.edgeHole, depth: fx.edgeHoleDepth), source: src, label: "Bolt hole"))
+                        sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: at(near.value - sign * fx.distance, innerFace, s), axis: intoO, diameter: fx.diameter,
+                                                                                            depth: min(fx.length, thick)), source: src, label: fx.family))
+                        break
+                    }
+                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .drill(center: at(far.value, mid, s), axis: into * -1, diameter: fx?.diameter ?? p.diameter ?? 0.007, depth: tThick),
                                                         source: src, label: "Confirmat"))
-                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: 0.005, depth: max(0.02, 0.05 - tThick)), source: src, label: "Confirmat pilot"))
+                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: c, axis: into * -1, diameter: fx?.faceHole ?? 0.005, depth: max(0.02, (fx?.length ?? 0.05) - tThick)),
+                                                        source: src, label: "Confirmat pilot"))
                 case .pocketScrew:
                     let ang = max(5 * .pi / 180, min(p.angle ?? 15 * .pi / 180, 45 * .pi / 180))
                     let run = (thick / 2) / tan(ang)
@@ -622,12 +648,14 @@ public enum JointSolver {
                     sol.machining.append(MachiningEntry(partID: j.otherID, op: .drill(center: entry, axis: dir, diameter: p.diameter ?? 0.0095, depth: (run * run + thick * thick / 4).squareRoot()),
                                                         source: src, label: "Pocket"))
                 case .biscuit:
-                    let half = 0.0635 / 2
+                    // COMPB: a click clip's slot from its length, thickness and slot depth (FM6's #20 biscuit without one).
+                    let half = (fx?.length ?? 0.0635) / 2, width = fx?.diameter ?? 0.004, deep = fx?.faceHoleDepth ?? 0.0127
+                    let slot = fx == nil ? "Biscuit slot" : "Clip slot"
                     let lu = L.unit
-                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .groove(start: c - lu * half, end: c + lu * half, axis: into, width: 0.004, depth: min(0.0127, tThick - 0.003)),
-                                                        source: src, label: "Biscuit slot"))
-                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .groove(start: c - lu * half, end: c + lu * half, axis: into * -1, width: 0.004, depth: 0.0127),
-                                                        source: src, label: "Biscuit slot"))
+                    sol.machining.append(MachiningEntry(partID: j.throughID, op: .groove(start: c - lu * half, end: c + lu * half, axis: into, width: width, depth: min(deep, tThick - 0.003)),
+                                                        source: src, label: slot))
+                    sol.machining.append(MachiningEntry(partID: j.otherID, op: .groove(start: c - lu * half, end: c + lu * half, axis: into * -1, width: width, depth: deep),
+                                                        source: src, label: slot))
                 default: break
                 }
             }

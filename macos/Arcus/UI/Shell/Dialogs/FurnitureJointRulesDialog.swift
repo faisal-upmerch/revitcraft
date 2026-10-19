@@ -119,13 +119,30 @@ struct JointRulesEditor: View {
             }
             .labelsHidden().controlSize(.small).frame(width: 120)
             HStack(spacing: 8) {
-                ForEach(r.type.parameterKeys.filter { !$0.isAngle && !$0.isCount }, id: \.self) { k in sizeField(pair, r, k) }
-                if r.type.parameterKeys.isEmpty { Text("—").foregroundStyle(.tertiary) }
+                fastenerPicker(pair, r) // COMPB
+                ForEach(r.type.parameterKeys.filter { !$0.isAngle && !$0.isCount && !(r.parameters.fastener != nil && [.diameter, .length].contains($0)) }, id: \.self) { k in
+                    sizeField(pair, r, k)
+                }
+                if r.type.parameterKeys.isEmpty && FurnitureJointFasteners.options(r.type).isEmpty { Text("—").foregroundStyle(.tertiary) }
                 Spacer(minLength: 0)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, 10).padding(.vertical, 5)
+    }
+
+    /// COMPB: the rule's connector component (By Joint Type, or a Component Library fastener for the joint type).
+    @ViewBuilder
+    func fastenerPicker(_ pair: JointPairKind, _ r: JointRule) -> some View {
+        let options = FurnitureJointFasteners.options(r.type)
+        if !options.isEmpty {
+            Picker("", selection: Binding(get: { r.parameters.fastener ?? "" }, set: { k in update(pair) { $0.parameters.fastener = k.isEmpty ? nil : k } })) {
+                Text("By Joint Type").tag("")
+                ForEach(options, id: \.key) { Text($0.name).tag($0.key) }
+            }
+            .labelsHidden().controlSize(.small).frame(width: 190)
+            .help("The connector this rule's joints use (Component Library)")
+        }
     }
 
     /// Column-friendly names (the Options Bar and Properties use the full ones).

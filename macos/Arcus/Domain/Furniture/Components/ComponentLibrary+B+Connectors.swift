@@ -41,6 +41,7 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.all, c: ("Cam Distance", CX.zero), r: "Cam Diameter / 2")
         b.symCross(.face, CBL.coarse, c: ("Cam Distance", CX.zero), s: "Cam Diameter * 0.35")
         b.symLine(.face, CBL.mediumFine, ("Cam Distance - Bolt Length", CX.zero), ("Cam Distance", CX.zero), dashed: true)
+        b.symRect(.side, CBL.coarse, ("-Cam Depth", "-Cam Diameter / 2"), (CX.zero, "Cam Diameter / 2"))
         b.drill("Cam lock", x: "Cam Distance", y: CX.zero, diameter: "Cam Diameter", depth: "Cam Depth")
         b.edgeDrill("Cam bolt hole", x: CX.zero, z: "-Cam Depth / 2", diameter: "Edge Hole Diameter", depth: "Edge Hole Depth")
         b.drill("Cam bolt", x: CX.zero, y: CX.zero, diameter: "Bolt Hole Diameter", depth: "Bolt Hole Depth", target: .counterpart)
@@ -98,6 +99,7 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.coarse, c: (CX.zero, "Drilling Distance"), r: "Head Diameter / 2")
         b.edgeDrill("Cam dowel hole", x: CX.zero, z: z, diameter: "Edge Hole Diameter", depth: "Drilling Distance + 0.002 m")
         b.drill("Cam dowel spigot", x: CX.zero, y: CX.zero, diameter: "Spigot Diameter", depth: "Spigot Length", target: .counterpart)
+        b.symRect(.top, CBL.coarse, ("-Head Diameter / 2", "-\(pt) / 2 - Head Diameter / 2"), ("Head Diameter / 2", "-\(pt) / 2 + Head Diameter / 2"))
         let mm = ComponentKit.mm
         b.type("Cam Dowel - 24 mm", ["Drilling Distance": mm(24)], flags: ["Double Ended": false], cost: 0.12, model: "CD-24", description: "Cam dowel, 24 mm drilling distance, 5 mm spigot")
         b.type("Cam Dowel - 34 mm", ["Drilling Distance": mm(34), "Spigot Length": mm(13)], flags: ["Double Ended": false], cost: 0.14, model: "CD-34",
@@ -145,6 +147,7 @@ extension ComponentLibrary {
         b.edgeDrill("Cam bolt hole", x: CX.zero, z: "-\(pt) / 2", diameter: "Edge Hole Diameter", depth: "Drilling Distance + 0.002 m")
         b.drill("Cam bolt", x: CX.zero, y: CX.zero, diameter: "Bolt Hole Diameter", depth: "Bolt Hole Depth", target: .counterpart)
         b.requires(.hostThickness(min: "Housing Depth + 0.003 m", max: nil))
+        b.symRect(.top, CBL.coarse, ("-Rim Diameter / 2", "-Housing Depth"), ("Rim Diameter / 2", CX.mm(0.8)))
         let mm = ComponentKit.mm
         b.type("Cam and Bolt - 12 mm", ["Housing Diameter": mm(12), "Housing Depth": mm(9.5), "Rim Diameter": mm(13.5), "Drilling Distance": mm(22), "Bolt Length": mm(28),
                                        "Bolt Diameter": mm(6), "Edge Hole Diameter": mm(7), "Panel Thickness": mm(16)],
@@ -189,6 +192,7 @@ extension ComponentLibrary {
         b.symCross(.face, CBL.coarse, c: c, s: "Housing Diameter * 0.3")
         b.drill("Housing bore", x: c.0, y: c.1, diameter: "Housing Diameter", depth: "Bore Depth")
         b.drill("Connector bolt", x: CX.zero, y: CX.zero, diameter: "Bolt Diameter", depth: "Bolt Length", target: .counterpart)
+        b.symRect(.top, CBL.coarse, ("-Housing Diameter / 2", "-Bore Depth"), ("Housing Diameter / 2", "Housing Height - Bore Depth"))
         let mm = ComponentKit.mm
         b.type("Surface Cam - 20 mm", [:], flags: ["Double": false], cost: 0.65, model: "SC-20", description: "Surface cam connector, 20 mm housing, single")
         b.type("Surface Cam - 20 mm Double", ["Bolt Length": mm(20)], flags: ["Double": true], cost: 1.10, model: "SC-20D", description: "Surface cam connector pair across a divider")
@@ -224,6 +228,7 @@ extension ComponentLibrary {
         b.edgeDrill("Eccentric pin hole", x: CX.zero, z: "-Body Depth / 2", diameter: "Pin Diameter + 0.001 m", depth: "Center Distance")
         b.drill("Eccentric pin", x: CX.zero, y: CX.zero, diameter: "Pin Diameter", depth: "Pin Length - Center Distance", target: .counterpart)
         b.requires(.hostThickness(min: "Body Depth + 0.004 m", max: nil))
+        b.symRect(.top, CBL.coarse, ("-Body Diameter / 2", "-Body Depth"), ("Body Diameter / 2", CX.zero))
         let mm = ComponentKit.mm
         b.type("Eccentric - 20 mm", ["Body Diameter": mm(20), "Body Depth": mm(12), "Center Distance": mm(16), "Pin Diameter": mm(5), "Pin Length": mm(24), "Panel Thickness": mm(19)],
                cost: 0.70, model: "EC-20", description: "Eccentric connector, 20 mm bore, 5 mm pin")
@@ -254,6 +259,7 @@ extension ComponentLibrary {
         b.symRect(.face, CBL.mediumFine, ("-Length / 2", "-Diameter / 2"), ("Length / 2", "Diameter / 2"))
         b.drill("Dowel", x: CX.zero, y: CX.zero, diameter: "Diameter", depth: "Length / 2 + 0.001 m")
         b.drill("Dowel", x: CX.zero, y: CX.zero, diameter: "Diameter", depth: "Length / 2 + 0.001 m", target: .counterpart)
+        b.symCircle(.side, CBL.coarse, r: "Diameter / 2")
         return b.build()
     }
 
@@ -290,6 +296,7 @@ extension ComponentLibrary {
         b.symRect(.face, CBL.all, ("-Diameter / 2", "-Length / 2"), ("Diameter / 2", "Length / 2"))
         b.drill("Metal dowel", x: CX.zero, y: CX.zero, diameter: "Diameter", depth: "Length / 2 + 0.001 m")
         b.drill("Metal dowel", x: CX.zero, y: CX.zero, diameter: "Diameter", depth: "Length / 2 + 0.001 m", target: .counterpart)
+        b.symCircle(.top, CBL.coarse, r: "Diameter / 2")
         let mm = ComponentKit.mm
         b.type("Metal Dowel - 5 x 30 mm", ["Diameter": mm(5), "Length": mm(30)], flags: ["Knurled": false, "Vertical": false], cost: 0.09, model: "MD-530")
         b.type("Metal Dowel - 6 x 30 mm", [:], flags: ["Knurled": false, "Vertical": false], cost: 0.11, model: "MD-630", isDefault: true)
@@ -318,6 +325,7 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.coarse, r: "Head Diameter / 2")
         b.drill("Confirmat", x: CX.zero, y: CX.zero, diameter: "Diameter", depth: "Host Thickness", through: true)
         b.drill("Confirmat pilot", x: CX.zero, y: CX.zero, diameter: "Pilot Diameter", depth: "Length - Host Thickness", target: .counterpart)
+        b.symCircle(.side, CBL.coarse, r: "Head Diameter / 2")
         let mm = ComponentKit.mm
         b.type("5 x 40 mm", ["Diameter": mm(5), "Length": mm(40), "Head Diameter": mm(8), "Pilot Diameter": mm(3.5), "Head Height": mm(5), "Countersink Diameter": mm(8)],
                flags: ["Vertical": false], cost: 0.07, model: "CF-540", description: "Confirmat screw 5 x 40 mm, for 12-16 mm panels")
@@ -361,6 +369,7 @@ extension ComponentLibrary {
         b.symRect(.top, CBL.mediumFine, ("-Diameter / 2", "-Length"), ("Diameter / 2", CX.zero), dashed: true)
         b.drill("Bolt clearance", x: CX.zero, y: CX.zero, diameter: "Clearance Hole Diameter", depth: "Host Thickness", through: true)
         b.drill("Bolt hole", x: CX.zero, y: CX.zero, diameter: "Clearance Hole Diameter", depth: "Length - Host Thickness", target: .counterpart)
+        b.symRect(.top, CBL.coarse, ("-Head Diameter / 2", "-Length"), ("Head Diameter / 2", "Head Height"))
         let mm = ComponentKit.mm
         b.type("M6 x 30 mm", ["Length": mm(30)], cost: 0.18, model: "FB-M630")
         b.type("M6 x 50 mm", [:], cost: 0.22, model: "FB-M650", isDefault: true)
@@ -394,6 +403,7 @@ extension ComponentLibrary {
         b.symLine(.face, CBL.coarse, ("-Diameter * 0.45", "Bolt Distance"), ("Diameter * 0.45", "Bolt Distance"))
         b.drill("Barrel nut bore", x: CX.zero, y: "Bolt Distance", diameter: "Diameter", depth: "Length + 0.001 m")
         b.edgeDrill("Bolt hole", x: CX.zero, z: "-Length / 2", diameter: "Diameter * 0.7", depth: "Bolt Distance + Diameter / 2")
+        b.symRect(.top, CBL.coarse, ("-Diameter / 2", "-Length"), ("Diameter / 2", CX.zero))
         let mm = ComponentKit.mm
         b.type("M6 x 10 x 13 mm", [:], cost: 0.15, model: "BN-M613", isDefault: true)
         b.type("M8 x 13 x 16 mm", ["Diameter": mm(13), "Length": mm(16), "Bolt Distance": mm(25)], texts: ["Thread": "M8"], cost: 0.22, model: "BN-M816")
@@ -427,6 +437,7 @@ extension ComponentLibrary {
         b.symLine(.face, CBL.coarse, ("-Head Diameter * 0.45", "Bolt Distance"), ("Head Diameter * 0.45", "Bolt Distance"))
         b.drill("Cross dowel bore", x: CX.zero, y: "Bolt Distance", diameter: "Diameter", depth: "Length + 0.001 m")
         b.edgeDrill("Bolt hole", x: CX.zero, z: "-Length / 2", diameter: "Diameter * 0.7", depth: "Bolt Distance + Diameter / 2")
+        b.symRect(.top, CBL.coarse, ("-Head Diameter / 2", "-Length"), ("Head Diameter / 2", CX.mm(1)))
         let mm = ComponentKit.mm
         b.type("M6 x 10 x 20 mm", [:], cost: 0.20, model: "XD-M620", isDefault: true)
         b.type("M8 x 12 x 24 mm", ["Diameter": mm(12), "Length": mm(24), "Head Diameter": mm(13.5), "Bolt Distance": mm(30)], texts: ["Thread": "M8"], cost: 0.30, model: "XD-M824")
@@ -460,6 +471,7 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.all, r: "Outer Diameter / 2")
         b.symCircle(.face, CBL.mediumFine, r: "Bore Diameter / 2")
         b.drill("Insert pilot", x: CX.zero, y: CX.zero, diameter: "Pilot Diameter", depth: "Length + 0.002 m")
+        b.symRect(.top, CBL.coarse, ("-Flange Diameter / 2", "-Length"), ("Flange Diameter / 2", CX.mm(1)))
         let mm = ComponentKit.mm
         b.type("M6 x 13 mm", [:], flags: ["Flanged": true], cost: 0.25, model: "TI-M613", isDefault: true)
         b.type("M8 x 15 mm", ["Outer Diameter": mm(12), "Length": mm(15), "Flange Diameter": mm(14), "Bore Diameter": mm(8), "Pilot Diameter": mm(10)],
@@ -570,6 +582,7 @@ extension ComponentLibrary {
         b.drill("T-bracket screw", x: "-Width * 0.38", y: CX.zero, diameter: "Screw Diameter * 0.6", depth: "Screw Length")
         b.drill("T-bracket screw", x: "Width * 0.38", y: CX.zero, diameter: "Screw Diameter * 0.6", depth: "Screw Length")
         b.drill("T-bracket screw", x: CX.zero, y: "Height * 0.7", diameter: "Screw Diameter * 0.6", depth: "Screw Length")
+        b.symRect(.top, CBL.coarse, ("-Width / 2", CX.zero), ("Width / 2", "Thickness"))
         let mm = ComponentKit.mm
         b.type("T-Bracket - 50 x 50 mm", ["Width": mm(50), "Height": mm(50), "Bar Width": mm(13)], cost: 0.22, model: "TB-50")
         b.type("T-Bracket - 75 x 75 mm", [:], cost: 0.30, model: "TB-75", isDefault: true)
@@ -643,6 +656,7 @@ extension ComponentLibrary {
         for f in ["-0.4", "-0.15", "0.15", "0.4"] {
             b.drill("Plate screw", x: "Length * \(f)", y: CX.zero, diameter: "Screw Diameter * 0.6", depth: "Screw Length")
         }
+        b.symRect(.top, CBL.coarse, ("-Length / 2", CX.zero), ("Length / 2", "Thickness"))
         let mm = ComponentKit.mm
         b.type("Joining Plate - 50 x 16 mm", ["Length": mm(50), "Width": mm(16), "Thickness": mm(1.2)], cost: 0.15, model: "JP-50")
         b.type("Joining Plate - 75 x 19 mm", [:], cost: 0.20, model: "JP-75", isDefault: true)
@@ -676,6 +690,7 @@ extension ComponentLibrary {
         for (x, y) in [("-Hole Pitch * 1.5", "-Hole Pitch"), ("Hole Pitch * 1.5", "-Hole Pitch"), ("-Hole Pitch * 1.5", "Hole Pitch"), ("Hole Pitch * 1.5", "Hole Pitch"), (CX.zero, CX.zero)] {
             b.drill("Plate screw", x: x, y: y, diameter: "Screw Diameter * 0.6", depth: "Screw Length")
         }
+        b.symRect(.top, CBL.coarse, ("-Length / 2", CX.zero), ("Length / 2", "Thickness"))
         let mm = ComponentKit.mm
         b.type("Connector Plate - 80 x 50 mm", ["Length": mm(80), "Width": mm(50), "Hole Pitch": mm(15)], cost: 0.30, model: "CP-8050")
         b.type("Connector Plate - 100 x 75 mm", [:], cost: 0.42, model: "CP-10075", isDefault: true)
@@ -824,6 +839,7 @@ extension ComponentLibrary {
         b.symCircle(.face, CBL.mediumFine, r: "Magnet Diameter / 2")
         b.drill("Magnet cup", x: CX.zero, y: CX.zero, diameter: "Cup Diameter", depth: "Cup Depth")
         b.drill("Striker", x: CX.zero, y: CX.zero, diameter: "Cup Diameter", depth: "Striker Thickness", target: .counterpart)
+        b.symRect(.top, CBL.coarse, ("-Cup Diameter / 2", "-Cup Depth"), ("Cup Diameter / 2", "0.0005 m + Striker Thickness"))
         let mm = ComponentKit.mm
         b.type("Magnetic Connector - 10 mm", [:], numbers: ["Holding Force": 4], cost: 0.55, model: "MC-10", isDefault: true)
         b.type("Magnetic Connector - 13 mm", ["Magnet Diameter": mm(13), "Cup Diameter": mm(15), "Cup Depth": mm(8)], numbers: ["Holding Force": 7], cost: 0.75, model: "MC-13")
@@ -888,6 +904,7 @@ extension ComponentLibrary {
         b.symRect(.face, CBL.coarse, ("-Body Length / 2", "-Body Diameter / 2"), ("Body Length / 2", "Body Diameter / 2"))
         b.edgeDrill("Bolt hole", x: CX.zero, z: CX.zero, diameter: "Diameter + 0.001 m", depth: "(Minimum Length + Adjustment) / 2")
         b.edgeDrill("Bolt hole", x: CX.zero, z: CX.zero, diameter: "Diameter + 0.001 m", depth: "(Minimum Length + Adjustment) / 2", target: .counterpart)
+        b.symRect(.top, CBL.coarse, ("-(Minimum Length + Extension) / 2", "-Body Diameter / 2"), ("(Minimum Length + Extension) / 2", "Body Diameter / 2"))
         let mm = ComponentKit.mm
         b.type("Adjustable Bolt - M6 50-70 mm", [:], cost: 0.85, model: "ADB-M650", isDefault: true)
         b.type("Adjustable Bolt - M8 70-100 mm", ["Minimum Length": mm(70), "Adjustment": mm(30), "Diameter": mm(8), "Body Diameter": mm(14), "Body Length": mm(26)],
@@ -922,6 +939,7 @@ extension ComponentLibrary {
         b.groove("Worktop connector bolt slot", from: (CX.zero, CX.zero), to: (CX.zero, "Bolt Length / 2"), width: "Diameter + 0.002 m", depth: "Pocket Depth / 2 + Diameter / 2")
         b.drill("Worktop connector pocket", x: CX.zero, y: "Bolt Length / 2", diameter: "Pocket Diameter", depth: "Pocket Depth", target: .counterpart)
         b.requires(.hostThickness(min: CX.mm(28), max: nil))
+        b.symRect(.top, CBL.coarse, ("-Pocket Diameter / 2", "-Pocket Depth"), ("Pocket Diameter / 2", CX.zero))
         let mm = ComponentKit.mm
         b.type("Worktop Connector - 65 mm", ["Bolt Length": mm(65), "Diameter": mm(6), "Pocket Depth": mm(18)], cost: 0.95, model: "WC-65")
         b.type("Worktop Connector - 150 mm", [:], cost: 1.40, model: "WC-150", isDefault: true)

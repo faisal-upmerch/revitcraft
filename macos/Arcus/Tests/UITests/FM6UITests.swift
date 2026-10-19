@@ -128,7 +128,7 @@ struct FM6UITests {
             if suffix == "light" { Self.draw(state.model, state.model[front.id]!, "fm6-joint-markers-front", overlay: tool.preview.primitives) }
             state.cancelTool()
             // Joint Rules.
-            try await Self.render(FurnitureJointRulesDialog(state: state), size: CGSize(width: 1060, height: 640), "ui-joint-rules-\(suffix)")
+            try await Self.render(FurnitureJointRulesDialog(state: state), size: CGSize(width: 1230, height: 640), "ui-joint-rules-\(suffix)")
         }
         NSApp.appearance = nil
     }

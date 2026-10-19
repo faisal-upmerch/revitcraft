@@ -64,11 +64,16 @@ public struct JointParameters: Hashable, Codable, Sendable {
     /// Mortise and tenon: the shoulders and the tenon's thickness (nil: a third of the rail).
     public var shoulder: Double?
     public var tenonThickness: Double?
+    /// COMPB: the connector component the joint uses ("<definition id>|<type name>", see FurnitureJointFasteners); nil
+    /// = the joint type's own fastener (FM6's sizes).
+    public var fastener: String?
 
     public init(depth: Double? = nil, clearance: Double? = nil, diameter: Double? = nil, length: Double? = nil, spacing: Double? = nil,
-                edgeDistance: Double? = nil, count: Int? = nil, angle: Double? = nil, shoulder: Double? = nil, tenonThickness: Double? = nil) {
+                edgeDistance: Double? = nil, count: Int? = nil, angle: Double? = nil, shoulder: Double? = nil, tenonThickness: Double? = nil,
+                fastener: String? = nil) {
         self.depth = depth; self.clearance = clearance; self.diameter = diameter; self.length = length; self.spacing = spacing
         self.edgeDistance = edgeDistance; self.count = count; self.angle = angle; self.shoulder = shoulder; self.tenonThickness = tenonThickness
+        self.fastener = fastener // COMPB
     }
 
     static let inch = 0.0254
@@ -94,7 +99,7 @@ public struct JointParameters: Hashable, Codable, Sendable {
     public func over(_ base: JointParameters) -> JointParameters {
         JointParameters(depth: depth ?? base.depth, clearance: clearance ?? base.clearance, diameter: diameter ?? base.diameter, length: length ?? base.length,
                         spacing: spacing ?? base.spacing, edgeDistance: edgeDistance ?? base.edgeDistance, count: count ?? base.count, angle: angle ?? base.angle,
-                        shoulder: shoulder ?? base.shoulder, tenonThickness: tenonThickness ?? base.tenonThickness)
+                        shoulder: shoulder ?? base.shoulder, tenonThickness: tenonThickness ?? base.tenonThickness, fastener: fastener ?? base.fastener) // COMPB
     }
 
     public func value(_ k: JointParameterKey) -> Double? {

@@ -17,6 +17,8 @@ extension ComponentLibrary {
 
     /// The opening-frame parameters every bay item has: the bay's width and depth and the height it's mounted at.
     static func openingParams(_ b: inout ComponentBuilder, width: Double = ComponentKit.inch(22.5), depth: Double = ComponentKit.inch(22), mount: Double = 0) {
+        // Placed in a bay on its left inside face: mounting x runs into the depth and y up from the bay's bottom.
+        b.host([.bay], faces: [.left], align: .full)
         b.length("Opening Width", width, instance: true, group: .placement, min: ComponentKit.inch(6), max: ComponentKit.inch(60))
         b.length("Opening Depth", depth, instance: true, group: .placement, min: ComponentKit.inch(6), max: ComponentKit.inch(30))
         b.length("Mount Height", mount, instance: true, group: .placement)
@@ -30,11 +32,11 @@ extension ComponentLibrary {
         }
     }
 
-    /// Slide screws in both sides at 32 mm-system positions from 37 mm.
+    /// Slide screws in the sides at 32 mm-system positions from 37 mm (the left side's; the right side's are mirrored,
+    /// ComponentLibrary+B+Machining.swift).
     static func slideScrews(_ b: inout ComponentBuilder, z: String, n: Int = 3) {
         for k in 0..<n {
             let y = "0.037 m + \(LX.num(Double(k) * 0.128)) m"
-            b.drill("Slide screw", x: y, y: z, diameter: CX.mm(4), depth: CX.mm(12))
             b.drill("Slide screw", x: y, y: z, diameter: CX.mm(4), depth: CX.mm(12), target: .counterpart)
         }
     }
@@ -551,11 +553,6 @@ extension ComponentLibrary {
         b.symCross(.face, CBL.coarse, c: c, s: "Shelf Diameter * 0.1")
         b.symCircle(.face, CBL.mediumFine, c: c, r: "Bearing Diameter / 2", dashed: true)
         b.symRect(.side, CBL.coarse, (z0, "Opening Depth / 2 - Shelf Diameter / 2"), ("\(z0) + Bearing Height + Shelf Thickness + Rim Height", "Opening Depth / 2 + Shelf Diameter / 2"))
-        for k in 0..<4 {
-            let a = Double(k) * .pi / 2
-            b.drill("Turntable screw", x: "Opening Width / 2 + Bearing Diameter * \(LX.num(0.4 * cos(a)))", y: "Opening Depth / 2 + Bearing Diameter * \(LX.num(0.4 * sin(a)))",
-                    diameter: CX.mm(3), depth: CX.mm(10))
-        }
         b.requires(.fitsWidth("Shelf Diameter + 0.01 m"))
         b.requires(.fitsDepth("Shelf Diameter + 0.01 m"))
         b.type("Rotating Shelf - 16\"", ["Shelf Diameter": ComponentKit.inch(16)], cost: 22.00, model: "RS-16")
@@ -596,7 +593,7 @@ extension ComponentLibrary {
         b.symbol(.face, CBL.all, .polyline(ComponentKit.points(quarter), closed: true))
         b.symCircle(.face, CBL.mediumFine, c: ("Shelf Radius * 0.7071", "Opening Depth - Shelf Radius * 0.7071"), r: "Post Diameter / 2")
         b.symRect(.side, CBL.coarse, ("Mount Height", "Opening Depth - Shelf Radius"), ("Mount Height + Shelf Spacing * 2 + Shelf Thickness", "Opening Depth"))
-        for k in 0..<3 { b.drill("Shelf cleat screw", x: CX.mm(10), y: "Mount Height + Shelf Spacing * \(k)", diameter: CX.mm(4), depth: CX.mm(25)) }
+        for k in 0..<3 { b.drill("Shelf cleat screw", x: "Opening Depth - 0.03 m", y: "Mount Height + Shelf Spacing * \(k) - 0.01 m", diameter: CX.mm(4), depth: CX.mm(25), target: .counterpart) }
         b.type("Corner Shelves - 10\" x 3", ["Shelf Radius": ComponentKit.inch(10), "Shelf Spacing": ComponentKit.inch(10)], flags: ["Fourth Shelf": false], cost: 28.00, model: "CSS-103")
         b.type("Corner Shelves - 12\" x 3", [:], flags: ["Fourth Shelf": false], cost: 34.00, model: "CSS-123", isDefault: true)
         b.type("Corner Shelves - 12\" x 4", [:], flags: ["Fourth Shelf": true], cost: 42.00, model: "CSS-124")
