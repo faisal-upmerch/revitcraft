@@ -41,7 +41,7 @@ struct POLISHSymbolTests {
     func ribbonOwnSymbolsResolve() {
         let modes = ["Line", "Rectangle", "Arc", "Circle", "Polygon", "Pick Lines", "Pick Walls", "Pick Panels", "Inscribed Polygon", "Circumscribed Polygon",
                      "Tangent Arc", "Fillet Arc", "Start-End-Radius Arc", "Center-ends Arc", "Tangent End Arc", "Spline", "Ellipse", "Partial Ellipse", "Other"]
-        let own = modes.map(RibbonContent.drawSymbol) + FamilyPreviewMode.allCases.map(\.symbol)
+        let own = modes.map(RibbonContent.drawSymbol) + FamilyPreviewMode.allCases.map(\.symbol) + RibbonCollapse.ownSymbols
             + ["cursorarrow", "arrow.up.left.and.down.right.magnifyingglass", "cube.transparent", "squareshape.split.2x2.dotted", "square.and.arrow.down",
                "equal", "ruler.fill", "scribble", "circle.lefthalf.filled", "tag", "eye", "eye.slash", "xmark.rectangle", "trash", "plus.square.on.square",
                "xmark.circle", "plus", "pencil", "minus", "checkmark", "xmark", "line.diagonal", "rectangle", "arrow.up.and.down", "arrow.uturn.backward",

@@ -426,16 +426,16 @@ struct RibbonView: View {
         let _ = state.session.selection.ids
         let tool = state.activeTool
         let contextualShown = state.ribbonShowsContextual && RibbonContent.contextualTitle(state) != nil
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 4) {
-                if contextualShown {
-                    scheduleOrContextualPanels(tool: tool) // BL-SCHED
-                } else {
-                    ForEach(RibbonContent.panels(state.ribbonTab, mode: state.mode)) { p in panelView(p) } // FM3: per mode
-                }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 5)
+        let frames = RibbonFrames.of(state)
+        // POLISH: panels shrink and collapse from the right to fit the strip (RibbonCollapse.swift), instead of scrolling.
+        RibbonPanelRow(spacing: 4) {
+            rowPanels(contextual: contextualShown, tool: tool)
+            RibbonOverflowButton { rowPanels(contextual: contextualShown, tool: tool) } // POLISH: when even collapsed panels don't fit
         }
+        .ribbonRowFrame(frames)
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .environment(\.ribbonFrames, frames)
         .frame(height: Tokens.ribbonPanelHeight)
         .onChange(of: state.toolRevision) { _, _ in if state.activeTool != nil { state.ribbonShowsContextual = true } else { contextEnded() } }
         .onChange(of: state.session.selection.ids) { _, ids in if !ids.isEmpty { state.ribbonShowsContextual = true } else { contextEnded() } }
@@ -444,13 +444,30 @@ struct RibbonView: View {
         .accessibilityLabel("Ribbon")
     }
 
+    /// The panels of the chosen tab, or of the contextual tab.
+    @ViewBuilder func rowPanels(contextual: Bool, tool: (any InteractiveTool)?) -> some View {
+        if contextual {
+            scheduleOrContextualPanels(tool: tool) // BL-SCHED
+        } else {
+            ForEach(Array(RibbonContent.panels(state.ribbonTab, mode: state.mode).enumerated()), id: \.element.id) { i, p in panelView(p, index: i) } // FM3: per mode
+        }
+    }
+
     private func contextEnded() {
         if stayOnModify && state.activeTool == nil && state.session.selection.isEmpty { state.ribbonTab = .modify }
     }
 
-    @ViewBuilder func panelView(_ p: RibbonPanel, contextual: Bool = false) -> some View {
-        if !contextual, p.title == "Design Options" { DesignOptionsRibbonPanel(panel: p, state: state) } // F11: with the active option combo
-        else { RibbonPanelView(panel: p, state: state, contextual: contextual) }
+    @ViewBuilder func panelView(_ p: RibbonPanel, contextual: Bool = false, index: Int? = nil) -> some View {
+        let key = "\(index.map(String.init) ?? "c") \(p.title)"
+        let symbol = p.items.first.map { CommandCatalog.info($0.id).symbol } ?? "square.grid.2x2"
+        if !contextual, p.title == "Design Options" { // F11: with the active option combo
+            DesignOptionsRibbonPanel(panel: p, state: state).ribbonCollapsible(key, title: p.title, symbol: symbol, tint: p.tint)
+        } else {
+            // POLISH: as designed, then compact (large buttons small), then icons, then collapsed into its button.
+            CollapsibleRibbonPanel(key: key, title: p.title, symbol: symbol, tint: p.tint, contextual: contextual) { d in
+                RibbonPanelView(panel: p, state: state, contextual: contextual, density: d)
+            }
+        }
     }
 
     @ViewBuilder func contextualPanels(tool: (any InteractiveTool)?) -> some View {
@@ -461,14 +478,15 @@ struct RibbonView: View {
             if let mode = tool.options.first(where: { $0.id == "mode" }), case .choice(let modes) = mode.kind {
                 DrawPanel(state: state, tool: tool, modes: modes, current: mode.value.textValue ?? "",
                           leading: RibbonContent.f2DrawLeading(tool), trailing: RibbonContent.f2DrawTrailing(tool)) // F2
+                    .ribbonCollapsible("c Draw", title: "Draw", symbol: "pencil.line", tint: RibbonContent.build, contextual: true) // POLISH
             }
             if tool.isSketchMode {
-                ModePanel(state: state)
+                ModePanel(state: state) // POLISH: Finish and Cancel never collapse
             }
             // The Level tool's plan-view options get their own panel (with Plan View Types); other tools' ribbon options
             // use the generic panel.
-            if let level = tool as? LevelTool { LevelPlanViewsPanel(state: state, tool: level) } // BL-BROWSER
-            else { RibbonToolOptionsPanel(state: state, tool: tool) } // BL-KEYS: 2026 arrangement of tool options
+            if let level = tool as? LevelTool { LevelPlanViewsPanel(state: state, tool: level).ribbonCollapsible("c Plan Views", title: "Plan Views", tint: RibbonContent.datum, contextual: true) } // BL-BROWSER
+            else { RibbonToolOptionsPanel(state: state, tool: tool).ribbonCollapsible("c Options", title: ToolOptionPlacement.panelTitle(tool.commandID), symbol: "slider.horizontal.3", contextual: true) } // BL-KEYS: 2026 arrangement of tool options
             ForEach(RibbonContent.f2ToolPanels(tool, state)) { p in panelView(p, contextual: true) } // F2: stair, roof, column panels
             ForEach(RibbonContent.fm6ToolPanels(tool)) { p in panelView(p, contextual: true) } // FM6: Joint Rules while the Joint tool runs
             if [.door, .window, .component].contains(tool.commandID) {
@@ -482,7 +500,7 @@ struct RibbonView: View {
                                       tint: RibbonContent.rooms), contextual: true)
             }
         } else {
-            if state.keys.pendingCommand != nil { PreselectionPanel(state: state) } // BL-KEYS: Finish/Cancel while selecting
+            if state.keys.pendingCommand != nil { PreselectionPanel(state: state) } // BL-KEYS: Finish/Cancel while selecting (never collapses)
             let wallPanels = RibbonContent.wallPanels(state) // BL-SITE
             ForEach(wallPanels.isEmpty ? RibbonContent.modifyPanels : RibbonContent.compactModifyPanels) { p in panelView(p, contextual: true) } // BL-SITE
             ForEach(wallPanels) { p in panelView(p, contextual: true) } // BL-SITE
@@ -596,6 +614,8 @@ private struct RibbonPanelView: View {
     let panel: RibbonPanel
     let state: DocumentState
     var contextual = false
+    /// POLISH: 0 as designed, 1 large buttons small, 2 icons (RibbonCollapse.swift).
+    var density = 0
     var body: some View {
         PanelCard(title: panel.title, contextual: contextual) {
             HStack(alignment: .top, spacing: RibbonMetrics.columnSpacing) {
@@ -625,7 +645,8 @@ private struct RibbonPanelView: View {
         var out: [[RibbonItem]] = []
         var smalls: [RibbonItem] = []
         func flush() { while !smalls.isEmpty { out.append(Array(smalls.prefix(3))); smalls.removeFirst(min(3, smalls.count)) } }
-        for item in panel.items {
+        for var item in panel.items {
+            item.size = item.size.at(density: density) // POLISH: compact and icon panels repack three high
             if item.size == .large { flush(); out.append([item]) }
             else {
                 if let last = smalls.last, last.size != item.size || item.breakBefore { flush() }
@@ -641,6 +662,7 @@ struct RibbonButton: View {
     let item: RibbonItem
     let state: DocumentState
     var tint: Color = .accentColor
+    @Environment(\.ribbonDensity) private var density // POLISH: shrunk panels draw smaller buttons
     var body: some View {
         let info = CommandCatalog.info(item.id)
         let router = CommandRouter(state: state)
@@ -669,7 +691,7 @@ struct RibbonButton: View {
 
     @ViewBuilder func label(_ info: CommandInfo, enabled: Bool, menu: Bool) -> some View {
         let fg: AnyShapeStyle = enabled ? AnyShapeStyle(tint) : AnyShapeStyle(.secondary)
-        switch item.size {
+        switch item.size.at(density: density) {
         case .large:
             VStack(spacing: 2) {
                 Image(systemName: info.symbol)

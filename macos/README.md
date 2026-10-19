@@ -24,6 +24,8 @@ Other entry points:
 | `script/build_and_run.sh --debug` | Debug build |
 | `script/build_and_run.sh --no-launch` | Build and validate only |
 | `swift test` | All unit and integration tests (Geometry, Calc, Domain, IFC, CAD, Output, Persistence) |
+| `swift test --filter DomainTests` | The model, regeneration and application-layer tests (about 30 s) |
+| `swift test --filter "LibraryTests\."` | The Furniture Library: every piece builds, flexes, compiles and loads, and every essential's shop drawing (F101) is clean, rendered to `/tmp/arcus-polish/` (about 7 min; kept out of DomainTests) |
 | `swift run -c release arcus-bench [--quick] [--out file.json]` | Engine benchmarks on the generated fixtures (see [Docs/Performance.md](Docs/Performance.md)) |
 | `script/qa_capture.sh all <dir>` | Scripted end-to-end QA workflow plus light/dark screenshots at minimum and spacious window sizes |
 | `script/release_local.sh patch\|minor\|major` | Bumps `VERSION`/`BUILD_NUMBER`, writes release notes and builds and verifies the release. Local only: no signing identity, notarization or upload |

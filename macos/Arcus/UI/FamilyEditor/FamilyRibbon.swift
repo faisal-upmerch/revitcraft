@@ -187,24 +187,29 @@ struct FamilyRibbonStrip: View {
     }
 }
 
-/// The panels of the chosen tab (or the contextual tab). The row has the project ribbon's fixed height and scrolls
-/// horizontally in a narrow window.
+/// The panels of the chosen tab (or the contextual tab). The row has the project ribbon's fixed height; in a narrow
+/// window its panels shrink and collapse (POLISH).
 struct FamilyRibbonPanels: View {
     @Bindable var model: FamilyEditorModel
 
     var body: some View {
-        let chrome = model.chrome
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(alignment: .top, spacing: 4) {
-                if chrome.ribbonShowsContextual, model.ribbonContextualTitle != nil { contextual } else { panels(chrome.ribbonTab) }
-            }
-            .padding(.horizontal, 10).padding(.vertical, 5)
-            .fixedSize(horizontal: false, vertical: true)
+        // POLISH: panels shrink and collapse from the right to fit the strip (RibbonCollapse.swift), instead of scrolling.
+        RibbonPanelRow(spacing: 4) {
+            rowPanels
+            RibbonOverflowButton { rowPanels } // POLISH: when even collapsed panels don't fit
         }
+        .padding(.horizontal, 10).padding(.vertical, 5)
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: Tokens.ribbonPanelHeight)
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FamilyEditorChrome.space)) } action: { [chrome = model.chrome] in chrome.measuredPanelRow = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Ribbon")
+    }
+
+    /// The panels of the chosen tab, or of the contextual tab.
+    @ViewBuilder var rowPanels: some View {
+        if model.chrome.ribbonShowsContextual, model.ribbonContextualTitle != nil { contextual } else { panels(model.chrome.ribbonTab) }
     }
 
     // MARK: Tabs
@@ -547,10 +552,48 @@ struct FamilyRibbonPanel<Content: View>: View {
     }
 
     var body: some View {
-        PanelCard(title: title, contextual: contextual) { content }
-            .environment(\.familyRibbonTint, tint)
-            .fixedSize(horizontal: true, vertical: true)
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FamilyEditorChrome.space)) } action: { chrome?.measuredPanels[title] = $0 }
+        // POLISH: as designed, then compact, then icons, then collapsed into its button (RibbonCollapse.swift).
+        CollapsibleRibbonPanel(key: title, title: title, symbol: symbol, tint: tint, contextual: contextual) { _ in
+            PanelCard(title: title, contextual: contextual) { content }
+        }
+        .environment(\.familyRibbonTint, tint)
+        .fixedSize(horizontal: false, vertical: true) // the row picks the width (each variant keeps its own)
+        .modifier(FamilyPanelFrame(title: title, chrome: chrome))
+    }
+
+    /// The collapsed button's symbol: the panel's own, by title.
+    var symbol: String {
+        switch title {
+        case "Select": "cursorarrow"
+        case "Properties", "Family Types": "slider.horizontal.3"
+        case "Forms": "cube"
+        case "Model": "line.diagonal"
+        case "Control": "arrow.left.and.right"
+        case "Datum": "squareshape.split.2x2.dotted"
+        case "Work Plane": "square.grid.3x3"
+        case "Family Editor": "square.and.arrow.down.on.square"
+        case "Dimension": "ruler"
+        case "Detail": "scribble"
+        case "Text": "textformat"
+        case "Graphics", "View": "eye"
+        case "Windows": "macwindow"
+        case "Settings": "gearshape"
+        case "Inquiry": "checkmark.circle"
+        case "Modify": "pencil"
+        default: "square.grid.2x2"
+        }
+    }
+}
+
+/// Records a Family Editor panel's frame for the QA check (not from the More popover). // POLISH
+struct FamilyPanelFrame: ViewModifier {
+    let title: String
+    let chrome: FamilyEditorChrome?
+    @Environment(\.ribbonRecording) private var recording
+    func body(content: Content) -> some View {
+        content.onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FamilyEditorChrome.space)) } action: { r in
+            if recording { chrome?.measuredPanels[title] = r }
+        }
     }
 }
 
@@ -584,10 +627,22 @@ struct FamilyRibbonLabel: View {
     let menu: Bool
     let enabled: Bool
     let tint: Color
+    @Environment(\.ribbonDensity) private var density // POLISH: shrunk panels draw small buttons, then icons
 
     var body: some View {
         let fg: AnyShapeStyle = enabled ? AnyShapeStyle(tint) : AnyShapeStyle(.secondary)
-        if large {
+        if density >= 2 {
+            HStack(spacing: 1) {
+                Image(systemName: symbol)
+                    .symbolRenderingMode(.hierarchical)
+                    .font(.system(size: RibbonMetrics.smallIcon + 0.5))
+                    .foregroundStyle(fg)
+                if menu { Image(systemName: "chevron.down").font(.system(size: 6, weight: .bold)).foregroundStyle(.secondary) }
+            }
+            .frame(minWidth: 26, minHeight: RibbonMetrics.rowHeight, maxHeight: RibbonMetrics.rowHeight)
+            .opacity(enabled ? 1 : 0.4)
+            .contentShape(Rectangle())
+        } else if large && density == 0 {
             VStack(spacing: 2) {
                 Image(systemName: symbol)
                     .symbolRenderingMode(.hierarchical)
@@ -612,7 +667,7 @@ struct FamilyRibbonLabel: View {
                     .font(.system(size: RibbonMetrics.smallIcon))
                     .foregroundStyle(fg)
                     .frame(width: 16, height: 16)
-                Text(title).font(.system(size: 11)).lineLimit(1).fixedSize()
+                Text(title.replacingOccurrences(of: "\n", with: " ")).font(.system(size: 11)).lineLimit(1).fixedSize()
                     .foregroundStyle(Color.primary)
                 if menu { Image(systemName: "chevron.down").font(.system(size: 6, weight: .bold)).foregroundStyle(.secondary) }
             }
