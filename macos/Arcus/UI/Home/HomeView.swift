@@ -54,6 +54,7 @@ struct HomeBackdrop: View {
 struct HomeSidebar: View {
     @Bindable var model: HomeModel
     @FocusState private var cardsFocused: Bool
+    @State private var showClaude = false // MCP: Design with Claude
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -85,6 +86,7 @@ struct HomeSidebar: View {
             }
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Start")
+            HomeClaudeCard { showClaude = true }.padding(.top, 12) // MCP: Design with Claude
             Spacer(minLength: 16)
             VStack(spacing: 2) {
                 HomeRowButton(title: "Open…", symbol: "folder", help: "Open a project, furniture or family (⌘O)") { model.openPanel() }
@@ -100,6 +102,7 @@ struct HomeSidebar: View {
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
         .onAppear { cardsFocused = true }
+        .sheet(isPresented: $showClaude) { ClaudeSetupView(onDone: { showClaude = false }) } // MCP
     }
 }
 

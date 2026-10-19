@@ -154,6 +154,7 @@ let package = Package(
     products: [
         .executable(name: "Arcus", targets: ["Arcus"]),
         .executable(name: "arcus-bench", targets: ["ArcusBench"]),
+        .executable(name: "arcus-mcp", targets: ["ArcusMCPServer"]), // MCP: Docs/MCP.md
     ],
     targets: [
         .target(name: "ArcusGeometry", path: "Arcus/Domain/Geometry", swiftSettings: strictNoImports),
@@ -209,6 +210,13 @@ let package = Package(
             path: "Arcus/Infrastructure/Exchange/Revit",
             swiftSettings: revitSwiftSettings
         ),
+        // MCP: the Arcus tool layer for Claude (Docs/MCP.md), run by arcus-mcp (file mode) and the app (live mode).
+        .target(
+            name: "ArcusMCP",
+            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusOutput", "ArcusCAD"],
+            path: "Arcus/MCP",
+            swiftSettings: strictNoImports
+        ),
         .target(
             name: "ArcusCanvasMetal",
             dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput"],
@@ -227,7 +235,7 @@ let package = Package(
             dependencies: [
                 "ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication",
                 "ArcusPersistence", "ArcusIFC", "ArcusCAD", "ArcusOutput", "ArcusServices", "ArcusViewport3D",
-                "ArcusRevit", "ArcusCanvasMetal",
+                "ArcusRevit", "ArcusCanvasMetal", "ArcusMCP",
             ],
             path: "Arcus/UI",
             exclude: ["Canvas3D", "CanvasMetal"],
@@ -246,6 +254,13 @@ let package = Package(
             path: "Arcus/Bench",
             swiftSettings: strictNoImports
         ),
+        .executableTarget(
+            name: "ArcusMCPServer",
+            dependencies: ["ArcusMCP", "ArcusCAD"],
+            path: "Arcus/MCPServer",
+            swiftSettings: strictNoImports
+        ),
+        .testTarget(name: "MCPTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusMCP"], path: "Arcus/Tests/MCPTests"),
         .testTarget(name: "RevitTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusRevit"], path: "Arcus/Tests/RevitTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "CanvasMetalTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput", "ArcusCanvasMetal"], path: "Arcus/Tests/CanvasMetalTests"),
         .testTarget(name: "Viewport3DTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusViewport3D"], path: "Arcus/Tests/Viewport3DTests"),

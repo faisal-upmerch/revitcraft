@@ -148,6 +148,7 @@ struct HomeFurniturePane: View {
                 .fixedSize()
                 .help("Furniture for loose pieces; Casework for built-in cabinets and millwork")
             }
+            ClaudeFurnitureHint() // MCP: Claude can design pieces
             HStack {
                 HomeSectionHeader(title: "Start From")
                 Spacer()
