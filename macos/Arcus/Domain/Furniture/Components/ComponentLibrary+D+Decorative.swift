@@ -317,18 +317,18 @@ extension ComponentLibrary {
         b.aliases("decorative mesh", "woven wire mesh", "brass mesh", "wire mesh insert", "cabinet mesh", "grille mesh")
         b.material("Mesh Material", .brassMesh)
         openingPanel(&b, width: DK.inch(12), height: DK.inch(20))
-        b.length("Wire Diameter", DK.mm(1.6))
+        b.length("Wire Diameter", DK.mm(2))
         // Over-under weave: alternate wires sit a wire diameter apart.
         for k in 0..<16 {
             let x = "-Width / 2 + Width * \(LX.num((Double(k) + 0.5) / 16))", z = k % 2 == 0 ? "Wire Diameter / 2" : "Wire Diameter * 1.5"
-            b.rod("Warp \(k + 1)", axis: .y, center: (x, z), radius: "Wire Diameter / 2", from: "-Height / 2", to: "Height / 2", segments: 8)
+            b.rod("Warp \(k + 1)", axis: .y, center: (x, z), radius: "Wire Diameter / 2", from: "-Height / 2", to: "Height / 2", segments: 12)
         }
         for k in 0..<24 {
             let y = "-Height / 2 + Height * \(LX.num((Double(k) + 0.5) / 24))", z = k % 2 == 0 ? "Wire Diameter * 1.5" : "Wire Diameter / 2"
-            b.rod("Weft \(k + 1)", axis: .x, center: (y, z), radius: "Wire Diameter / 2", from: "-Width / 2", to: "Width / 2", segments: 8)
+            b.rod("Weft \(k + 1)", axis: .x, center: (y, z), radius: "Wire Diameter / 2", from: "-Width / 2", to: "Width / 2", segments: 12)
         }
         b.type("Decorative Mesh - Woven Brass", cost: 28.00, model: "DMS-WB")
-        b.type("Decorative Mesh - Fine Woven Brass", ["Wire Diameter": DK.mm(1.2)], cost: 32.00, model: "DMS-FB")
+        b.type("Decorative Mesh - Fine Woven Brass", ["Wire Diameter": DK.mm(1.5)], cost: 32.00, model: "DMS-FB")
         return b.build()
     }
 

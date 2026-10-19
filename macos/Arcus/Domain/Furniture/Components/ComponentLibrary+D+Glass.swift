@@ -104,7 +104,7 @@ extension ComponentLibrary {
         b.length("Glass Thickness", DK.mm(6)); b.length("Cap Diameter", DK.mm(25)); b.length("Cap Height", DK.mm(8)); b.length("Hole Diameter", DK.mm(12))
         b.flag("Corner Clamp", false, instance: false, group: .dimensions)
         b.flag("Through Bolt", true, formula: "not(Corner Clamp)")
-        b.host([.glass], faces: [.front], align: .topLeft, alignments: [.topLeft, .topRight, .bottomLeft, .bottomRight], offsetX: DK.mm(30), offsetY: DK.mm(30))
+        b.host([.glass, .shelf, .door, .sidePanel], faces: [.front], align: .topLeft, alignments: [.topLeft, .topRight, .bottomLeft, .bottomRight], offsetX: DK.mm(30), offsetY: DK.mm(30))
         b.visibility = "Through Bolt"
         b.revolve("Front Cap", profile: DK.pts([(DK.z, DK.z), ("Cap Diameter / 2", DK.z), ("Cap Diameter / 2", "Cap Height * 0.6"), ("Cap Diameter / 2 - 0.003 m", "Cap Height"), (DK.z, "Cap Height")]))
         b.rod("Bolt", axis: .z, center: (DK.z, DK.z), radius: "Hole Diameter / 2 - 0.001 m", from: "-Glass Thickness", to: CX.zero)
@@ -212,7 +212,7 @@ extension ComponentLibrary {
         b.flag("Bar", false, instance: false, group: .dimensions)
         b.flag("Knob", true, formula: "not(Bar)")
         b.hardwareKind(.handle)
-        b.host([.glass], faces: [.front], align: .outside, alignments: [.outside, .center, .inside], offsetX: DK.inch(1.5))
+        b.host([.glass, .door], faces: [.front], align: .outside, alignments: [.outside, .center, .inside], offsetX: DK.inch(1.5))
         for (s, n) in [("-", "Left"), ("", "Right")] {
             b.rod("\(n) Rose", axis: .z, center: ("\(s)Hole Spacing / 2", CX.zero), radius: CX.mm(9), from: CX.zero, to: CX.mm(3))
             b.rod("\(n) Back Rose", axis: .z, center: ("\(s)Hole Spacing / 2", CX.zero), radius: CX.mm(9), from: "-Glass Thickness - 0.003 m", to: "-Glass Thickness")
@@ -263,7 +263,7 @@ extension ComponentLibrary {
         b.material("Seal Material", .clearPVC)
         b.runLength(DK.mm(700))
         b.length("Glass Thickness", DK.mm(4)); b.length("Grip Depth", DK.mm(8)); b.length("Fin Length", DK.mm(8)); b.length("Wall", DK.mm(1))
-        b.hostRun([.glass], faces: [.leftEdge, .rightEdge, .topEdge, .bottomEdge])
+        b.hostRun([.glass, .door], faces: [.leftEdge, .rightEdge, .topEdge, .bottomEdge])
         b.run("Clip", DK.pts([("-Glass Thickness / 2 - Wall", "-Grip Depth"), ("-Glass Thickness / 2", "-Grip Depth"), ("-Glass Thickness / 2", DK.z),
                               ("Glass Thickness / 2", DK.z), ("Glass Thickness / 2", "-Grip Depth"), ("Glass Thickness / 2 + Wall", "-Grip Depth"),
                               ("Glass Thickness / 2 + Wall", "Wall"), ("-Glass Thickness / 2 - Wall", "Wall")]))
@@ -414,7 +414,7 @@ extension ComponentLibrary {
         b.length("Width", DK.inch(15), instance: true); b.length("Height", DK.inch(30), instance: true)
         b.length("Glass Thickness", DK.mm(4)); b.length("Wall", DK.mm(1.5)); b.length("Lip", DK.mm(8))
         b.length("Profile Depth", DK.mm(7), formula: "Glass Thickness + 2 * Wall")
-        b.host([.glass], faces: [.front], align: .center)
+        b.host([.glass, .door, .shelf], faces: [.front], align: .center)
         frame(&b, bar: "Lip", depth: "Profile Depth", rebate: "Lip - Wall")
         b.requires(.hostThickness(min: "Glass Thickness - 0.0005 m", max: "Glass Thickness + 0.0005 m"))
         b.type("Glass Frame Profile - 4 mm Glass", cost: 22.00, model: "GFP-04")

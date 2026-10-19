@@ -186,6 +186,10 @@ extension ComponentLibrary {
         b.type("Lift-Up Stay - Heavy", ["Body Length": DK.mm(190), "Body Height": DK.mm(130), "Body Width": DK.mm(36), "Arm Length": DK.mm(120),
                                         "Screw Hole Diameter": DK.mm(5), "Screw Hole Depth": DK.mm(13), "Screw Spacing": DK.mm(32)],
                flags: ["Drop Down": false], cost: 24.00, model: "FS-LUH", description: "Lift-up flap stay for heavy flaps (up to 22 lb), holds open at any angle")
+        // Plan and elevation symbols of the mechanism on the side (FM5's frame: X across, Y back, Z up from the flap's top).
+        b.symbol(.face, [.coarse, .medium, .fine], .rect(("0.015 m", "-Body Height"), ("0.015 m + Body Length", "0 m")))
+        b.symbol(.top, [.medium, .fine], .rect(("0 m", "0.015 m"), ("Body Width", "0.015 m + Body Length")))
+        b.symbol(.face, [.medium, .fine], dashed: true, .line(("0.015 m", "-0.04 m"), ("Arm Length", "-0.04 m")))
         return b.build()
     }
 
@@ -466,7 +470,7 @@ extension ComponentLibrary {
         b.length("Extension", 0, instance: true, group: .placement)
         b.number("Force", 1000, unit: "N", group: .data)
         b.number("Speed", 10, unit: "mm/s", group: .data)
-        b.electrical(watts: 36, volts: 12, supply: "DC 12 V, 3 A", cable: "2-wire, 1 m, with limit switches", connector: "2-pin")
+        b.electrical(watts: 36, volts: 12, supply: "DC 12 V", cable: "2-wire, 1 m, with limit switches", connector: "2-pin")
         b.host([.sidePanel, .bottom, .back, .rail], faces: [.inside, .top], align: .bottom, alignments: [.bottom, .center])
         let c = "Tube Diameter / 2 + 0.004 m"
         b.pipe("Rear Eye", axis: .y, center: (CX.mm(8), c), outer: CX.mm(8), inner: CX.mm(4), from: CX.mm(-6), to: CX.mm(6))
@@ -499,7 +503,7 @@ extension ComponentLibrary {
         b.length("Extension", 0, instance: true, group: .placement)
         b.flag("Three Stage", false, instance: false, group: .dimensions)
         b.number("Load", 80, unit: "kg", group: .data)
-        b.electrical(watts: 120, volts: 24, supply: "DC 24 V from control box", cable: "Motor cable, 1.5 m", connector: "6-pin DIN")
+        b.electrical(watts: 120, volts: 24, supply: "DC 24 V", cable: "Motor cable, 1.5 m", connector: "6-pin DIN")
         b.host([.floor, .bottom, .top], faces: [.top, .bottom], align: .center)
         let h = "Retracted Height", e = "min(Extension, Stroke)"
         b.box("Foot Plate", x: ("-Base Width", "Base Width"), y: ("-Base Depth * 1.2", "Base Depth * 1.2"), z: (DK.z, CX.mm(8)))
