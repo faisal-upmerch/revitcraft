@@ -10,6 +10,13 @@ import ArcusCalc
 @Suite("FMG1 Furniture parts and flex") @MainActor
 struct FMG1Tests {
     static let inch = 0.0254
+    /// The compiled piece's overall box without hardware (as FM9CTests measures it; that suite lives in LibraryTests).
+    static func bounds(_ ev: EvaluatedFamily) -> Box3 {
+        let hardware = [FurnitureHardware.concealedHinge, FurnitureHardware.faceFrameHinge, FurnitureHardware.buttHinge, FurnitureHardware.pianoHinge,
+                        FurnitureHardware.sideMountSlide, FurnitureHardware.undermountSlide, FurnitureHardware.barPull, FurnitureHardware.knob,
+                        FurnitureHardware.cupPull, FurnitureHardware.edgePull, FurnitureHardware.flapStay, FurnitureHardware.glide, FurnitureHardware.caster]
+        return ev.solids.filter { s in !s.isVoid && !hardware.contains { s.name.hasPrefix($0) } }.reduce(Box3.empty) { $0.union($1.bounds) }
+    }
 
     /// The pieces that kept some parts' size before FMG1, and the turned-leg pieces.
     nonisolated static let flexPieces = ["Sun Lounger", "Hammock", "Hanging Chair", "Picnic Table", "Folding Chair", "Swing Bench", "Adirondack Chair",
@@ -38,7 +45,7 @@ struct FMG1Tests {
                     g.types[i].values[param] = .double(base * scale)
                     let ev = FamilyEvaluator.evaluate(g, typeName: t.name, units: .imperial)
                     #expect(ev.errors.isEmpty, "\(name) \(param) x\(scale): \(ev.errors.prefix(2))")
-                    let b = FM9CTests.bounds(ev), b0 = FM9CTests.bounds(ev0)
+                    let b = Self.bounds(ev), b0 = Self.bounds(ev0)
                     let size = [b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z][axis]
                     let size0 = [b0.max.x - b0.min.x, b0.max.y - b0.min.y, b0.max.z - b0.min.z][axis]
                     #expect(abs((size - size0) - base * (scale - 1)) < 1e-3, "\(name) \(t.name) \(param) x\(scale): \(size0 / inch) → \(size / inch)")
