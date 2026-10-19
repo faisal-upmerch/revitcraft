@@ -449,7 +449,7 @@ enum FurniturePartParameters {
         case .furnitureShelves: [tThickness, tCore, tFace, tEdge, tEdgeThickness, tBanding, tGrain] + (td.familyName == "Top" ? [tOverhang, tTopEdge] : [])
         case .furnitureLegs: [tLegShape, tWidth, tDepth, tTaper, tRod, tCore]
         case .furnitureRails: [tRailProfile, tWidth, tRailHeight, tCore, tGrain]
-        case .furnitureEdgeProfiles: [tProfileShape, tSize] + (td.familyName == FurniturePartTypes.grooveFamily ? [tGrooveDepth] : [])
+        case .furnitureEdgeProfiles: [tProfileShape, tSize] + (td.familyName == FurniturePartTypes.grooveFamily || FurniturePartTypes.Values(td).profileShape == .bevel ? [tGrooveDepth] : []) // COMPD: bevels
         default: []
         }
     }
