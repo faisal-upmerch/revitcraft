@@ -36,6 +36,9 @@ public enum ElementTransform {
             // mirrors the insert, so its hand must not be toggled as well.
             i.location = t.apply(i.location)
             e.data = .insert(i)
+        case .component(var c) where c.sketchPlane != nil: // S3D2: the work plane moves, the component stays on it
+            c.sketchPlane?.transform(by: t)
+            e.data = .component(c)
         case .component(var c):
             // A reflection is M = R(φ)·diag(1, −1), so M·R(θ) = R(φ − θ + π)·diag(−1, 1): with the mirrored flag
             // toggled (placement applies it as scale(−1, 1)) the new rotation is φ − θ + π.
@@ -84,6 +87,9 @@ public enum ElementTransform {
         case .room(var r):
             r.point = t.apply(r.point)
             e.data = .room(r)
+        case .modelLine(var l) where l.sketchPlane != nil: // S3D2
+            l.sketchPlane?.transform(by: t)
+            e.data = .modelLine(l)
         case .modelLine(var l):
             l.curve = t.apply(l.curve)
             l.freeform = l.freeform?.transformed(t) // F1
@@ -94,6 +100,10 @@ public enum ElementTransform {
             e.data = .grid(g)
         case .referencePlane(var p):
             p.line = p.line.transformed(t)
+            if let q = p.plane3D { // S3D2
+                p.plane3D = ReferencePlane3D(start: Vec3(t.apply(q.start.xy), z: q.start.z), end: Vec3(t.apply(q.end.xy), z: q.end.z),
+                                             extrusion: Vec3(t.applyVector(q.extrusion.xy), z: q.extrusion.z))
+            }
             e.data = .referencePlane(p)
         case .topography(var tp):
             tp.points = tp.points.map { Vec3(t.apply($0.xy), z: $0.z) }
@@ -157,6 +167,9 @@ public enum ElementTransform {
         case .colorFillLegend(var l):
             l.position = t.apply(l.position)
             e.data = .colorFillLegend(l)
+        case .modelText(var m) where m.sketchPlane != nil: // S3D2
+            m.sketchPlane?.transform(by: t)
+            e.data = .modelText(m)
         case .modelText(var m): // F1: the text turns with the transform; a mirror keeps it readable (it reads the other way)
             m.position = t.apply(m.position)
             m.rotation = t.applyVector(Vec2.fromAngle(m.rotation)).angle + (mirror ? .pi : 0)

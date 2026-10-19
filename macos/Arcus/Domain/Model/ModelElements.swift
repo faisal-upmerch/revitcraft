@@ -91,6 +91,9 @@ public struct ReferencePlaneData: Hashable, Codable, Sendable {
     public var isReference: Bool
     /// Scope box limiting where the reference plane appears (WP6a; absent in older files).
     public var scopeBoxID: ElementID?
+    /// S3D2: a plane drawn on another work plane in 3D (horizontal or inclined); `line` is then its plan projection.
+    /// nil: vertical through `line` (absent in older files).
+    public var plane3D: ReferencePlane3D?
     public init(line: Segment2, isReference: Bool = true) { self.line = line; self.isReference = isReference }
 }
 
@@ -164,6 +167,9 @@ public struct ComponentData: Hashable, Codable, Sendable {
     public var mirrored: Bool
     /// F1415: Flip Facing from a family's vertical flip control (mirrors across the family's X axis); nil = not flipped.
     public var facingFlipped: Bool?
+    /// S3D2: the work plane the component sits on when it isn't its level (`location` and `rotation` are then in
+    /// the plane's coordinates and `offset` is along its normal). Absent in older files.
+    public var sketchPlane: WorkPlaneHost?
     public init(location: Vec2, rotation: Double = 0, offset: Double = 0, mirrored: Bool = false) {
         self.location = location; self.rotation = rotation; self.offset = offset; self.mirrored = mirrored
     }
@@ -425,6 +431,9 @@ public struct ModelLineData: Hashable, Codable, Sendable {
     public var styleID: ElementID?
     /// F1: a spline or (partial) ellipse drawn as one line; `curve` is then its chord. Optional, so older documents decode.
     public var freeform: FreeformCurve?
+    /// S3D2: the work plane the line is drawn on when it isn't its level (`curve` and `freeform` are then in the
+    /// plane's coordinates). Absent in older files.
+    public var sketchPlane: WorkPlaneHost?
     public init(curve: Curve2, styleID: ElementID? = nil, freeform: FreeformCurve? = nil) { self.curve = curve; self.styleID = styleID; self.freeform = freeform }
 }
 

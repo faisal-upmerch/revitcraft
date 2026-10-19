@@ -475,6 +475,10 @@ struct PlanGraphics {
             guard let o = builder.resolver.resolve(l), let ml = l.modelLine else { continue }
             var st = builder.stroke(.detailLines, cut: false, o)
             if let ls = model[ml.styleID]?.lineStyle { st = GStroke(weight: ls.weight, color: ls.color, pattern: ls.pattern, halftone: st.halftone) }
+            if ml.sketchPlane != nil { // S3D2: a line on another work plane shows as its plan projection
+                items.append(GItem(elementID: l.id, category: .detailLines, layer: .model, primitives: [.polyline(ml.worldPolyline(baseZ: 0).map(\.xy), closed: false, st)]))
+                continue
+            }
             items.append(GItem(elementID: l.id, category: .detailLines, layer: .model, primitives: [ml.freeform.map { .polyline($0.points, closed: false, st) } ?? curvePrim(ml.curve, st)])) // F1
         }
         var lineCats: [Category] = [.roomSeparationLines, .propertyLines]

@@ -258,7 +258,7 @@ public final class ComponentTool: BaseTool, InteractiveTool {
         guard let e = probeElement(at: i.point), let t = e.typeID else { message("Load a \(title.lowercased()) family first."); return }
         let view = ctx.viewID
         ctx.session.perform("Place \(title)") { tx in
-            tx.create(category, data: e.data, typeID: t, levelID: isViewSpecific ? nil : ctx.levelID, ownerViewID: isViewSpecific ? view : nil)
+            tx.create(category, data: ctx.sketched(e.data), typeID: t, levelID: isViewSpecific ? nil : ctx.levelID, ownerViewID: isViewSpecific ? view : nil) // S3D2: on the work plane
         }
         if let err = ctx.session.lastError { message(err.message) }
     }

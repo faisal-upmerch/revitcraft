@@ -74,6 +74,9 @@ public final class ToolContext {
     public var pixel: Double = 0.01
     public var snapIndex = SnapIndex()
     public var snapSettings = SnapSettings()
+    /// S3D2: in a 3D view, the work plane tools draw on when it isn't the level's: points are then in its coordinates
+    /// and new elements keep it as their sketch plane (Snapping3D+WorkPlane.swift).
+    public var sketchPlane: WorkPlaneHost?
     /// Current type per category (the type selector).
     public var currentTypes: [Category: ElementID] = [:]
     /// Host callbacks.

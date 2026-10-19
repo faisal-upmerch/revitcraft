@@ -28,6 +28,9 @@ public struct ModelTextData: Hashable, Codable, Sendable {
     /// Upright text stands in the vertical plane along its direction and is extruded behind it (signage on a wall);
     /// otherwise it lies on the work plane and is extruded up.
     public var upright: Bool
+    /// S3D2: the work plane the text lies on when it isn't its level (`position` and `rotation` are then in the
+    /// plane's coordinates and `offset` is along its normal). Absent in older files.
+    public var sketchPlane: WorkPlaneHost?
 
     public static let defaultFont = "Arial"
 
@@ -141,6 +144,11 @@ public enum ModelTextGeometry {
     /// Plan footprint of the text: the glyph outlines for lying text, the extruded strip for upright text.
     public static func planOutlines(_ e: Element) -> [Polygon2] {
         guard let t = e.modelText else { return [] }
+        if let sp = t.sketchPlane { // S3D2: text on a work plane: its plan projection
+            var flat = t
+            flat.sketchPlane = nil
+            return planOutlines(Element(id: e.id, category: e.category, data: .modelText(flat))).map { $0.transformed(sp.planProjection) }
+        }
         guard t.upright else { return planContours(t) }
         guard let b = localBounds(t) else { return [] }
         let (d, n) = t.frame
@@ -151,6 +159,7 @@ public enum ModelTextGeometry {
     /// The 3D text: lying on its work plane (extruded up), or upright (extruded behind the text plane).
     public static func meshParts(_ e: Element, _ model: BIMModel) -> [MeshPart] {
         guard let t = e.modelText else { return [] }
+        if let sp = t.sketchPlane { return sketchMeshParts(t, sp) } // S3D2
         let z0 = baseZ(e, model)
         let depth = max(t.depth, 0.0001)
         let (d, _) = t.frame

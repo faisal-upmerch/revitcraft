@@ -169,7 +169,7 @@ public enum ElementOperations {
         let curve: Curve2?
         switch e.data {
         case .wall(let w): curve = w.location
-        case .modelLine(let l): curve = l.freeform == nil ? l.curve : nil // F1: splines and ellipses aren't split
+        case .modelLine(let l): curve = l.freeform == nil && l.sketchPlane == nil ? l.curve : nil // F1: splines and ellipses aren't split; S3D2: nor lines on other work planes
         case .beam(let b): curve = b.curve
         default: curve = nil
         }
@@ -231,10 +231,10 @@ public enum ElementOperations {
     public static func curveOf(_ e: Element) -> Curve2? {
         switch e.data {
         case .wall(let w): w.location
-        case .modelLine(let l): l.freeform == nil ? l.curve : nil // F1: splines and ellipses are not trimmed, split or offset
+        case .modelLine(let l): l.freeform == nil && l.sketchPlane == nil ? l.curve : nil // F1: splines and ellipses are not trimmed, split or offset; S3D2: nor lines on other work planes
         case .beam(let b): b.curve
         case .grid(let g): g.isMultiSegment ? nil : g.curve // F2: multi-segment grids are not trimmed, split or offset
-        case .referencePlane(let r): .line(r.line)
+        case .referencePlane(let r): r.plane3D == nil ? .line(r.line) : nil // S3D2: sloped planes are not edited in plan
         default: nil
         }
     }

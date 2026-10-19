@@ -40,10 +40,10 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     private var downPoint = CGPoint.zero
     private(set) var lastMouse: CGPoint?
     /// Plan point under the pointer on the current plane (for the work-plane grid).
-    private(set) var planePoint: Vec2?
+    var planePoint: Vec2? // S3D2: set by tools on other work planes too
     private(set) var snap: SnapResult?
     /// Elevation of the plane the current interaction draws on.
-    private(set) var planeZ = 0.0
+    var planeZ = 0.0 // S3D2: set by tools on other work planes too
     /// The selection drag in progress (a plan `SelectTool` on the dragged element's level).
     private(set) var dragTool: SelectTool?
     private var planListeners: [ElementID: UUID] = [:]
@@ -101,6 +101,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
 
     /// Picks a new work plane; a running tool restarts on it (its sketch or chain is discarded, as when changing views).
     func setWorkPlane(_ level: ElementID) {
+        if activeSketchPlane != nil { WorkPlanes.set(.level(level), on: viewID, in: state.session) } // S3D2: back to a level
         guard level != workPlaneLevel || chosenLevel == nil else { return }
         chosenLevel = level
         if let tool = state.activeTool {
@@ -233,6 +234,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     private func toolInput(_ event: NSEvent, at p: CGPoint, tool: any InteractiveTool) -> ToolInput? {
+        if (tool as? BaseTool)?.ctx.sketchPlane != nil { return sketchToolInput(event, at: p, tool: tool) } // S3D2: any work plane
         guard let ctx = (tool as? BaseTool)?.ctx ?? context(), let s = sample(event, at: p) else { return nil }
         let z = ctx.isPlan ? ctx.levelElevation : ctx.model.elevation(ofLevel: workPlaneLevel)
         let surface = prefersSurface(tool)
@@ -541,13 +543,13 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         let tool = state.activeTool
         let dragging = dragTool?.isDragging == true
         guard tool != nil || dragging else { return }
-        let z = planeZ
-        func seg(_ a: Vec2, _ b: Vec2) -> (CGPoint, CGPoint)? { v.viewSegment(Vec3(a, z: z), Vec3(b, z: z)) }
-        func pt(_ a: Vec2) -> CGPoint? { v.viewPoint(of: Vec3(a, z: z)) }
+        let frame = drawFrame // S3D2: the level's plane, or the tool's work plane
+        func seg(_ a: Vec2, _ b: Vec2) -> (CGPoint, CGPoint)? { v.viewSegment(frame.point(a.x, a.y), frame.point(b.x, b.y)) }
+        func pt(_ a: Vec2) -> CGPoint? { v.viewPoint(of: frame.point(a.x, a.y)) }
 
         // A patch of the work plane around the pointer, so the plane being drawn on is visible.
         if tool != nil, let c = planePoint {
-            let step = [0.1, 0.5, 1, 5, 10, 50].first { $0 >= v.worldPerPoint(at: Vec3(c, z: z)) * 18 } ?? 50
+            let step = [0.1, 0.5, 1, 5, 10, 50].first { $0 >= v.worldPerPoint(at: frame.point(c.x, c.y)) * 18 } ?? 50
             let o = Vec2((c.x / step).rounded() * step, (c.y / step).rounded() * step)
             cg.saveGState()
             cg.setStrokeColor(Tokens.selection.withAlphaComponent(0.22).cgColor)
@@ -567,7 +569,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         for p in prims { draw(p, cg, seg: seg, pt: pt) }
         drawGuides(guides, cg, seg: seg)
         for d in dims { drawTempDim(d, cg, seg: seg) }
-        if let s = snap, !(tool is InsertTool) { drawSnap3D(s, cg, bounds: bounds, planeZ: z) } // S3D: plan markers, on the model
+        if let s = snap, !(tool is InsertTool) { drawSnap3D(s, cg, bounds: bounds, plane: frame) } // S3D: plan markers, on the model
         drawTooltip(cg, bounds: bounds)
     }
 

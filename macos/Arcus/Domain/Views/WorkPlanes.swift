@@ -7,17 +7,20 @@ import ArcusGeometry
 public enum WorkPlaneRef: Hashable, Codable, Sendable {
     case level(ElementID)
     case referencePlane(ElementID)
+    /// S3D2: a face picked in a 3D view (the element it lies on, and the plane as picked).
+    case face(ElementID, WorkPlaneFrame)
 }
 
 /// A work plane in model space: an origin and two in-plane unit axes (`u` horizontal, `v` up the plane), the normal
 /// `u × v`. A level's plane is horizontal (`v` = +Y); a reference plane's is vertical (`v` = +Z).
-public struct WorkPlaneFrame: Hashable, Sendable {
+public struct WorkPlaneFrame: Hashable, Codable, Sendable {
     public var origin: Vec3
     public var u: Vec3
     public var v: Vec3
     public var normal: Vec3 { u.cross(v).normalized }
     public var isHorizontal: Bool { abs(normal.z) > 0.999 }
     public func point(_ a: Double, _ b: Double) -> Vec3 { origin + u * a + v * b }
+    public init(origin: Vec3, u: Vec3, v: Vec3) { self.origin = origin; self.u = u; self.v = v }
 }
 
 public enum WorkPlanes {
@@ -36,6 +39,7 @@ public enum WorkPlanes {
         switch w {
         case .level(let id): model[id]?.level != nil
         case .referencePlane(let id): model[id]?.referencePlane != nil
+        case .face(let id, _): model[id] != nil // S3D2
         }
     }
 
@@ -45,6 +49,7 @@ public enum WorkPlanes {
         case .level(let id)?: model[id].map { "Level : \($0.name)" } ?? "<not associated>"
         case .referencePlane(let id)?:
             model[id].map { "Reference Plane : \($0.name.isEmpty ? "(unnamed)" : $0.name)" } ?? "<not associated>"
+        case .face(let id, _)?: model[id].map { "Face : \($0.category.singularName)\($0.name.isEmpty ? "" : " : \($0.name)")" } ?? "<not associated>" // S3D2
         case nil: "<not associated>"
         }
     }
@@ -63,9 +68,9 @@ public enum WorkPlanes {
             guard let l = model[id]?.level else { return nil }
             return WorkPlaneFrame(origin: Vec3(0, 0, l.elevation), u: Vec3(1, 0, 0), v: Vec3(0, 1, 0))
         case .referencePlane(let id):
-            guard let line = model[id]?.referencePlane?.line, line.length > Tolerance.length else { return nil }
-            let d = line.direction
-            return WorkPlaneFrame(origin: Vec3(line.start, z: 0), u: Vec3(d.x, d.y, 0), v: Vec3(0, 0, 1))
+            return model[id]?.referencePlane?.frame // S3D2: vertical, or drawn on another work plane
+        case .face(let id, let f): // S3D2
+            return model[id] != nil ? f : nil
         }
     }
 
@@ -113,8 +118,10 @@ public enum WorkPlanes {
         case .level(let l):
             let plans = model.views.filter { $0.levelID == l && ($0.view?.kind.isPlan ?? false) }
             return plans.first { $0.view?.kind == .floorPlan && $0.view?.parentViewID == nil } ?? plans.first
-        case .referencePlane(let id):
-            guard let f = frame(w, model), let line = model[id]?.referencePlane?.line else { return nil }
+        case .referencePlane, .face: // S3D2: any vertical plane
+            guard let f = frame(w, model), abs(f.normal.z) < 1e-6 else { return nil }
+            var line = Segment2(f.origin.xy, f.origin.xy + f.u.xy)
+            if case .referencePlane(let id) = w, let l = model[id]?.referencePlane?.line, l.length > Tolerance.length, model[id]?.referencePlane?.plane3D == nil { line = l }
             var v = ViewData(kind: .elevation, scale: 100)
             let n = f.normal.xy.normalized
             // Stand back on the normal side, looking straight at the plane, deep enough to see the whole model.

@@ -73,7 +73,9 @@ public final class ModelTextTool: BaseTool, InteractiveTool {
     public func pointerDown(_ i: ToolInput) {
         guard ctx.isPlan else { message("Open a plan view to place model text."); return }
         guard let t = data(at: i.point) else { message("Type the text first."); return }
-        guard let id = Self.place(t, level: ctx.levelID, session: ctx.session) else {
+        var placed = t
+        placed.sketchPlane = ctx.sketchPlane // S3D2: on the 3D view's work plane
+        guard let id = Self.place(placed, level: ctx.levelID, session: ctx.session) else {
             if let e = ctx.session.lastError { message(e.message) }
             return
         }

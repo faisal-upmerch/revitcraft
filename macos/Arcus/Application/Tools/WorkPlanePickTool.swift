@@ -8,6 +8,8 @@ import ArcusDomain
 public final class WorkPlanePickTool: BaseTool, InteractiveTool {
     public var commandID: CommandID { .workPlaneSet }
     public var title: String { "Work Plane" }
+    /// S3D2: the view whose work plane is set (a 3D view runs this tool in a plan context); nil = the tool's view.
+    public var targetViewID: ElementID?
     public var prompt: String { ctx.isPlan ? "Pick a reference plane to be the work plane." : "Pick a reference plane or a level to be the work plane." }
 
     func plane(_ i: ToolInput) -> WorkPlaneRef? {
@@ -17,20 +19,24 @@ public final class WorkPlanePickTool: BaseTool, InteractiveTool {
             if e.referencePlane != nil { return .referencePlane(id) }
             if e.level != nil, !ctx.isPlan { return .level(id) }
         }
+        // S3D2: in a 3D view, the face under the pointer.
+        if let p = i.surfacePoint, let id = i.hit, let e = ctx.model[id], e.category.isModel, let f = FacePlanes.frame(of: e, at: p, ctx.model) {
+            return .face(id, f)
+        }
         return nil
     }
 
     public func pointerMoved(_ i: ToolInput) {
         preview = ToolPreview()
         switch plane(i) {
-        case .referencePlane(let id)?, .level(let id)?: preview.highlight = [id]; preview.cursor = .pick
+        case .referencePlane(let id)?, .level(let id)?, .face(let id, _)?: preview.highlight = [id]; preview.cursor = .pick
         case nil: preview.cursor = .notAllowed
         }
     }
 
     public func pointerDown(_ i: ToolInput) {
         guard let w = plane(i) else { message(prompt); return }
-        WorkPlanes.set(w, on: ctx.viewID, in: ctx.session)
+        WorkPlanes.set(w, on: targetViewID ?? ctx.viewID, in: ctx.session)
         message("Work plane: \(WorkPlanes.name(w, ctx.model)).")
         ctx.toolFinished?()
     }
