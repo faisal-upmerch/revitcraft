@@ -12,8 +12,8 @@ extension GroupA {
     }
 
     /// A lock: face-based, with a finish and a cylinder (plug) material, a Front Thickness and the lock tags.
-    static func lock(_ name: String, _ sub: String, _ description: String, finish f: ComponentFinish = .satinNickel) -> ShapeA {
-        var g = faced(name, .locks, sub, description)
+    static func lock(_ name: String, _ sub: String, _ description: String, finish f: ComponentFinish = .satinNickel, category: ComponentCategory = .locks) -> ShapeA {
+        var g = faced(name, category, sub, description)
         g.b.material(finish, f)
         g.b.material("Cylinder Material", .brass)
         g.b.length("Front Thickness", inch(0.75), instance: true, group: .placement)

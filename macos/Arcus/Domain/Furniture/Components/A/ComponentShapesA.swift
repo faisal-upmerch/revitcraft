@@ -207,14 +207,15 @@ struct ShapeA {
     /// A revolve about local axis `along` through `center` (on the other two axes): profile (r, h), h measured along
     /// the local axis from 0 (put the base in the profile's h).
     @discardableResult
-    mutating func revolve(_ name: String, along k: Int, center: (String, String) = (CX.zero, CX.zero), profile: [(String, String)]) -> [String] {
+    mutating func revolve(_ name: String, along k: Int, center: (String, String) = (CX.zero, CX.zero), profile: [(String, String)],
+                          from start: Double = 0, to end: Double = 360) -> [String] {
         let n = frames.count
         return each { b, fr in
             let (w, s) = fr.axes[k]
             let p = fr.uv(center, along: k)
             guard case .expr(let u) = p.x, case .expr(let v) = p.y else { return }
             let prof = profile.map { FamilyPoint($0.0, FrameA.fam($0.1, s)) }
-            b.revolve(Self.label(name, fr, n), profile: prof, plane: FrameA.plane(normal: w), axis: (u, v))
+            b.revolve(Self.label(name, fr, n), profile: prof, plane: FrameA.plane(normal: w), axis: (u, v), startDegrees: LX.num(start), endDegrees: LX.num(end))
         }
     }
 

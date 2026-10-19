@@ -85,5 +85,5 @@ enum GroupA {
 
 extension GroupA {
     /// Every Group A definition, in browser order.
-    static var all: [ComponentDefinition] { handles + locks + hinges + drawers }
+    static var all: [ComponentDefinition] { handles + locks + hinges + drawers + slidingDoors }
 }
