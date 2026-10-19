@@ -300,11 +300,16 @@ struct PlanGraphics {
             }
             if lines.walk.count >= 2 {
                 prims.append(.polyline(lines.walk, closed: false, st))
-                let end = lines.walk.last!, prev = lines.walk[lines.walk.count - 2]
+                // HOUSE: on the plan of the level a stair arrives at, the walk line reads DN from the top, arrow at the
+                // bottom (as RevitCraft and Revit draw it); elsewhere UP from the bottom, arrow at the top.
+                let down = l.baseZ < levelZ - 0.01
+                let walk = down ? Array(lines.walk.reversed()) : lines.walk
+                let end = walk.last!, prev = walk[walk.count - 2]
                 let d = (end - prev).normalized, n = d.perpendicular
                 let a = builder.paper(0.0025)
                 prims.append(.polyline([end - d * a + n * a * 0.4, end, end - d * a - n * a * 0.4], closed: false, st))
-                prims.append(.text(GText(position: lines.walk[0] - d * builder.paper(0.003), height: 0.0022, string: "UP", alignment: .center, verticalAnchor: 0.5)))
+                let first = (walk[1] - walk[0]).normalized
+                prims.append(.text(GText(position: walk[0] - first * builder.paper(0.003), height: 0.0022, string: down ? "DN" : "UP", alignment: .center, verticalAnchor: 0.5)))
             }
             let hit = l.runs.map { l.runRect($0) } + l.landings.map(\.polygon)
             items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: prims, hitPolygons: hit))

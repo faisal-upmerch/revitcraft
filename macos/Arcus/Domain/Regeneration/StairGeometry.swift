@@ -191,8 +191,16 @@ public enum StairGeometry {
                     let nside = nr.direction.perpendicular * ((nr.width / 2 - inset) * (leftSide ? 1 : -1))
                     let corner = end + r.direction * l.width
                     let nstart = nr.start + nside
-                    if corner.distance(to: nstart) > 0.05 { pts.append(Vec3(end + r.direction * (l.width - inset), z: z1)) }
-                    _ = corner
+                    // HOUSE: a U-stair's rail follows the landing: the outer one around its far edge (two corners), the
+                    // inner one straight across the gap between the runs (no diagonal over the landing).
+                    let reverses = nr.direction.dot(r.direction) < -0.5
+                    let inner = reverses && (nstart - end).dot(r.direction.perpendicular * (leftSide ? 1 : -1)) > 0
+                    if !inner, corner.distance(to: nstart) > 0.05 {
+                        let far = end + r.direction * (l.width - inset)
+                        pts.append(Vec3(far, z: z1))
+                        let farNext = nstart + r.direction * (far - nstart).dot(r.direction)
+                        if farNext.distance(to: far) > 0.05 && farNext.distance(to: nstart) > 0.05 { pts.append(Vec3(farNext, z: z1)) }
+                    }
                 }
             }
         }
