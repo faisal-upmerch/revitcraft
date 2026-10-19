@@ -10,6 +10,7 @@ public struct Regenerator: Sendable {
         normalizeCurtainWalls(tx) // WP3
         try StructuralFraming.regenerateBeamSystems(tx) // F34
         repairDanglingReferences(tx)
+        FurnitureRegeneration.regenerate(tx) // FM3: Furniture documents: planes follow Family Types
         try ConstraintSolver.solve(tx)
         try validate(tx)
     }

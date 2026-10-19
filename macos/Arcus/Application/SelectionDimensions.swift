@@ -26,6 +26,8 @@ public struct SelectionDimension: Sendable, Hashable {
     /// I3: set for a segment of a permanent dimension (its value text, view coordinates): the canvas edits it in place
     /// instead of drawing a temporary dimension, as in RevitCraft.
     public var permanentLabel: Vec2? = nil
+    /// FM3: a Furniture document's labelled dimension (Width, Depth…): a typed value sets that parameter, as in families.
+    public var labelParameter: String? = nil
 }
 
 public enum SelectionDimensions {
@@ -33,9 +35,11 @@ public enum SelectionDimensions {
     /// (RevitCraft tempdims.rs `permanent_dims`). Typing a new value there moves the element; the other reference stays.
     /// Locked, EQ-constrained, baseline and ordinate strings are left alone.
     public static func permanent(for id: ElementID, in model: BIMModel, view: Element?, scale: Double) -> [SelectionDimension] {
-        guard let view, view.view?.kind.isPlan == true else { return [] }
+        let furniture = model.isFurniture // FM3: labelled dimensions edit their parameter, in elevations too
+        guard let view, view.view?.kind.isPlan == true || (furniture && view.view?.kind.isVerticalCut == true) else { return [] }
         var out: [SelectionDimension] = []
         for e in model.elements(.dimensions) where e.ownerViewID == view.id {
+            if view.view?.kind.isPlan != true && e.dimension?.labelParameter == nil { continue } // FM3
             guard let d = e.dimension, d.kind == .linear || d.kind == .aligned, !d.locked, !d.equality,
                   (d.chainStyle ?? .continuous) == .continuous, d.references.count >= 2,
                   let lay = DimensionLayout.make(e, d, model, scale: scale, view: view), lay.order.count == d.references.count else { continue }
@@ -48,7 +52,7 @@ public enum SelectionDimensions {
                 guard dir.length > 0.5 else { continue }
                 out.append(SelectionDimension(elementID: id, role: .offset, from: lay.projected[mine], to: lay.projected[other], value: lay.values[k],
                                               direction: dir, elementReference: d.references[mine], otherReference: d.references[other],
-                                              permanentLabel: lay.textPositions[k]))
+                                              permanentLabel: lay.textPositions[k], labelParameter: furniture ? d.labelParameter : nil)) // FM3
             }
         }
         return out
@@ -207,6 +211,11 @@ public enum SelectionDimensions {
     /// elements follow and joined walls stay joined).
     public static func apply(_ d: SelectionDimension, value: Double, in tx: TransactionContext, viewID: ElementID?) throws(TransactionError) {
         guard let e = tx.model[d.elementID] else { throw TransactionError("The element no longer exists.") }
+        if let label = d.labelParameter { // FM3: a labelled dimension sets its parameter
+            guard value > Tolerance.length else { throw TransactionError("Enter a length greater than zero.") }
+            try FurnitureParameters.setValue(label, .double(value), in: tx)
+            return
+        }
         if e.pinned { throw TransactionError("The element is pinned. Unpin it to edit.", elements: [e.id]) }
         switch d.role {
         case .offset:

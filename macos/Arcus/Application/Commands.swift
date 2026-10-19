@@ -106,6 +106,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     // FES commands:
 
     // FM3 commands:
+    case furnitureFamilyTypes, furnitureCategory, furnitureFlex, furnitureLoadIntoProject, furnitureLoadAndClose, newFurniture // FM3
 
     // FM4 commands:
 

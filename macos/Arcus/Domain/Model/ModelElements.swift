@@ -94,6 +94,8 @@ public struct ReferencePlaneData: Hashable, Codable, Sendable {
     /// S3D2: a plane drawn on another work plane in 3D (horizontal or inclined); `line` is then its plan projection.
     /// nil: vertical through `line` (absent in older files).
     public var plane3D: ReferencePlane3D?
+    /// FM3: in a Furniture document, the plane's normal axis, offset formula and reference strength (nil elsewhere).
+    public var furniture: FurniturePlaneData?
     public init(line: Segment2, isReference: Bool = true) { self.line = line; self.isReference = isReference }
 }
 

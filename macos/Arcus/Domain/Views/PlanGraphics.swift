@@ -463,6 +463,7 @@ struct PlanGraphics {
         }
         for r in model.elements(.referencePlanes) where r.ownerViewID == nil || r.ownerViewID == builder.view.id {
             guard let o = builder.resolver.resolve(r), var rp = r.referencePlane else { continue }
+            if FurniturePlanes.isHorizontal(rp) { continue } // FM3: Furniture Bottom/Top planes show in elevations only
             guard ScopeBoxes.limitPlan(&rp, builder: builder) else { continue } // WP6a: scope box
             let st = builder.stroke(.referencePlanes, cut: false, o)
             var prims: [GPrimitive] = [.polyline([rp.line.start, rp.line.end], closed: false, st)]

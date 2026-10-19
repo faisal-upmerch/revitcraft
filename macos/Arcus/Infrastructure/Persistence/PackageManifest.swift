@@ -8,6 +8,10 @@ import CryptoKit
 public struct PackageManifest: Codable, Sendable, Hashable {
     public static let projectFormat = "com.local.arcus.project"
     public static let familyFormat = "com.local.arcus.family"
+    /// FM3: a Furniture document (`.arcusfurniture`): the project layout, opened in Furniture mode.
+    public static let furnitureFormat = "com.local.arcus.furniture"
+    /// Formats read as projects (the package layout is the same).
+    public static let projectFormats: Set<String> = [projectFormat, furnitureFormat]
 
     /// `com.local.arcus.project` or `com.local.arcus.family`.
     public var format: String
@@ -26,6 +30,8 @@ public struct PackageManifest: Codable, Sendable, Hashable {
     public var checksums: [String: String]
     /// True for a project saved as a template (new projects start from a copy). Absent in ordinary projects.
     public var isTemplate: Bool?
+    /// FM3: the document kind ("furniture"); absent in projects.
+    public var kind: String?
 
     public init(format: String, schemaVersion: Int, minimumReaderVersion: Int, writerAppVersion: String, writerBuild: String,
                 documentID: UUID, created: Date, modified: Date, elementCount: Int, checksums: [String: String], isTemplate: Bool? = nil) {
@@ -33,12 +39,14 @@ public struct PackageManifest: Codable, Sendable, Hashable {
         self.writerAppVersion = writerAppVersion; self.writerBuild = writerBuild; self.documentID = documentID
         self.created = created; self.modified = modified; self.elementCount = elementCount; self.checksums = checksums
         self.isTemplate = isTemplate
+        self.kind = nil
     }
 
     // Tolerant decoding: unknown keys are ignored (newer writers may add fields); required keys must exist.
     enum CodingKeys: String, CodingKey {
         case format, schemaVersion, minimumReaderVersion, writerAppVersion, writerBuild, documentID, created, modified, elementCount, checksums
         case isTemplate
+        case kind // FM3
     }
     public init(from decoder: any Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -53,6 +61,7 @@ public struct PackageManifest: Codable, Sendable, Hashable {
         elementCount = try c.decodeIfPresent(Int.self, forKey: .elementCount) ?? 0
         checksums = try c.decodeIfPresent([String: String].self, forKey: .checksums) ?? [:]
         isTemplate = try c.decodeIfPresent(Bool.self, forKey: .isTemplate)
+        kind = try c.decodeIfPresent(String.self, forKey: .kind) // FM3
     }
 
     // MARK: Coding
