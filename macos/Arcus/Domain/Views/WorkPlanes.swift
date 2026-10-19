@@ -25,7 +25,10 @@ public struct WorkPlaneFrame: Hashable, Codable, Sendable {
 
 public enum WorkPlanes {
     /// Grid spacing of the shown work plane, as RevitCraft (3000 mm, or 10' in imperial projects).
-    public static func spacing(_ model: BIMModel) -> Double { model.units.system == .imperial ? 3.048 : 3.0 }
+    public static func spacing(_ model: BIMModel) -> Double {
+        if model.isFurniture { return 6 * 0.0254 } // FM3D: a furniture piece's work plane has a 6" grid
+        return model.units.system == .imperial ? 3.048 : 3.0
+    }
 
     /// The work plane a view uses: the one set on it, else its default (a plan's level; nil for sections, elevations
     /// and 3D views, whose default is the view plane or the 3D tools' level).

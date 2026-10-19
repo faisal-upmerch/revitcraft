@@ -57,7 +57,7 @@ struct FM7UITests {
         let fab = RibbonContent.panels(.fabricate, mode: .furniture)
         #expect(fab.first { $0.title == "Part List" }?.items.map(\.id) == [.furniturePartList, .furnitureHardwareSchedule, .furnitureMaterialTakeoff, .furnitureEdgeBanding, .furnitureCost])
         #expect(fab.first { $0.title == "Nesting" }?.items.map(\.id) == [.furnitureNesting, .furnitureStockSheets])
-        #expect(fab.first { $0.title == "Output" }?.items.map(\.id) == [.furnitureCNCExport, .furnitureShopDrawings, .furnitureCheckParts])
+        #expect(fab.first { $0.title == "Output" }?.items.map(\.id) == [.furnitureCNCExport, .furnitureShopDrawings, .furnitureExplodeParts, .furnitureCheckParts])
         #expect(RibbonContent.panels(.manage, mode: .furniture).first { $0.title == "Fabrication" }?.items.map(\.id).contains(.furnitureHardwareCatalog) == true)
     }
 
