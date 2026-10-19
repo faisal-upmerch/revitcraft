@@ -311,7 +311,10 @@ struct ScheduleTests {
     @Test func scheduleLayoutWidthMatchesColumns() throws {
         let p = try project()
         let t = ScheduleEngine.compute(p.schedule("Door Schedule"), p.model)
-        #expect(Fx.approx(t.totalWidth, t.columns.reduce(0) { $0 + $1.width }, 1e-12))
+        // POLISH: columns keep their set width or widen to fit their contents; the grid and totalWidth agree.
+        let fit = ScheduleLayout.fit(t)
+        #expect(zip(fit.widths, t.columns).allSatisfy { $0 >= $1.width - 1e-12 })
+        #expect(Fx.approx(t.totalWidth, ScheduleLayout.grid(t).width, 1e-12))
         let prims = ScheduleLayout.primitives(t, topLeft: Vec2(0, 0.5))
         let texts = prims.compactMap { if case .text(let g) = $0 { return g.string } else { return nil } }
         #expect(texts.contains("DOOR SCHEDULE"))

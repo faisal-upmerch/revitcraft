@@ -208,20 +208,21 @@ public enum FurniturePartTypes {
         ensurePartTag(in: tx)
     }
 
-    /// The Part Tag: Mark over the nominal size (W x L), for every part category.
+    /// The Part Tag: Mark over the nominal size (W x L), for every part category, in a 24 × 7 mm box.
     static func ensurePartTag(in tx: TransactionContext) {
         guard !tx.model.elements(.families).contains(where: { $0.name == "Part Tag" }) else { return }
         var f = FamilyDefinition(name: "Part Tag", template: .tag)
         f.taggedCategories = Category.furnitureParts
         f.types = [FamilyTypeDefinition(name: "Mark and Size", values: [:])]
+        // POLISH: 24 mm wide (was 18), so a size such as 22 3/4" x 66 1/2" stays inside the box.
         f.annotationLines = [
-            FamilyLine(shape: .line(FamilyPoint("-0.009", "-0.0035"), FamilyPoint("0.009", "-0.0035"))),
-            FamilyLine(shape: .line(FamilyPoint("0.009", "-0.0035"), FamilyPoint("0.009", "0.0035"))),
-            FamilyLine(shape: .line(FamilyPoint("0.009", "0.0035"), FamilyPoint("-0.009", "0.0035"))),
-            FamilyLine(shape: .line(FamilyPoint("-0.009", "0.0035"), FamilyPoint("-0.009", "-0.0035"))),
-            FamilyLine(shape: .line(FamilyPoint("-0.009", "0"), FamilyPoint("0.009", "0"))),
+            FamilyLine(shape: .line(FamilyPoint("-0.012", "-0.0035"), FamilyPoint("0.012", "-0.0035"))),
+            FamilyLine(shape: .line(FamilyPoint("0.012", "-0.0035"), FamilyPoint("0.012", "0.0035"))),
+            FamilyLine(shape: .line(FamilyPoint("0.012", "0.0035"), FamilyPoint("-0.012", "0.0035"))),
+            FamilyLine(shape: .line(FamilyPoint("-0.012", "0.0035"), FamilyPoint("-0.012", "-0.0035"))),
+            FamilyLine(shape: .line(FamilyPoint("-0.012", "0"), FamilyPoint("0.012", "0"))),
         ]
-        f.fills = [FamilyFill(points: [FamilyPoint("-0.009", "-0.0035"), FamilyPoint("0.009", "-0.0035"), FamilyPoint("0.009", "0.0035"), FamilyPoint("-0.009", "0.0035")], isMasking: true)]
+        f.fills = [FamilyFill(points: [FamilyPoint("-0.012", "-0.0035"), FamilyPoint("0.012", "-0.0035"), FamilyPoint("0.012", "0.0035"), FamilyPoint("-0.012", "0.0035")], isMasking: true)]
         f.labels = [
             FamilyLabel(position: FamilyPoint("0", "0.0017"), parameterName: "Mark", height: 0.0022, bold: true, sample: "P1"),
             FamilyLabel(position: FamilyPoint("0", "-0.0018"), parameterName: "Size", height: 0.0018, sample: "11 1/4\" x 30\""),

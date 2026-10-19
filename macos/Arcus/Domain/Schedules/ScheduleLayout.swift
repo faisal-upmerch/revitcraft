@@ -65,7 +65,8 @@ public enum ScheduleLayout {
     public static func grid(_ t: ScheduleTable, rows segment: ScheduleRowRange? = nil) -> ScheduleGrid {
         let ap = t.appearance, fm = t.formatting
         let n = max(1, t.columns.count)
-        let widths = t.columns.isEmpty ? [0.04] : t.columns.map(\.width)
+        let fitted = fit(t) // POLISH: columns as wide as their headings (on up to two lines) and their contents
+        let widths = t.columns.isEmpty ? [0.04] : fitted.widths
         let thin: ScheduleBorder = ap.gridLines ? .thin : .none
         let heavy: ScheduleBorder = ap.outline ? .wide : thin
         func cell(_ key: ScheduleCellKey?, _ text: String, column: Int, span: Int = 1, bold: Bool, size: Double, align: HorizontalAlign,
@@ -113,7 +114,7 @@ public enum ScheduleLayout {
                     } else {
                         // Outside a group the heading spans both header rows, as in RevitCraft.
                         let f = ci < t.columns.count ? t.columns[ci] : nil
-                        var c = cell(f.map { .heading($0.id) }, f?.heading ?? "", column: ci, bold: ap.boldHeaders, size: ap.headerTextHeight, align: .center,
+                        var c = cell(f.map { .heading($0.id) }, ci < fitted.headings.count ? fitted.headings[ci] : "", column: ci, bold: ap.boldHeaders, size: ap.headerTextHeight, align: .center,
                                      edges: bottom, shading: ap.headerShading)
                         c.rowSpan = 2
                         cells.append(c)
@@ -124,9 +125,9 @@ public enum ScheduleLayout {
             }
             var cells: [ScheduleGridCell] = []
             for (i, f) in t.columns.enumerated() where spans.isEmpty || spans.contains(where: { $0.columns.contains(i) }) {
-                cells.append(cell(.heading(f.id), f.heading, column: i, bold: ap.boldHeaders, size: ap.headerTextHeight, align: .center, edges: bottom, shading: ap.headerShading))
+                cells.append(cell(.heading(f.id), fitted.headings[i], column: i, bold: ap.boldHeaders, size: ap.headerTextHeight, align: .center, edges: bottom, shading: ap.headerShading))
             }
-            rows.append(ScheduleGridRow(kind: .headings, height: rowHeight, cells: cells))
+            rows.append(ScheduleGridRow(kind: .headings, height: fitted.headingHeight, cells: cells))
         }
         if ap.blankRowBeforeData { rows.append(ScheduleGridRow(kind: .blank, height: rowHeight, cells: [])) }
         for (ri, r) in t.rows.enumerated() where segment.map({ $0.contains(ri) }) ?? true {
@@ -140,11 +141,14 @@ public enum ScheduleLayout {
                 let strong = r.kind != .data
                 let edges: [ScheduleBorder] = r.kind == .grandTotal ? [thin, thin, heavy, thin] : [thin, thin, thin, thin]
                 var cells: [ScheduleGridCell] = []
-                for (i, f) in t.columns.enumerated() {
+                // POLISH: a total's title ("Plywood 3/4\": 12", "Grand total: 25") runs across the empty cells after it.
+                let titleSpan = strong && !r.title.isEmpty ? Self.titleSpan(r, columns: t.columns.count) : 1
+                for (i, f) in t.columns.enumerated() where i == 0 || i >= titleSpan {
                     var text = i < r.cells.count ? r.cells[i].text : ""
                     if i == 0, strong, !r.title.isEmpty { text = r.title }
                     let align = i < r.cells.count ? r.cells[i].alignment : f.alignment
-                    var c = cell(.body(f.id), text, column: i, bold: strong, size: ap.bodyTextHeight, align: strong && i == 0 && !r.title.isEmpty ? .left : align, edges: edges)
+                    var c = cell(.body(f.id), text, column: i, span: i == 0 ? titleSpan : 1, bold: strong, size: ap.bodyTextHeight,
+                                 align: strong && i == 0 && !r.title.isEmpty ? .left : align, edges: edges)
                     if i < r.cells.count, let bg = r.cells[i].background { c.shading = bg }
                     cells.append(c)
                 }
@@ -152,6 +156,63 @@ public enum ScheduleLayout {
             }
         }
         return ScheduleGrid(widths: widths, rows: rows)
+    }
+
+    // MARK: Column fit (POLISH)
+
+    /// Space between a cell's text and its borders (paper meters).
+    static let cellPad = 0.0015
+    /// Text widths are estimates (`TextMetrics`); this margin keeps estimated text clear of the borders.
+    static let fitMargin = 1.08
+
+    /// Columns cells a total row's title covers: the first column and the empty cells right after it.
+    static func titleSpan(_ r: ScheduleRow, columns: Int) -> Int {
+        var span = 1
+        while span < columns, span >= r.cells.count || r.cells[span].text.isEmpty { span += 1 }
+        return span
+    }
+
+    /// Paper width of one line of text in a cell, with the cell's padding.
+    static func cellWidth<S: StringProtocol>(_ s: S, height: Double, bold: Bool) -> Double {
+        TextMetrics.lineWidth(s, height: height, bold: bold) * fitMargin + 2 * cellPad
+    }
+
+    /// The columns of a table as laid out on paper, as Revit sheets show them: a column keeps its set width, a heading
+    /// too long for it wraps onto two lines at a space, and a column widens only when its contents, its longest heading
+    /// word or a heading that needs more than two lines don't fit. Returns the widths, the headings with their line
+    /// breaks and the height of the headings row.
+    public static func fit(_ t: ScheduleTable) -> (widths: [Double], headings: [String], headingHeight: Double) {
+        let ap = t.appearance
+        var widths = t.columns.map(\.width), headings = t.columns.map(\.heading)
+        // Contents: every data cell, and the totals' cells (a title only where it can't run into the next cells).
+        for r in t.rows where r.kind != .groupHeader && r.kind != .blank {
+            let strong = r.kind != .data
+            let titled = strong && !r.title.isEmpty
+            for i in widths.indices {
+                var text = i < r.cells.count ? r.cells[i].text : ""
+                if i == 0, titled {
+                    guard titleSpan(r, columns: widths.count) == 1 else { continue }
+                    text = r.title
+                }
+                guard !text.isEmpty else { continue }
+                for line in text.split(separator: "\n") { widths[i] = max(widths[i], cellWidth(line, height: ap.bodyTextHeight, bold: strong)) }
+            }
+        }
+        // Headings: one line when it fits, else two lines split at the space that keeps the longer line shortest.
+        var lines = 1
+        let h = ap.headerTextHeight, bold = ap.boldHeaders
+        for (i, heading) in headings.enumerated() where !heading.isEmpty {
+            if cellWidth(heading, height: h, bold: bold) <= widths[i] { continue }
+            let words = heading.split(separator: " ").map(String.init)
+            guard words.count > 1 else { widths[i] = cellWidth(heading, height: h, bold: bold); continue }
+            let splits = (1..<words.count).map { k in (words[..<k].joined(separator: " "), words[k...].joined(separator: " ")) }
+            let best = splits.min { max(cellWidth($0.0, height: h, bold: bold), cellWidth($0.1, height: h, bold: bold))
+                < max(cellWidth($1.0, height: h, bold: bold), cellWidth($1.1, height: h, bold: bold)) }!
+            widths[i] = max(widths[i], cellWidth(best.0, height: h, bold: bold), cellWidth(best.1, height: h, bold: bold))
+            headings[i] = best.0 + "\n" + best.1
+            lines = 2
+        }
+        return (widths, headings, rowHeight + Double(lines - 1) * h * 1.7)
     }
 
     /// Paper rectangles of the cells, row by row (rows covered by a cell above are part of its rectangle).

@@ -154,8 +154,8 @@ struct SheetTests {
         #expect(Fx.approx(layout.box.center, Vec2(0.6, 0.5), 1e-12))
         let table = ScheduleEngine.compute(s.model[doors]!, s.model)
         #expect(Fx.approx(layout.box.width, table.totalWidth, 1e-12))
-        // ScheduleLayout draws a title band, one header row and the rows.
-        let drawn = ScheduleLayout.titleHeight + Double(table.rows.count + 1) * ScheduleLayout.rowHeight
+        // ScheduleLayout draws a title band, one header row (two lines when a heading wraps, POLISH) and the rows.
+        let drawn = ScheduleLayout.titleHeight + ScheduleLayout.fit(table).headingHeight + Double(table.rows.count) * ScheduleLayout.rowHeight
         #expect(Fx.approx(layout.box.height, drawn, 1e-12))
         let item = try #require(b.build().items.first { $0.elementID == vp })
         #expect(item.targetViewID == doors)

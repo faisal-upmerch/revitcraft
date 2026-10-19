@@ -39,8 +39,8 @@ public struct ScheduleTable: Sendable {
     public init(title: String, columns: [ScheduleField], rows: [ScheduleRow], elementCount: Int) {
         self.title = title; self.columns = columns; self.rows = rows; self.elementCount = elementCount
     }
-    /// Width on paper of all visible columns.
-    public var totalWidth: Double { columns.reduce(0) { $0 + $1.width } }
+    /// Width on paper of all visible columns, as laid out (POLISH: columns fit their headings and contents).
+    public var totalWidth: Double { ScheduleLayout.fit(self).widths.reduce(0, +) }
 }
 
 /// Computes live schedule tables from the model.

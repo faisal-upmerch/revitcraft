@@ -260,7 +260,7 @@ let package = Package(
         // DomainTests so it stays fast. Run them with `swift test --filter LibraryTests`.
         .testTarget(
             name: "LibraryTests",
-            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication"],
+            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusOutput"],
             path: "Arcus/Tests/LibraryTests"
         ),
         .testTarget(name: "IFCTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusIFC"], path: "Arcus/Tests/IFCTests", resources: [.copy("Fixtures")]),
