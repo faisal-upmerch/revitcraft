@@ -321,6 +321,8 @@ public enum FurniturePartOperations {
         var r = RailData(plane: .xy, start: start, end: end, w: z, justification: .top)
         if let p = zPlane, let v = FurnitureBoundResolver(tx.model).positions[p] { r.w = v + z; r.bounds["w"] = .plane(p, offset: z) }
         r.slats = SlatLayout(rule: rule, spacing: spacing, number: number, extent: extent)
+        // FMG1: the first slat and the far side follow what the region's sides lie on, so the layout follows them.
+        FurniturePartFlex.bindSlats(&r, near: alongX ? rect.min.y : rect.min.x, farSide: alongX ? rect.max.y : rect.max.x, slatWidth: w, in: tx)
         return tx.create(.furnitureRails, data: .furnitureRail(r), typeID: t, levelID: level(tx.model))
     }
 

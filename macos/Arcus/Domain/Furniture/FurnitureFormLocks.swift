@@ -38,6 +38,9 @@ public struct FormLock: Hashable, Codable, Sendable {
     public var x: FormAxisLock?
     public var y: FormAxisLock?
     public var z: FormAxisLock?
+    /// FMG1: a revolve's profile follows the lock too: its radii as points across the axis on x, its heights on z (a
+    /// basket that grows with Width and Height). nil = only its axis and base follow.
+    public var profile: Bool? = nil
     public init(x: FormAxisLock? = nil, y: FormAxisLock? = nil, z: FormAxisLock? = nil) { self.x = x; self.y = y; self.z = z }
 
     public subscript(_ a: FamilyAxis) -> FormAxisLock? {
@@ -62,7 +65,8 @@ public enum FurnitureFormLocks {
         guard let lock, lock.x != nil || lock.y != nil || lock.z != nil else { return solids }
         // The form's extent along each axis, as drawn.
         var lo: [FamilyAxis: Double] = [:], hi: [FamilyAxis: Double] = [:]
-        for s in solids { visit(s) { axis, v in lo[axis] = min(lo[axis] ?? v, v); hi[axis] = max(hi[axis] ?? v, v) } }
+        let profile = lock.profile == true // FMG1
+        for s in solids { visit(s, profile: profile) { axis, v in lo[axis] = min(lo[axis] ?? v, v); hi[axis] = max(hi[axis] ?? v, v) } }
         let positions = FurniturePlanes.positionsByName(m)
         let formulas = planeFormulas(m)
         func mapped(_ axis: FamilyAxis, _ v: Double) -> FamilyBound {
@@ -96,7 +100,7 @@ public enum FurnitureFormLocks {
                 return .expr(v <= (a + b) / 2 ? "(\(fl)) \(term(v - l.low0))" : "(\(fh)) \(term(v - l.high0))")
             }
         }
-        return solids.map { map($0, mapped) }
+        return solids.map { map($0, profile: profile, mapped) }
     }
 
     /// The reference planes a locked form follows (its meshes change when they move).
@@ -131,8 +135,9 @@ public enum FurnitureFormLocks {
         return nil
     }
 
-    /// The world axis of each coordinate a solid places (profiles measured from a path or an axis are skipped).
-    static func visit(_ s: FamilySolid, _ f: (FamilyAxis, Double) -> Void) {
+    /// The world axis of each coordinate a solid places (profiles measured from a path or an axis are skipped, except a
+    /// revolve's when `profile` is set: FMG1).
+    static func visit(_ s: FamilySolid, profile: Bool = false, _ f: (FamilyAxis, Double) -> Void) {
         let axes = (s.workPlane ?? .xy).axes
         func pt(_ p: FamilyPoint, _ u: FamilyAxis, _ v: FamilyAxis) { if let x = number(p.x) { f(u, x) }; if let y = number(p.y) { f(v, y) } }
         switch s.profile {
@@ -142,14 +147,19 @@ public enum FurnitureFormLocks {
         case .polygon(let pts): pts.forEach { pt($0, axes.u, axes.v) }
         case .circle(let c, _): pt(c, axes.u, axes.v)
         case .blend(let b): (b.bottom + b.top).forEach { pt($0, .x, .y) }
-        case .revolve(let r): pt(r.axis, .x, .y)
-        case .sweep(let sw): sw.path.forEach { pt($0, .x, .y) }
+        case .revolve(let r):
+            pt(r.axis, .x, .y)
+            // FMG1: the profile's points across the axis (on x) and their heights.
+            if profile, let ax = number(r.axis.x), let z0 = number(s.zMin) {
+                for p in r.profile { if let x = number(p.x) { f(.x, ax + x) }; if let y = number(p.y) { f(.z, z0 + y) } }
+            }
+        case .sweep(let sw): sw.path.forEach { pt($0, axes.u, axes.v) } // FMG1: paths on any work plane
         }
         for b in [s.zMin, s.zMax] { if let v = number(b) { f(axes.w, v) } }
     }
 
-    /// The solid with every placed coordinate mapped.
-    static func map(_ s: FamilySolid, _ m: (FamilyAxis, Double) -> FamilyBound) -> FamilySolid {
+    /// The solid with every placed coordinate mapped (FMG1: with a revolve's profile when `profile` is set).
+    static func map(_ s: FamilySolid, profile: Bool = false, _ m: (FamilyAxis, Double) -> FamilyBound) -> FamilySolid {
         var out = s
         let axes = (s.workPlane ?? .xy).axes
         func b(_ x: FamilyBound, _ a: FamilyAxis) -> FamilyBound { number(x).map { m(a, $0) } ?? x }
@@ -160,11 +170,33 @@ public enum FurnitureFormLocks {
         case .polygon(let pts): out.profile = .polygon(pts.map { pt($0, axes.u, axes.v) })
         case .circle(let c, let r): out.profile = .circle(center: pt(c, axes.u, axes.v), radius: r)
         case .blend(let bl): out.profile = .blend(FamilyBlend(bottom: bl.bottom.map { pt($0, .x, .y) }, top: bl.top.map { pt($0, .x, .y) }))
-        case .revolve(var r): r.axis = pt(r.axis, .x, .y); out.profile = .revolve(r)
-        case .sweep(var sw): sw.path = sw.path.map { pt($0, .x, .y) }; out.profile = .sweep(sw)
+        case .revolve(var r):
+            // FMG1: each profile point maps as the point it places (radius across the axis, height above the base), less
+            // the mapped axis and base.
+            if profile, let ax = number(r.axis.x), let z0 = number(s.zMin) {
+                let axis = b(r.axis.x, .x), base = b(s.zMin, .z)
+                func diff(_ a: FamilyBound, _ c: FamilyBound) -> FamilyBound {
+                    if let x = number(a), let y = number(c) { return .expr(PartSolidContext.number(x - y)) }
+                    return .expr("(\(expression(a))) - (\(expression(c)))")
+                }
+                r.profile = r.profile.map { p in
+                    guard let x = number(p.x), let y = number(p.y) else { return p }
+                    return FamilyPoint(diff(m(.x, ax + x), axis), diff(m(.z, z0 + y), base))
+                }
+            }
+            r.axis = pt(r.axis, .x, .y); out.profile = .revolve(r)
+        case .sweep(var sw): sw.path = sw.path.map { pt($0, axes.u, axes.v) }; out.profile = .sweep(sw) // FMG1: any work plane
         }
         out.zMin = b(s.zMin, axes.w)
         out.zMax = b(s.zMax, axes.w)
         return out
+    }
+
+    /// FMG1: a bound as a length expression (formulas as written, numbers in metres).
+    static func expression(_ b: FamilyBound) -> String {
+        switch b {
+        case .expr(let e): Double(e.trimmingCharacters(in: .whitespaces)).map { "\(num($0)) m" } ?? e
+        case .plane(let n): n
+        }
     }
 }

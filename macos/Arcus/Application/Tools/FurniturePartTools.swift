@@ -324,7 +324,7 @@ public final class FurnitureSlatsTool: BaseTool, InteractiveTool {
     public var options: [ToolOption] {
         var o = [ToolOption(id: "direction", label: "Slats Run", kind: .choice(["Along X", "Along Y"]), value: .text(alongX ? "Along X" : "Along Y")),
                  ToolOption(id: "rule", label: "Layout Rule", kind: .choice(SlatLayout.Rule.allCases.map(\.rawValue)), value: .text(rule.rawValue))]
-        o.append(rule == .fixedDistance ? ToolOption(id: "spacing", label: "Spacing", kind: .length, value: .double(spacing))
+        o.append(rule != .fixedNumber ? ToolOption(id: "spacing", label: rule == .maximumSpacing ? "Maximum Spacing" : "Spacing", kind: .length, value: .double(spacing)) // FMG1
                                         : ToolOption(id: "number", label: "Number", kind: .integer, value: .int(number)))
         o.append(ToolOption(id: "plane", label: "Height from", kind: .choice(["None"] + FurnitureToolOptions.planeNames(.z, ctx.model)), value: .text(plane ?? "None")))
         o.append(ToolOption(id: "offset", label: "Offset", kind: .length, value: .double(offset)))

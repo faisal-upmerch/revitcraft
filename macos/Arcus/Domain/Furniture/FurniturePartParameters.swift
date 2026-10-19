@@ -229,7 +229,7 @@ enum FurniturePartParameters {
     static let layoutRule = P("furniture.part.layoutRule", "Layout Rule", .choice(SlatLayout.Rule.allCases.map(\.rawValue)), .construction,
                               get: { e, _ in e.furnitureRail?.slats.map { .text($0.rule.rawValue) } },
                               set: { e, v, _ in
-                                  guard let r = SlatLayout.Rule(rawValue: text(v)) else { throw err("Choose Fixed Distance or Fixed Number.") }
+                                  guard let r = SlatLayout.Rule(rawValue: text(v)) else { throw err("Choose Fixed Distance, Fixed Number or Maximum Spacing.") }
                                   e.furnitureRail?.slats?.rule = r
                               })
     static let slatSpacing = P("furniture.part.slatSpacing", "Spacing", .length, .construction,
@@ -246,7 +246,7 @@ enum FurniturePartParameters {
                                   guard let n = v.intValue, n >= 1, n <= 200 else { throw err("Use 1 to 200 slats.") }
                                   e.furnitureRail?.slats?.number = n
                               },
-                              locked: { e, _ in e.furnitureRail?.slats?.rule == .fixedDistance ? "The number follows the spacing (Fixed Distance)." : nil })
+                              locked: { e, _ in e.furnitureRail.flatMap(\.slats).map { $0.rule == .fixedNumber ? nil : "The number follows the spacing (\($0.rule.rawValue))." } ?? nil }) // FMG1: Maximum Spacing
     static let slatExtent = P("furniture.part.slatExtent", "Layout Width", .length, .construction,
                               tooltip: "From the first slat's centre to the last's.",
                               get: { e, _ in e.furnitureRail?.slats.map { .double($0.extent) } },
@@ -354,7 +354,7 @@ enum FurniturePartParameters {
         case .furnitureLeg:
             return typed + [baseConstraint, baseOffset, topConstraint, topOffset, unconnectedHeight, topAttached, rotation, length, width, thickness, size, volume] + identity + phasing
         case .furnitureRail(let r):
-            return typed + [railPlane, railOffset, zJust, startExtension, endExtension]
+            return typed + [railPlane, railOffset, zJust, yJust, startExtension, endExtension, startCut, endCut] // FMG1: y Justification, end cuts
                 + (r.slats != nil ? [layoutRule, slatSpacing, slatNumber, slatExtent, count] : []) + quantities + identity + phasing
         case .furnitureEdgeProfile:
             return typed + [host, profileOffset, startSetback, endSetback, length] + identity + phasing

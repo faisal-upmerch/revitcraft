@@ -54,12 +54,17 @@ public enum FurnitureLegShapes {
                 f.solids = [solid("Leg", .circle(center: p(0, 0), radius: n(w / 2)), "0", "Height")]
             }
         case .turned:
-            // A classic turned leg (radius as a fraction of the size, height as a fraction of Height): foot, vase, bead
-            // and cove, and a full-size top block for the apron.
-            let prof: [(Double, Double)] = [(0, 0), (0.30, 0), (0.30, 0.03), (0.38, 0.05), (0.30, 0.08), (0.22, 0.16), (0.26, 0.40),
-                                           (0.34, 0.54), (0.26, 0.62), (0.40, 0.66), (0.40, 0.70), (0.30, 0.72), (0.50, 0.75), (0.50, 1), (0, 1)]
-            let pts = prof.map { FamilyPoint(.expr(n($0.0 * w)), .expr("Height * \(n($0.1))")) }
-            f.solids = [solid("Leg", .revolve(FamilyRevolve(profile: pts)), "0", "Height")]
+            // FMG1: a classic turned leg as a turner leaves it: a square pommel (the top quarter) where the aprons join, and
+            // the turned body below it (foot, vase, bead and cove; radius as a fraction of the size). The body is a nested
+            // family, so joint cuts (mortises, which FM6 cuts in the leg's own solids) reach only the pommel, a box cut
+            // exactly, never the revolve (a mesh Boolean on a revolve made a piece with turned legs take over a minute).
+            f.solids = [solid("Pommel", rect(-w / 2, -w / 2, w / 2, w / 2), "Height * \(n(Self.pommelStart))", "Height")]
+            let body = turnedBody(tv, height: height * Self.pommelStart)
+            f.nestedFamilies = [body]
+            var inst = NestedFamilyInstance(familyName: body.name, typeName: body.types.first?.name, bindings: ["Height": "Height * \(n(Self.pommelStart))"])
+            inst.id = "turned-body"
+            if tv.material != nil { inst.bindings["Material"] = "Material" }
+            f.nestedInstances = [inst]
         case .hairpin:
             // Two rods from the foot to the top plate, splayed across the leg's width; a 3/16" plate on top.
             let plate = 0.1875 * 0.0254
@@ -86,6 +91,26 @@ public enum FurnitureLegShapes {
             wheel.workPlane = .xz
             f.solids.append(wheel)
         }
+        return f
+    }
+
+    /// FMG1: where a turned leg's square pommel starts, as a share of its height.
+    static let pommelStart = 0.75
+
+    /// FMG1: the turned body of a turned leg (below its pommel) as a local family: a revolve whose radii are shares of the
+    /// leg's size and whose heights are shares of the body's Height.
+    static func turnedBody(_ tv: FurniturePartTypes.Values, height: Double) -> FamilyDefinition {
+        let w = tv.width
+        var f = FamilyDefinition(name: "Turned Leg Body \(n(w))", template: .furniture)
+        f.parameters = [FamilyParameter(name: "Height", type: .length), FamilyParameter(name: "Material", type: .elementRef(.materials), group: .materials)]
+        var values: [String: ParamValue] = ["Height": .double(height)]
+        if let mat = tv.material { values["Material"] = .ref(mat) }
+        f.types = [FamilyTypeDefinition(name: "Body", values: values)]
+        // Foot, vase, bead and cove, up to the pommel's neck (heights as shares of the whole leg).
+        let prof: [(Double, Double)] = [(0, 0), (0.30, 0), (0.30, 0.03), (0.38, 0.05), (0.30, 0.08), (0.22, 0.16), (0.26, 0.40),
+                                       (0.34, 0.54), (0.26, 0.62), (0.40, 0.66), (0.40, 0.70), (0.30, 0.72), (0.36, 0.75), (0, 0.75)]
+        let pts = prof.map { FamilyPoint(.expr(n($0.0 * w)), .expr("Height * \(n($0.1 / pommelStart))")) }
+        f.solids = [solid("Turned Body", .revolve(FamilyRevolve(profile: pts)), "0", "Height")]
         return f
     }
 }

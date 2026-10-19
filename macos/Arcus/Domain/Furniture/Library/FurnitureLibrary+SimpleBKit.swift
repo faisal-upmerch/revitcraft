@@ -186,18 +186,72 @@ struct SBStep {
                                                typeID: try self.type(.furnitureRails, type), in: tx)
     }
 
-    /// A rail drawn in a front elevation from (x, z) `a` to `c`, its centre at depth `y`.
+    /// A rail drawn in a front elevation from (x, z) `a` to `c`, its centre at depth `y`, its ends cut as given (FMG1).
     @discardableResult
-    func railXZ(_ a: (Double, Double), _ c: (Double, Double), y: Double, _ type: String) throws -> ElementID {
-        try FurniturePartOperations.createRail(start: v2(a.0, a.1), end: v2(c.0, c.1), plane: .xz, w: m(y), justification: .center,
-                                               typeID: try self.type(.furnitureRails, type), in: tx)
+    func railXZ(_ a: (Double, Double), _ c: (Double, Double), y: Double, _ type: String, cuts: (RailEndCut?, RailEndCut?) = (nil, nil)) throws -> ElementID {
+        let id = try FurniturePartOperations.createRail(start: v2(a.0, a.1), end: v2(c.0, c.1), plane: .xz, w: m(y), justification: .center,
+                                                        typeID: try self.type(.furnitureRails, type), in: tx)
+        if cuts.0 != nil || cuts.1 != nil { tx.update(id) { $0.furnitureRail?.startCut = cuts.0; $0.furnitureRail?.endCut = cuts.1 } }
+        return id
     }
 
-    /// A rail drawn in a side elevation from (y, z) `a` to `c`, its centre at `x`.
+    /// A rail drawn in a side elevation from (y, z) `a` to `c`, its centre at `x`, its ends cut as given (FMG1: a raked
+    /// leg cut level stands flat on the floor).
     @discardableResult
-    func railYZ(_ a: (Double, Double), _ c: (Double, Double), x: Double, _ type: String) throws -> ElementID {
-        try FurniturePartOperations.createRail(start: v2(a.0, a.1), end: v2(c.0, c.1), plane: .yz, w: m(x), justification: .center,
-                                               typeID: try self.type(.furnitureRails, type), in: tx)
+    func railYZ(_ a: (Double, Double), _ c: (Double, Double), x: Double, _ type: String, cuts: (RailEndCut?, RailEndCut?) = (nil, nil)) throws -> ElementID {
+        let id = try FurniturePartOperations.createRail(start: v2(a.0, a.1), end: v2(c.0, c.1), plane: .yz, w: m(x), justification: .center,
+                                                        typeID: try self.type(.furnitureRails, type), in: tx)
+        if cuts.0 != nil || cuts.1 != nil { tx.update(id) { $0.furnitureRail?.startCut = cuts.0; $0.furnitureRail?.endCut = cuts.1 } }
+        return id
+    }
+
+    /// FMG1: a bound at `v` inches along `axis` to the nearest plane (Align and lock).
+    func nearest(_ v: Double, _ axis: FamilyAxis) -> FurnitureBound {
+        guard let p = FurniturePartCoordinates.planes(along: axis, tx.model).min(by: { abs($0.position - m(v)) < abs($1.position - m(v)) }) else { return .value(m(v)) }
+        return .plane(p.name, offset: m(v) - p.position)
+    }
+
+    /// FMG1: locks coordinates of a part to named planes at their current offsets (Align and lock to a chosen plane
+    /// rather than the nearest one): key → plane name.
+    func lock(_ id: ElementID, _ keys: [String: String]) {
+        guard let e = tx.model[id] else { return }
+        let r = FurnitureBoundResolver(tx.model)
+        var b = FurniturePartBounds.bounds(of: e)
+        for c in FurniturePartCoordinates.coordinates(of: e) {
+            guard let plane = keys[c.key], let at = r.positions[plane] else { continue }
+            b[c.key] = .plane(plane, offset: c.value - at)
+        }
+        var el = e
+        FurniturePartBounds.setBounds(b, of: &el)
+        let data = el.data
+        tx.update(id) { $0.data = data }
+    }
+
+    /// FMG1: keeps coordinates of a rail at share `index` / `count` of the way between two places (inches, each locked
+    /// to its nearest plane), by EQ, as the places follow their planes: key → (low, high, axis).
+    func keep(_ id: ElementID, _ keys: [String: (Double, Double, FamilyAxis)], index: Int, count: Int) {
+        var eq: [String: EqualSpacing] = [:]
+        for (k, v) in keys { eq[k] = EqualSpacing(low: nearest(v.0, v.2), high: nearest(v.1, v.2), index: index, count: count) }
+        tx.update(id) { $0.furnitureRail?.eq = eq }
+    }
+
+    /// FMG1: `count` rails along x up a raked line from side-view point `a` (y, z) to `c` (inches), the k-th at share
+    /// (2k + 1) / (2 · `of`) of the way (`of` defaults to `count`: evenly, half a space from each end), or k / (count - 1)
+    /// when `inclusive`, kept there by EQ as the line's ends follow their planes (the slats of a raked back on its
+    /// struts, a sloping seat). `lift` raises each rail's top above the line.
+    @discardableResult
+    func raked(x: (Double, Double), from a: (Double, Double), to c: (Double, Double), count: Int, of total: Int? = nil, inclusive: Bool = false,
+               lift: Double = 0, _ type: String) throws -> [ElementID] {
+        var ids: [ElementID] = []
+        for k in 0..<count {
+            let (i, n) = inclusive ? (k, max(1, count - 1)) : (2 * k + 1, 2 * (total ?? count))
+            let t = Double(i) / Double(n)
+            let y = a.0 + (c.0 - a.0) * t, z = a.1 + (c.1 - a.1) * t + lift
+            let id = try rail((x.0, y), (x.1, y), z: z, type)
+            keep(id, ["start.v": (a.0, c.0, .y), "end.v": (a.0, c.0, .y), "w": (a.1 + lift, c.1 + lift, .z)], index: i, count: n)
+            ids.append(id)
+        }
+        return ids
     }
 
     /// A vertical rail (a spindle, bar or post) at plan point (x, y) from z0 to z1.
@@ -206,21 +260,18 @@ struct SBStep {
         try railXZ((x, z.0), (x, z.1), y: y, type)
     }
 
-    /// Slats over a plan rectangle, along x or across it, their tops at `top`: one rail per slat (each locked to its
-    /// nearest plane, so they stay inside the piece as it flexes), `count` of them or as many as fit at `spacing`.
+    /// Slats over a plan rectangle, along x or across it, their tops at `top`: one Slats part (FMG1: as the Slats tool
+    /// makes it, a beam-system-like layout whose first slat and far side follow the planes, so the slats spread, or are
+    /// added and removed, as the piece flexes), `count` of them (Fixed Number) or as many as keep `spacing` (Maximum
+    /// Spacing), the outer slats at the sides.
     @discardableResult
     func slats(x: (Double, Double), y: (Double, Double), alongX: Bool, spacing: Double? = nil, count: Int? = nil, top: Double,
                _ type: String = "3/4\" x 2 1/2\" Slat") throws -> [ElementID] {
         let (x0, x1) = (min(x.0, x.1), max(x.0, x.1)), (y0, y1) = (min(y.0, y.1), max(y.0, y.1))
-        let sw = try thickness(.furnitureRails, type)
-        let lo = (alongX ? y0 : x0) + sw / 2, hi = (alongX ? y1 : x1) - sw / 2
-        let n = max(1, count ?? (Int(((hi - lo) / (spacing ?? 4) + 1e-9).rounded(.down)) + 1))
-        var ids: [ElementID] = []
-        for k in 0..<n {
-            let c = n == 1 ? (lo + hi) / 2 : lo + (hi - lo) * Double(k) / Double(n - 1)
-            ids.append(alongX ? try rail((x0, c), (x1, c), z: top, type) : try rail((c, y1), (c, y0), z: top, type))
-        }
-        return ids
+        let rect = Rect2(min: v2(x0, y0), max: v2(x1, y1))
+        let rule: SlatLayout.Rule = count == nil ? .maximumSpacing : .fixedNumber
+        return [try FurniturePartOperations.createSlats(in: rect, alongX: alongX, rule: rule, spacing: m(spacing ?? 4), number: max(1, count ?? 1), z: m(top),
+                                                        typeID: try self.type(.furnitureRails, type), in: tx)]
     }
 
     // MARK: Carcass pieces picked from committed parts
@@ -275,7 +326,10 @@ struct SBStep {
     /// How a form follows the framing planes: by where it is (`auto`: against a side it follows that side, across the
     /// middle it stretches; heights follow the Bottom unless it reaches the Top), not at all, per axis, or by where it is
     /// in plan with the given mode in height (`z`).
-    enum Lock { case auto, none, axes(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?), z(FormAxisLock.Mode) }
+    enum Lock { case auto, none, axes(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?), z(FormAxisLock.Mode)
+        /// FMG1: a revolve whose profile follows the lock too (its radii on x, its heights on z).
+        case revolveProfile(FormAxisLock.Mode?, FormAxisLock.Mode?, FormAxisLock.Mode?)
+    }
 
     /// A form in `material`, shown at `detail` levels, locked to the planes by `lock` given its extent (inches).
     @discardableResult
@@ -287,6 +341,9 @@ struct SBStep {
         switch lock {
         case .none: g.lock = nil
         case .axes(let x, let y, let z): g.lock = FormLock.framing(tx.model, x: x, y: y, z: z)
+        case .revolveProfile(let x, let y, let z):
+            g.lock = FormLock.framing(tx.model, x: x, y: y, z: z)
+            g.lock?.profile = true
         case .auto, .z:
             var zMode = Self.autoMode(extent.2, 0, h, vertical: true)
             if case .z(let mode) = lock { zMode = mode }
@@ -333,14 +390,25 @@ struct SBStep {
     }
 
     /// A revolve of `profile` (distance from the axis, height above z0; inches) about the vertical axis at (x, y),
-    /// from `angles` (degrees, counterclockwise from +x) when given.
+    /// from `angles` (degrees, counterclockwise from +x) when given. FMG1: with `radiiTo`, its sketch is locked to the
+    /// planes instead of a form lock: its axis and base to their nearest planes, the points off the axis across to that
+    /// plane (a base that keeps its distance in from the Right as Width changes), heights to their nearest planes.
     @discardableResult
     func revolve(_ profile: [(Double, Double)], at c: (Double, Double) = (0, 0), z0: Double, _ material: String, angles: (Double, Double)? = nil,
-                 lock: Lock = .auto) throws -> ElementID {
+                 lock: Lock = .auto, radiiTo plane: String? = nil) throws -> ElementID {
         var f = FurnitureFormData(kind: .revolve, profile: profile.map { v2($0.0, $0.1) }, w0: m(z0), w1: m(z0))
         f.axis = v2(c.0, c.1)
         if let a = angles { f.startAngle = a.0 * .pi / 180; f.endAngle = a.1 * .pi / 180 }
         let rad = profile.map(\.0).max() ?? 0, top = profile.map(\.1).max() ?? 0
+        if let plane, let at = FurniturePlanes.positionsByName(tx.model)[plane] {
+            var b: [String: FurnitureBound] = ["axis.x": nearest(c.0, .x), "axis.y": nearest(c.1, .y), "w0": nearest(z0, .z)]
+            for (i, p) in profile.enumerated() {
+                b["p\(i).r"] = p.0 > 1e-6 ? .plane(plane, offset: m(c.0 + p.0) - at) : nearest(c.0, .x)
+                b["p\(i).h"] = nearest(z0 + p.1, .z)
+            }
+            f.bounds = b
+            return try form(f, material, extent: ((c.0 - rad, c.0 + rad), (c.1 - rad, c.1 + rad), (z0, z0 + top)), lock: .none)
+        }
         return try form(f, material, extent: ((c.0 - rad, c.0 + rad), (c.1 - rad, c.1 + rad), (z0, z0 + top)), lock: lock)
     }
 
@@ -450,6 +518,7 @@ enum SimpleBKit {
         leg("Round 1 1/4\" Maple", .round, w: 1.25, material: "Solid Maple"),
         leg("Round 1 1/4\" Steel", .round, w: 1.25, material: "Steel"),
         leg("Turned 2\" Walnut", .turned, w: 2, material: "Solid Walnut"),
+        leg("Turned 2\" Oak", .turned, w: 2, material: "Solid Oak"), // FMG1: Decorative Console and Bench
         leg("Square 1\" Steel", .square, w: 1, material: "Steel"),
         leg("Square 2\" Oak", .square, w: 2, material: "Solid Oak"),
         leg("Round Tapered 1 3/4\" Oak", .round, w: 1.75, taper: 1, material: "Solid Oak"),
@@ -557,7 +626,7 @@ enum SimpleBKit {
         func nearest(_ a: FamilyAxis, _ v: Double) -> (name: String, position: Double)? {
             planes[a]?.min { abs($0.position - v) < abs($1.position - v) }
         }
-        for cat in [Category.furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails] {
+        for cat in [Category.furniturePanels, .furnitureShelves, .furnitureLegs, .furnitureRails, .furnitureForms] { // FMG1: revolves locked to planes
             for e in tx.model.elements(cat) {
                 var bounds = FurniturePartBounds.bounds(of: e)
                 var skip: Set<String> = []
@@ -569,6 +638,7 @@ enum SimpleBKit {
                     }
                 }
                 if e.furnitureLeg?.attachedTopID != nil { skip.insert("top") }
+                if let keys = e.furnitureRail?.eq?.keys { skip.formUnion(keys) } // FMG1: EQ rails keep their share
                 let coords = FurniturePartCoordinates.coordinates(of: e).filter { !skip.contains($0.key) }
                 var changed = false
                 for axis in FamilyAxis.allCases {

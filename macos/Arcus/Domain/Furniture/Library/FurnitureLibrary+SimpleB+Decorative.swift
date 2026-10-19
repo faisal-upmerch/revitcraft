@@ -79,21 +79,25 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// A console with a marble top on tapered legs, aprons and an oak lower shelf.
+    /// A console with a marble top on turned legs, aprons and an oak lower shelf.
     static func decorativeConsole() throws -> BIMModel {
         let p = try SBBuilder("Decorative Console", .furniture, [SBSize(54, 15, 32), SBSize(60, 16, 34)], material: "Solid Oak")
         try p.step("Top, Legs and Shelf") { s in
-            let t = try s.table(top: "1\" Marble Top", leg: "Round Tapered 2\"", inset: 1, apron: "3/4\" x 3\" Apron")
+            let t = try s.table(top: "1\" Marble Top", leg: "Turned 2\" Oak", inset: 1, apron: "3/4\" x 3\" Apron") // FMG1: turned legs
             try s.board(x: (t.legX.0 + t.legWidth, t.legX.1 - t.legWidth), y: (t.legY.0 + 0.5, t.legY.1 - 0.5), top: 8, "1\" Solid Oak Shelf")
         }
         return try p.finish()
     }
 
-    /// A four-leaf folding screen, half folded: walnut posts at the hinges and canvas leaves between them.
+    /// A four-leaf folding screen, half folded: walnut posts at the hinges and canvas leaves between them. FMG1: the
+    /// inner posts stand on reference planes at a quarter of the Width, so the leaves (drawn at an angle in plan) stretch
+    /// evenly with Width and swing out with Depth.
     static func foldingScreen() throws -> BIMModel {
-        let p = try SBBuilder("Folding Screen", .furniture, [SBSize(72, 12, 70)], material: "Canvas")
+        let p = try SBBuilder("Folding Screen", .furniture, [SBSize(72, 12, 70), SBSize(60, 12, 66)], material: "Canvas",
+                              planes: [SBPlane("Post 1", .x, "-Width / 4 + 0.375\"", at: -17.625), SBPlane("Post 3", .x, "Width / 4 - 0.375\"", at: 17.625)])
         try p.step("Posts and Leaves") { s in
-            let pts: [(Double, Double)] = (0...4).map { k in (s.l + 0.75 + (s.w - 1.5) * Double(k) / 4, k % 2 == 0 ? s.f + 0.75 : s.b - 0.75) }
+            let xs = [s.l + 0.75, s.pos("Post 1"), 0, s.pos("Post 3"), s.r - 0.75]
+            let pts: [(Double, Double)] = xs.enumerated().map { k, x in (x, k % 2 == 0 ? s.f + 0.75 : s.b - 0.75) }
             for q in pts { try s.leg(q.0, q.1, z: (0, s.h), "Square 1 1/2\" Walnut") }
             for (a, c) in zip(pts, pts.dropFirst()) {
                 let dx = c.0 - a.0, dy = c.1 - a.1, len = hypot(dx, dy), ux = dx / len, uy = dy / len
@@ -124,11 +128,12 @@ extension SimpleB {
         return try p.finish()
     }
 
-    /// An upholstered bench on tapered legs with aprons and stretchers.
+    /// An upholstered bench on turned legs with aprons and stretchers.
     static func decorativeBench() throws -> BIMModel {
         let p = try SBBuilder("Decorative Bench", .furniture, [SBSize(48, 16, 19), SBSize(60, 18, 19)], material: "Solid Oak")
         try p.step("Frame and Seat") { s in
-            let t = try s.table(top: "3/4\" Plywood Top", leg: "Round Tapered 2\"", inset: 0, apron: "3/4\" x 3\" Apron", topAt: s.h - 3)
+            let t = try s.table(top: "3/4\" Plywood Top", leg: "Turned 2\" Oak", inset: 0, // FMG1: turned legs
+                                 apron: "3/4\" x 3\" Apron", topAt: s.h - 3)
             try s.railRing(x: t.legX, y: t.legY, legWidth: t.legWidth, top: 5, "3/4\" x 1 1/2\" Stretcher", sides: (false, false, true, true))
             try s.rail((t.legX.0 + t.legWidth, 0), (t.legX.1 - t.legWidth, 0), z: 5, "3/4\" x 1 1/2\" Stretcher")
             try s.cushion(x: (s.l, s.r), y: (s.f, s.b), z0: s.h - 3, height: 3, "Fabric", crown: 0.75, radius: 1)
@@ -151,12 +156,26 @@ extension SimpleB {
 
     /// A leaning ladder shelf: two raked rails and four shelves, deepest at the bottom.
     static func ladderShelf() throws -> BIMModel {
-        let p = try SBBuilder("Ladder Shelf", .furniture, [SBSize(24, 16, 72)], material: "Solid Oak")
+        // FMG1: the side rails lean from the Front at the floor to 3 1/2" short of the Back at the Top, their front edges on
+        // those points and cut level at both ends; each shelf is on a plane at its share of the Height, its front on a
+        // plane that follows the rails' lean, its back on the Back.
+        let heights = [8.0, 24, 40, 56], w = 24.0, d = 16.0, h = 72.0, lean = 3.5
+        var planes: [SBPlane] = []
+        for (k, z) in heights.enumerated() {
+            let share = z / h, inset = 1.5 - lean * share
+            planes.append(SBPlane("Shelf \(k + 1)", .z, "Height * \(FurnitureFormLocks.num(share))", at: z))
+            planes.append(SBPlane("Shelf \(k + 1) Front", .y, "Depth * \(FurnitureFormLocks.num(share)) - Depth / 2 + \(FurnitureFormLocks.num(inset))\"",
+                                  at: d * share - d / 2 + inset))
+        }
+        let p = try SBBuilder("Ladder Shelf", .furniture, [SBSize(w, d, h), SBSize(30, 18, 84)], material: "Solid Oak", planes: planes)
         try p.step("Rails and Shelves") { s in
-            for x in [s.l + 0.75, s.r - 0.75] { try s.railYZ((s.f + 1.5, 0), (s.b - 1.5, s.h), x: x, "1 1/2\" x 3\" Oak Rail") }
-            for z in [8.0, 24, 40, 56] {
-                let yr = (s.f + 1.5) + (s.b - s.f - 3) * z / s.h
-                try s.board(x: (s.l + 1.5, s.r - 1.5), y: (yr - 2, s.b - 0.5), top: z, "3/4\" Solid Pine Shelf")
+            for x in [s.l + 0.75, s.r - 0.75] {
+                let id = try s.railYZ((s.f, 0), (s.b - lean, s.h), x: x, "1 1/2\" x 3\" Oak Rail", cuts: (.horizontal, .horizontal))
+                s.tx.update(id) { $0.furnitureRail?.yJustification = .right }
+                s.lock(id, ["start.u": "Front", "start.v": "Bottom", "end.u": "Back", "end.v": "Top"])
+            }
+            for k in heights.indices {
+                try s.board(x: (s.l + 1.5, s.r - 1.5), y: (s.pos("Shelf \(k + 1) Front"), s.b), top: s.pos("Shelf \(k + 1)"), "3/4\" Solid Pine Shelf")
             }
         }
         return try p.finish()

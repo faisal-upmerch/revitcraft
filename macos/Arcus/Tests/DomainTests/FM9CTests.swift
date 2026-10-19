@@ -8,7 +8,7 @@ import ArcusCalc
 /// FM9C (Furniture Library, simple pieces part B): every piece of the owner's list for this batch is registered under
 /// its rooms and category, builds with the Furniture mode operations, has one or two size types and a Material, passes
 /// Flex (the document's and the compiled family's), Check Parts with no errors (every part has a material), flexes
-/// Width, Depth and Height as a whole (pieces with fixed-size parts excepted, see `SimpleB.partialFlex`), and loads
+/// Width, Depth and Height as a whole (FMG1: angled parts and revolves included), and loads
 /// into a project, where an instance draws.
 @Suite("FM9C Furniture Library simple pieces B") @MainActor
 struct FM9CTests {
@@ -155,7 +155,6 @@ struct FM9CTests {
         for t in f.types {
             let ev0 = FamilyEvaluator.evaluate(f, typeName: t.name, units: .imperial)
             #expect(ev0.errors.isEmpty && !ev0.solids.isEmpty, "\(name) \(t.name): \(ev0.errors.prefix(2))")
-            guard !SimpleB.partialFlex.keys.contains(name) else { continue }
             // Width, Depth and Height flex the whole piece (hardware aside), as FM8's samples do.
             for (param, axis) in [("Width", 0), ("Depth", 1), ("Height", 2)] {
                 for scale in [0.85, 1.25] {

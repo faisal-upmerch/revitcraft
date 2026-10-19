@@ -46,19 +46,6 @@ enum SimpleB {
         return out
     }
 
-    /// Pieces with parts that keep their size when the piece flexes, and why (Flex still passes: nothing breaks).
-    static let partialFlex: [String: String] = [
-        "Sun Lounger": "the back's raked struts",
-        "Hammock": "the raked uprights, ropes and the bed's curve",
-        "Hanging Chair": "the revolved basket and base",
-        "Picnic Table": "the A-frame legs",
-        "Folding Chair": "the raked legs",
-        "Swing Bench": "the A-frame legs",
-        "Adirondack Chair": "the raked stringers and back slats",
-        "Folding Screen": "the leaves, drawn at an angle in plan",
-        "Ladder Shelf": "the raked side rails",
-    ]
-
     static let entry = "Entryway & Hallway", kidsRoom = "Kids' Room & Nursery", outdoorRoom = "Outdoor & Balcony"
     static let storageRoom = "Storage & Utility", multi = "Multipurpose & Space-Saving", decor = "Decorative & Accent"
 }
