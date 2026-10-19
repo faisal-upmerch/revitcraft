@@ -77,7 +77,7 @@ public enum FurnitureLegShapes {
                         solid("Post 1", rect(-w / 2, -half, w / 2, -half + t), n(t), "Height - \(n(t)) m"),
                         solid("Post 2", rect(-w / 2, half - t, w / 2, half), n(t), "Height - \(n(t)) m")]
         case .caster:
-            // Mounting plate, fork and wheel; the wheel fills most of the height.
+            // Mounting plate, fork and wheel; the wheel fills most of the height. (FM9C: offsets from Height are lengths.)
             let plate = 0.125 * 0.0254
             f.solids = [solid("Plate", rect(-w / 2, -w / 2, w / 2, w / 2), "Height - \(n(plate)) m", "Height"),
                         solid("Fork", rect(-w * 0.18, -w * 0.3, w * 0.18, w * 0.3), "Height * 0.45", "Height - \(n(plate)) m")]
