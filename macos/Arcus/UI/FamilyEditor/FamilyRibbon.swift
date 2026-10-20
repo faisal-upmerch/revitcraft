@@ -46,7 +46,7 @@ struct FamilyRibbonTabsBar: View {
         let contextual = model.ribbonContextualTitle
         let contextualShown = chrome.ribbonShowsContextual && contextual != nil
         let fit = Self.fit(contextual: contextual, available: available)
-        HStack(spacing: 1) {
+        HStack(spacing: 0) { // PILLS: the capsules' padding spaces the titles
             if fit == .compact {
                 Menu {
                     ForEach(FamilyRibbonTab.allCases) { t in
@@ -60,9 +60,8 @@ struct FamilyRibbonTabsBar: View {
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
                     }
                     .foregroundStyle(contextualShown ? Color.secondary : Color.primary)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.primary.opacity(contextualShown ? 0 : 0.10)))
-                    .contentShape(Capsule())
+                    .padding(.horizontal, PillSpec.padding).frame(height: PillSpec.shellItemHeight) // PILLS
+                    .pillHighlight(!contextualShown)
                 } primaryAction: { pick(chrome.ribbonTab) }
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
                 .accessibilityLabel("Ribbon tab: \(chrome.ribbonTab.rawValue)")
@@ -80,20 +79,10 @@ struct FamilyRibbonTabsBar: View {
                 .frame(maxWidth: fit == .full ? nil : max(56, available - Self.tasksWidth(compact: fit == .compact)), alignment: .leading)
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
-            Button { chrome.ribbonCollapsed.toggle() } label: {
-                Image(systemName: chrome.ribbonCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 9, weight: .bold))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(RibbonPressStyle())
-            .modifier(HoverBackground(radius: 11))
-            .foregroundStyle(.secondary)
-            .help(chrome.ribbonCollapsed ? "Show the ribbon panels" : "Minimize the ribbon to tabs")
-            .accessibilityLabel(chrome.ribbonCollapsed ? "Show ribbon panels" : "Minimize ribbon")
+            RibbonMinimizeButton(collapsed: chrome.ribbonCollapsed) { chrome.ribbonCollapsed.toggle() }
         }
-        .padding(.horizontal, 3)
-        .arcusAnimation(contextual)
+        .padding(PillSpec.inset) // PILLS: as the project window's tab pill
+        .arcusAnimation(contextual != nil) // PILLS: the contextual tab slides in; its title never cross-fades
         .fixedSize(horizontal: fit == .full, vertical: true) // the row keeps its height whatever the window offers
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Ribbon tabs")
@@ -105,18 +94,16 @@ struct FamilyRibbonTabsBar: View {
     }
 
     /// A tab's width: its title in the selected weight plus its padding and the row spacing.
-    static func tabWidth(_ title: String) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        return ceil((title as NSString).size(withAttributes: [.font: font]).width) + 21
-    }
+    static func tabWidth(_ title: String) -> CGFloat { RibbonTabMetrics.width(title, selected: true) } // PILLS
     /// The task tabs (or the compact menu) plus the minimize control and the row's padding.
     static func tasksWidth(compact: Bool) -> CGFloat {
-        (compact ? tabWidth(FamilyRibbonTab.create.rawValue) + 30 : FamilyRibbonTab.allCases.reduce(0) { $0 + tabWidth($1.rawValue) }) + 30
+        (compact ? tabWidth(FamilyRibbonTab.create.rawValue) + 14 : RibbonTabMetrics.rowWidth(FamilyRibbonTab.allCases.map(\.rawValue))) + RibbonTabMetrics.chromeWidth
     }
     /// How the tabs fit in `available` points.
     static func fit(contextual: String?, available: CGFloat) -> Fit {
         let tasks = tasksWidth(compact: false)
-        if tasks + (contextual.map(tabWidth) ?? 0) <= available { return .full }
+        let titles = FamilyRibbonTab.allCases.map(\.rawValue) + (contextual.map { [$0] } ?? [])
+        if RibbonTabMetrics.rowWidth(titles) + RibbonTabMetrics.chromeWidth <= available { return .full } // PILLS: one tab is chosen at a time
         if tasks + (contextual == nil ? 0 : 90) <= available { return .truncatedContextual }
         return .compact
     }
@@ -127,8 +114,7 @@ struct FamilyRibbonTabsPill: View {
     @Bindable var model: FamilyEditorModel
     let available: CGFloat
     var body: some View {
-        FamilyRibbonTabsBar(model: model, available: max(0, available - 10))
-            .padding(.horizontal, 5)
+        FamilyRibbonTabsBar(model: model, available: available)
             .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))
             .modifier(GlassPill(role: .tabs))
     }
@@ -142,34 +128,10 @@ struct FamilyRibbonTabButton: View {
     var chrome: FamilyEditorChrome? = nil
     let action: () -> Void
     var doubleTap: () -> Void = {}
-    @State private var hovering = false
     var body: some View {
-        Text(title)
-            .font(.system(size: 12, weight: selected ? .semibold : .medium))
-            .lineLimit(1).truncationMode(.tail)
-            .fixedSize(horizontal: !contextual, vertical: true) // FES: a tab name never collapses; a squeezed contextual tab still reads "Modi…"
-            .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FamilyEditorChrome.space)) } action: { chrome?.measuredTabs[title] = $0 }
-            .frame(minWidth: contextual ? 56 : 0)
-            .padding(.horizontal, 10).padding(.vertical, 4)
-            .foregroundStyle(contextual ? Tokens.contextualTint : (selected ? Color.primary : Color.secondary))
-            .background {
-                if selected {
-                    Capsule().fill(contextual ? Tokens.contextualTint.opacity(0.18) : Color.primary.opacity(0.10))
-                } else if hovering {
-                    Capsule().fill(Color.primary.opacity(0.06))
-                } else if contextual {
-                    Capsule().strokeBorder(Tokens.contextualTint.opacity(0.45), lineWidth: 1)
-                }
-            }
-            .contentShape(Capsule())
-            .onHover { hovering = $0 }
-            .onTapGesture(count: 2, perform: doubleTap)
-            .onTapGesture(perform: action)
-            .help(title)
-            .accessibilityElement()
-            .accessibilityLabel(title + " tab")
-            .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
-            .accessibilityAction { action() }
+        // PILLS: the project window's tab, measured for the strip's fit checks.
+        RibbonTabButton(title: title, selected: selected, contextual: contextual, action: action, doubleTap: doubleTap,
+                        onFrame: { [chrome] r in chrome?.measuredTabs[title] = r }, spaceName: FamilyEditorChrome.space)
     }
 }
 
@@ -198,6 +160,7 @@ struct FamilyRibbonPanels: View {
             rowPanels
             RibbonOverflowButton { rowPanels } // POLISH: when even collapsed panels don't fit
         }
+        .instantContent("ribbon", key: "\(model.chrome.ribbonShowsContextual) \(model.chrome.ribbonTab.rawValue) \(model.ribbonContextualTitle ?? "")") // PILLS: never two ribbons
         .padding(.horizontal, 10).padding(.vertical, 5)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)

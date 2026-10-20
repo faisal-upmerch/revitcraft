@@ -49,11 +49,8 @@ struct ContentAreaView: View {
             .onChange(of: controlsWidth, initial: true) { _, v in state.docks.controlsWidth = v }
             .onChange(of: tabsWidth, initial: true) { _, v in if abs(v - state.ribbonTabsWidth) > 0.5 { state.ribbonTabsWidth = v } }
             .animation(AccessibilityPrefs.reduceMotion ? nil : .spring(duration: 0.28, bounce: 0.08), value: visibility)
-            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.2), value: state.ribbonCollapsed)
-            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.18), value: state.activeTool == nil)
-            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.18), value: state.openViews.count > 1)
+            .modifier(ShellAnimations(state: state))
         }
-        .arcusAnimation(state.message)
         .ignoresSafeArea()
         .background(Color(nsColor: Tokens.canvas))
         .sheet(item: $state.presented) { d in DialogHost(state: state, dialog: d) }
@@ -90,6 +87,19 @@ struct ContentAreaView: View {
                     .padding(.top, v.view?.kind == .threeD ? 148 : 12).padding(.trailing, 12) // W4-WIRE: under the 3D orientation cube
             }
         }
+    }
+}
+
+/// The shell's motion: the floating pieces slide and fade as the ribbon minimizes, a tool's Options pill comes and
+/// goes, the view-tab row appears, and a toast shows. Shared by the window and the ribbon transition test. // PILLS
+struct ShellAnimations: ViewModifier {
+    let state: DocumentState
+    func body(content: Content) -> some View {
+        content
+            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.2), value: state.ribbonCollapsed)
+            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.18), value: state.activeTool == nil)
+            .animation(AccessibilityPrefs.reduceMotion ? nil : .easeOut(duration: 0.18), value: state.openViews.count > 1)
+            .arcusAnimation(state.message)
     }
 }
 
@@ -191,24 +201,15 @@ struct ViewTabBar: View {
             Image(systemName: icon(e)).font(.system(size: 10.5, weight: active ? .semibold : .regular)).foregroundStyle(active ? Tokens.selectionColor : .secondary)
             Text(title(e)).font(.system(size: 11.5, weight: active ? .semibold : .regular)).lineLimit(1)
                 .foregroundStyle(active ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary)) // VIS: inactive tabs recede
-            Button { state.close(id) } label: {
-                Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold)).frame(width: 14, height: 14).contentShape(Circle())
-            }
-                .buttonStyle(RibbonPressStyle())
-                .modifier(HoverBackground(radius: 7))
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("Close \(title(e))")
+            ViewTabCloseButton(title: title(e)) { state.close(id) }
         }
-        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 4) // room around the icon and close button, so the selected tint doesn't hug them
-        .background {
-            if active {
-                // W4-WIRE: a tint on the glass pill. VIS: strong enough to find at a glance in light and dark, with an edge.
-                Capsule().fill(Tokens.selectionColor.opacity(0.24))
-                    .overlay(Capsule().strokeBorder(Tokens.selectionColor.opacity(0.6), lineWidth: 1))
-            }
-        }
-        .modifier(HoverBackground(radius: 12))
-        .contentShape(Capsule())
+        // PILLS: 12 pt before the icon, 8 pt after the close circle (so the ✕ sits 12 pt in), a 22 pt capsule 4 pt
+        // inside the 30 pt glass pill all round, hover on the same capsule.
+        .padding(.leading, PillSpec.padding).padding(.trailing, PillSpec.closePadding)
+        .frame(height: PillSpec.viewTabItemHeight)
+        .pillHighlight(active, .tint(Tokens.selectionColor)) // W4-WIRE / VIS: a tint strong enough to find at a glance, with an edge
+        .padding(PillSpec.inset)
+        .contentShape(Capsule()) // the whole pill takes the click
         .onTapGesture { state.activeViewID = id }
         .contextMenu {
             Button("Close") { state.close(id) }
@@ -225,6 +226,22 @@ struct ViewTabBar: View {
     func title(_ e: Element) -> String { ViewTitles.qualified(e) }
 }
 
+/// A view tab's close button: a 16 pt circle with its own hover, inside the tab's capsule. // PILLS
+struct ViewTabCloseButton: View {
+    let title: String
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold))
+                .frame(width: PillSpec.closeButtonSize, height: PillSpec.closeButtonSize)
+                .pillHighlight(false)
+        }
+        .buttonStyle(RibbonPressStyle())
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Close \(title)")
+    }
+}
+
 /// Scale, detail level, visual style, crop, temporary hide/isolate and reveal hidden for the active view.
 struct ViewControlStrip: View {
     @Bindable var state: DocumentState
@@ -233,14 +250,14 @@ struct ViewControlStrip: View {
         let v = state.activeView
         let vd = v?.view
         let temp = state.activeViewID.flatMap { state.session.temporaryVisibility[$0] }
-        HStack(spacing: 10) {
+        HStack(spacing: PillSpec.gap) { // PILLS: the items' own 28 pt capsules space them
             if let vd, vd.kind != .threeD {
                 Menu {
                     let imperial = state.model.units.system == .imperial
                     if imperial { ForEach(ViewScales.imperial, id: \.value) { s in Button(s.label) { setScale(s.value) } } }
                     else { ForEach(ViewScales.metric, id: \.self) { s in Button("1 : \(s)") { setScale(s) } } }
                 } label: { Text(ViewScales.label(vd.scale, imperial: state.model.units.system == .imperial)).font(Tokens.monoDigits) }
-                .menuStyle(.borderlessButton).fixedSize()
+                .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
                 .help(scaleLocked(v) ? "View scale (controlled by the view template)" : "View scale").accessibilityLabel("View scale \(vd.scale)") // BL-VG
                 .disabled(scaleLocked(v)) // BL-VG: only when the template controls the scale
             }
@@ -264,8 +281,8 @@ struct ViewControlStrip: View {
                     Divider()
                     Button("Reset Temporary Hide/Isolate") { CommandRouter(state: state).run(.resetTemporary) }
                 } label: { Image(systemName: "eyeglasses") }
-                .menuStyle(.borderlessButton).fixedSize()
-                .modifier(HoverBackground(active: temp?.isActive == true, tint: Tokens.selectionColor, radius: 5)) // VIS: on reads at a glance
+                .menuStyle(.borderlessButton).fixedSize().barMenuItem()
+                .pillHighlight(temp?.isActive == true, .tint(Tokens.selectionColor)) // VIS: on reads at a glance
                 .overlay(alignment: .topTrailing) { if temp?.isActive == true { Circle().fill(Tokens.selectionColor).frame(width: 5, height: 5) } }
                 .help(temp?.isActive == true ? "Temporary hide/isolate is on" : "Temporary hide/isolate")
                 .accessibilityLabel(temp?.isActive == true ? "Temporary hide or isolate, active" : "Temporary hide or isolate")
@@ -276,8 +293,9 @@ struct ViewControlStrip: View {
             if temp?.isActive == true || temp?.revealHidden == true || temp?.temporaryTemplateID != nil || temp?.revealConstraints == true { // BL-VG
                 Text(temp?.revealHidden == true ? "Reveal Hidden" : temp?.isActive == true ? "Temporary Hide/Isolate" : temp?.temporaryTemplateID != nil ? "Temporary View Properties" : "Reveal Constraints") // BL-VG
                     .font(.system(size: 10, weight: .semibold))
-                    .padding(.horizontal, 6).padding(.vertical, 1)
+                    .padding(.horizontal, 10).frame(height: 20) // PILLS: a chip, not a tight label
                     .background(Capsule().fill(Tokens.selectionColor.opacity(0.15)))
+                    .padding(.horizontal, 4)
                     .foregroundStyle(Tokens.selectionColor)
             }
         }
@@ -287,10 +305,10 @@ struct ViewControlStrip: View {
     func stripButton(_ symbol: String, _ help: String, _ cmd: CommandID, on: Bool) -> some View {
         Button { CommandRouter(state: state).run(cmd) } label: {
             Image(systemName: symbol).foregroundStyle(on ? Tokens.selectionColor : .primary)
-                .frame(width: 22, height: 20).contentShape(Rectangle())
+                .frame(width: PillSpec.shellItemHeight, height: PillSpec.shellItemHeight) // PILLS: 28 pt, 4 pt inside the bottom pill
         }
         .buttonStyle(RibbonPressStyle())
-        .modifier(HoverBackground(active: on, tint: Tokens.selectionColor, radius: 5))
+        .pillHighlight(on, .tint(Tokens.selectionColor))
         .help(help + (on ? " (on)" : ""))
         .accessibilityLabel(help)
         .accessibilityValue(on ? "On" : "Off")
@@ -335,10 +353,10 @@ struct GraphicDisplayControls: View {
     var body: some View {
         Button { update("Shadows") { $0.castShadows.toggle() } } label: {
             Image(systemName: "shadow").foregroundStyle(options.castShadows ? Tokens.selectionColor : .primary)
-                .frame(width: 22, height: 20).contentShape(Rectangle())
+                .frame(width: PillSpec.shellItemHeight, height: PillSpec.shellItemHeight) // PILLS: 28 pt, 4 pt inside the bottom pill
         }
         .buttonStyle(RibbonPressStyle())
-        .modifier(HoverBackground(active: options.castShadows, tint: Tokens.selectionColor, radius: 5)) // VIS
+        .pillHighlight(options.castShadows, .tint(Tokens.selectionColor)) // VIS
         .help(options.castShadows ? "Shadows On" : "Shadows Off")
         .accessibilityLabel("Shadows")
         .accessibilityValue(options.castShadows ? "On" : "Off")
@@ -354,7 +372,7 @@ struct GraphicDisplayControls: View {
                 ForEach(Self.stillPresets) { p in sunButton(p) }
             }
         } label: { Image(systemName: "sun.max") }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
         .help("Graphic display options")
         .accessibilityLabel("Graphic display options")
     }
@@ -446,9 +464,10 @@ struct BottomBarView: View {
                     StatusBarView(state: state, level: 2)
                     StatusBarView(state: state, level: 3)
                 }
+                .instantContent("status", key: "\(state.prompt) \(state.session.selection.count)") // PILLS: the prompt swaps, never two lines cross-fading
             } else { Spacer(minLength: 0) }
         }
-        .padding(.horizontal, 14) // W4-WIRE: inside the bottom pill (BottomPill draws the glass)
+        .padding(.horizontal, PillSpec.inset) // W4-WIRE / PILLS: the end items' capsules 4 pt from the pill's ends
         .frame(height: Tokens.bottomBarHeight)
         .frame(maxWidth: .infinity, alignment: .leading) // W4-WIRE: a pill too narrow for the view controls clips at its right end, never the left
     }
@@ -499,6 +518,7 @@ struct StatusBarView: View {
                     Text(errors + warns == 0 ? "No warnings" : "\(errors + warns)").font(.system(size: 11).monospacedDigit())
                         .lineLimit(1).fixedSize() // W4-AUDIT: never wraps to "N o" in narrow windows; the prompt truncates instead
                 }
+                .padding(.horizontal, 10).frame(height: PillSpec.shellItemHeight).pillHighlight(false) // PILLS
             }
             .buttonStyle(.plain)
             .help("Warnings") // BL-VG
@@ -528,7 +548,7 @@ struct StatusBarView: View {
                     Text("\(state.session.selection.count)").font(.system(size: 11).monospacedDigit())
                 }
             }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
             .help("Selection filter")
             .accessibilityLabel("\(state.session.selection.count) selected. Selection filter")
             }
@@ -540,11 +560,10 @@ struct StatusBarView: View {
             Image(systemName: symbol).symbolVariant(on ? .none : .slash)
                 .font(.system(size: 11))
                 .foregroundStyle(on ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
-                .frame(width: 20, height: 18)
-                .contentShape(Rectangle())
+                .frame(width: PillSpec.shellItemHeight, height: PillSpec.shellItemHeight) // PILLS
         }
         .buttonStyle(RibbonPressStyle())
-        .modifier(HoverBackground(radius: 5))
+        .pillHighlight(false)
         .help("\(title): \(on ? "on" : "off")")
         .accessibilityLabel(title)
         .accessibilityValue(on ? "On" : "Off")

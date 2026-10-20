@@ -15,12 +15,12 @@ struct FamilyControlsPill: View {
     @Bindable var model: FamilyEditorModel
     var body: some View {
         let _ = model.family // undo and redo availability follow every edit
-        HStack(spacing: 1) {
+        HStack(spacing: PillSpec.gap) {
             PillIconButton(symbol: "arrow.uturn.backward", help: model.undo.canUndo ? "Undo \(model.undo.undoActionName) (⌘Z)" : "Undo (⌘Z)", enabled: model.undo.canUndo) { model.undo.undo() }
             PillIconButton(symbol: "arrow.uturn.forward", help: model.undo.canRedo ? "Redo \(model.undo.redoActionName) (⇧⌘Z)" : "Redo (⇧⌘Z)", enabled: model.undo.canRedo) { model.undo.redo() }
             PillIconButton(symbol: "sidebar.trailing", help: "Show or hide Properties (⌥⌘2)") { model.chrome.toggleProperties() }
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, PillSpec.inset) // PILLS
         .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))
         .modifier(GlassPill(role: .controls))
         .accessibilityElement(children: .contain)
@@ -136,7 +136,13 @@ struct FamilyViewTabPills: View {
                 Divider()
                 Menu("Open View") { ForEach(FamilyPreviewMode.allCases) { v in Button(v.viewTitle, systemImage: v.symbol) { model.view = v } } }
                 Button("Close Inactive Views") { model.openViews = [model.view] }.disabled(model.openViews.count < 2)
-            } label: { Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).frame(width: 26, height: CGFloat(ShellMetrics.arcus.viewTabsHeight)) }
+            } label: {
+                // PILLS: a 22 pt hover circle 4 pt inside the 30 pt glass circle, as the tabs' capsules.
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    .frame(width: PillSpec.viewTabItemHeight, height: PillSpec.viewTabItemHeight)
+                    .pillHighlight(false)
+                    .padding(PillSpec.inset)
+            }
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
             .modifier(GlassPill(role: .viewTab))
             .help("All open views")
@@ -149,20 +155,17 @@ struct FamilyViewTabPills: View {
     func tab(_ v: FamilyPreviewMode) -> some View {
         let active = v == model.view
         return HStack(spacing: 6) {
-            Image(systemName: v.symbol).font(.system(size: 10.5)).foregroundStyle(active ? Tokens.selectionColor : .secondary)
+            Image(systemName: v.symbol).font(.system(size: 10.5, weight: active ? .semibold : .regular)).foregroundStyle(active ? Tokens.selectionColor : .secondary)
             Text(v.viewTitle).font(.system(size: 11.5, weight: active ? .semibold : .regular)).lineLimit(1).fixedSize()
-            Button { close(v) } label: {
-                Image(systemName: "xmark").font(.system(size: 7.5, weight: .bold)).frame(width: 14, height: 14).contentShape(Circle())
-            }
-            .buttonStyle(RibbonPressStyle())
-            .modifier(HoverBackground(radius: 7))
-            .foregroundStyle(.secondary)
-            .accessibilityLabel("Close \(v.viewTitle)")
+                .foregroundStyle(active ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
+            ViewTabCloseButton(title: v.viewTitle) { close(v) }
         }
-        .padding(.leading, 14).padding(.trailing, 10).padding(.vertical, 4) // as the project window's view tabs
-        .background { if active { Capsule().fill(Tokens.selectionColor.opacity(0.14)) } }
-        .modifier(HoverBackground(radius: 12))
-        .contentShape(Capsule())
+        // PILLS: as the project window's view tabs (PillSpec).
+        .padding(.leading, PillSpec.padding).padding(.trailing, PillSpec.closePadding)
+        .frame(height: PillSpec.viewTabItemHeight)
+        .pillHighlight(active, .tint(Tokens.selectionColor))
+        .padding(PillSpec.inset)
+        .contentShape(Capsule()) // the whole pill takes the click
         .onTapGesture { model.view = v }
         .contextMenu {
             Button("Close") { close(v) }
@@ -202,6 +205,7 @@ struct FamilyOptionsBar: View {
                 row
                 ScrollView(.horizontal, showsIndicators: false) { row }
             }
+            .instantContent("options", key: title) // PILLS: a new tool's options swap, never cross-fade
             .padding(.horizontal, 14)
             .frame(height: CGFloat(ShellMetrics.arcus.optionsHeight))
             .modifier(GlassPill(role: .options))
@@ -313,9 +317,9 @@ struct FamilyBottomPill: View {
         HStack(spacing: 0) {
             FamilyViewControls(model: model)
             Divider().frame(height: 16).padding(.horizontal, 10)
-            FamilyStatusText(model: model)
+            FamilyStatusText(model: model).instantContent("status", key: model.statusText) // PILLS: one status line
         }
-        .padding(.horizontal, 14)
+        .padding(.leading, PillSpec.inset).padding(.trailing, 14) // PILLS: the first capsule 4 pt from the pill's end
         .frame(height: Tokens.bottomBarHeight)
         .frame(maxWidth: .infinity, alignment: .leading)
         .clipShape(Capsule())
@@ -328,13 +332,13 @@ struct FamilyViewControls: View {
     @Bindable var model: FamilyEditorModel
     var body: some View {
         let chrome = model.chrome
-        HStack(spacing: 10) {
+        HStack(spacing: PillSpec.gap) { // PILLS
             Menu {
                 ForEach(FamilyPreviewMode.allCases) { v in
                     Toggle(v.viewTitle, isOn: Binding(get: { v == model.view }, set: { _ in model.view = v })) // VIS: checkmark on the current view
                 }
             } label: { Image(systemName: model.view.symbol) }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
             .help("View: \(model.view.viewTitle)").accessibilityLabel("View \(model.view.viewTitle)")
             Menu {
                 ForEach(DetailLevel.allCases, id: \.self) { d in
@@ -343,7 +347,7 @@ struct FamilyViewControls: View {
                     }
                 }
             } label: { ViewControlIcon(image: ViewStateIcons.detail(model.detail)) }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
             .disabled(!model.applyVisibility)
             .help(model.applyVisibility ? model.detail.controlHelp : "Detail Level (turn on Preview Visibility to use it)")
             .accessibilityLabel("Detail Level")
@@ -352,10 +356,10 @@ struct FamilyViewControls: View {
                 Image(systemName: model.applyVisibility ? "eye" : "eye.slash")
                     .font(.system(size: 12))
                     .foregroundStyle(model.applyVisibility ? AnyShapeStyle(Tokens.selectionColor) : AnyShapeStyle(.secondary))
-                    .frame(width: 22, height: 20).contentShape(Rectangle())
+                    .frame(width: PillSpec.shellItemHeight, height: PillSpec.shellItemHeight) // PILLS: 28 pt, 4 pt inside the bottom pill
             }
             .buttonStyle(RibbonPressStyle())
-            .modifier(HoverBackground(active: model.applyVisibility, tint: Tokens.selectionColor, radius: 5))
+            .pillHighlight(model.applyVisibility, .tint(Tokens.selectionColor))
             .help(model.applyVisibility ? "Preview Visibility: on. Shows only what a project view would show at this detail level and view direction." : "Preview Visibility: off. Shows every form and line.")
             .accessibilityLabel("Preview Visibility")
             .accessibilityValue(model.applyVisibility ? "On" : "Off")
@@ -364,14 +368,14 @@ struct FamilyViewControls: View {
                 Divider()
                 ForEach([50, 100, 200, 400], id: \.self) { p in Button("\(p)%") { model.chrome.zoomRequest = Double(p) / 100 * 400 } }
             } label: { Text(zoomText(chrome.zoomScale)).font(Tokens.monoDigits) }
-            .menuStyle(.borderlessButton).fixedSize()
+            .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
             .help("Zoom (grid \(model.length(chrome.gridStep)))")
             .accessibilityLabel("Zoom \(zoomText(chrome.zoomScale))")
             Button { model.zoomToFit() } label: {
-                Image(systemName: "arrow.up.left.and.down.right.magnifyingglass").font(.system(size: 11)).frame(width: 22, height: 20).contentShape(Rectangle())
+                Image(systemName: "arrow.up.left.and.down.right.magnifyingglass").font(.system(size: 11)).frame(width: PillSpec.shellItemHeight, height: PillSpec.shellItemHeight) // PILLS: 28 pt, 4 pt inside the bottom pill
             }
             .buttonStyle(RibbonPressStyle())
-            .modifier(HoverBackground(radius: 5))
+            .pillHighlight(false)
             .help("Zoom to Fit (F)")
             .accessibilityLabel("Zoom to Fit")
         }

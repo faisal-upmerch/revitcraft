@@ -83,7 +83,7 @@ struct FESTests {
             var r = ShellRequest(region: DockRegion(width: window, height: 800))
             r.leadingInset = docks.leadingInset; r.trailingInset = docks.trailingInset
             r.controlsWidth = 99
-            return CGFloat(ShellLayout.layout(r, metrics: .arcus).tabs.width) - 10
+            return CGFloat(ShellLayout.layout(r, metrics: .arcus).tabs.width) // PILLS: the tab pill passes its whole slot (its inset is in the bar)
         }
         #expect(FamilyRibbonTabsBar.fit(contextual: nil, available: available(1280)) == .full)
         #expect(FamilyRibbonTabsBar.fit(contextual: "Modify | Create Extrusion", available: available(1280)) == .full)

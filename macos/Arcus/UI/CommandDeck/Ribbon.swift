@@ -353,7 +353,7 @@ struct RibbonTabsBar: View {
         let contextualShown = state.ribbonShowsContextual && contextualTitle != nil
         let tabs = RibbonTab.tabs(for: state.mode) // FM3: the mode's tabs
         let compact = Self.fullWidth(contextual: contextualTitle, tabs: tabs) > state.ribbonTabsWidth
-        HStack(spacing: 1) {
+        HStack(spacing: 0) { // PILLS: the capsules' 12 pt padding spaces the titles
             if compact {
                 // Too narrow for every tab: the task tabs collapse into one menu, the contextual tab stays a tab.
                 Menu {
@@ -368,9 +368,8 @@ struct RibbonTabsBar: View {
                         Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
                     }
                     .foregroundStyle(contextualShown ? Color.secondary : Color.primary)
-                    .padding(.horizontal, 10).padding(.vertical, 4)
-                    .background(Capsule().fill(Color.primary.opacity(contextualShown ? 0 : 0.10)))
-                    .contentShape(Capsule())
+                    .padding(.horizontal, PillSpec.padding).frame(height: PillSpec.shellItemHeight) // PILLS
+                    .pillHighlight(!contextualShown)
                 } primaryAction: { pick(state.ribbonTab) }
                 .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden)
                 .accessibilityLabel("Ribbon tab: \(state.ribbonTab.rawValue)")
@@ -387,20 +386,10 @@ struct RibbonTabsBar: View {
                 } doubleTap: { state.ribbonCollapsed.toggle() }
                 .transition(.opacity.combined(with: .scale(scale: 0.92)))
             }
-            Button { state.ribbonCollapsed.toggle() } label: {
-                Image(systemName: state.ribbonCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 9, weight: .bold))
-                    .frame(width: 22, height: 22)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(RibbonPressStyle())
-            .modifier(HoverBackground(radius: 11))
-            .foregroundStyle(.secondary)
-            .help(state.ribbonCollapsed ? "Show the ribbon panels" : "Minimize the ribbon to tabs")
-            .accessibilityLabel(state.ribbonCollapsed ? "Show ribbon panels" : "Minimize ribbon")
+            RibbonMinimizeButton(collapsed: state.ribbonCollapsed) { state.ribbonCollapsed.toggle() }
         }
-        .padding(.horizontal, 3)
-        .arcusAnimation(contextualTitle)
+        .padding(PillSpec.inset) // PILLS: every tab capsule 4 pt inside the tab pill, all round
+        .arcusAnimation(contextualTitle != nil) // PILLS: the contextual tab slides in; its title never cross-fades
         .fixedSize(horizontal: !compact, vertical: true) // W4-WIRE: compact tabs truncate the contextual title in a narrow pill
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Ribbon tabs")
@@ -413,9 +402,7 @@ struct RibbonTabsBar: View {
 
     /// Width of the full tab row: each tab's title plus its padding, the contextual tab and the minimize control.
     static func fullWidth(contextual: String?, tabs: [RibbonTab] = RibbonTab.tabs(for: .project)) -> CGFloat {
-        let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
-        func w(_ s: String) -> CGFloat { (s as NSString).size(withAttributes: [.font: font]).width + 21 }
-        return tabs.reduce(0) { $0 + w($1.rawValue) } + (contextual.map(w) ?? 0) + 30
+        RibbonTabMetrics.rowWidth(tabs.map(\.rawValue) + (contextual.map { [$0] } ?? [])) + RibbonTabMetrics.chromeWidth
     }
 }
 
@@ -436,6 +423,7 @@ struct RibbonView: View {
             rowPanels(contextual: contextualShown, tool: tool)
             RibbonOverflowButton { rowPanels(contextual: contextualShown, tool: tool) } // POLISH: when even collapsed panels don't fit
         }
+        .instantContent("ribbon", key: RibbonContentKey(state, contextual: contextualShown)) // PILLS: one ribbon at a time, never two cross-fading
         .ribbonRowFrame(frames)
         .padding(.horizontal, 10).padding(.vertical, 5)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -517,6 +505,21 @@ struct RibbonView: View {
     }
 }
 
+/// What the ribbon strip shows: when it changes (a tool starts or ends, a tab is picked, the selection's category
+/// changes) the panels swap in one frame. // PILLS
+struct RibbonContentKey: Equatable {
+    let contextual: Bool
+    let tab: String
+    let title: String?
+    let tool: Int
+    @MainActor init(_ state: DocumentState, contextual: Bool) {
+        self.contextual = contextual
+        tab = state.ribbonTab.rawValue
+        title = RibbonContent.contextualTitle(state)
+        tool = state.toolRevision
+    }
+}
+
 /// Press feedback for ribbon and toolbar controls: a slight dim and shrink while held.
 struct RibbonPressStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
@@ -582,32 +585,72 @@ struct PanelCard<Content: View>: View { // BL-KEYS: internal for Ribbon+Keys.swi
     }
 }
 
-private struct RibbonTabButton: View {
+/// PILLS: ribbon tab geometry, shared by the project and Family Editor tab pills: 28 pt capsules 4 pt inside the
+/// 36 pt pill, 12 pt either side of the title.
+enum RibbonTabMetrics {
+    static let font = NSFont.systemFont(ofSize: 12, weight: .medium)
+    static let selectedFont = NSFont.systemFont(ofSize: 12, weight: .semibold)
+    static func text(_ s: String, _ f: NSFont) -> CGFloat { ceil((s as NSString).size(withAttributes: [.font: f]).width) }
+    /// A tab's width: its title (in the selected weight when `selected`) and its padding. Tabs sit side by side; the
+    /// capsules' own padding spaces their titles.
+    static func width(_ title: String, selected: Bool = false) -> CGFloat {
+        text(title, selected ? selectedFont : font) + 2 * PillSpec.padding
+    }
+    /// A row of tabs with one of them chosen (the widest case: the one that grows most in semibold).
+    static func rowWidth(_ titles: [String]) -> CGFloat {
+        titles.reduce(0) { $0 + width($1) } + (titles.map { text($0, selectedFont) - text($0, font) }.max() ?? 0)
+    }
+    /// The minimize control (a 24 × 28 pt capsule: a small glyph needs no more) and the pill's inset either side.
+    static let minimizeWidth: CGFloat = 24
+    static let chromeWidth: CGFloat = minimizeWidth + 2 * PillSpec.inset
+}
+
+/// The ribbon tab pill's minimize / show-panels control: a capsule as tall as the tabs.
+struct RibbonMinimizeButton: View {
+    let collapsed: Bool
+    let action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: collapsed ? "chevron.down" : "chevron.up")
+                .font(.system(size: 9, weight: .bold))
+                .frame(width: RibbonTabMetrics.minimizeWidth, height: PillSpec.shellItemHeight)
+                .pillHighlight(false)
+        }
+        .buttonStyle(RibbonPressStyle())
+        .foregroundStyle(.secondary)
+        .help(collapsed ? "Show the ribbon panels" : "Minimize the ribbon to tabs")
+        .accessibilityLabel(collapsed ? "Show ribbon panels" : "Minimize ribbon")
+    }
+}
+
+/// A ribbon tab: its title on a 28 pt capsule (neutral when chosen; the contextual tab in green, outlined while
+/// another tab is chosen). PILLS
+struct RibbonTabButton: View {
     let title: String
     let selected: Bool
     var contextual = false
     let action: () -> Void
     var doubleTap: () -> Void = {}
-    @State private var hovering = false
+    /// Where the tab reports its frame (the Family Editor measures its tabs).
+    var onFrame: ((CGRect) -> Void)? = nil
+    /// The named coordinate space the frame is in (nil: the window).
+    var spaceName: String? = nil
     var body: some View {
         Text(title)
             .font(.system(size: 12, weight: selected ? .semibold : .medium))
-            .lineLimit(1).truncationMode(.tail).frame(minWidth: contextual ? 56 : 0) // W4-WIRE: a squeezed contextual tab still reads "Modi…"
-            .padding(.horizontal, 10).padding(.vertical, 4)
+            .lineLimit(1).truncationMode(.tail)
+            .fixedSize(horizontal: !contextual, vertical: true) // FES: a tab name never collapses; a squeezed contextual tab still reads "Modi…"
+            .onGeometryChange(for: CGRect.self) { [spaceName] g in spaceName.map { g.frame(in: .named($0)) } ?? g.frame(in: .global) } action: { r in onFrame?(r) }
+            .instantContent("tab", key: title) // PILLS: a contextual title that changes swaps, never doubles
+            .frame(minWidth: contextual ? 56 : 0) // W4-WIRE: a squeezed contextual tab still reads "Modi…"
+            .padding(.horizontal, PillSpec.padding)
+            .frame(height: PillSpec.shellItemHeight)
             .foregroundStyle(contextual ? Tokens.contextualTint : (selected ? Color.primary : Color.secondary))
-            .background {
-                if selected {
-                    Capsule().fill(contextual ? Tokens.contextualTint.opacity(0.18) : Color.primary.opacity(0.10))
-                } else if hovering {
-                    Capsule().fill(Color.primary.opacity(0.06))
-                } else if contextual {
-                    Capsule().strokeBorder(Tokens.contextualTint.opacity(0.45), lineWidth: 1)
-                }
-            }
-            .contentShape(Capsule())
-            .onHover { hovering = $0 }
+            .pillHighlight(selected, contextual ? .tint(Tokens.contextualTint) : .neutral,
+                           restingEdge: contextual ? Tokens.contextualTint.opacity(0.45) : nil)
             .onTapGesture(count: 2, perform: doubleTap)
             .onTapGesture(perform: action)
+            .help(title)
             .accessibilityElement()
             .accessibilityLabel(title + " tab")
             .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
@@ -848,6 +891,7 @@ struct OptionsBarView: View {
                 row
                 ScrollView(.horizontal, showsIndicators: false) { row }
             }
+            .instantContent("options", key: state.toolRevision) // PILLS: a new tool's options swap, never cross-fade
             .padding(.horizontal, 14)
             .frame(height: CGFloat(ShellMetrics.arcus.optionsHeight)) // W4-WIRE: the Options pill in the shell's third row
             .modifier(GlassPill(role: .options))
