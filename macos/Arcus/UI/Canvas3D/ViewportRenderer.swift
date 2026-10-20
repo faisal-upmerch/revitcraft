@@ -508,6 +508,14 @@ nonisolated struct ViewportQuality: Equatable {
             enc.setDepthStencil(style == .wireframe ? pipelines.depthAlways : pipelines.depthTest)
             enc.draw(.triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: scene.edgeCount)
             calls += 1
+            // VIS: silhouettes of smooth surfaces (cylinders, round-overs), drawn only where the surface turns away.
+            if let sb = scene.silhouetteBuffer, scene.silhouetteCount > 0 {
+                enc.setPipeline(pipelines.silhouette)
+                enc.setBuffer(sb, offset: 0, index: 3)
+                enc.draw(.triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: scene.silhouetteCount)
+                if let eb = scene.edgeBuffer { enc.setBuffer(eb, offset: 0, index: 3) }
+                calls += 1
+            }
         }
         if drawEdges && !transparentStyle { edges() }
         if drawFaces {

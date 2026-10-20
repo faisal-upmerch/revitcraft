@@ -36,7 +36,16 @@ nonisolated public struct ScenePart: Sendable {
     public var mesh: Mesh
     public var color: RGBColor
     public var finish: SurfaceFinish
+    /// VIS: silhouette candidates (pairs of vertex indices into `mesh`), drawn only where the surface turns away from
+    /// the eye, with the two face normals of each (`silhouetteNormals`, two per edge).
+    public var silhouetteEdges: [UInt32] = []
+    public var silhouetteNormals: [Vec3] = []
     public init(mesh: Mesh, color: RGBColor, finish: SurfaceFinish = .matte) { self.mesh = mesh; self.color = color; self.finish = finish }
+    /// VIS: a part shaded smooth (welded mesh with smooth normals and its silhouette candidates).
+    public init(shaded: ShadedMesh, color: RGBColor, finish: SurfaceFinish = .matte) {
+        mesh = shaded.mesh; self.color = color; self.finish = finish
+        silhouetteEdges = shaded.silhouetteEdges; silhouetteNormals = shaded.silhouetteNormals
+    }
 }
 
 /// A visible model element prepared for the 3D viewport.
@@ -74,7 +83,7 @@ nonisolated public struct Viewport3DScene: Sendable {
         for e in elements {
             h.combine(e.id)
             h.combine(e.parts.count)
-            for p in e.parts { h.combine(p.mesh.positions.count); h.combine(p.mesh.indices.count); h.combine(p.color); h.combine(p.finish) }
+            for p in e.parts { h.combine(p.mesh.positions.count); h.combine(p.mesh.indices.count); h.combine(p.color); h.combine(p.finish); h.combine(p.silhouetteEdges.count) }
         }
         return h.finalize()
     }

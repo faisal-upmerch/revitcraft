@@ -97,6 +97,9 @@ nonisolated struct PackedVertex {
     let opaqueIndexBuffer: (any MTLBuffer)?
     let transparentIndexBuffer: (any MTLBuffer)?
     let edgeBuffer: (any MTLBuffer)?
+    /// VIS: silhouette candidates, four words each (vertex a, vertex b, packed normals of the two faces).
+    let silhouetteBuffer: (any MTLBuffer)?
+    let silhouetteCount: Int
     let opaqueIndexCount: Int
     let transparentIndexCount: Int
     let edgeCount: Int
@@ -105,11 +108,11 @@ nonisolated struct PackedVertex {
 
     var elementCount: Int { elementIDs.count }
     var bufferBytes: Int {
-        [vertexBuffer, opaqueIndexBuffer, transparentIndexBuffer, edgeBuffer].reduce(0) { $0 + ($1?.length ?? 0) }
+        [vertexBuffer, opaqueIndexBuffer, transparentIndexBuffer, edgeBuffer, silhouetteBuffer].reduce(0) { $0 + ($1?.length ?? 0) }
     }
     /// Buffers to keep resident while the scene is displayed.
     var allocations: [any MTLAllocation] {
-        [vertexBuffer, opaqueIndexBuffer, transparentIndexBuffer, edgeBuffer].compactMap { $0 }
+        [vertexBuffer, opaqueIndexBuffer, transparentIndexBuffer, edgeBuffer, silhouetteBuffer].compactMap { $0 }
     }
 
     init(scene: Viewport3DScene, device: any MTLDevice, uploader: SceneUploader? = nil) {
@@ -120,12 +123,13 @@ nonisolated struct PackedVertex {
         origin = o
 
         // Pass 1: sizes.
-        var vCount = 0, opaqueCount = 0, transCount = 0, eCount = 0
+        var vCount = 0, opaqueCount = 0, transCount = 0, eCount = 0, sCount = 0
         for e in scene.elements {
             for p in e.parts {
                 vCount += p.mesh.positions.count
                 if p.color.a < 0.99 { transCount += p.mesh.indices.count } else { opaqueCount += p.mesh.indices.count }
                 eCount += p.mesh.featureEdges.count / 2
+                if p.silhouetteNormals.count == p.silhouetteEdges.count { sCount += p.silhouetteEdges.count / 2 } // VIS
             }
         }
         let up = uploader ?? SceneUploader(device: device)
@@ -139,13 +143,14 @@ nonisolated struct PackedVertex {
         let ob = make(opaqueCount * 4, "Viewport opaque indices")
         let tb = make(transCount * 4, "Viewport transparent indices")
         let eb = make(eCount * 8, "Viewport edges")
+        let sb = make(sCount * 16, "Viewport silhouettes") // VIS
 
         // Pass 2: stream into the private buffers (write-combined staging, sequential writes only).
         var ids: [ElementID] = []; ids.reserveCapacity(scene.elements.count)
         var bnds: [Box3] = []; bnds.reserveCapacity(scene.elements.count)
         var cats: [ArcusDomain.Category] = []; cats.reserveCapacity(scene.elements.count)
         var map: [ElementID: Int] = [:]; map.reserveCapacity(scene.elements.count)
-        var vi = 0, oi = 0, ti = 0, ei = 0
+        var vi = 0, oi = 0, ti = 0, ei = 0, si = 0
         var tris = 0
         for (index, e) in scene.elements.enumerated() {
             ids.append(e.id); bnds.append(e.bounds); cats.append(e.category); map[e.id] = index
@@ -188,11 +193,31 @@ nonisolated struct PackedVertex {
                     }
                     ei += edgeValues
                 }
+                // VIS: silhouette candidates with their two face normals.
+                let silCount = p.silhouetteNormals.count == p.silhouetteEdges.count ? p.silhouetteEdges.count / 2 : 0
+                if let sb, silCount > 0 {
+                    let edges = p.silhouetteEdges, normals = p.silhouetteNormals
+                    up.write(UInt32.self, count: silCount * 4, to: sb, at: si * 16) { dst, range in
+                        var j = 0
+                        for k in range {
+                            let e = k / 4
+                            switch k % 4 {
+                            case 0: dst[j] = edges[2 * e] + base
+                            case 1: dst[j] = edges[2 * e + 1] + base
+                            case 2: dst[j] = GPUScene.packNormal(normals[2 * e])
+                            default: dst[j] = GPUScene.packNormal(normals[2 * e + 1])
+                            }
+                            j += 1
+                        }
+                    }
+                    si += silCount
+                }
                 tris += m.triangleCount
             }
         }
         up.finish()
         vertexBuffer = vb; opaqueIndexBuffer = ob; transparentIndexBuffer = tb; edgeBuffer = eb
+        silhouetteBuffer = sb; silhouetteCount = sCount
         opaqueIndexCount = opaqueCount; transparentIndexCount = transCount; edgeCount = eCount
         triangleCount = tris
         elementIDs = ids; elementBounds = bnds; elementCategories = cats; indexOf = map

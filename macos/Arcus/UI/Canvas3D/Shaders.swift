@@ -280,13 +280,41 @@ static inline float4 pullTowardEye(float3 p, constant Uniforms &u) {
     return u.viewProj * float4(p, 1.0);
 }
 
+static EdgeOut edgeQuad(uint vid, Vertex va, Vertex vb, constant Uniforms &u, device const uchar *states);
+
 vertex EdgeOut edge_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
                            device const Vertex *verts [[buffer(0)]],
                            constant Uniforms &u [[buffer(1)]],
                            device const uchar *states [[buffer(2)]],
                            device const uint *edges [[buffer(3)]]) {
-    Vertex va = verts[edges[iid * 2]];
-    Vertex vb = verts[edges[iid * 2 + 1]];
+    return edgeQuad(vid, verts[edges[iid * 2]], verts[edges[iid * 2 + 1]], u, states);
+}
+
+// VIS: a silhouette candidate (a seam inside a smooth surface) is drawn only when one of its two faces looks toward the
+// eye and the other away; otherwise its quad collapses to a point outside the view.
+vertex EdgeOut silhouette_vertex(uint vid [[vertex_id]], uint iid [[instance_id]],
+                                 device const Vertex *verts [[buffer(0)]],
+                                 constant Uniforms &u [[buffer(1)]],
+                                 device const uchar *states [[buffer(2)]],
+                                 device const uint *edges [[buffer(3)]]) {
+    Vertex va = verts[edges[iid * 4]];
+    Vertex vb = verts[edges[iid * 4 + 1]];
+    float3 n0 = unpack_snorm4x8_to_float(edges[iid * 4 + 2]).xyz;
+    float3 n1 = unpack_snorm4x8_to_float(edges[iid * 4 + 3]).xyz;
+    float3 mid = (float3(va.position) + float3(vb.position)) * 0.5;
+    float3 toEye = u.eye.w > 0.5 ? (u.eye.xyz - mid) : -u.viewDir.xyz;
+    if (dot(n0, toEye) * dot(n1, toEye) > 0.0) {
+        EdgeOut o;
+        o.position = float4(2.0, 2.0, 0.5, 1.0);
+        for (int i = 0; i < 6; i++) { o.clip[i] = -1.0; }
+        o.color = float4(0.0);
+        o.element = va.element;
+        return o;
+    }
+    return edgeQuad(vid, va, vb, u, states);
+}
+
+static EdgeOut edgeQuad(uint vid, Vertex va, Vertex vb, constant Uniforms &u, device const uchar *states) {
     float3 pa = float3(va.position), pb = float3(vb.position);
     float4 ca = pullTowardEye(pa, u);
     float4 cb = pullTowardEye(pb, u);

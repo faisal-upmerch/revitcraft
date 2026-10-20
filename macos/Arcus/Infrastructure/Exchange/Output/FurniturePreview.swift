@@ -31,7 +31,7 @@ public enum ShadedFamilyRenderer {
         var minX = Double.infinity, maxX = -Double.infinity, minY = Double.infinity, maxY = -Double.infinity
         var zMin = Double.infinity
         for s in ev.solids where !s.isVoid && s.visibleIn3D {
-            let mesh = s.familyMesh
+            let mesh = s.displayMesh
             let base = s.materialParameter.flatMap { colors[$0] } ?? fallback
             let idx = mesh.indices
             var i = 0
