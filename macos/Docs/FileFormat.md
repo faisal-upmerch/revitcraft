@@ -22,8 +22,10 @@ Tower.arcus/
 ├── model.sqlite           required; the model (SQLite 3, rollback-journal mode, never WAL)
 ├── assets/                optional; content-keyed compressed blobs (reference drawings)
 │   └── <sha256>.lzfse
-└── thumbnails/
-    └── preview.png        optional; Finder/Open-panel preview
+├── thumbnails/
+│   └── preview.png        optional; Finder/Open-panel preview
+└── assistant/
+    └── history.json       optional; the AI assistant's chats (§1.7)
 ```
 
 No other files are written. Readers ignore unknown files, but `verify` reports assets that are not listed in the manifest. Readers never follow symbolic links inside a package: a symlinked `model.sqlite` or asset is treated as missing.
@@ -148,6 +150,15 @@ Reference drawings (`BIMModel.referenceDrawings`) are stored as compressed asset
 ### 1.6 Thumbnail
 
 `thumbnails/preview.png` is optional, is not checksummed, and is capped at 32 MiB on read (`ArcusPackage.readThumbnail`).
+
+### 1.7 AI assistant history
+
+`assistant/history.json` is optional (written only when the document has chats), is not checksummed, and is capped at
+32 MiB on read (`ArcusPackage.readAssistantHistory`). It is the `AIHistory` JSON of `ArcusAssistant` (`version`, `chats`:
+each chat's prompts, reply text, tool steps, plan, changes, models and token usage). Attached images are not stored,
+only their names, and the API key never is. Readers that don't know it ignore it; Settings ▸ AI ▸ Clear All Chats and
+the sidebar's Clear History empty it (the file is dropped on the next save). Nothing in it is sent unless that chat is
+continued in the sidebar.
 
 ---
 

@@ -33,6 +33,9 @@ public final class ToolContext {
     public let host: any DocumentHost
     public let args: ToolArgs
 
+    /// AITOOLS: the toolbox running the call (mode, active view, family host).
+    public weak var toolbox: ArcusToolbox?
+
     init(host: any DocumentHost, args: ToolArgs) { self.host = host; self.args = args }
 
     public func session() throws(ToolError) -> DocumentSession {
@@ -224,13 +227,52 @@ public final class ToolContext {
             s.undoManager.beginUndoGrouping()
             undoGroupOpen = true
         }
+        if healthBefore == nil { healthBefore = ModelHealth.check(s.model) }
+        healthAfterCache = nil
         do {
-            return try s.performThrowing(name, body)
+            let r = try s.performThrowing(name, body)
+            if let r { records.append(r) }
+            return r
         } catch let e as TransactionError {
             throw ToolError(e.message + (e.resolution.map { " " + $0 } ?? ""))
         } catch {
             throw ToolError("\(error)")
         }
+    }
+
+    /// AITOOLS: model health before this call's first edit, and the call's transactions (the verification block).
+    var healthBefore: [ModelWarning]?
+    var records: [TransactionRecord] = []
+    /// Health after the call, computed once.
+    var healthAfterCache: [ModelWarning]?
+    func healthAfter() -> [ModelWarning] {
+        if let h = healthAfterCache { return h }
+        let h = host.session.map { ModelHealth.check($0.model) } ?? []
+        healthAfterCache = h
+        return h
+    }
+
+    /// What this call changed and whether it left new problems: `{"ok", "problems", "changed", "health_delta"}`.
+    public func verification(ids: [ElementID], extra: [String] = []) -> JSONValue {
+        let after = healthAfter()
+        let beforeIDs = Set((healthBefore ?? after).map(\.id))
+        let fresh = after.filter { !beforeIDs.contains($0.id) && $0.severity >= .warning }
+        var problems = fresh.prefix(8).map(\.message) + extra
+        if let e = host.session?.lastWarnings.filter({ $0.severity == .error }).first, !problems.contains(e.message) { problems.append(e.message) }
+        var created = 0, modified = 0, deleted = 0
+        for r in records {
+            for ch in r.changes {
+                switch (ch.before == nil, ch.after == nil) {
+                case (true, false): created += 1
+                case (false, true): deleted += 1
+                default: modified += 1
+                }
+            }
+        }
+        var o: [String: JSONValue] = ["ok": .bool(problems.isEmpty), "problems": .array(problems.map { .string($0) })]
+        if !records.isEmpty { o["changed"] = ["created": .int(created), "modified": .int(modified), "deleted": .int(deleted)] }
+        if let b = healthBefore, after.count != b.count { o["health_delta"] = .int(after.count - b.count) }
+        return .object(o)
     }
 
     /// Ids created by a transaction, in creation order.
@@ -242,7 +284,7 @@ public final class ToolContext {
     public func checks(_ ids: [ElementID]) -> [String: JSONValue] {
         guard let s = host.session else { return [:] }
         let set = Set(ids)
-        let health = ModelHealth.check(s.model)
+        let health = healthAfter()
         var items = s.lastWarnings.filter { $0.severity != .info || set.isEmpty || !set.isDisjoint(with: $0.elements) }
         for w in health where !set.isDisjoint(with: w.elements) && !items.contains(where: { $0.id == w.id }) { items.append(w) }
         var out: [String: JSONValue] = ["health": .int(health.count)]

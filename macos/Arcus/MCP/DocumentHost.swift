@@ -37,6 +37,10 @@ public final class FileDocumentHost: DocumentHost {
     public private(set) var documentURL: URL?
     public private(set) var documentName = ""
     public var appVersion = "1.0.0"
+    /// AITOOLS: the view tools last opened or worked in (file mode has no window).
+    public var activeViewID: ElementID?
+    /// AITOOLS: a family opened or created with create_family (file mode's Family Editor).
+    public var family: FileFamilyHost?
 
     public init() {}
 
@@ -47,6 +51,8 @@ public final class FileDocumentHost: DocumentHost {
         session = s
         documentURL = nil
         documentName = name
+        activeViewID = model.views.first { $0.view?.kind == .floorPlan }?.id ?? model.views.first { $0.view?.kind == .threeD }?.id
+        family = nil
     }
 
     public func open(_ url: URL) throws(ToolError) {
@@ -88,4 +94,19 @@ public final class FileDocumentHost: DocumentHost {
     public static func fileExtension(_ model: BIMModel) -> String {
         model.isFurniture ? ArcusPackage.furnitureFileExtension : "arcus"
     }
+}
+
+// AITOOLS: file mode's window features: an active view that tools set, no canvas to zoom, commands run headless.
+extension FileDocumentHost: DocumentUIHost {
+    public func activateView(_ id: ElementID) -> Bool {
+        guard let e = session?.model[id], e.view != nil || e.sheet != nil || e.schedule != nil else { return false }
+        activeViewID = id
+        return true
+    }
+    public func zoom(to ids: [ElementID]?) {}
+    public func commandDisabledReason(_ id: CommandID) -> String? {
+        CommandResolver.headless.contains(id) ? nil : "Runs in the Arcus app only (file mode has no window). Use a tool, or turn on live mode."
+    }
+    public func runCommand(_ id: CommandID) -> CommandOutcome { .unavailable(commandDisabledReason(id) ?? "") }
+    public var familyHost: (any FamilyEditingHost)? { family }
 }

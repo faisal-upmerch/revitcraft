@@ -19,6 +19,7 @@ struct FamilyControlsPill: View {
             PillIconButton(symbol: "arrow.uturn.backward", help: model.undo.canUndo ? "Undo \(model.undo.undoActionName) (⌘Z)" : "Undo (⌘Z)", enabled: model.undo.canUndo) { model.undo.undo() }
             PillIconButton(symbol: "arrow.uturn.forward", help: model.undo.canRedo ? "Redo \(model.undo.redoActionName) (⇧⌘Z)" : "Redo (⇧⌘Z)", enabled: model.undo.canRedo) { model.undo.redo() }
             PillIconButton(symbol: "sidebar.trailing", help: "Show or hide Properties (⌥⌘2)") { model.chrome.toggleProperties() }
+            AIToolbarButton(panel: AIAssistantPanel.of(family: model)) { AIAssistantPanel.toggle(family: model) } // AICORE: the AI assistant (⇧⌘A)
         }
         .padding(.horizontal, PillSpec.inset) // PILLS
         .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))

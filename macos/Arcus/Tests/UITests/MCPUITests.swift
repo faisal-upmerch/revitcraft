@@ -93,7 +93,7 @@ struct MCPUITests {
         }
         let help = MainMenuBuilder.build().items.first { $0.title == "Help" }?.submenu
         #expect(help?.items.contains { ($0.representedObject as? String) == CommandID.designWithClaude.rawValue } == true)
-        #expect(OnboardingView.steps == 4)
+        #expect(OnboardingView.steps == 5) // AICORE: + AI Assistant
     }
 
     @Test func statusFollowsActivity() {

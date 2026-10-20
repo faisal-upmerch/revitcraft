@@ -483,6 +483,7 @@ enum QAHarness {
             await fmg2Screenshots(suffix) // FMG2: shaped side's joints, joints in Properties, Explode Parts, F104 exploded
             await fmg1Screenshots(suffix) // FMG1: locked part-face dimensions, Blend Edit Top, Sweep in an elevation, pieces that flex fully
             await mcpScreenshots(suffix) // MCP: Home's Design with Claude card, the Set Up window, the bottom bar pill
+            await aicoreScreenshots(suffix) // AICORE: the AI button, the assistant sidebar (empty, conversation, confirmation), Settings ▸ AI
             await fmg3Screenshots(suffix) // FMG3: fronts on the back, sides and canted faces, lids, Leaf Count, swings in a project elevation
             await fmg4Screenshots(suffix) // FMG4: automatic scales, Associate Family Parameter, canted fronts out of square, lid plan swings, explode tags, F101, walls hiding swings
             await compbScreenshots(suffix) // COMPB: Joint Rules with connector components, a table on Component Library hairpin legs

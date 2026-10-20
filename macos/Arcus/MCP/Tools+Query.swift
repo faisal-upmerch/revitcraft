@@ -20,6 +20,20 @@ extension ArcusToolbox {
         switch try c.args.requireString("what").lowercased() {
         case "summary":
             return try status(c)
+        case "here":
+            // AITOOLS: what the active view shows, cheaply: counts by category and a few ids each.
+            let view = try c.viewOrActive(allowSheets: true)
+            let visible = Set(graphics(view, m).0.items.compactMap(\.elementID)).compactMap { m[$0] }.filter { !$0.isType && $0.id != view.id }
+            var byCat: [String: JSONValue] = [:]
+            for (cat, es) in Dictionary(grouping: visible, by: \.category) {
+                byCat[cat.rawValue] = ["count": .int(es.count), "ids": .array(es.prefix(8).map(\.id.json))]
+            }
+            var o: [String: JSONValue] = ["view": .string(view.name), "kind": .string(view.view?.kind.rawValue ?? (view.sheet != nil ? "Sheet" : "")), "visible": .object(byCat),
+                                          "unit": .string(ToolContext.unitScale(m).symbol)]
+            if let l = m[view.levelID] { o["level"] = .string(l.name) }
+            let sel = try c.session().selection.ids
+            if !sel.isEmpty { o["selection"] = .array(sel.prefix(20).compactMap { m[$0] }.map { describe($0, c, m) }) }
+            return ToolOutput(.object(o))
         case "levels":
             return ToolOutput(["unit": .string(ToolContext.unitScale(m).symbol), "levels": .array(m.levels.sorted { ($0.level?.elevation ?? 0) < ($1.level?.elevation ?? 0) }.map { l in
                 ["id": l.id.json, "name": .string(l.name), "elevation": c.out(l.level?.elevation ?? 0, m),
@@ -81,7 +95,7 @@ extension ArcusToolbox {
                 return .object(o)
             })])
         default:
-            throw ToolError("what must be summary, levels, elements, rooms, views, sheets, schedules, warnings or element.")
+            throw ToolError("what must be here, summary, levels, elements, rooms, views, sheets, schedules, warnings or element.")
         }
     }
 

@@ -75,17 +75,52 @@ extension ArcusToolbox {
 
     func exportPDF(_ c: ToolContext) async throws -> ToolOutput {
         let m = try c.model()
-        let sheets = try sheetsArg(c, "sheets", m).sorted { ($0.sheet?.number ?? "").localizedStandardCompare($1.sheet?.number ?? "") == .orderedAscending }
-        guard !sheets.isEmpty else { throw ToolError("The document has no sheets. create_sheet first.") }
+        // AITOOLS: sheet sets, views, separate files, naming, colors; never overwrites unless asked.
+        var items: [PDFExportItem] = []
+        var labels: [String] = []
+        if let list = c.args.array("views") {
+            for (k, v) in list.enumerated() { let e = try c.view(v, what: "views[\(k)]"); items.append(.view(e.id)); labels.append(e.name) }
+        } else {
+            var sheets = try sheetsArg(c, "sheets", m)
+            if let setName = c.args.string("sheet_set") {
+                guard let set = m.viewSheetSets.first(where: { $0.name.caseInsensitiveCompare(setName) == .orderedSame }) else {
+                    throw ToolError("No sheet set “\(setName)”. Sets: \(m.viewSheetSets.map(\.name).joined(separator: ", ")). create_sheet_set makes one.")
+                }
+                sheets = set.members.compactMap { m[$0] }.filter { $0.sheet != nil }
+            }
+            sheets.sort { ($0.sheet?.number ?? "").localizedStandardCompare($1.sheet?.number ?? "") == .orderedAscending }
+            guard !sheets.isEmpty else { throw ToolError("The document has no sheets. create_sheet first.") }
+            items = sheets.map { PDFExportItem(elementID: $0.id, kind: .sheet) }
+            labels = sheets.map { "\($0.sheet?.number ?? "") \($0.name)" }
+        }
+        let combined = c.args.bool("combined", default: true)
         var url = Self.url(try c.args.requireString("path"))
-        if url.pathExtension.lowercased() != "pdf" { url = url.appendingPathExtension("pdf") }
-        try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-        var job = PDFExportJob(items: sheets.map { PDFExportItem(elementID: $0.id, kind: .sheet) }, outputDirectory: url.deletingLastPathComponent())
+        let folder: URL
+        if combined {
+            if url.pathExtension.lowercased() != "pdf" { url = url.appendingPathExtension("pdf") }
+            url = Self.destination(url, overwrite: c.args.bool("overwrite", default: false))
+            folder = url.deletingLastPathComponent()
+        } else { folder = url.pathExtension.lowercased() == "pdf" ? url.deletingLastPathComponent() : url }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        var job = PDFExportJob(items: items, outputDirectory: folder)
+        job.combined = combined
         job.combinedFileName = url.lastPathComponent
-        job.overwrite = .replace
+        job.overwrite = c.args.bool("overwrite", default: false) ? .replace : .uniquify
+        switch c.args.string("naming")?.lowercased() {
+        case nil, "sheet_number_and_name": job.naming = .sheetNumberAndName
+        case "view_name": job.naming = .viewName
+        default: job.naming = .custom(c.args.string("naming")!)
+        }
+        switch c.args.string("colors")?.lowercased() {
+        case "black_lines": job.colors = .blackLines
+        case "grayscale": job.colors = .grayscale
+        default: job.colors = .color
+        }
+        if let p = c.args.string("paper") { job.viewPaper = try Self.paper(p, imperial: m.units.system == .imperial) }
         let r: PDFExportResult
         do { r = try await PDFExporter.export(m, job: job) } catch { throw ToolError("PDF export failed: \(error.localizedDescription)") }
-        return ToolOutput(["path": .string(r.files.first?.path ?? url.path), "pages": .int(r.pageCount), "sheets": .array(sheets.map { .string("\($0.sheet?.number ?? "") \($0.name)") })])
+        return ToolOutput(["path": .string(r.files.first?.path ?? url.path), "files": .array(r.files.map { .string($0.path) }), "pages": .int(r.pageCount),
+                           "sheets": .array(labels.map { .string($0) })])
     }
 
     func exportDWG(_ c: ToolContext) throws -> ToolOutput {

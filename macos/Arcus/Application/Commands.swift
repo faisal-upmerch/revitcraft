@@ -154,6 +154,11 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case componentAddHandle, componentAddHinges, componentAddLock, componentAddSoftClose, componentAddPushToOpen, componentAddSlides, componentAddOrganizer
     case componentAddHangingRod, componentAddShoeRack, componentAddLighting, componentAddSlidingSystem
 
+    // AICORE commands:
+    case aiAssistant
+
+    // AITOOLS commands:
+
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
@@ -183,7 +188,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands + polishCommands + fmg1Commands + fmg2Commands + fmg3Commands + fmg4Commands + fm3dCommands + compCommands + mcpCommands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands + polishCommands + fmg1Commands + fmg2Commands + fmg3Commands + fmg4Commands + fm3dCommands + compCommands + aicoreCommands + aitoolsCommands + mcpCommands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

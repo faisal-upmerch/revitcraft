@@ -152,8 +152,24 @@ extension ArcusToolbox {
                 vd.phaseID = phase
                 counts[.elevation, default: m.views.filter { $0.view?.kind == .elevation }.count] += 1
                 specs.append((v["name"]?.stringValue ?? "Elevation \(counts[.elevation]!)", vd, nil))
+            case "drafting", "drafting_view", "legend":
+                // AITOOLS: drafting views and legends (2D views with no model).
+                let legend = v["kind"]?.stringValue?.lowercased() == "legend"
+                var vd = ViewData(kind: legend ? .legend : .drafting, scale: v["scale"]?.intValue ?? (legend ? 50 : 20)); vd.phaseID = phase
+                specs.append((v["name"]?.stringValue ?? (legend ? "Legend" : "Drafting View") + " \(m.views.filter { $0.view?.kind == vd.kind }.count + 1)", vd, nil))
+            case "callout":
+                // AITOOLS: a callout of a parent view: the parent's settings at twice the scale, cropped to a rectangle.
+                guard let pv = v["parent"], let rv = v["rect"] else { throw ToolError("\(what): a callout needs parent (view) and rect [[x0,y0],[x1,y1]].") }
+                let parent = try c.view(pv, what: what + ".parent")
+                guard var vd = parent.view else { throw ToolError("\(what).parent must be a view.") }
+                let r = try c.points(rv, what + ".rect")
+                vd.scale = v["scale"]?.intValue ?? max(1, vd.scale / 2)
+                vd.cropRegion = Rect2(points: r); vd.cropActive = true; vd.cropVisible = true
+                vd.parentViewID = parent.id
+                vd.templateID = nil
+                specs.append((uniqueViewName(v["name"]?.stringValue ?? "Callout of \(parent.name)", kind: vd.kind, m), vd, parent.levelID))
             default:
-                throw ToolError("\(what).kind must be floor_plan, ceiling_plan, three_d, section or elevation.")
+                throw ToolError("\(what).kind must be floor_plan, ceiling_plan, three_d, section, elevation, callout, drafting or legend.")
             }
         }
         let r = try c.edit("Create Views") { tx in
@@ -226,6 +242,7 @@ extension ArcusToolbox {
         let area = Rect2(min: Vec2(size.x * 0.03, size.y * 0.06), max: Vec2(size.x * 0.80, size.y * 0.95))
         var placements: [(Element, Vec2)] = []
         var overflow: [String] = []
+        var rescale: [ElementID: Int] = [:]
         for (k, (e, pos)) in items.enumerated() {
             let center: Vec2
             if let pos { center = Vec2(pos.x * size.x, pos.y * size.y) } else {
@@ -233,8 +250,15 @@ extension ArcusToolbox {
                 center = Vec2(area.min.x + area.width * (Double(col) + 0.5) / Double(cols), area.max.y - area.height * (Double(row) + 0.5) / Double(rows))
                 // Schedules size themselves to their rows; only views are checked.
                 let ps = Self.paperSize(of: e, m)
-                if e.view != nil, ps.x > area.width / Double(cols) * 1.02 || ps.y > area.height / Double(rows) * 1.02 {
-                    overflow.append("\(e.name) is \(Int(ps.x * 1000))×\(Int(ps.y * 1000)) mm on paper at 1:\(e.view?.scale ?? 0), more than its \(Int(area.width / Double(cols) * 1000))×\(Int(area.height / Double(rows) * 1000)) mm cell")
+                let cell = Vec2(area.width / Double(cols), area.height / Double(rows))
+                if let vd = e.view, ps.x > cell.x * 1.02 || ps.y > cell.y * 1.02 {
+                    // AITOOLS: fit (default): the next standard scale that fits the cell, as a drafter would pick.
+                    let scales = m.units.system == .imperial || m.isFurniture ? [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 480] : [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]
+                    if c.args.bool("fit", default: true), let s = scales.first(where: { $0 > vd.scale && ps.x * Double(vd.scale) / Double($0) <= cell.x * 1.02 && ps.y * Double(vd.scale) / Double($0) <= cell.y * 1.02 }) {
+                        rescale[e.id] = s
+                    } else {
+                        overflow.append("\(e.name) is \(Int(ps.x * 1000))×\(Int(ps.y * 1000)) mm on paper at 1:\(vd.scale), more than its \(Int(cell.x * 1000))×\(Int(cell.y * 1000)) mm cell")
+                    }
                 }
             }
             placements.append((e, center))
@@ -244,6 +268,7 @@ extension ArcusToolbox {
             var sd = SheetData(number: number, paper: paper, titleBlockTypeID: tb?.id)
             sd.drawnBy = "Arcus"; sd.designedBy = "Arcus"
             let sid = tx.create(.sheets, name: name, data: .sheet(sd))
+            for (id, s) in rescale { tx.update(id) { $0.view?.scale = s } }
             for (e, center) in placements { try SheetPlacement.place(e.id, onSheet: sid, at: center, in: tx) }
         }
         let ids = ToolContext.created(r)
@@ -252,6 +277,7 @@ extension ArcusToolbox {
         var o: [String: JSONValue] = ["sheet": sheet?.id.json ?? .null, "number": .string(number), "paper": .string(paper.rawValue),
                                       "title_block": .string(tb.map { ToolContext.typeLabel($0, nm) } ?? "none"),
                                       "placed": .array(placements.map { .string($0.0.name) })]
+        if !rescale.isEmpty { o["rescaled"] = .object(rescale.reduce(into: [:]) { $0[nm[$1.key]?.name ?? ""] = .string("1:\($1.value)") }) }
         if !overflow.isEmpty {
             o["fit"] = .string(overflow.joined(separator: "; ") + ". Use a smaller scale (set_parameters {\"View Scale\": \(imperial ? "96" : "200")}), a bigger paper, or fewer views per sheet.")
         }
@@ -260,14 +286,28 @@ extension ArcusToolbox {
 
     func createSchedule(_ c: ToolContext) throws -> ToolOutput {
         let kind = try c.args.requireString("kind").lowercased()
-        let def: ScheduleDefinition, base: String
+        var def: ScheduleDefinition, base: String
         switch kind {
         case "doors", "door": def = ScheduleTemplates.doorSchedule(); base = "Door Schedule"
         case "windows", "window": def = ScheduleTemplates.windowSchedule(); base = "Window Schedule"
         case "rooms", "room": def = ScheduleTemplates.roomSchedule(); base = "Room Schedule"
         case "walls", "wall": def = ScheduleTemplates.wallQuantities(); base = "Wall Quantities"
         case "sheets", "sheet": def = ScheduleTemplates.sheetList(); base = "Sheet List"
-        default: throw ToolError("kind must be doors, windows, rooms, walls or sheets.")
+        // AITOOLS: Furniture fabrication and component schedules, and any category with its fields.
+        case "part_list": def = FabricationSchedules.partList(); base = "Part List"
+        case "hardware": def = FabricationSchedules.hardwareSchedule(); base = "Hardware Schedule"
+        case "edge_banding": def = FabricationSchedules.edgeBanding(); base = "Edge Banding"
+        case "cost": def = FabricationSchedules.costSummary(); base = "Cost"
+        case "material_takeoff": def = FabricationSchedules.materialTakeoff(); base = "Material Takeoff"
+        case "component_bom": def = ComponentSchedules.bom(); base = "Component BOM"
+        case "category":
+            let cat = try Self.category(try c.args.requireString("category"))
+            def = ScheduleDefinition(kind: .category, categories: [cat])
+            for n in c.args.array("fields")?.compactMap(\.stringValue) ?? ["Type", "Count"] { def.fields.append(try scheduleField(n, def, try c.model())) }
+            if let f = def.fields.first { def.sorting = [ScheduleSort(fieldID: f.id)] }
+            def.grandTotals = true
+            base = "\(cat.displayName) Schedule"
+        default: throw ToolError("kind must be doors, windows, rooms, walls, sheets, part_list, hardware, edge_banding, cost, material_takeoff, component_bom or category (with category and fields).")
         }
         let m = try c.model()
         var name = c.args.string("name") ?? base
@@ -286,9 +326,9 @@ extension ArcusToolbox {
     // MARK: Dimensions and tags
 
     func addDimensions(_ c: ToolContext) throws -> ToolOutput {
-        let view = try c.view(c.args["view"], kinds: [.floorPlan, .ceilingPlan, .structuralPlan])
+        // AITOOLS: any view: plans (walls), sections and elevations (level heights, overall width), Furniture views (W, D, H).
+        let view = try c.viewOrActive(kinds: [.floorPlan, .ceilingPlan, .structuralPlan, .areaPlan, .section, .elevation, .detail])
         let m = try c.model()
-        guard let level = view.levelID else { throw ToolError("“\(view.name)” has no level.") }
         let dimType = m.types(for: .dimensions).first { $0.name.lowercased().contains("linear") || $0.name == "Dimension" } ?? m.types(for: .dimensions).first
         var dims: [DimensionData] = []
         if let wv = c.args["walls"], let list = wv.arrayValue, !list.isEmpty, !c.args.bool("auto", default: false) {
@@ -301,10 +341,19 @@ extension ArcusToolbox {
             default: .location
             }
             dims.append(DimensionData(kind: .aligned, references: walls.map { GeometryReference($0.id, kind) }, linePoint: try c.point(at, "at")))
+        } else if c.args["elements"] != nil {
+            let refs = try c.elementIDs("elements").map { GeometryReference($0, .location) }
+            guard refs.count >= 2, let at = c.args["at"] else { throw ToolError("Give two or more elements and “at”, a point the dimension line passes through.") }
+            dims.append(DimensionData(kind: .aligned, references: refs, linePoint: try c.point(at, "at")))
+        } else if m.isFurniture {
+            dims = try furnitureDimensions(c, view: view, m)
+        } else if view.view?.kind.isVerticalCut == true {
+            dims = try verticalDimensions(c, view: view, m)
         } else {
+            guard let level = view.levelID else { throw ToolError("“\(view.name)” has no level.") }
             dims = try autoDimensions(c, level: level, m)
         }
-        guard !dims.isEmpty else { throw ToolError("Nothing to dimension: the level has no orthogonal walls.") }
+        guard !dims.isEmpty else { throw ToolError("Nothing to dimension in “\(view.name)”.") }
         let r = try c.edit("Dimension") { tx in
             for d in dims { tx.create(.dimensions, data: .dimension(d), typeID: dimType?.id, ownerViewID: view.id) }
         }
@@ -314,7 +363,51 @@ extension ArcusToolbox {
             guard let d = e.dimension, let l = DimensionLayout.make(e, d, nm, scale: Double(view.view?.scale ?? 100), view: view) else { return .null }
             return .string(l.values.map { c.formatLength($0, nm) }.joined(separator: " | "))
         }
-        return result(c, ["dimensions": .array(ids.map(\.json)), "view": .string(view.name), "strings": .array(texts)], ids: ids)
+        let fresh = Set(ids)
+        let problems = DrawingCheck.dimensionProblems(nm[view.id] ?? view, nm).filter { !fresh.isDisjoint(with: $0.elements) }.map(\.message)
+        return result(c, ["dimensions": .array(ids.map(\.json)), "view": .string(view.name), "strings": .array(texts)], ids: ids,
+                      problems: problems + (problems.isEmpty ? [] : ["Fix with arrange_dimensions."]))
+    }
+
+    /// Sections and elevations: a chain through the levels at the left of the view, and the overall level-to-level height.
+    func verticalDimensions(_ c: ToolContext, view: Element, _ m: BIMModel) throws(ToolError) -> [DimensionData] {
+        let levels = m.levels.sorted { ($0.level?.elevation ?? 0) < ($1.level?.elevation ?? 0) }
+        guard levels.count >= 2 else { throw ToolError("A section or elevation needs two levels to dimension.") }
+        let crop = view.view?.cropRegion ?? Rect2(min: Vec2(-10, levels.first!.level!.elevation), max: Vec2(10, levels.last!.level!.elevation))
+        let scale = Double(view.view?.scale ?? 100)
+        let x = crop.min.x + 0.012 * scale
+        var out = [DimensionData(kind: .linear, references: levels.map { GeometryReference($0.id, .levelPlane) }, linePoint: Vec2(x, crop.center.y), direction: .pi / 2)]
+        if levels.count > 2 {
+            out.append(DimensionData(kind: .linear, references: [GeometryReference(levels.first!.id, .levelPlane), GeometryReference(levels.last!.id, .levelPlane)],
+                                     linePoint: Vec2(x - 0.008 * scale, crop.center.y), direction: .pi / 2))
+        }
+        return out
+    }
+
+    /// Furniture views: overall width, depth or height between the piece's reference planes, outside the parts.
+    func furnitureDimensions(_ c: ToolContext, view: Element, _ m: BIMModel) throws(ToolError) -> [DimensionData] {
+        let planes = Dictionary(m.elements(.referencePlanes).map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })
+        guard let box = Self.furnitureBox(m) else { throw ToolError("The piece has no parts yet.") }
+        let scale = Double(view.view?.scale ?? 12)
+        let off = 0.012 * scale
+        func pair(_ a: String, _ b: String) -> [GeometryReference]? {
+            guard let pa = planes[a], let pb = planes[b] else { return nil }
+            return [GeometryReference(pa.id, .location), GeometryReference(pb.id, .location)]
+        }
+        var out: [DimensionData] = []
+        switch view.view?.kind {
+        case .floorPlan?, .ceilingPlan?:
+            if let r = pair("Left", "Right") { out.append(DimensionData(kind: .linear, references: r, linePoint: Vec2(0, box.min.y - off), direction: 0)) }
+            if let r = pair("Front", "Back") { out.append(DimensionData(kind: .linear, references: r, linePoint: Vec2(box.max.x + off, 0), direction: .pi / 2)) }
+        default:
+            let d = view.view?.viewDirection ?? Vec2(0, 1)
+            let widthPair = abs(d.y) >= abs(d.x) ? pair("Left", "Right") : pair("Front", "Back")
+            let crop = view.view?.cropRegion ?? Rect2(min: Vec2(-1, box.min.z), max: Vec2(1, box.max.z))
+            if let r = widthPair { out.append(DimensionData(kind: .linear, references: r, linePoint: Vec2(crop.center.x, box.min.z - off), direction: 0)) }
+            if let r = pair("Bottom", "Top") { out.append(DimensionData(kind: .linear, references: r, linePoint: Vec2(crop.max.x - off / 2, (box.min.z + box.max.z) / 2), direction: .pi / 2)) }
+        }
+        guard !out.isEmpty else { throw ToolError("The piece's reference planes (Left, Right, Front, Back, Bottom, Top) are missing.") }
+        return out
     }
 
     /// Overall and wall-by-wall strings on each side of the level's walls.
@@ -374,7 +467,7 @@ extension ArcusToolbox {
     }
 
     func addTags(_ c: ToolContext) throws -> ToolOutput {
-        let view = try c.view(c.args["view"])
+        let view = try c.viewOrActive()
         let m = try c.model()
         var cats: [Category] = []
         for s in c.args.array("categories")?.compactMap(\.stringValue) ?? ["doors", "windows", "rooms"] {
@@ -388,12 +481,17 @@ extension ArcusToolbox {
         for cat in cats { if let t = TagTool.defaultTagType(for: cat, m) { types[cat] = t } else { missing.append(cat.rawValue) } }
         let visible = Set(ViewGraphicsBuilder(model: m, view: view).build().items.compactMap(\.elementID))
         var count = 0
+        let only = c.args["elements"] != nil ? Set(try c.elementIDs("elements")) : nil
+        let opts = TagAllOptions(tagTypes: types, onlyElements: only, leader: c.args.bool("leader", default: false))
         let r = try c.edit("Tag All") { tx in
-            count = TagAll.run(TagAllOptions(tagTypes: types), view: view.id, visible: visible, scale: view.view?.scale ?? 100, in: tx)
+            count = TagAll.run(opts, view: view.id, visible: visible, scale: view.view?.scale ?? 100, in: tx)
         }
         let ids = ToolContext.created(r)
         var o: [String: JSONValue] = ["tagged": .int(count), "view": .string(view.name)]
         if !missing.isEmpty { o["no_tag_family"] = .array(missing.map { .string($0) }) }
-        return result(c, o, ids: ids)
+        let nm = try c.model()
+        let left = TagAll.untagged(in: view.id, visible: visible, nm).filter { cats.contains($0.key) && types[$0.key] != nil }
+            .map { k, v in v.filter { only?.contains($0) ?? true }.count > 0 ? "\(v.filter { only?.contains($0) ?? true }.count) \(k.displayName.lowercased()) still untagged" : nil }.compactMap { $0 }
+        return result(c, o, ids: ids, problems: left + missing.map { "No tag family loads for \($0)." })
     }
 }

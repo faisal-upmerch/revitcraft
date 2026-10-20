@@ -87,6 +87,7 @@ struct HomeSidebar: View {
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Start")
             HomeClaudeCard { showClaude = true }.padding(.top, 12) // MCP: Design with Claude
+            HomeAssistantCard().padding(.top, 8) // AICORE: the in-app AI assistant
             Spacer(minLength: 16)
             VStack(spacing: 2) {
                 HomeRowButton(title: "Open…", symbol: "folder", help: "Open a project, furniture or family (⌘O)") { model.openPanel() }
@@ -95,7 +96,7 @@ struct HomeSidebar: View {
                               help: "Courtyard House: 4 levels, 2 wings, 120 rooms, 16 sheets") { model.openSample() }
                     .disabled(model.openingSample)
             }
-            Text("Documents stay on this Mac. No account, no network.")
+            Text("Documents stay on this Mac. No account, no network (unless you turn on the AI assistant).") // AICORE
                 .font(.system(size: 11)).foregroundStyle(.tertiary)
                 .padding(.horizontal, 8).padding(.top, 16)
         }

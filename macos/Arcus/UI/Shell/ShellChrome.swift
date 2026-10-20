@@ -307,6 +307,7 @@ struct ShellControlsPill: View {
             PillIconButton(symbol: "sidebar.trailing", help: state.workspace == .macSpacious ? "Show or hide the inspector" : "Show or hide Properties") {
                 (state.window?.windowController as? DocumentWindowController)?.toggleInspector(nil)
             }
+            AIToolbarButton(panel: AIAssistantPanel.of(state)) { AIAssistantPanel.toggle(in: state) } // AICORE: the AI assistant (⇧⌘A)
         }
         .padding(.horizontal, PillSpec.inset) // PILLS: the end buttons' capsules 4 pt from the pill's ends
         .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))

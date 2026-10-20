@@ -484,7 +484,7 @@ extension ArcusToolbox {
     }
 
     func setParameters(_ c: ToolContext) throws -> ToolOutput {
-        let ids = try c.elementIDs("elements")
+        let ids = try c.idsOrSelection()
         guard let params = c.args["parameters"]?.objectValue, !params.isEmpty else { throw ToolError("parameters must be an object {name: value}.") }
         let onType = c.args.bool("type", default: false)
         let m = try c.model()
@@ -526,18 +526,30 @@ extension ArcusToolbox {
     }
 
     func moveElements(_ c: ToolContext) throws -> ToolOutput {
-        let ids = try c.elementIDs("elements")
+        let ids = try c.idsOrSelection()
         guard let bv = c.args["by"] else { throw ToolError("Missing “by” [dx, dy].") }
         let d = try c.point(bv, "by")
         try c.edit("Move") { tx in try ElementOperations.transform(ids, by: .translation(d), in: tx, viewID: nil) }
         return result(c, ["moved": .array(ids.map(\.json))], ids: ids)
     }
 
+    /// AITOOLS: deletes given ids (or the selection). More than 5 elements in all (with what depends on them) need
+    /// confirm: true; without it the result previews what would go and deletes nothing.
     func deleteElements(_ c: ToolContext) throws -> ToolOutput {
-        let ids = try c.elementIDs("elements")
+        let ids = try c.idsOrSelection()
         let m = try c.model()
         let pinned = ids.filter { m[$0]?.pinned == true }
         let ok = ids.filter { !pinned.contains($0) }
+        // Dry run: what the deletion takes with it.
+        let probe = TransactionContext(model: m, name: "Delete")
+        for id in ok { probe.delete(id) }
+        let gone = m.elements.keys.filter { probe.model[$0] == nil }
+        if gone.count > 5 && !c.args.bool("confirm", default: false) {
+            var byCat: [String: JSONValue] = [:]
+            for (cat, es) in Dictionary(grouping: gone.compactMap { m[$0] }, by: \.category) { byCat[cat.rawValue] = .int(es.count) }
+            return ToolOutput(["confirm_required": true, "would_delete": .int(gone.count), "by_category": .object(byCat),
+                               "note": .string("Nothing was deleted. Ask the user, then call delete_elements again with confirm: true.")])
+        }
         let before = m.count
         if !ok.isEmpty { try c.edit("Delete") { tx in for id in ok { tx.delete(id) } } }
         var o: [String: JSONValue] = ["deleted": .array(ok.map(\.json)), "removed_total": .int(before - (try c.model().count))]

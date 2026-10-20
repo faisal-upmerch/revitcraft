@@ -213,8 +213,15 @@ let package = Package(
         // MCP: the Arcus tool layer for Claude (Docs/MCP.md), run by arcus-mcp (file mode) and the app (live mode).
         .target(
             name: "ArcusMCP",
-            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusOutput", "ArcusCAD"],
+            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusOutput", "ArcusCAD", "ArcusIFC"], // AITOOLS: export_ifc
             path: "Arcus/MCP",
+            swiftSettings: strictNoImports
+        ),
+        // AICORE: the in-app AI assistant (Anthropic Messages API client, agent loop, pricing, history), on the MCP tool layer.
+        .target(
+            name: "ArcusAssistant",
+            dependencies: ["ArcusDomain", "ArcusApplication", "ArcusMCP"],
+            path: "Arcus/Assistant",
             swiftSettings: strictNoImports
         ),
         .target(
@@ -235,7 +242,7 @@ let package = Package(
             dependencies: [
                 "ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication",
                 "ArcusPersistence", "ArcusIFC", "ArcusCAD", "ArcusOutput", "ArcusServices", "ArcusViewport3D",
-                "ArcusRevit", "ArcusCanvasMetal", "ArcusMCP",
+                "ArcusRevit", "ArcusCanvasMetal", "ArcusMCP", "ArcusAssistant", // AICORE
             ],
             path: "Arcus/UI",
             exclude: ["Canvas3D", "CanvasMetal"],
@@ -260,6 +267,7 @@ let package = Package(
             path: "Arcus/MCPServer",
             swiftSettings: strictNoImports
         ),
+        .testTarget(name: "AssistantTests", dependencies: ["ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusMCP", "ArcusAssistant"], path: "Arcus/Tests/AssistantTests"), // AICORE
         .testTarget(name: "MCPTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusMCP"], path: "Arcus/Tests/MCPTests"),
         .testTarget(name: "RevitTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusRevit"], path: "Arcus/Tests/RevitTests", resources: [.copy("Fixtures")]),
         .testTarget(name: "CanvasMetalTests", dependencies: ["ArcusGeometry", "ArcusDomain", "ArcusOutput", "ArcusCanvasMetal"], path: "Arcus/Tests/CanvasMetalTests"),

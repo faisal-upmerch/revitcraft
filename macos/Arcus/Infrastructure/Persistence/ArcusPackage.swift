@@ -31,6 +31,8 @@ public enum ArcusPackage {
     public static let modelPath = "model.sqlite"
     public static let assetsDirectory = "assets"
     public static let thumbnailPath = "thumbnails/preview.png"
+    /// AICORE: the AI assistant's chats (optional, not checksummed, like the thumbnail; Docs/FileFormat.md §1.7).
+    public static let assistantHistoryPath = "assistant/history.json"
 
     static let log = Logger(subsystem: "com.local.arcus", category: "Persistence")
 
@@ -45,6 +47,8 @@ public enum ArcusPackage {
         public var isTemplate: Bool = false
         /// FM9: the modification date to write (nil = now), so generated library files are byte-stable between builds.
         public var modified: Date? = nil
+        /// AICORE: the AI assistant's chat history JSON to store with the document (nil = none).
+        public var assistantHistory: Data? = nil
         public init(documentID: UUID = UUID(), appVersion: String, build: String, created: Date? = nil, thumbnailPNG: Data? = nil) {
             self.documentID = documentID; self.appVersion = appVersion; self.build = build; self.created = created; self.thumbnailPNG = thumbnailPNG
         }
@@ -98,6 +102,7 @@ public enum ArcusPackage {
             checksums[p] = Checksum.hex(data)
         }
         if let png = info.thumbnailPNG { files.append((thumbnailPath, png)) }
+        if let h = info.assistantHistory, !h.isEmpty { files.append((assistantHistoryPath, h)) } // AICORE
 
         let furniture = model.isFurniture // FM3
         var manifest = PackageManifest(format: furniture ? PackageManifest.furnitureFormat : PackageManifest.projectFormat, schemaVersion: currentSchemaVersion,
@@ -140,6 +145,11 @@ public enum ArcusPackage {
     /// The optional preview image.
     public static func readThumbnail(_ url: URL, limits: PersistenceLimits = .default) -> Data? {
         try? DirectorySource(root: url).read(thumbnailPath, maxBytes: limits.maxThumbnailBytes)
+    }
+
+    /// AICORE: the optional AI assistant history (capped like the thumbnail; nil when absent or unreadable).
+    public static func readAssistantHistory(_ url: URL, limits: PersistenceLimits = .default) -> Data? {
+        try? DirectorySource(root: url).read(assistantHistoryPath, maxBytes: limits.maxThumbnailBytes)
     }
 
     /// True when the package was written by a newer schema that this build can read but would not round-trip
