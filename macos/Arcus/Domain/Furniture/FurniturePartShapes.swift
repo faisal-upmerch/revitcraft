@@ -71,8 +71,8 @@ public enum FurnitureLegShapes {
             let spread = max(w / 2 - rod, rod)
             f.solids = [solid("Plate", rect(-w / 2, -rod * 2, w / 2, rod * 2), "Height - \(n(plate)) m", "Height")]
             for (k, sx) in [-1.0, 1.0].enumerated() {
-                f.solids.append(solid("Rod \(k + 1)", .blend(FamilyBlend(bottom: ngon(Vec2(sx * rod * 0.6, 0), rod / 2, sides: 8),
-                                                                         top: ngon(Vec2(sx * spread, 0), rod / 2, sides: 8))), "0", "Height - \(n(plate)) m"))
+                f.solids.append(solid("Rod \(k + 1)", .blend(FamilyBlend(bottom: ngon(Vec2(sx * rod * 0.6, 0), rod / 2), // VIS: round rods
+                                                                         top: ngon(Vec2(sx * spread, 0), rod / 2))), "0", "Height - \(n(plate)) m"))
             }
         case .sled:
             // A tube frame across the depth: runner, two posts and a top bar.
@@ -82,14 +82,24 @@ public enum FurnitureLegShapes {
                         solid("Post 1", rect(-w / 2, -half, w / 2, -half + t), n(t), "Height - \(n(t)) m"),
                         solid("Post 2", rect(-w / 2, half - t, w / 2, half), n(t), "Height - \(n(t)) m")]
         case .caster:
-            // Mounting plate, fork and wheel; the wheel fills most of the height. (FM9C: offsets from Height are lengths.)
+            // VIS: a swivel caster as it's made: mounting plate, a round swivel, a fork whose two cheeks hold the wheel
+            // on its axle, and the wheel filling most of the height. (FM9C: offsets from Height are lengths.)
             let plate = 0.125 * 0.0254
+            let tw = w * 0.12, cheek = w * 0.035, gap = w * 0.015
             f.solids = [solid("Plate", rect(-w / 2, -w / 2, w / 2, w / 2), "Height - \(n(plate)) m", "Height"),
-                        solid("Fork", rect(-w * 0.18, -w * 0.3, w * 0.18, w * 0.3), "Height * 0.45", "Height - \(n(plate)) m")]
+                        solid("Swivel", .circle(center: p(0, 0), radius: n(w * 0.3)), "Height * 0.84", "Height - \(n(plate)) m"),
+                        solid("Fork Bridge", rect(-w * 0.16, -(tw + gap + cheek), w * 0.16, tw + gap + cheek), "Height * 0.76", "Height * 0.84")]
+            for (k, side) in [-1.0, 1.0].enumerated() {
+                let y0 = side * (tw + gap), y1 = side * (tw + gap + cheek)
+                f.solids.append(solid("Fork Cheek \(k + 1)", rect(-w * 0.16, min(y0, y1), w * 0.16, max(y0, y1)), "Height * 0.18", "Height * 0.76"))
+            }
             var wheel = FamilySolid(name: "Wheel", profile: .circle(center: FamilyPoint(.expr("0"), .expr("Height * 0.3")), radius: "Height * 0.3"),
-                                    zMin: .expr(n(-w * 0.12)), zMax: .expr(n(w * 0.12)), materialParameter: "Material")
+                                    zMin: .expr(n(-tw)), zMax: .expr(n(tw)), materialParameter: "Material")
             wheel.workPlane = .xz
-            f.solids.append(wheel)
+            var axle = FamilySolid(name: "Axle", profile: .circle(center: FamilyPoint(.expr("0"), .expr("Height * 0.3")), radius: n(w * 0.06)),
+                                   zMin: .expr(n(-(tw + gap + cheek * 1.4))), zMax: .expr(n(tw + gap + cheek * 1.4)), materialParameter: "Material")
+            axle.workPlane = .xz
+            f.solids += [wheel, axle]
         }
         return f
     }
@@ -106,12 +116,48 @@ public enum FurnitureLegShapes {
         var values: [String: ParamValue] = ["Height": .double(height)]
         if let mat = tv.material { values["Material"] = .ref(mat) }
         f.types = [FamilyTypeDefinition(name: "Body", values: values)]
-        // Foot, vase, bead and cove, up to the pommel's neck (heights as shares of the whole leg).
-        let prof: [(Double, Double)] = [(0, 0), (0.30, 0), (0.30, 0.03), (0.38, 0.05), (0.30, 0.08), (0.22, 0.16), (0.26, 0.40),
-                                       (0.34, 0.54), (0.26, 0.62), (0.40, 0.66), (0.40, 0.70), (0.30, 0.72), (0.36, 0.75), (0, 0.75)]
-        let pts = prof.map { FamilyPoint(.expr(n($0.0 * w)), .expr("Height * \(n($0.1 / pommelStart))")) }
+        let pts = turnedProfile(width: w, height: height / pommelStart).map { r, f, d in
+            FamilyPoint(.expr(n(r)), .expr("Height * \(n(f / pommelStart))" + (abs(d) < 1e-6 ? "" : (d > 0 ? " + " : " - ") + String(format: "%.6f m", abs(d)))))
+        }
         f.solids = [solid("Turned Body", .revolve(FamilyRevolve(profile: pts)), "0", "Height")]
         return f
+    }
+}
+
+extension FurnitureLegShapes {
+    /// VIS: a turned leg's body profile as a turner shapes it, from the foot to the pommel's neck: a foot with a bead, a
+    /// taper to the ankle, a vase that swells and narrows, a collar bead and a flare into the pommel. Each point is
+    /// (radius in m, height as a share of the whole leg, height offset in m), so beads stay round whatever the leg's height.
+    static func turnedProfile(width w: Double, height h: Double) -> [(Double, Double, Double)] {
+        let b1 = min(0.05 * w, 0.03 * h), b2 = min(0.07 * w, 0.025 * h) // bead radii (kept clear of the next shape on short legs)
+        var out: [(Double, Double, Double)] = [(0, 0, 0), (0.32 * w, 0, 0)]
+        /// A bead (half round bulging out) of radius `b` on the face at radius `r`, starting at height share `f`.
+        func bead(_ r: Double, _ f: Double, _ b: Double, steps: Int = 8) {
+            for k in 0...steps {
+                let a = -Double.pi / 2 + Double.pi * Double(k) / Double(steps)
+                out.append((r + b * cos(a), f, b + b * sin(a)))
+            }
+        }
+        out.append((0.32 * w, 0.02, 0))
+        bead(0.32 * w, 0.02, b1)
+        out.append((0.32 * w, 0.02, 2 * b1))
+        // Taper to the ankle, then the vase: swelling to its belly and narrowing to the neck (a smooth curve).
+        let f0 = 0.10, f1 = 0.62
+        for k in 0...8 { // the view refines the curve at Fine (CurveRefinement)
+            let t = Double(k) / 8
+            let r = (0.22 + 0.02 * t) * w + 0.11 * w * sin(.pi * pow(t, 0.85))
+            out.append((r, f0 + (f1 - f0) * t, 0))
+        }
+        // Collar bead, a short neck, then a flare into the pommel.
+        bead(0.24 * w, f1, b2)
+        out.append((0.24 * w, f1, 2 * b2))
+        out.append((0.26 * w, 0.68, 0))
+        for k in 1...4 {
+            let t = Double(k) / 4
+            out.append(((0.26 + 0.12 * (1 - cos(.pi / 2 * t))) * w, 0.68 + 0.07 * sin(.pi / 2 * t), 0))
+        }
+        out.append((0, 0.75, 0))
+        return out
     }
 }
 

@@ -33,6 +33,13 @@ public struct EvaluatedFamily: Sendable {
 
         /// Closed mesh in family coordinates.
         public var familyMesh: Mesh { mesh ?? MeshBuilder.extrude(profile, bottom: zMin, top: zMax) }
+        /// VIS: the mesh came out of a Boolean cut (BSP slivers and T-junctions along cut curves).
+        public var booleanCut = false
+        /// VIS: the mesh for views: a Boolean result without lines inside its smooth surfaces and with its T-junctions
+        /// closed, so cut curves draw and shade like the builders' own.
+        public var displayMesh: Mesh {
+            booleanCut ? MeshSmoothing.fixingTJunctions(MeshSmoothing.droppingSmoothEdges(familyMesh)) : familyMesh
+        }
         public var bounds: Box3 {
             if let mesh { return mesh.bounds }
             var b = Box3.empty
@@ -171,26 +178,32 @@ public enum FamilyEvaluator {
         return (values, errors)
     }
 
+    /// Evaluates a family. `quality` sets how finely circles, arcs and curved profiles are cut into segments (VIS: one
+    /// per view detail level; Medium when nothing asks).
     public static func evaluate(_ family: FamilyDefinition, typeName: String, instance: [String: ParamValue] = [:],
-                                units: UnitsSettings = .metric) -> EvaluatedFamily {
-        evaluate(family, typeName: typeName, instance: instance, units: units, chain: [])
+                                units: UnitsSettings = .metric, quality: TessellationQuality = .medium) -> EvaluatedFamily {
+        evaluate(family, typeName: typeName, instance: instance, units: units, chain: [], quality: quality)
     }
 
     /// Nesting depth limit (a chain of families nested in each other).
     public static let maxNestingDepth = 8
 
     static func evaluate(_ family: FamilyDefinition, typeName: String, instance: [String: ParamValue],
-                         units: UnitsSettings, chain: [String]) -> EvaluatedFamily {
+                         units: UnitsSettings, chain: [String], quality: TessellationQuality = .medium) -> EvaluatedFamily {
         let (values, paramErrors) = parameterValues(family, typeName: typeName, instance: instance, units: units)
         var errors = paramErrors
         var warnings: [String] = []
         let names = Set(values.keys)
+        // VIS: one name table and one parse per distinct expression (profiles repeat "Height * …" many times).
+        let parse = Formula.parser(knownNames: names)
+        var parsed: [String: Formula] = [:]
 
         func formula(_ s: String) -> FormulaValue? {
             let trimmed = s.trimmingCharacters(in: .whitespaces)
             if let d = Double(trimmed) { return .quantity(d, .none) }
             do {
-                let f = try Formula(trimmed, knownNames: names)
+                let f: Formula
+                if let hit = parsed[trimmed] { f = hit } else { f = try parse(trimmed); parsed[trimmed] = f }
                 return try f.evaluate(units: units) { values[$0] }
             } catch {
                 errors.append("Expression “\(s)”: \(error)")
@@ -230,7 +243,7 @@ public enum FamilyEvaluator {
         }
         func loop(_ pts: [FamilyPoint]) -> Polygon2? {
             guard pts.count >= 3 else { return nil }
-            let poly = Polygon2(pts.map(point))
+            let poly = Polygon2(CurveRefinement.refine(pts.map(point), closed: true, quality: quality)) // VIS: curves stored as points
             return poly.isDegenerate ? nil : poly
         }
 
@@ -252,11 +265,11 @@ public enum FamilyEvaluator {
                     let r = Rect2(min: Vec2(min(a, b), min(c, d)), max: Vec2(max(a, b), max(c, d)))
                     profile = r.width > Tolerance.length && r.height > Tolerance.length ? .init(outer: .rectangle(r)) : nil
                 case .polygon(let pts):
-                    let poly = Polygon2(pts.map(point))
+                    let poly = Polygon2(CurveRefinement.refine(pts.map(point), closed: true, quality: quality)) // VIS
                     profile = poly.isDegenerate ? nil : Profile2(outer: poly)
                 case .circle(let c, let r):
                     let rr = expr(r)
-                    profile = rr > Tolerance.length ? Profile2(outer: Polygon2(Arc2(center: point(c), radius: rr, startAngle: 0, sweep: Angle.twoPi).tessellate(chordTolerance: 0.002).dropLast())) : nil
+                    profile = rr > Tolerance.length ? Profile2(outer: Polygon2(Arc2(center: point(c), radius: rr, startAngle: 0, sweep: Angle.twoPi).tessellate(quality: quality).dropLast())) : nil
                 default:
                     profile = nil
                 }
@@ -285,6 +298,7 @@ public enum FamilyEvaluator {
                 let z0 = bound(s.zMin)
                 var path: [Vec2] = []
                 for p in sw.path.map(point) where path.last.map({ !$0.isAlmostEqual(p) }) ?? true { path.append(p) }
+                path = CurveRefinement.refine(path, closed: false, quality: quality) // VIS: arcs in the path
                 guard path.count >= 2 else {
                     errors.append("\(s.profile.kindName) “\(s.name)” needs a path of at least two distinct points.")
                     continue
@@ -317,9 +331,10 @@ public enum FamilyEvaluator {
                         errors.append("Sweep “\(s.name)” uses the profile family “\(pfName)”, which isn't loaded in this family.")
                         continue
                     }
-                    let pev = evaluate(pf, typeName: sw.profileFamilyType ?? pf.types.first?.name ?? "", instance: [:], units: units, chain: chain + [family.name])
+                    let pev = evaluate(pf, typeName: sw.profileFamilyType ?? pf.types.first?.name ?? "", instance: [:], units: units, chain: chain + [family.name],
+                                       quality: quality)
                     errors += pev.errors.map { "Profile “\(pfName)”: \($0)" }
-                    profile = pev.profileLoop.flatMap { $0.isDegenerate ? nil : $0 }
+                    profile = pev.profileLoop.flatMap { $0.isDegenerate ? nil : Polygon2(CurveRefinement.refine($0.points, closed: true, quality: quality)) } // VIS
                 } else {
                     profile = loop(sw.profile)
                 }
@@ -378,10 +393,10 @@ public enum FamilyEvaluator {
                     continue
                 }
                 let axis = point(rv.axis)
-                let segments = max(4, Int((abs(sweep) / Angle.twoPi * 48).rounded(.up)))
+                let segments = max(4, quality.segments(radius: max(rs.max() ?? 0, Tolerance.length), sweep: sweep)) // VIS: by size and detail level
                 let raw = MeshBuilder.revolve(profile: prof.points.map { Vec2(max(0, $0.x), $0.y + z0) }, around: Vec3(axis, z: 0), segments: segments, angle: sweep)
                 let mesh = raw.transformed(Transform3(Transform2.rotation(a0, around: axis)))
-                guard !mesh.isEmpty, let foot = FamilyFormGeometry.revolveFootprint(axis: axis, rMin: max(0, rs.min() ?? 0), rMax: rs.max() ?? 0, start: a0, sweep: sweep) else {
+                guard !mesh.isEmpty, let foot = FamilyFormGeometry.revolveFootprint(axis: axis, rMin: max(0, rs.min() ?? 0), rMax: rs.max() ?? 0, start: a0, sweep: sweep, quality: quality) else {
                     errors.append("Revolve “\(s.name)” can't be built for this type.")
                     continue
                 }
@@ -466,7 +481,7 @@ public enum FamilyEvaluator {
                 if let i = child.parameters.firstIndex(where: { $0.name == param }) { child.parameters[i].formula = nil }
             }
             child.types = [FamilyTypeDefinition(name: tname ?? "Nested", values: tvals)]
-            let nev = evaluate(child, typeName: tname ?? "Nested", instance: [:], units: units, chain: chain + [family.name])
+            let nev = evaluate(child, typeName: tname ?? "Nested", instance: [:], units: units, chain: chain + [family.name], quality: quality)
             errors += nev.errors.map { "Nested “\(nf.name)”: \($0)" }
             warnings += nev.warnings.map { "Nested “\(nf.name)”: \($0)" }
             let origin = Vec3(bound(inst.x), bound(inst.y), bound(inst.z))
@@ -555,7 +570,7 @@ public enum FamilyEvaluator {
         for c in cycles { problems.append("Circular formula chain: " + c.joined(separator: " → ")) }
 
         for t in family.types {
-            let r = evaluate(family, typeName: t.name, units: units)
+            let r = evaluate(family, typeName: t.name, units: units, quality: .coarse) // VIS: errors don't depend on how fine curves are cut
             for e in r.errors { problems.append("Type “\(t.name)”: \(e)") }
             let flexible = family.parameters.filter { $0.formula == nil && $0.type == .length }
             for p in flexible {
@@ -566,7 +581,7 @@ public enum FamilyEvaluator {
                     vals[p.name] = .double(base * factor)
                     var fam = family
                     fam.types = [FamilyTypeDefinition(name: t.name, values: vals)]
-                    let fr = evaluate(fam, typeName: t.name, units: units)
+                    let fr = evaluate(fam, typeName: t.name, units: units, quality: .coarse)
                     for e in fr.errors {
                         let msg = "Flexing “\(p.name)” to \(Int(factor * 100))% in type “\(t.name)”: \(e)"
                         if !problems.contains(msg) { problems.append(msg) }

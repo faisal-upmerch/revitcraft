@@ -102,8 +102,10 @@ final class FamilyEditorModel {
 
     // W4-FAMED: view state shared by the browser, ribbon, canvas and inspector.
     var view: FamilyPreviewMode = .plan { didSet { drawingRevision += 1; if !openViews.contains(view) { openViews.append(view) } } } // F1415: view tabs
-    var detail: DetailLevel = .fine { didSet { drawingRevision += 1 } }
-    var applyVisibility = true { didSet { drawingRevision += 1 } }
+    var detail: DetailLevel = .fine { didSet { if oldValue != detail { refresh() } } } // VIS: curves are cut for the detail level
+    var applyVisibility = true { didSet { if oldValue != applyVisibility { refresh() } } }
+    /// VIS: how finely the preview cuts curves: the detail level's quality with Preview Visibility on, else Fine.
+    var previewQuality: TessellationQuality { applyVisibility ? detail.tessellation : .fine }
     /// Bumped whenever the canvas drawing must be rebuilt (evaluation, view, detail level, visibility).
     private(set) var drawingRevision = 0
     var selection: FamilyEditing.Item?
@@ -145,13 +147,13 @@ final class FamilyEditorModel {
         self.familyID = familyID
         let t = family.types.first?.name ?? ""
         currentType = t
-        evaluated = FamilyEvaluator.evaluate(family, typeName: t, units: state.model.units)
+        evaluated = FamilyEvaluator.evaluate(family, typeName: t, units: state.model.units, quality: .fine) // VIS: Fine, the default detail
     }
 
     var units: UnitsSettings { state.model.units }
 
     private func refresh() {
-        evaluated = FamilyEvaluator.evaluate(family, typeName: currentType, units: units)
+        evaluated = FamilyEvaluator.evaluate(family, typeName: currentType, units: units, quality: previewQuality)
         drawingRevision += 1
         if let s = selection, !exists(s) { selection = nil }
     }

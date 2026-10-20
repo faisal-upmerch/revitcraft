@@ -97,7 +97,8 @@ struct FM8Tests {
             }
             // Light: Coarse and Medium meshes stay small.
             let tris = { (d: DetailLevel) in ev0.solids.filter { !$0.isVoid && $0.visibleAt.contains(d) }.reduce(0) { $0 + $1.familyMesh.indices.count / 3 } }
-            #expect(tris(.coarse) < 600 && tris(.medium) < 1500, "\(name): \(tris(.coarse)) / \(tris(.medium)) triangles")
+            // VIS: Medium draws curves smooth (36 segments a circle, hinge cups and handles included), still light.
+            #expect(tris(.coarse) < 600 && tris(.medium) < 4000, "\(name): \(tris(.coarse)) / \(tris(.medium)) triangles")
             #expect(tris(.coarse) <= tris(.medium) && tris(.medium) <= tris(.fine))
         }
     }

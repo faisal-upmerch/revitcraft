@@ -159,28 +159,59 @@ public enum DerivedCaches {
 public final class GeometryCache: @unchecked Sendable {
     public static let shared = GeometryCache()
     private let lock = NSLock()
-    private var entries: [ElementID: (key: Int, parts: [MeshPart])] = [:]
+    /// VIS: one entry per element and detail level, so views at different detail levels don't evict each other.
+    struct Slot: Hashable { var id: ElementID; var detail: DetailLevel }
+    final class Entry: @unchecked Sendable {
+        let key: Int
+        let parts: [MeshPart]
+        /// VIS: the parts prepared for smooth shading, built on first use by a 3D view.
+        var shaded: [ShadedMesh]?
+        init(key: Int, parts: [MeshPart]) { self.key = key; self.parts = parts }
+    }
+    private var entries: [Slot: Entry] = [:]
     public private(set) var hits = 0
     public private(set) var misses = 0
 
     public func parts(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> [MeshPart] {
-        let key = GeometryCache.key(e, model, detail: detail)
+        entry(e, model, detail: detail).parts
+    }
+
+    /// VIS: the element's parts with their meshes prepared for smooth shading (welded, smooth normals, silhouette
+    /// candidates), cached with the parts.
+    public func shadedParts(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> [(part: MeshPart, shaded: ShadedMesh)] {
+        let entry = entry(e, model, detail: detail)
         lock.lock()
-        if let hit = entries[e.id], hit.key == key { hits += 1; lock.unlock(); return hit.parts }
+        if let s = entry.shaded { lock.unlock(); return Array(zip(entry.parts, s)) }
+        lock.unlock()
+        let s = entry.parts.map { $0.mesh.smoothShaded() }
+        lock.lock()
+        entry.shaded = s
+        lock.unlock()
+        return Array(zip(entry.parts, s))
+    }
+
+    private func entry(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> Entry {
+        let key = GeometryCache.key(e, model, detail: detail)
+        let slot = Slot(id: e.id, detail: detail)
+        lock.lock()
+        if let hit = entries[slot], hit.key == key { hits += 1; lock.unlock(); return hit }
         misses += 1
         lock.unlock()
-        let p = ElementMeshes.parts(e, model, detail: detail)
+        let entry = Entry(key: key, parts: ElementMeshes.parts(e, model, detail: detail))
         lock.lock()
-        entries[e.id] = (key, p)
+        entries[slot] = entry
         lock.unlock()
-        return p
+        return entry
     }
 
     public func purge() { lock.lock(); entries.removeAll(); lock.unlock() }
     public var count: Int { lock.lock(); defer { lock.unlock() }; return entries.count }
     public var approximateBytes: Int {
         lock.lock(); defer { lock.unlock() }
-        return entries.values.reduce(0) { acc, v in acc + v.parts.reduce(0) { $0 + $1.mesh.positions.count * 48 + $1.mesh.indices.count * 4 + $1.mesh.featureEdges.count * 4 } }
+        func bytes(_ m: Mesh) -> Int { m.positions.count * 48 + m.indices.count * 4 + m.featureEdges.count * 4 }
+        return entries.values.reduce(0) { acc, v in
+            acc + v.parts.reduce(0) { $0 + bytes($1.mesh) } + (v.shaded ?? []).reduce(0) { $0 + bytes($1.mesh) + $1.silhouetteEdges.count * 4 + $1.silhouetteNormals.count * 24 }
+        }
     }
 
     public static func key(_ e: Element, _ model: BIMModel, detail: DetailLevel) -> Int {

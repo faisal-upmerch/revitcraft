@@ -98,6 +98,8 @@ public enum FamilyFormGeometry {
     public static func blendFootprint(bottom: Polygon2, top: Polygon2) -> Profile2? {
         let b = bottom.simplified().counterClockwise, t = aligned(top.simplified().counterClockwise, to: b)
         guard b.count >= 3, t.count >= 3 else { return nil }
+        // VIS: two convex loops (round and square legs, tapers): the footprint is their hull, no Boolean union of every side.
+        if b.isConvex, t.isConvex, let hull = convexHull(b.points + t.points) { return Profile2(outer: hull) }
         let fb = fractions(b.points), ft = fractions(t.points)
         let merged = Array(Set(fb + ft)).sorted()
         let rb = merged.map { sample(b.points, fb, $0) }, rt = merged.map { sample(t.points, ft, $0) }
@@ -109,6 +111,24 @@ public enum FamilyFormGeometry {
         }
         let union = PolygonBoolean.union(parts)
         return union.max { $0.area < $1.area }
+    }
+
+    /// VIS: the convex hull of points (counterclockwise, monotone chain); nil when they're in line.
+    static func convexHull(_ pts: [Vec2]) -> Polygon2? {
+        let p = pts.sorted { $0.x < $1.x || ($0.x == $1.x && $0.y < $1.y) }
+        guard p.count >= 3 else { return nil }
+        func cross(_ o: Vec2, _ a: Vec2, _ b: Vec2) -> Double { (a - o).cross(b - o) }
+        var lower: [Vec2] = [], upper: [Vec2] = []
+        for q in p {
+            while lower.count >= 2 && cross(lower[lower.count - 2], lower[lower.count - 1], q) <= 1e-15 { lower.removeLast() }
+            lower.append(q)
+        }
+        for q in p.reversed() {
+            while upper.count >= 2 && cross(upper[upper.count - 2], upper[upper.count - 1], q) <= 1e-15 { upper.removeLast() }
+            upper.append(q)
+        }
+        let hull = Polygon2(Array(lower.dropLast() + upper.dropLast()))
+        return hull.count >= 3 && !hull.isDegenerate ? hull : nil
     }
 
     /// Cumulative arc-length fractions (0 ≤ f < 1) of a closed loop's vertices.
@@ -144,10 +164,11 @@ public enum FamilyFormGeometry {
     // MARK: Revolve
 
     /// Plan footprint of a revolve: a full disc or ring, or an annular sector for partial revolves.
-    public static func revolveFootprint(axis: Vec2, rMin: Double, rMax: Double, start: Double, sweep: Double) -> Profile2? {
+    public static func revolveFootprint(axis: Vec2, rMin: Double, rMax: Double, start: Double, sweep: Double,
+                                        quality: TessellationQuality = .medium) -> Profile2? {
         guard rMax > Tolerance.length, abs(sweep) > Tolerance.angle else { return nil }
         let full = abs(sweep) >= Angle.twoPi - Tolerance.angle
-        let segs = max(8, Int((abs(sweep) / Angle.twoPi * 48).rounded(.up)))
+        let segs = max(8, quality.segments(radius: rMax, sweep: sweep)) // VIS
         func arc(_ r: Double) -> [Vec2] { (0...segs).map { axis + Vec2.fromAngle(start + sweep * Double($0) / Double(segs), length: r) } }
         if full {
             let outer = Polygon2(Array(arc(rMax).dropLast()))

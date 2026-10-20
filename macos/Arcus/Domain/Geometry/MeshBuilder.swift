@@ -261,9 +261,25 @@ public enum MeshBuilder {
         let crease = Double.pi / 8
         let pp = prof.points
         let qn = pp.count
+        // VIS: angles' cosines and sines once, and a direct path for quads off the axis (the common case).
+        let cs = phis.map { (cos($0), sin($0)) }
+        func at(_ q: Vec2, _ k: Int) -> Vec3 { axisOrigin + Vec3(q.x * cs[k].0, q.x * cs[k].1, q.y) }
         for i in 0..<qn {
             let p = pp[i], q = pp[(i + 1) % qn]
+            let ringEdge = turnAngle(pp, i) > crease && p.x > Tolerance.length
+            let offAxis = p.x > Tolerance.length && q.x > Tolerance.length
             for k in 0..<n {
+                if offAxis && full {
+                    let a = at(p, k), b = at(p, k + 1), c = at(q, k + 1), d = at(q, k)
+                    let fn = (b - a).cross(c - a) + (c - a).cross(d - a)
+                    let len = fn.length
+                    guard len > 1e-20 else { continue }
+                    let base = w.addVertices([a, b, c, d], normal: fn / len)
+                    w.addTriangle(base, base + 1, base + 2)
+                    w.addTriangle(base, base + 2, base + 3)
+                    if ringEdge { w.addEdge(base, base + 1) }
+                    continue
+                }
                 // Outward for a CCW profile and positive sweep; negative sweeps are fixed
                 // globally by the volume check below.
                 let poly = [pos(p, k), pos(p, k + 1), pos(q, k + 1), pos(q, k)]
@@ -274,9 +290,15 @@ public enum MeshBuilder {
                     clean.append(v); slots.append(vi)
                 }
                 if clean.count > 1 && clean[0].isAlmostEqual(clean[clean.count - 1]) { clean.removeLast(); slots.removeLast() }
-                guard clean.count >= 3, let base = w.addFace(clean) else { continue }
+                guard clean.count >= 3 else { continue }
+                // VIS: revolve quads are planar trapezoids (and triangles at the axis): add them directly, no triangulation.
+                let fn = newellNormal(clean)
+                guard fn.lengthSquared > 0 else { continue }
+                let base = w.addVertices(clean, normal: fn)
+                w.addTriangle(base, base + 1, base + 2)
+                if clean.count == 4 { w.addTriangle(base, base + 2, base + 3) }
                 // Ring edge at profile vertex p (edge between slots 0 and 1) where the profile creases.
-                if turnAngle(pp, i) > crease, p.x > Tolerance.length, let a = slots.firstIndex(of: 0), let b = slots.firstIndex(of: 1) {
+                if ringEdge, let a = slots.firstIndex(of: 0), let b = slots.firstIndex(of: 1) {
                     w.addEdge(base + UInt32(a), base + UInt32(b))
                 }
                 if !full {

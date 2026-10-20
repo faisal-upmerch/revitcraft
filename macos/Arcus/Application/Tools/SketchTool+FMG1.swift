@@ -46,7 +46,7 @@ extension SketchTool {
     /// Edit Top) still gives the larger as the base.
     func fmg1BlendLoops(_ polys: [Polygon2]) -> ([Vec2], [Vec2])? {
         let other: Polygon2? = {
-            guard !fm4.otherSketch.isEmpty, case .success(let p) = Sketch(loops: splitLoops(fm4.otherSketch)).polygons() else { return nil }
+            guard !fm4.otherSketch.isEmpty, case .success(let p) = Sketch(loops: splitLoops(fm4.otherSketch)).polygons(quality: .fine) else { return nil }
             return p.max { $0.area < $1.area }
         }()
         guard let mine = polys.max(by: { $0.area < $1.area }) else { return nil }
@@ -62,7 +62,7 @@ extension SketchTool {
         guard case .fm4(.form(_, let isVoid)) = target else { return false }
         let loops = splitLoops(curves)
         if let issue = SketchValidation.validate(curves, loops: loops) { presentSketchIssue(issue); return false }
-        guard case .success(let polys) = Sketch(loops: loops).polygons(), ctx.isPlan, let (base, top) = fmg1BlendLoops(polys) else {
+        guard case .success(let polys) = Sketch(loops: loops).polygons(quality: .fine), ctx.isPlan, let (base, top) = fmg1BlendLoops(polys) else {
             message(fmg1BlendMessage)
             return false
         }

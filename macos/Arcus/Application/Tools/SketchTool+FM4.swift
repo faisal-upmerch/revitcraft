@@ -254,7 +254,7 @@ extension SketchTool {
     }
 
     func fm4Commit(_ t: FM4SketchTarget, _ sketch: Sketch) {
-        guard case .success(let polys) = sketch.polygons(), let outer = polys.max(by: { $0.area < $1.area }) else { message("Sketch a closed loop."); return }
+        guard case .success(let polys) = sketch.polygons(quality: .fine), let outer = polys.max(by: { $0.area < $1.area }) else { message("Sketch a closed loop."); return } // VIS: arcs kept round
         switch t {
         case .shelf(let k):
             if let id = editingID {
@@ -322,7 +322,7 @@ extension SketchTool {
             return g.count >= 2 && ends.allSatisfy { p in ends.filter { $0.isAlmostEqual(p, tolerance: Tolerance.length * 10) }.count >= 2 } && first.length > 0
         }
         let loops = groups.filter(closed).compactMap { g -> Polygon2? in
-            guard case .success(let polys) = Sketch(loops: [g]).polygons() else { return nil }
+            guard case .success(let polys) = Sketch(loops: [g]).polygons(quality: .fine) else { return nil } // VIS
             return polys.first
         }
         let open = groups.filter { !closed($0) }
@@ -350,7 +350,7 @@ extension SketchTool {
             // section; the profile stands up from a plan path, or reaches into the view from an elevation path.
             var path: [Vec2] = []
             for c in orderedChain(pathCurves) {
-                for p in c.tessellate(chordTolerance: 0.002) {
+                for p in (c.asArc.map { $0.tessellate(quality: .fine) } ?? c.tessellate(chordTolerance: 0.002)) { // VIS
                     let q = ctx.isPlan ? p : map.toSketch(p)
                     if path.last.map({ !$0.isAlmostEqual(q) }) ?? true { path.append(q) }
                 }

@@ -44,6 +44,12 @@ public struct Formula: Sendable, Hashable {
         try self.init(source, names: FormulaNames(knownNames))
     }
 
+    /// VIS: a parser for many formulas over the same names (the name table is built once).
+    public static func parser(knownNames: Set<String>) -> @Sendable (String) throws -> Formula {
+        let table = FormulaNames(knownNames)
+        return { try Formula($0, names: table) }
+    }
+
     /// Parses `source` against a prebuilt name table (cheap to reuse across many formulas).
     init(_ source: String, names table: FormulaNames) throws {
         guard source.count <= Formula.maxLength else {
