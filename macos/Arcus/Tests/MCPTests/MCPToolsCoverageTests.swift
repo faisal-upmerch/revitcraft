@@ -261,6 +261,7 @@ struct MCPToolsCoverageTests {
         var failures: [String] = []
         for spec in ArcusToolCatalog.all {
             guard let (mode, setup) = Self.minimal[spec.name] else { continue }
+            try await Task.sleep(for: .milliseconds(2)) // lets other suites' main-actor work (the live socket test) run
             let f = try await Self.fixture(mode)
             #expect(spec.modes.isEmpty || spec.modes.contains(mode), "\(spec.name) runs in \(mode) but declares \(spec.modes)")
             let args: JSONValue
@@ -280,6 +281,7 @@ struct MCPToolsCoverageTests {
         var silent: [String] = []
         for spec in ArcusToolCatalog.all where !spec.requiredNames.isEmpty {
             guard let (mode, _) = Self.minimal[spec.name] else { continue }
+            try await Task.sleep(for: .milliseconds(2))
             let f = try await Self.fixture(mode)
             let r = await f.t.box.callTool(spec.name, arguments: [:])
             if !r.isError { silent.append("\(spec.name) accepted {}"); continue }
