@@ -27,7 +27,7 @@ pass `height:` and let their panes fill it. Tabbed dialogs let each tab size its
 **Sections and rows.** Group controls in `DialogSection("Title", footnote:)` boxes. Inside, use
 `DialogRow("Label") { control }`: labels sit in one column whose width the dialog sets (`labelWidth`), so every control
 starts on the same line. Hide control labels (`.labelsHidden()`), size pop-ups to their content (`.fixedSize()`), put
-units after fields in secondary, use segmented pickers for two or three choices. Read-only facts are
+units after fields in secondary, use `PillSegmented` for two to four choices (see Pills and selection). Read-only facts are
 `DialogValueRow`. Explanations go in a section's footnote, not in loose caption text. `boxed: false` gives a list its
 title and accessory (Check All / None, Include views) without a second box around it.
 
@@ -58,6 +58,32 @@ is missing). `swift test --filter DialogRenderTests` renders every dialog at its
 `/tmp/arcus-dialogs/` with 2 × 2 review sheets (`_sheet-light-NN.png`); `ARCUS_DIALOG=name,name` renders only those.
 Read the PNGs before you finish: no clipping, truncation, misalignment or empty areas. (Offscreen the test process is
 not the active app, so default buttons draw grey; in a sheet they are accent-coloured.)
+
+## Pills and selection
+
+One spec for every selected or hovered capsule in Arcus: tabs, segmented controls, chips, toggles and selected rows
+(`PillSpec` in `UI/Shell/DesignTokens.swift`; the parts in `UI/Shell/PillControls.swift`).
+
+| Rule | Value |
+| --- | --- |
+| Inset of a selected capsule inside its glass pill or container, all round | `PillSpec.inset` = 4 pt (segmented tracks: `trackInset` = 3 pt) |
+| Side padding between a capsule's edge and its text or icon | `PillSpec.padding` = 12 pt each side; before a close button `closePadding` = 8 pt (its 16 pt circle brings the ✕ to 12 pt) |
+| Selected list rows | `rowPadding` = 12 pt each side, rounded, inset from the list's edge |
+| Heights | 36 pt shell pills → 28 pt capsules (ribbon tabs, controls, bottom bar); 30 pt view-tab pill → 22 pt; segmented 24 / 26 / 30 pt tracks |
+| Corners | Capsule inside capsule; a rounded selection's radius = container radius − inset (`PillSpec.radius(inside:)`); cards concentric with the thumbnail they hold |
+| Gap between neighbouring capsules | `PillSpec.gap` = 2 pt (ribbon tabs touch: their padding spaces the titles) |
+| Fills | Hover `primary` 7 %; selected neutral `primary` 11 %; tinted 20 % with a 50 % edge (active view tab, contextual tab, "on" toggle); segments raised (white with a soft shadow; 17 % white in dark) |
+
+- Use `.pillHighlight(selected, style)` on the padded content, then `.padding(PillSpec.inset)` inside the pill: hover
+  and selection share the shape, so nothing jumps.
+- Use `PillSegmented(selection:, [(value, "Title")])` instead of `Picker(...).pickerStyle(.segmented)`, in dialogs and in
+  the shell alike (`size: .small` in the Options Bar and panels, `.large` on Home, `fill: true` across a pane).
+- Bottom pill items are 28 pt capsules (`barMenuItem()` for menus); icon buttons in the controls pill are 32 × 28 pt.
+- Content that a state change swaps (the ribbon's panels, the status prompt, the Options Bar) never cross-fades:
+  `instantContent(_:key:)` switches it in one frame while the pills around it may slide. The contextual tab switches
+  in the same update as the tool (`DocumentState.setTool`), never from an `onChange` a frame later.
+- Render-check: `swift test --filter PILLSUITests` writes every pill to `/tmp/arcus-pills/` (light on glass, dark on
+  the opaque surface); zoom into the selected state and check the inset and padding by eye.
 
 ## Inventory
 

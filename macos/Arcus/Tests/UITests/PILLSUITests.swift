@@ -122,7 +122,46 @@ struct PILLSUITests {
                 try await Self.render(ComponentPreview(model: pm, definition: d, height: 200), CGSize(width: 360, height: 270), "component-preview", dark: dark)
             }
             try await Self.render(ComponentLibraryView(state: cs, categories: [], furnitureItems: []), CGSize(width: 1120, height: 720), "component-library", dark: dark)
+            // Home: the Recent filter with Furniture chosen, and the Start cards with one selected.
+            let home = HomeModel(tab: .recent, readsDisk: false)
+            home.recentFilter = .furniture
+            home.selected = .furniture
+            Self.renderHome(home, "home", dark: dark)
+            // Segmented controls at each size, as dialogs and panels use them.
+            var pick = 1
+            let segs = VStack(alignment: .leading, spacing: 10) {
+                PillSegmented(selection: Binding(get: { pick }, set: { pick = $0 }), [(0, "Model Objects"), (1, "Annotation Objects"), (2, "Imported Objects")])
+                PillSegmented(selection: Binding(get: { pick }, set: { pick = $0 }), [(0, "Line"), (1, "Rectangle")], size: .small)
+                PillSegmented(selection: Binding(get: { pick }, set: { pick = $0 }), [(0, "All"), (1, "Projects"), (2, "Furniture"), (3, "Families")], size: .large)
+            }
+            try await Self.render(segs, CGSize(width: 520, height: 140), "segmented", dark: dark)
         }
+    }
+
+    /// Home in its own window, as HomeRenderTests draws it.
+    static func renderHome(_ model: HomeModel, _ name: String, dark: Bool) {
+        let w = AppDelegate.makeHubWindow(model: model)
+        w.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        w.setContentSize(CGSize(width: 1040, height: 660))
+        GlassShieldView.forceOpaque = dark
+        defer { GlassShieldView.forceOpaque = false; w.close() }
+        w.contentView?.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        w.contentView?.layoutSubtreeIfNeeded()
+        if let v = w.contentView?.superview ?? w.contentView { try? shoot(v, "\(name)-\(dark ? "dark" : "light")") }
+    }
+
+    @Test("The spec: concentric radii, capsule heights inside each pill")
+    func spec() {
+        #expect(PillSpec.height(in: CGFloat(ShellMetrics.arcus.pillHeight)) == PillSpec.shellItemHeight)
+        #expect(PillSpec.height(in: CGFloat(ShellMetrics.arcus.viewTabsHeight)) == PillSpec.viewTabItemHeight)
+        #expect(PillSpec.height(in: CGFloat(ShellMetrics.arcus.bottomHeight)) == PillSpec.shellItemHeight)
+        #expect(PillSpec.radius(inside: 16) == 12 && PillSpec.radius(inside: 2) == 0)
+        #expect(PillSpec.inset >= 3 && PillSpec.padding >= 12 && PillSpec.rowPadding >= 12)
+        // A tab's width is its title plus 12 pt either side; the row adds the chosen tab's extra weight once.
+        let w = RibbonTabMetrics.width("Create")
+        #expect(abs(w - RibbonTabMetrics.text("Create", RibbonTabMetrics.font) - 24) < 0.01)
+        #expect(RibbonTabMetrics.rowWidth(["Create", "Insert"]) >= RibbonTabMetrics.width("Create") + RibbonTabMetrics.width("Insert"))
     }
 
     @Test("Entering or leaving a sketch shows one ribbon: the sketch's panels replace the tab's, and back")
