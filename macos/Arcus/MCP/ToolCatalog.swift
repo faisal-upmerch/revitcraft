@@ -181,7 +181,7 @@ public enum ArcusToolCatalog {
                  "Create a sheet with a title block and place views and schedules on it. Without positions, they are laid out in a grid. position is [u, v] as fractions of the paper (0–1, origin bottom-left).",
                  properties: ["number": S.str("e.g. A101"), "name": S.str(), "paper": S.oneOf(["ARCH D", "ARCH E", "ARCH C", "ANSI B", "Letter", "A0", "A1", "A2", "A3", "A4"], "Default ARCH D (Imperial) or A1"),
                               "title_block": S.ref(), "views": S.array(S.object(["view": S.ref("View or schedule name/id"), "position": S.array(S.num())], required: ["view"])),
-                              "schedules": S.array(S.ref(), "Schedule names to place")],
+                              "schedules": S.array(S.ref(), "Schedule names to place"), "fit": S.bool("Default true: views too big for their place get the next standard scale that fits")],
                  required: ["number", "name"]),
         ToolSpec("create_schedule", "Create Schedule", "Create a schedule: standard doors, windows, rooms, walls or sheets; Furniture part_list, hardware, edge_banding, cost, material_takeoff, component_bom; or category with fields (parameter names, 'Count'). get_schedule reads it, edit_schedule changes it.",
                  properties: ["kind": S.oneOf(["doors", "windows", "rooms", "walls", "sheets", "part_list", "hardware", "edge_banding", "cost", "material_takeoff", "component_bom", "category"]),

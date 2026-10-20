@@ -85,9 +85,14 @@ public final class ArcusToolbox: ToolBackend {
     public func callTool(_ name: String, arguments: [String: JSONValue]) async -> ToolResult {
         let ctx = ToolContext(host: host, args: ToolArgs(arguments))
         ctx.toolbox = self
-        ctx.groupsUndo = !Self.readOnly.contains(name) && !Self.documentLevel.contains(name)
-        if let spec = ArcusToolCatalog.spec(name), !spec.modes.isEmpty, !spec.modes.contains(mode) {
-            return .error(Self.modeMessage(spec, mode))
+        ctx.groupsUndo = !Self.documentLevel.contains(name) // read-only tools never edit, so they never open a group
+        if let spec = ArcusToolCatalog.spec(name) {
+            if !spec.modes.isEmpty, !spec.modes.contains(mode) { return .error(Self.modeMessage(spec, mode)) }
+            // AITOOLS: required arguments first, so the message names what to give.
+            let missing = spec.requiredNames.filter { ctx.args[$0] == nil }
+            if !missing.isEmpty {
+                return .error("Missing \(missing.map { "“\($0)”" }.joined(separator: " and ")). \(name) needs \(spec.requiredNames.joined(separator: ", ")); see its schema.")
+            }
         }
         // One undo step per call, opened by its first edit; nests inside the assistant's prompt group.
         defer {
@@ -113,11 +118,12 @@ public final class ArcusToolbox: ToolBackend {
 
     /// Why a tool doesn't apply to the front document, and what to do instead.
     static func modeMessage(_ spec: ToolSpec, _ mode: DocumentMode) -> String {
-        let wants = spec.modes.map(\.rawValue).sorted().joined(separator: " or ")
+        let label: [DocumentMode: String] = [.project: "project", .furniture: "Furniture", .family: "Family Editor", .none: "no"]
+        let wants = spec.modes.map { label[$0] ?? $0.rawValue }.sorted().joined(separator: " or ")
         switch mode {
         case .none: return "\(spec.name) needs an open \(wants) document. Call create_project, create_furniture or open_document first."
         case .family: return "\(spec.name) works in \(wants) documents; the front window is the Family Editor. Use the family tools (family_info, add_family_parameter, add_form…), or load_family_into_project."
-        default: return "\(spec.name) works in \(wants) documents; the front document is a \(mode.rawValue). \(mode == .furniture ? "Use the furniture tools (add_furniture_parts, add_fronts…)." : "Use create_furniture for a piece of furniture.")"
+        default: return "\(spec.name) works in \(wants) documents; the front document is a \(label[mode] ?? mode.rawValue) document. \(mode == .furniture ? "Use the furniture tools (add_furniture_parts, add_fronts…)." : "Use create_furniture for a piece of furniture.")"
         }
     }
 

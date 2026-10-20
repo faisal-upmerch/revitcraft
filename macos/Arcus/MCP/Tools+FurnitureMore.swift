@@ -107,12 +107,19 @@ extension ArcusToolbox {
             let l = planes["Left"] ?? -0.45, r = planes["Right"] ?? 0.45, b = planes["Bottom"] ?? 0, t = planes["Top"] ?? 0.76
             let f = planes["Front"] ?? -0.23, k = planes["Back"] ?? 0.23
             let (u0, u1, v0, v1) = face == .front ? (l, r, b, t) : (l, r, f, k)
-            var seen: [BayOpening] = []
+            // Sample the face; one bay per opening (by its bounds), skipping toe kicks and slots under 5".
+            var seen: [[Int]] = []
+            let minSize = 5 * 0.0254
             for i in 1..<24 { for j in 1..<24 {
                 let p = Vec2(u0 + (u1 - u0) * Double(i) / 24, v0 + (v1 - v0) * Double(j) / 24)
-                guard let o = FurnitureBays.opening(face: face, at: p, frame: .front, m), !seen.contains(o) else { continue }
-                seen.append(o)
-                pts.append(p)
+                guard let o = FurnitureBays.opening(face: face, at: p, frame: .front, m) else { continue }
+                let (w, h) = face == .front ? (o.x1 - o.x0, o.z1 - o.z0) : (o.x1 - o.x0, o.y1 - o.y0)
+                guard w >= minSize, h >= minSize else { continue }
+                let key = [o.x0, o.x1, o.y0, o.y1, o.z0, o.z1].map { Int(($0 / 0.002).rounded()) }
+                guard !seen.contains(key) else { continue }
+                seen.append(key)
+                // The opening's centre, so the bay seed sits well inside it.
+                pts.append(face == .front ? Vec2((o.x0 + o.x1) / 2, (o.z0 + o.z1) / 2) : Vec2((o.x0 + o.x1) / 2, (o.y0 + o.y1) / 2))
             } }
             // Openings already holding a bay are skipped below.
         }
@@ -201,7 +208,7 @@ extension ArcusToolbox {
         let key = JointKey(parts[0], parts[1])
         guard FurnitureJoints.joint(parts[0], parts[1], m) != nil else { throw ToolError("Parts \(parts[0].raw) and \(parts[1].raw) don't touch, so they have no joint. set_joint {list: true} lists the joints.") }
         try c.edit("Joint") { tx in
-            if c.args.bool("reset", default: false) { try FurnitureJointOperations.reset(key, in: tx); return }
+            if c.args.bool("reset", default: false) { FurnitureJointOperations.reset(key, in: tx); return }
             if let t = c.args.string("type") {
                 let k = t.lowercased().replacingOccurrences(of: "_", with: " ")
                 guard let jt = JointType.allCases.first(where: { $0.rawValue.lowercased() == k || $0.rawValue.lowercased().replacingOccurrences(of: " and ", with: " ") == k }) else {
@@ -402,14 +409,17 @@ extension ArcusToolbox {
             }
             if let v = a["value"] {
                 let pt = tx.model.furnitureSetup?.family.parameter(named: name)?.type ?? type
-                let value = try Self.familyValue(v, pt, name, .imperial)
+                // Furniture numbers are inches.
+                let value: ParamValue = pt == .length ? .double(try c.length(v, name)) : try Self.familyValue(v, pt, name, .imperial)
                 try FurnitureParameters.setValue(name, value, in: tx)
             }
             _ = exists
         }
         let nm = try c.model()
         var o: [String: JSONValue] = ["current_type": .string(nm.furnitureSetup?.currentType ?? ""), "types": .array((nm.furnitureSetup?.family.types ?? []).map { .string($0.name) })]
-        if let n = a.string("name"), let v = FurnitureParameters.value(n, nm) { o["value"] = .string("\(v)") }
+        if let n = a.string("name"), let v = FurnitureParameters.value(n, nm) {
+            o["value"] = v.quantityValue.map { c.out($0, nm) } ?? .string("\(v)")
+        }
         o["planes"] = .object(FurniturePlanes.positionsByName(nm).mapValues { c.out($0, nm) })
         _ = m
         return try furnitureResult(c, o, ids: [])

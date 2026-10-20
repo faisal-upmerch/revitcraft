@@ -79,7 +79,11 @@ public final class FileFamilyHost: FamilyEditingHost {
         var next = family
         try edit(&next)
         guard next != family else { return }
+        // No run loop groups undo here: each apply is its own group (or joins the caller's).
+        let own = undoManager.groupingLevel == 0
+        if own { undoManager.beginUndoGrouping() }
         set(next, name: name)
+        if own { undoManager.endUndoGrouping() }
     }
 
     private func set(_ f: FamilyDefinition, name: String) {
@@ -94,6 +98,10 @@ public final class FileFamilyHost: FamilyEditingHost {
         guard let project else { throw ToolError("No project is open to load into. In the app, open the family from a project (Edit Family) or a Furniture document.") }
         let fam = family
         let existing = project.model.family(named: fam.name)?.id
+        let um = project.undoManager
+        let own = um.groupingLevel == 0 && !um.groupsByEvent
+        if own { um.beginUndoGrouping() }
+        defer { if own { um.endUndoGrouping() } }
         _ = try project.performThrowing(existing == nil ? "Load Family" : "Reload Family") { tx in
             FamilyProjectLoader.load(fam, replacing: existing, mode: .keepProjectValues, in: tx)
         }

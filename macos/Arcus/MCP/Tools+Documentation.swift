@@ -242,6 +242,7 @@ extension ArcusToolbox {
         let area = Rect2(min: Vec2(size.x * 0.03, size.y * 0.06), max: Vec2(size.x * 0.80, size.y * 0.95))
         var placements: [(Element, Vec2)] = []
         var overflow: [String] = []
+        var rescale: [ElementID: Int] = [:]
         for (k, (e, pos)) in items.enumerated() {
             let center: Vec2
             if let pos { center = Vec2(pos.x * size.x, pos.y * size.y) } else {
@@ -249,8 +250,15 @@ extension ArcusToolbox {
                 center = Vec2(area.min.x + area.width * (Double(col) + 0.5) / Double(cols), area.max.y - area.height * (Double(row) + 0.5) / Double(rows))
                 // Schedules size themselves to their rows; only views are checked.
                 let ps = Self.paperSize(of: e, m)
-                if e.view != nil, ps.x > area.width / Double(cols) * 1.02 || ps.y > area.height / Double(rows) * 1.02 {
-                    overflow.append("\(e.name) is \(Int(ps.x * 1000))×\(Int(ps.y * 1000)) mm on paper at 1:\(e.view?.scale ?? 0), more than its \(Int(area.width / Double(cols) * 1000))×\(Int(area.height / Double(rows) * 1000)) mm cell")
+                let cell = Vec2(area.width / Double(cols), area.height / Double(rows))
+                if let vd = e.view, ps.x > cell.x * 1.02 || ps.y > cell.y * 1.02 {
+                    // AITOOLS: fit (default): the next standard scale that fits the cell, as a drafter would pick.
+                    let scales = m.units.system == .imperial || m.isFurniture ? [4, 8, 12, 16, 24, 32, 48, 64, 96, 128, 192, 256, 384, 480] : [5, 10, 20, 25, 50, 100, 200, 250, 500, 1000]
+                    if c.args.bool("fit", default: true), let s = scales.first(where: { $0 > vd.scale && ps.x * Double(vd.scale) / Double($0) <= cell.x * 1.02 && ps.y * Double(vd.scale) / Double($0) <= cell.y * 1.02 }) {
+                        rescale[e.id] = s
+                    } else {
+                        overflow.append("\(e.name) is \(Int(ps.x * 1000))×\(Int(ps.y * 1000)) mm on paper at 1:\(vd.scale), more than its \(Int(cell.x * 1000))×\(Int(cell.y * 1000)) mm cell")
+                    }
                 }
             }
             placements.append((e, center))
@@ -260,6 +268,7 @@ extension ArcusToolbox {
             var sd = SheetData(number: number, paper: paper, titleBlockTypeID: tb?.id)
             sd.drawnBy = "Arcus"; sd.designedBy = "Arcus"
             let sid = tx.create(.sheets, name: name, data: .sheet(sd))
+            for (id, s) in rescale { tx.update(id) { $0.view?.scale = s } }
             for (e, center) in placements { try SheetPlacement.place(e.id, onSheet: sid, at: center, in: tx) }
         }
         let ids = ToolContext.created(r)
@@ -268,6 +277,7 @@ extension ArcusToolbox {
         var o: [String: JSONValue] = ["sheet": sheet?.id.json ?? .null, "number": .string(number), "paper": .string(paper.rawValue),
                                       "title_block": .string(tb.map { ToolContext.typeLabel($0, nm) } ?? "none"),
                                       "placed": .array(placements.map { .string($0.0.name) })]
+        if !rescale.isEmpty { o["rescaled"] = .object(rescale.reduce(into: [:]) { $0[nm[$1.key]?.name ?? ""] = .string("1:\($1.value)") }) }
         if !overflow.isEmpty {
             o["fit"] = .string(overflow.joined(separator: "; ") + ". Use a smaller scale (set_parameters {\"View Scale\": \(imperial ? "96" : "200")}), a bigger paper, or fewer views per sheet.")
         }
