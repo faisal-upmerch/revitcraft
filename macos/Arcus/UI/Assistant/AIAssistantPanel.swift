@@ -41,6 +41,18 @@ final class AIAssistantPanel {
         return p
     }
 
+    /// QA: a panel on preview settings (in-memory defaults and key, never the user's), installed for the window.
+    @discardableResult
+    static func installPreview(_ state: DocumentState, settings: AISettings) -> AIAssistantPanel {
+        let toolbox = ArcusToolbox(host: AIWindowDocumentHost(state: state))
+        let host = ToolboxAIHost(toolbox: toolbox, selection: { [weak state] in state.map(AIAssistantPanel.chips) ?? [] },
+                                 activeView: { [weak state] in state?.activeView.map { ViewTitles.qualified($0) } })
+        let p = AIAssistantPanel(host: host, settings: settings, transport: OfflineTransport())
+        p.selectionCount = { [weak state] in state?.session.selection.count ?? 0 }
+        panels[ObjectIdentifier(state)] = p
+        return p
+    }
+
     static func existingPanel(_ k: ObjectIdentifier) -> AIAssistantPanel? { panels[k] }
     static func forget(_ owner: AnyObject) { panels.removeValue(forKey: ObjectIdentifier(owner)) }
     /// The saved chats of a document window's panel (nil when the assistant was never opened in it).
@@ -206,5 +218,12 @@ final class AIWindowDocumentHost: DocumentHost {
         }
         if let error { throw ToolError("Arcus could not save to \(dest.path): \(error.localizedDescription)") }
         return dest
+    }
+}
+
+/// QA previews: a transport that never connects.
+struct OfflineTransport: AITransport {
+    func open(_ request: URLRequest) async throws -> (status: Int, headers: [String: String], lines: AsyncThrowingStream<String, any Error>) {
+        throw URLError(.notConnectedToInternet)
     }
 }

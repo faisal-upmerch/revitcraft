@@ -67,6 +67,9 @@ public struct AIModelUsage: Codable, Sendable, Hashable {
     public var usage: AIUsage
     public var cost: Double
     public var requests: Int
+    public init(model: AIModel, usage: AIUsage, cost: Double, requests: Int) {
+        self.model = model; self.usage = usage; self.cost = cost; self.requests = requests
+    }
 }
 
 /// One prompt and its reply.
@@ -119,7 +122,12 @@ public struct AIChat: Codable, Sendable, Hashable, Identifiable {
     public init() {}
 
     public var cost: Double { turns.reduce(0) { $0 + $1.cost } }
-    public var title: String { turns.first.map { String($0.prompt.prefix(60)) } ?? "New Chat" }
+    public var title: String {
+        guard let p = turns.first?.prompt, !p.isEmpty else { return turns.isEmpty ? "New Chat" : "Images" }
+        guard p.count > 60 else { return p }
+        let cut = p.prefix(60)
+        return (cut.lastIndex(of: " ").map { String(cut[..<$0]) } ?? String(cut)) + "…"
+    }
 }
 
 /// The chats saved in a document (`assistant/history.json`).

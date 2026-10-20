@@ -30,7 +30,7 @@ struct AISettingsSection: View {
             VStack(alignment: .trailing, spacing: 6) {
                 if settings.hasKey && !editingKey {
                     HStack(spacing: 8) {
-                        Text(settings.maskedKey ?? "").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary)
+                        Text(settings.maskedKey ?? "").font(.system(.body, design: .monospaced)).foregroundStyle(.secondary).fixedSize()
                         Button("Change…") { editingKey = true; keyField = "" }
                         Button("Remove", role: .destructive) { settings.removeKey(); testState = .idle }
                     }
@@ -63,7 +63,7 @@ struct AISettingsSection: View {
             HStack(spacing: 6) {
                 Text("$")
                 TextField("Budget", value: $settings.monthlyBudget, format: .number.precision(.fractionLength(0...2)))
-                    .textFieldStyle(.roundedBorder).frame(width: 70).multilineTextAlignment(.trailing)
+                    .labelsHidden().textFieldStyle(.roundedBorder).frame(width: 70).multilineTextAlignment(.trailing)
                 Stepper("", value: $settings.monthlyBudget, in: 0...1000, step: 5).labelsHidden()
             }
         }

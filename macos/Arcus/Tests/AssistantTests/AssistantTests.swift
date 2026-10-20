@@ -3,6 +3,7 @@ import Testing
 import ArcusDomain
 import ArcusApplication
 import ArcusMCP
+import ArcusPersistence
 @testable import ArcusAssistant
 
 // AICORE: the in-app assistant without the network: request building (tools, caching, images), SSE parsing, retries,
@@ -390,5 +391,22 @@ struct AssistantTests {
         await group.begin()
         group.end("AI: Nothing", changed: false)
         #expect(session.undoManager.undoActionName == before)
+    }
+
+    @Test func historySavesWithTheDocument() throws {
+        let dir = FileManager.default.temporaryDirectory.appending(path: "aicore-\(UUID().uuidString.prefix(6)).arcus")
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (model, _) = ProjectTemplates.make(.architectural, units: .imperial, projectName: "H")
+        var chat = AIChat(); chat.turns = [AITurn(prompt: "Dimension this plan and tag the doors")]
+        let data = try AIHistory(chats: [chat]).encoded()
+        var info = ArcusPackage.WriteInfo(appVersion: "1", build: "t")
+        info.assistantHistory = data
+        try ArcusPackage.write(model, to: dir, info: info)
+        let back = try #require(ArcusPackage.readAssistantHistory(dir))
+        #expect(try AIHistory.decode(back).chats.first?.turns.first?.prompt == "Dimension this plan and tag the doors")
+        _ = try ArcusPackage.read(from: dir) // the package still opens and verifies
+        #expect(ArcusPackage.verify(dir).isHealthy)
+        try ArcusPackage.write(model, to: dir, info: ArcusPackage.WriteInfo(appVersion: "1", build: "t"))
+        #expect(ArcusPackage.readAssistantHistory(dir) == nil, "cleared chats leave no file")
     }
 }

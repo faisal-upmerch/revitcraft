@@ -207,6 +207,13 @@ struct AIStepGroup: View {
     var body: some View {
         let failed = steps.filter { $0.status == .failed }.count
         VStack(alignment: .leading, spacing: 0) {
+            if steps.count == 1 {
+                Button { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } } label: {
+                    AIStepRow(step: steps[0], showsDetail: expanded).padding(.vertical, 2).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help(expanded ? "Hide the result" : "Show the result")
+            } else {
             Button { withAnimation(.easeOut(duration: 0.15)) { expanded.toggle() } } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.right").font(.system(size: 9, weight: .bold)).foregroundStyle(.tertiary)
@@ -222,22 +229,20 @@ struct AIStepGroup: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("\(title), \(expanded ? "expanded" : "collapsed")")
-            if expanded || steps.count == 1 || steps.contains(where: { $0.status == .running || $0.status == .waiting }) {
+            if expanded || steps.contains(where: { $0.status == .running || $0.status == .waiting }) {
                 Divider().opacity(0.5)
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(steps) { s in AIStepRow(step: s, showsDetail: expanded) }
                 }
                 .padding(.vertical, 3)
             }
+            }
         }
         .background(RoundedRectangle(cornerRadius: AIStyle.radius, style: .continuous).fill(AIStyle.card))
         .overlay(RoundedRectangle(cornerRadius: AIStyle.radius, style: .continuous).strokeBorder(AIStyle.stroke))
     }
 
-    private var title: String {
-        if steps.count == 1 { return steps[0].status == .running ? "Running \(steps[0].title)…" : "1 step" }
-        return "\(steps.count) steps"
-    }
+    private var title: String { "\(steps.count) steps" }
 }
 
 struct AIStepRow: View {

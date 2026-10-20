@@ -487,7 +487,14 @@ public final class AIAgent {
         for k in a.keys.sorted() {
             guard let v = a[k] else { continue }
             let key = k.replacingOccurrences(of: "_", with: " ")
-            if let arr = v.arrayValue { parts.append("\(arr.count) \(key)") } else if let s = v.stringValue { parts.append("\(key): \(s.prefix(30))") }
+            if let arr = v.arrayValue {
+                let strings = arr.compactMap(\.stringValue)
+                if !strings.isEmpty && strings.count == arr.count && strings.count <= 3 {
+                    parts.append("\(key): " + strings.joined(separator: ", "))
+                } else {
+                    parts.append("\(arr.count) " + (arr.count == 1 && key.hasSuffix("s") ? String(key.dropLast()) : key))
+                }
+            } else if let s = v.stringValue { parts.append("\(key): \(s.prefix(30))") }
             else if v.objectValue != nil { parts.append(key) } else { parts.append("\(key): \(v.jsonText.prefix(20))") }
             if parts.count == 3 { break }
         }

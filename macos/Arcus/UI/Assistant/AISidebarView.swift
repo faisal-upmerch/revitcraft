@@ -97,7 +97,8 @@ struct AISidebarHeader: View {
         case .noKey: return "Needs your API key"
         default: break
         }
-        return "\(panel.kind.title) · \(AIModel.haiku.displayName)"
+        let kind = switch panel.kind { case .project: "Project"; case .furniture: "Furniture"; case .family: "Family" }
+        return "\(kind) · \(AIModel.haiku.displayName)"
     }
 
     private func headerButton(_ symbol: String, _ help: String, action: @escaping () -> Void) -> some View {
