@@ -160,7 +160,8 @@ struct FamilyRibbonPanels: View {
             rowPanels
             RibbonOverflowButton { rowPanels } // POLISH: when even collapsed panels don't fit
         }
-        .instantContent("ribbon", key: "\(model.chrome.ribbonShowsContextual) \(model.chrome.ribbonTab.rawValue) \(model.ribbonContextualTitle ?? "")") // PILLS: never two ribbons
+        .id(page) // PILLS: a new tab's panels are new views (each lays out and reports its frame)
+        .instantContent("ribbon", key: page) // PILLS: never two ribbons
         .padding(.horizontal, 10).padding(.vertical, 5)
         .fixedSize(horizontal: false, vertical: true)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -168,6 +169,12 @@ struct FamilyRibbonPanels: View {
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .named(FamilyEditorChrome.space)) } action: { [chrome = model.chrome] in chrome.measuredPanelRow = $0 }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Ribbon")
+    }
+
+    /// The page of panels shown: the chosen tab, or the contextual tab and its title.
+    var page: String {
+        let contextual = model.chrome.ribbonShowsContextual && model.ribbonContextualTitle != nil
+        return contextual ? "c \(model.ribbonContextualTitle ?? "")" : model.chrome.ribbonTab.rawValue
     }
 
     /// The panels of the chosen tab, or of the contextual tab.

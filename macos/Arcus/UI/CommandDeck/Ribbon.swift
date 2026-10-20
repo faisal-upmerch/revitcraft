@@ -182,8 +182,8 @@ enum RibbonContent {
                                                        .small(.pointCloud), .small(.coordinationModel), .small(.linkPDF), .small(.linkImage)], tint: build),
                     RibbonPanel(title: "Import", items: [.large(.importCAD), .small(.importGbXML), .small(.importPDF), .small(.importImage),
                                                          .large(.importIFC), .large(.importRevit)], tint: build), // BL-SCHED
-                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.components), .large(.loadFamily), // COMP: Components panel
-                                                                    .large(.loadFurniture), .large(.loadAsGroup), // FM8: Load Furniture
+                    RibbonPanel(title: "Load from Library", items: [.large(.componentLibrary), .large(.loadFamily), // Revit-style: library, Load Family
+                                                                    .large(.loadFurniture), .large(.components), .large(.loadAsGroup), // FM8: Load Furniture; COMP: Components panel; PILLS: in the Insert menu's order
                                                                     .large(.insertViewsFromFile, [.insertViewsFromFile, .insert2DElementsFromFile]),
                                                                     .small(.reloadFamily), .small(.typeCatalog)], tint: build)] // W2-LIB
         case .annotate:
@@ -423,6 +423,7 @@ struct RibbonView: View {
             rowPanels(contextual: contextualShown, tool: tool)
             RibbonOverflowButton { rowPanels(contextual: contextualShown, tool: tool) } // POLISH: when even collapsed panels don't fit
         }
+        .id(RibbonContentKey(state, contextual: contextualShown).page) // PILLS: a new tab's panels are new views (each lays out and reports its frame)
         .instantContent("ribbon", key: RibbonContentKey(state, contextual: contextualShown)) // PILLS: one ribbon at a time, never two cross-fading
         .ribbonRowFrame(frames)
         .padding(.horizontal, 10).padding(.vertical, 5)
@@ -518,6 +519,8 @@ struct RibbonContentKey: Equatable {
         title = RibbonContent.contextualTitle(state)
         tool = state.toolRevision
     }
+    /// The page of panels shown (the tab or the contextual tab), without the tool's own changes.
+    var page: String { "\(contextual) \(tab) \(title ?? "")" }
 }
 
 /// Press feedback for ribbon and toolbar controls: a slight dim and shrink while held.
