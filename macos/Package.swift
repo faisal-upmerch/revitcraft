@@ -213,7 +213,7 @@ let package = Package(
         // MCP: the Arcus tool layer for Claude (Docs/MCP.md), run by arcus-mcp (file mode) and the app (live mode).
         .target(
             name: "ArcusMCP",
-            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusOutput", "ArcusCAD"],
+            dependencies: ["ArcusGeometry", "ArcusCalc", "ArcusDomain", "ArcusApplication", "ArcusPersistence", "ArcusOutput", "ArcusCAD", "ArcusIFC"], // AITOOLS: export_ifc
             path: "Arcus/MCP",
             swiftSettings: strictNoImports
         ),

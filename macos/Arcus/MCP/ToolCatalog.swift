@@ -35,7 +35,36 @@ enum S {
 public enum ArcusToolCatalog {
     static let lengthNote = "Lengths: numbers are in the document unit (ft in Imperial projects, mm in Metric, in in Furniture) or text like 12'-6\"."
 
-    public static let all: [ToolSpec] = [
+    /// Every tool, grouped (AITOOLS: the original tools with their group, risk and modes, then the batch's tools).
+    public static let all: [ToolSpec] = core.map(annotated) + contextTools + architectureTools + annotationTools + viewTools + scheduleTools
+        + exportTools + familyTools + furnitureTools + editTools + selectionTools + navigationTools + checkTools + commandTools
+
+    /// Group, risk and document kinds of the original tools.
+    static let coreMeta: [String: (ToolGroup, ToolRisk, Set<DocumentMode>)] = [
+        "arcus_status": (.document, .read, []), "create_project": (.document, .file, []), "create_furniture": (.document, .file, []),
+        "open_document": (.document, .file, []), "save": (.document, .file, .open), "set_project_info": (.document, .projectWide, .project),
+        "undo": (.document, .destructive, .open), "redo": (.document, .edit, .open),
+        "add_level": (.architecture, .edit, .project), "add_grid": (.architecture, .edit, .project), "create_walls": (.architecture, .edit, .project),
+        "place_doors": (.architecture, .edit, .project), "place_windows": (.architecture, .edit, .project), "create_floor": (.architecture, .edit, .project),
+        "create_ceiling": (.architecture, .edit, .project), "create_roof": (.architecture, .edit, .project), "add_stair": (.architecture, .edit, .project),
+        "add_railing": (.architecture, .edit, .project), "place_rooms": (.architecture, .edit, .project), "place_components": (.architecture, .edit, .project),
+        "set_parameters": (.edit, .edit, .model), "move_elements": (.edit, .edit, .model), "delete_elements": (.edit, .destructive, .model),
+        "create_views": (.views, .edit, .model), "create_sheet": (.views, .edit, .model), "create_schedule": (.schedules, .edit, .model),
+        "add_dimensions": (.annotation, .edit, .model), "add_tags": (.annotation, .edit, .model),
+        "query_model": (.query, .read, .model), "list_types": (.query, .read, .model), "list_families": (.query, .read, .project),
+        "render_view": (.exports, .read, .model), "export_pdf": (.exports, .file, .model), "export_dwg": (.exports, .file, .model),
+        "set_furniture_size": (.furniture, .edit, .furniture), "add_furniture_parts": (.furniture, .edit, .furniture),
+    ]
+
+    static func annotated(_ t: ToolSpec) -> ToolSpec {
+        var t = t
+        guard let (g, r, m) = coreMeta[t.name] else { return t }
+        t.group = g; t.risk = r; t.modes = m
+        t.changesDocument = ["create_project", "create_furniture", "open_document", "save"].contains(t.name)
+        return t
+    }
+
+    static let core: [ToolSpec] = [
         // MARK: Document
         ToolSpec("arcus_status", "Status", "Where tools run (file mode or the live Arcus app), the open document, its units and element counts, and what to do next. Call first.",
                  readOnly: true),
@@ -141,9 +170,10 @@ public enum ArcusToolCatalog {
 
         // MARK: Documentation
         ToolSpec("create_views", "Create Views",
-                 "Create views: floor_plan / ceiling_plan (level), three_d (optional section box of a level), section (start + end points; looks to the left of start→end unless flipped), elevation (point + facing direction it looks). " + lengthNote,
+                 "Create views: floor_plan / ceiling_plan (level), three_d (optional section box of a level), section (start + end points; looks to the left of start→end unless flipped), elevation (point + facing direction it looks), callout (parent view + rect, at twice the scale), drafting, legend. " + lengthNote,
                  properties: ["views": S.array(S.object([
-                    "kind": S.oneOf(["floor_plan", "ceiling_plan", "three_d", "section", "elevation"]), "name": S.str(), "level": S.ref(), "scale": S.int("1:scale, e.g. 48 for 1/4\" = 1'-0\", 96 for 1/8\""),
+                    "kind": S.oneOf(["floor_plan", "ceiling_plan", "three_d", "section", "elevation", "callout", "drafting", "legend"]), "name": S.str(),
+                    "parent": S.ref("Callout: parent view"), "rect": S.points("Callout: [[x0,y0],[x1,y1]]"), "level": S.ref(), "scale": S.int("1:scale, e.g. 48 for 1/4\" = 1'-0\", 96 for 1/8\""),
                     "start": S.point(), "end": S.point(), "flip": S.bool(), "depth": S.len("Section/elevation far clip"), "point": S.point(), "facing": S.ref("Direction the elevation looks"),
                     "cut_to_level": S.ref("3D: section box cutting above this level"),
                  ], required: ["kind"]))], required: ["views"]),
@@ -153,16 +183,16 @@ public enum ArcusToolCatalog {
                               "title_block": S.ref(), "views": S.array(S.object(["view": S.ref("View or schedule name/id"), "position": S.array(S.num())], required: ["view"])),
                               "schedules": S.array(S.ref(), "Schedule names to place")],
                  required: ["number", "name"]),
-        ToolSpec("create_schedule", "Create Schedule", "Create a standard schedule: doors, windows, rooms, walls or sheets.",
-                 properties: ["kind": S.oneOf(["doors", "windows", "rooms", "walls", "sheets"]), "name": S.str()], required: ["kind"]),
+        ToolSpec("create_schedule", "Create Schedule", "Create a schedule: standard doors, windows, rooms, walls or sheets; Furniture part_list, hardware, edge_banding, cost, material_takeoff, component_bom; or category with fields (parameter names, 'Count'). get_schedule reads it, edit_schedule changes it.",
+                 properties: ["kind": S.oneOf(["doors", "windows", "rooms", "walls", "sheets", "part_list", "hardware", "edge_banding", "cost", "material_takeoff", "component_bom", "category"]),
+                              "category": S.str("For kind category"), "fields": S.array(S.str(), "For kind category, e.g. ['Type','Width','Count']"), "name": S.str()], required: ["kind"]),
         ToolSpec("add_dimensions", "Add Dimensions",
-                 "Dimension a plan view. auto: overall and wall-by-wall chains on all four sides of the building (orthogonal walls). Or one dimension between walls (faces or centre lines) through a point.",
-                 properties: ["view": S.ref("Plan view"), "auto": S.bool(), "walls": S.ids("Walls to dimension between"),
+                 "Dimension any view (default the active one). auto: plans get overall and wall-by-wall chains on all four sides (orthogonal walls); sections and elevations get the level heights; Furniture views get overall width, depth and height. Or one dimension between walls (faces or centre lines) or other elements (grids, levels, reference planes) through a point. The result's verification flags overlaps (fix: arrange_dimensions).",
+                 properties: ["view": S.ref("View (default active)"), "auto": S.bool(), "walls": S.ids("Walls to dimension between"), "elements": S.ids("Grids, levels or reference planes to dimension between"),
                               "reference": S.oneOf(["centerline", "exterior_face", "interior_face"], "Default centerline"), "at": S.point("A point the dimension line passes through"),
-                              "offset": S.len("Auto: distance of the first string from the outside wall faces (default 4' / 1200 mm)")],
-                 required: ["view"]),
-        ToolSpec("add_tags", "Add Tags", "Tag every untagged element of the given categories visible in a view (Tag All). Default doors, windows and rooms.",
-                 properties: ["view": S.ref(), "categories": S.array(S.str(), "e.g. ['doors','windows','rooms','walls','furniture']")], required: ["view"]),
+                              "offset": S.len("Auto: distance of the first string from the outside wall faces (default 4' / 1200 mm)")]),
+        ToolSpec("add_tags", "Add Tags", "Tag every untagged element of the given categories visible in a view (Tag All; default the active view), or only the given elements. Default doors, windows and rooms.",
+                 properties: ["view": S.ref(), "categories": S.array(S.str(), "e.g. ['doors','windows','rooms','walls','furniture']"), "elements": S.ids("Only these"), "leader": S.bool()]),
 
         // MARK: Query
         ToolSpec("query_model", "Query Model",
@@ -184,8 +214,11 @@ public enum ArcusToolCatalog {
                  properties: ["view": S.ref("View name/id or sheet number"), "path": S.str(".png path"), "width": S.int("Pixels, default 1600"),
                               "inline": S.bool("Return the image in the result (default true)")],
                  required: ["view"]),
-        ToolSpec("export_pdf", "Export PDF", "Export sheets (default all) to one vector PDF.", readOnly: true,
-                 properties: ["sheets": S.array(S.ref(), "Sheet numbers or names"), "path": S.str(".pdf path")], required: ["path"]),
+        ToolSpec("export_pdf", "Export PDF", "Export sheets (default all, or a sheet set) or views to vector PDF: one combined file (path) or one file per sheet into path's folder, named by sheet number and name or a pattern; color, black lines or grayscale; views on a paper size. Never overwrites unless overwrite is true.", readOnly: true,
+                 properties: ["sheets": S.array(S.ref(), "Sheet numbers or names"), "sheet_set": S.str(), "views": S.array(S.ref(), "Views to print instead of sheets"), "path": S.str(".pdf path (combined) or folder"),
+                              "combined": S.bool("Default true"), "naming": S.str("sheet_number_and_name (default), view_name, or a pattern like '{Project Number}-{Sheet Number}'"),
+                              "colors": S.oneOf(["color", "black_lines", "grayscale"]), "paper": S.str("Paper for views, e.g. ARCH D, A3"), "overwrite": S.bool("Replace existing files (ask the user first)")],
+                 required: ["path"]),
         ToolSpec("export_dwg", "Export DWG/DXF", "Export views or sheets to DWG (needs Arcus's bundled DWG engine) or DXF, one file per view, into a folder.", readOnly: true,
                  properties: ["views": S.array(S.ref(), "View names/ids or sheet numbers"), "folder": S.str(), "format": S.oneOf(["dwg", "dxf"], "Default dwg (falls back to dxf when the engine is missing)")],
                  required: ["views", "folder"]),
