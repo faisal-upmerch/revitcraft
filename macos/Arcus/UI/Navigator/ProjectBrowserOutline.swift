@@ -533,10 +533,20 @@ final class BrowserCell: NSTableCellView {
     }
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
+    /// VIS: the active view's row has an accent icon as well as a bold name, so it reads as current even when the
+    /// selection moves to another row; on a selected (emphasized) row the icon follows the row's text colour.
+    private var baseTint: NSColor = .secondaryLabelColor
+    private var isActiveView = false
+    override var backgroundStyle: NSView.BackgroundStyle { didSet { applyTint() } }
+    private func applyTint() {
+        icon.contentTintColor = backgroundStyle == .emphasized ? .alternateSelectedControlTextColor : (isActiveView ? .controlAccentColor : baseTint)
+    }
+
     func configure(_ node: BrowserNode, tint: NSColor, active: Bool, open: Bool) {
         icon.image = NSImage(systemSymbolName: node.symbol, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: 11.5, weight: .regular))
-        icon.contentTintColor = tint
+        baseTint = tint; isActiveView = active
+        applyTint()
         if title.currentEditor() == nil { title.stringValue = node.title }
         title.font = .systemFont(ofSize: 11, weight: active ? .bold : .regular)
         detail.stringValue = node.subtitle

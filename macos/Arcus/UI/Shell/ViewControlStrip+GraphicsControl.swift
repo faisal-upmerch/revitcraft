@@ -13,16 +13,7 @@ extension ViewControlStrip {
 
     /// Wireframe (lines only) or Hidden Line (cut and surface patterns) for plans, sections and elevations.
     func visualStyle2D(_ vd: ViewData) -> some View {
-        Menu {
-            ForEach([VisualStyle.wireframe, .hiddenLine], id: \.self) { s in
-                Button { CommandRouter(state: state).setViewParam(ParameterID("view.visualStyle"), .text(s.rawValue), "Visual Style") } label: {
-                    if vd.visualStyle == s || (s == .hiddenLine && vd.visualStyle != .wireframe) { Label(s.rawValue, systemImage: "checkmark") } else { Text(s.rawValue) }
-                }
-            }
-        } label: { Image(systemName: vd.visualStyle == .wireframe ? "square.dashed" : "square.on.square") }
-        .menuStyle(.borderlessButton).fixedSize()
-        .help("Visual style: \(vd.visualStyle == .wireframe ? "Wireframe" : "Hidden Line")")
-        .accessibilityLabel("Visual style \(vd.visualStyle == .wireframe ? "Wireframe" : "Hidden Line")")
+        visualStyleMenu(vd) // VIS
     }
 
     /// Temporary View Properties: apply a template to this view for the session, or restore.
@@ -40,6 +31,7 @@ extension ViewControlStrip {
             Button("Manage View Templates…") { CommandRouter(state: state).run(.viewTemplatesManage) }
         } label: { Image(systemName: "clock.badge").foregroundStyle(active ? Tokens.selectionColor : .primary) }
         .menuStyle(.borderlessButton).fixedSize()
+        .modifier(HoverBackground(active: active, tint: Tokens.selectionColor, radius: 5)) // VIS
         .help(active ? "Temporary View Properties is on" : "Temporary View Properties")
         .accessibilityLabel(active ? "Temporary view properties, active" : "Temporary view properties")
     }
