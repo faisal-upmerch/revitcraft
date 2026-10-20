@@ -160,11 +160,11 @@ public enum ArcusToolCatalog {
                  ], required: ["family", "point"]))], required: ["components"]),
         ToolSpec("set_parameters", "Set Parameters",
                  "Set parameters by their Properties name on elements, e.g. {\"Name\":\"Kitchen\"}, {\"Mark\":\"D1\"}, {\"Top Offset\":\"-6\\\"\"}, {\"Sill Height\":\"3'\"}. Values are parsed like typed input. type:true sets type parameters (affects every instance).",
-                 properties: ["elements": S.ids(), "parameters": S.object([:], "{parameter name: value}"), "type": S.bool()], required: ["elements", "parameters"]),
+                 properties: ["elements": S.ids("Default the selection"), "parameters": S.object([:], "{parameter name: value}"), "type": S.bool()], required: ["parameters"]),
         ToolSpec("move_elements", "Move Elements", "Move elements by a plan vector (hosted doors and windows follow their walls). " + lengthNote,
-                 properties: ["elements": S.ids(), "by": S.point("[dx, dy]")], required: ["elements", "by"]),
-        ToolSpec("delete_elements", "Delete Elements", "Delete elements (and what depends on them, such as their doors and tags).", destructive: true,
-                 properties: ["elements": S.ids()], required: ["elements"]),
+                 properties: ["elements": S.ids("Default the selection"), "by": S.point("[dx, dy]")], required: ["by"]),
+        ToolSpec("delete_elements", "Delete Elements", "Delete elements (and what depends on them, such as their doors and tags). More than 5 in all needs confirm: true: without it you get a preview and nothing is deleted.", destructive: true,
+                 properties: ["elements": S.ids("Default the selection"), "confirm": S.bool("Required to delete more than 5 elements (ask the user first)")]),
         ToolSpec("undo", "Undo", "Undo the last tool calls (each editing call is one step, like ⌘Z).", destructive: true, properties: ["steps": S.int("Default 1")]),
         ToolSpec("redo", "Redo", "Redo steps undone with undo (each step is one tool call).", properties: ["steps": S.int("Default 1")]),
 
@@ -196,9 +196,9 @@ public enum ArcusToolCatalog {
 
         // MARK: Query
         ToolSpec("query_model", "Query Model",
-                 "Read the model. what: summary (levels, counts, units), levels, elements (by category, with key parameters), rooms (areas, bounded or not), views, sheets, schedules, warnings (model health), element (all parameters of ids).",
+                 "Read the model. what: here (what the active view shows, by category, and the selection), summary (levels, counts, units), levels, elements (by category, with key parameters), rooms (areas, bounded or not), views, sheets, schedules, warnings (model health), element (all parameters of ids).",
                  readOnly: true,
-                 properties: ["what": S.oneOf(["summary", "levels", "elements", "rooms", "views", "sheets", "schedules", "warnings", "element"]),
+                 properties: ["what": S.oneOf(["here", "summary", "levels", "elements", "rooms", "views", "sheets", "schedules", "warnings", "element"]),
                               "category": S.str("For elements: walls, doors, windows, floors, roofs, ceilings, stairs, railings, furniture, … or furniture parts (furniturePanels…)"),
                               "level": S.ref(), "ids": S.ids("For element"), "limit": S.int("Default 200")],
                  required: ["what"]),
