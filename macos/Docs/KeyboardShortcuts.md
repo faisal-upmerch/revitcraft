@@ -183,6 +183,8 @@ corners, edge midpoints, centres, crossings, nearest, and the work plane's own s
 `SR` `SZ` `SO` `SS` apply to the next pick. `Return` finishes a sketch, `Delete` removes its last point, and `Esc` ends
 the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks as in the project window, and ⌘Return finishes a sketch.
 
+**AI Assistant.** ⇧⌘A opens it; ⌘↩ sends; Return adds a line; ⌘. stops the current prompt.
+
 ## Commands
 
 ### Modify
@@ -283,6 +285,10 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Disallow Join |  |  | Stops the selected parts joining at their ends: they stay as drawn. |
 | Edit Path |  |  | Sketches a new path for the selected stair railing; it keeps following the stair's height. |
 | Reset Railing |  |  | Puts the selected stair railing back on the stair's edge. |
+| Edit Top |  |  | Sketches the blend's top loop (its base is kept), or edits the selected blend's top. |
+| Edit Base |  |  | Sketches the blend's base loop (its top is kept), or edits the selected blend's base. |
+| Edit Sketch |  |  | Edits the sketch of the selected extrusion or void extrusion on its own work plane, in a plan, an elevation or 3D. |
+| Replace Component |  |  | Replaces the selected components with the one selected in the Components panel, keeping host, position and alignment. |
 
 ### Architecture
 
@@ -421,6 +427,19 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Railing |  |  | Chooses the railing type the stair gets (or None) and whether it sits on the treads or the stringer. |
 | Flip |  |  | Reverses the stair's up direction. |
 | Pick Stair |  |  | Adds the outline of the stair you pick to the shaft sketch. |
+| Place Component |  |  | Places the component selected in the Components panel on a door, drawer, panel, shelf or bay; it follows its host. |
+| Insert Assembly |  |  | Inserts a ready module into the selected bay: drawer stack, desk pedestal, wardrobe interior, pantry pull-out… |
+| Add Handle |  |  | Adds a handle sized to each selected front. |
+| Add Hinges |  |  | Adds hinges to the selected doors and flaps by their height and overlay. |
+| Add Lock |  |  | Adds a lock to the selected fronts. |
+| Add Soft-Close |  |  | Adds a soft-close damper to the selected fronts. |
+| Add Push-to-Open |  |  | Adds a push-to-open latch to the selected fronts and takes their handles off. |
+| Add Slides |  |  | Adds drawer slides sized to the bay's depth. |
+| Add Organizer |  |  | Adds an organizer to the selected drawer or bay. |
+| Add Hanging Rod |  |  | Adds a hanging rod across the selected bay. |
+| Add Shoe Rack |  |  | Adds a shoe rack to the selected bay. |
+| Add Lighting |  |  | Adds LED lighting to the selected bay, shelf or top. |
+| Add Sliding System |  |  | Adds a sliding door system to the selected bay. |
 
 ### Structure
 
@@ -490,6 +509,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Insert Views from File… |  |  | Copies drafting views, legends and schedules (with their 2D content) from another project file. |
 | Insert 2D Elements from File… |  |  | Copies the 2D elements of a drafting view or legend in another project into the current view. |
 | Load Furniture… |  |  | Shows the Furniture Library (bundled pieces and your furniture templates) to load a piece as a family and place it. |
+| Components |  |  | Shows or hides the Components panel: search the hardware and component library, preview, place and replace. |
+| Component Browser |  |  | Opens the Component Library in its own window, at full size. |
 
 ### Annotate
 
@@ -706,6 +727,11 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Cost |  |  | Opens the Cost schedule: materials, banding, hardware, labor and markup, totalled as the piece cost. |
 | Nesting |  |  | Lays the sheet parts out on stock sheets, one Nesting view per material and thickness, with grain and yield. |
 | Shop Drawings |  |  | Tags the parts, makes the Nesting views and arranges sheets F101–F104 at scales that fit. |
+| Explode Parts |  |  | Draws the active 3D view with the parts moved apart along their joints, tagged, at a distance you set (shop drawing F104 uses it). |
+| 3D Design |  |  | Opens the piece's 3D design view: an orbit-friendly camera with the work plane shown. Every Furniture tool draws in 3D on the work plane. |
+| Component BOM |  |  | Opens the Component BOM: every hardware line grouped by component category, with counts and cost. |
+| Power Summary |  |  | Opens the Power Summary: the electronics by supply with their watts. |
+| AI Assistant | `⇧⌘A` |  | Open the AI assistant: describe what to create or change and Arcus makes it in this window. |
 
 ### Manage
 
@@ -801,6 +827,9 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | Stock Sheets |  |  | Sets the sheet sizes parts are nested on (per material and thickness), the kerf, edge trim, grain and rotation. |
 | Hardware Catalog |  |  | Lists every hardware type with its cost, manufacturer and model for editing. |
 | Check Parts |  |  | Checks the parts before cutting: too thin for their hardware, larger than the stock, missing materials, overlapping without a joint, edges that show unbanded. |
+| Hardware Rules |  |  | Sets how many hinges doors get by their height. |
+| Update Components |  |  | Reloads components whose library definition is newer, keeping the document's values. |
+| Design with Claude… |  |  | Set up Claude Desktop or Claude Code to build and edit Arcus designs from a description, and let Claude edit open documents. |
 
 ### File
 
@@ -836,6 +865,8 @@ the rubber band or chain. ⌥⌘S, ⌥⌘1 and ⌥⌘2 show and hide the docks a
 | New Furniture… |  |  | Creates a Furniture document: a custom piece with parameters, cut lists and shop drawings. |
 | CNC Export |  |  | Writes DXF or DWG programs per part or per nested sheet (outline, drilling, grooves, pockets, grain, labels) and a CSV part list. |
 | Save as Furniture Template… |  |  | Saves this piece with a preview in your Furniture Templates, under a room, so it appears on Home ▸ Furniture and in Load Furniture. |
+| Save Selection as Component |  |  | Saves the selected parts, fronts and hardware as a component in your library. |
+| New Component |  |  | Starts a component of your own from the Furniture Hardware / Component template. |
 
 ### Arcus
 

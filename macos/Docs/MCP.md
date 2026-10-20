@@ -419,3 +419,21 @@ libraries and runs (`--version`). The setup sheet points at the running app's ow
   touch.
 * File mode: one document at a time (a family created with create_family loads into it); commands that need a window
   (most of `list_commands`) run only in the app.
+
+## In-app AI Assistant
+
+The AI button (top right, ⇧⌘A; also View ▸ AI Assistant and Manage ▸ Add-Ins) opens a right-hand chat in projects,
+Furniture documents and the Family Editor. It uses the same tool layer in-process (`ArcusAssistant` target).
+
+- Opt-in (Settings ▸ AI Assistant, off by default); only the assistant goes online. The user's Anthropic API key lives in
+  the Keychain. First use explains what is sent: the prompt, a compact model summary, tool results, and view images only
+  for drawing checks or attached pictures.
+- Models: `claude-haiku-5-5` works through the tools; a step that fails verification twice runs once on
+  `claude-sonnet-5-5`, then back to Haiku. Drawing tasks run `verify_drawing` before finishing.
+- Each prompt is one undo step ("AI: …") with a change summary and Undo; risky calls (files, deletes over 5 elements,
+  project-wide settings) ask in the chat first.
+- Prompt caching: breakpoints on the last tool, the system prompt and the per-prompt context block, plus automatic
+  caching for the tool loop; system and tools are identical across requests and models.
+- Cost per reply, chat and month; monthly budget cap; editable price table (checked 2026-10-20).
+- Chats are saved in the document (`assistant/history.json`, FileFormat.md §1.7); Family Editor chats last for the session.
+

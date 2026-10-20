@@ -183,7 +183,7 @@ enum MainMenuBuilder {
                                                  .duplicateView, .duplicateViewWithDetailing, .duplicateDependent, .renameView]))
         let sheets = submenu("Sheet Composition", commands([.newSheet, .placeView, .titleBlock, nil, .revisions, .guideGrid, .matchline])) // F810
         return [graphics, presentation, create, sheets, .separator()] + commands([.navigationWheel, nil]) + commands([.zoomExtents, .zoomIn, .zoomOut, .zoomOutTwice, .zoomRegion, .zoomSheetSize, nil, .previousPanZoom, .nextPanZoom, nil, .thinLines, .visibilityGraphics, .viewRange, .cropView, .toggleCropVisible, .sectionBox, .saveOrientation]) +
-            [detail, styles, .separator(), temp] + commands([.revealHidden, .hideInView, .unhideInView, nil, .toggleNavigator, .toggleProperties]) + [sidebar, .separator(), fullScreen] // W4-SHELL
+            [detail, styles, .separator(), temp] + commands([.revealHidden, .hideInView, .unhideInView, nil, .toggleNavigator, .toggleProperties, .aiAssistant]) /* AICORE */ + [sidebar, .separator(), fullScreen] // W4-SHELL
     }
 }
 

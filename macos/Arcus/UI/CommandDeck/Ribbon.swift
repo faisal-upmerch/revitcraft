@@ -253,7 +253,7 @@ enum RibbonContent {
                     RibbonPanel(title: "Phasing", items: [.large(.phases)], tint: manage),
                     RibbonPanel(title: "Selection", items: [.small(.saveSelection), .small(.loadSelection), .small(.editSelection)], tint: manage), // F11
                     RibbonPanel(title: "Inquiry", items: [.small(.idsOfSelection), .small(.selectByID), .small(.warnings), .small(.modelHealth), .small(.diagnostics)], tint: manage), // BL-VG
-                    RibbonPanel(title: "Add-Ins", items: [.large(.designWithClaude)], tint: manage)] // MCP: Design with Claude
+                    RibbonPanel(title: "Add-Ins", items: [.large(.aiAssistant), .large(.designWithClaude)], tint: manage)] // MCP: Design with Claude; AICORE: AI Assistant
         }
     }
 
