@@ -169,5 +169,22 @@ Types (`TypeData`) for each part kind: thickness, core material, face material, 
 | FM8 | ✅ Full compile, Edit Family round trip, projects load `.arcusfurniture`, Load Furniture, Save as Furniture Template, `.arcusfamily` opens (port/FM8). FMG3: drops on the 3D view; swing lines in project elevations and sections. | FM5, FM6 |
 | FM9 | ✅ Library: the Top 25 at high detail (+ Kitchen Wall Cabinet; Kitchen Cabinet covers B12–B36 with Leaf Count) built with the Furniture Library kit (port/FM9); 169 simple pieces (port/FM9B, port/FM9C); `arcus-bench --furniture-library` writes the files and index.json; Home ▸ Furniture, Load Furniture and the Component Library list pieces by room. Open: parts flex proportionally between the planes; mechanisms are shown in one position (Murphy Bed closed, Sofa Bed as a sofa); Wine Rack is a cubby grid | FM8 |
 | FM3D | ✅ Furniture design in 3D (port/FM3D): every Parts/Openings/Forms tool on the 3D work plane via the view that sees it; Place on Face for picking tools; Placement Plane with Pick a Face; shape handles (locked faces move their plane); 3D drag and editable temporary dimensions; Tab; Edit Sketch for extrusions; 3D Design view. Open: Move/Copy along vertical work planes; canted faces need a section; a rail placed on a picked face is centred on it | FM4–FM8 |
+| COMP | ✅ Component Library (port/COMP, COMPA, COMPC, COMPD; COMPB in progress): kit-built parametric component families in 20 categories, generic only; search with synonyms, typos and sizes; Components panel (Create ▸ Model, Insert in projects) and browser window; host-aware placement that follows the host; Replace; one-click hardware with confirmation; compatibility and collision checks; eight assembly presets; custom components (Save Selection, New Component, user library); Hardware Schedule fields, Component BOM, Power Summary. Open: tags, host rules and mounting points can't be edited in the Family Editor yet; in projects, components don't follow their host | FM5–FM9 |
 | FMG | ✅ Gap batches (port/FMG1, FMG2, FMG3, POLISH). Open: Leaf Count is associated by typing a parameter name (no Associate button); canted fronts keep hardware at 45° and have outline-only CNC; side-face drawers keep their slide length when depth flexes; project swings are hidden only by the family's own solids; a 3D drop places on the level without a preview; lids have no plan swing | FM9 |
 | FM10 | Docs, keyboard shortcuts, QA checks (Home, Family Editor, Furniture mode), verification | all |
+
+## 7. Component Library
+
+Owner's decisions (2026-10-19): every listed component (≈400 in 20 categories) as a real parametric family, generic only,
+Imperial parameters with metric trade names in type names, a dockable panel plus a browser window, one-click hardware,
+compatibility and collision checks, assembly presets, Replace that keeps placement, custom components through the Family
+Editor and Save Selection, electronics as geometry plus power data, also usable in Architectural projects.
+
+- Components are loadable families built with `ComponentKit` (Domain/Furniture/Components); each carries its
+  definition id and version, so Update Components upgrades it and keeps renamed types.
+- Groups: A (handles, locks, hinges, drawer systems, sliding doors), B (connectors, legs and bases, shelving, wardrobe,
+  casters), C (kitchen, table and desk, bed, sofa, chair), D (lighting and electrical, glass, edges and profiles,
+  mechanisms, decorative). FM5's 17 hardware families were upgraded in place.
+- Edge treatments double as Edge Profile types (with a new Bevel) and edge band materials priced per linear foot; Edit
+  Type has an Edge Band picker.
+

@@ -79,6 +79,14 @@ The editor is its own window built on the project window's shell (FES, Docs/Furn
 2. **Depth typed while sketching an extrusion or blend was ignored** until the next sketch: the Options Bar's Depth now sets the sketch in progress too.
 3. **Menu commands were disabled while the editor was key** (the Family Editor commands in the Manage menu, Window ▸ Project Browser/Properties): the window now answers them; app commands go on to the app delegate.
 
+## Component template (COMP)
+
+File ▸ New Component (or the Component Library's New Component) opens the Family Editor on the **Furniture Hardware /
+Component** template: face frame (origin on the host face, X along it, Y up it, Z out of it), Width/Height/Depth
+parameters, a finish material slot and the Generic identity data. The family saves to the user component library
+(`~/Library/Application Support/Arcus/Components/`), apart from the built-ins. Tags, host rules and mounting points are
+set from the Component Library (Save Selection as Component); editing them inside the Family Editor isn't there yet.
+
 ## What the tests cover
 
 `Arcus/Tests/UITests/FESTests.swift` (6 tests, FES) hosts the app target's views offscreen: the tab row offered 4 pt of height keeps every tab name at full size; the panel row in a 40 pt frame keeps its 92 pt height and every panel of every tab whole (this test fails if the fixed height is removed); the tab fit at 1280 pt (full, with "Modify | Create Extrusion") and at the minimum width (task tabs whole, contextual truncated); zoom to fit centred in the part not under the shell; the window itself at 1280 × 800 and 1200 × 700 on every tab and in sketch mode (no toolbar, full-size content, tab texts inside the tab pill at full width, the panel row inside the strip, every panel inside the row). With `ARCUS_UI_CAPTURES=1` it also renders the window to `/tmp/arcus-fes/` (light and dark; plan, selection, sketch at both sizes, front with view tabs, back, 3D, flex result, browser hidden, Annotate tab). Offscreen renders show no glass and dim the docks' text in dark mode; the List's selected row renders black there. The same row renders black for the browser hosted alone in a plain window, so these look like `cacheDisplay` artefacts; check them in the QA captures.

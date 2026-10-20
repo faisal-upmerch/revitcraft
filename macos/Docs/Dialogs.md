@@ -67,21 +67,24 @@ already first-party; the Settings window and Home are windows, not modals.
 
 | Dialog | File (`Arcus/UI/`) | Size | Status |
 |---|---|---|---|
-| AddToSetDialog | `Shell/Dialogs/F11ManageDialogs.swift` | medium | Done |
 | AdditionalSettingsDialog | `Shell/Dialogs/ManageSettingsDialogs.swift` | wide | Done |
-| CNCExportDialog | `Shell/Dialogs/FurnitureFabricationDialogs.swift` | wide | Done |
-| CSVImportDialog | `Shell/Dialogs/ScheduleDialogs.swift` | large | Done |
+| AddToSetDialog | `Shell/Dialogs/F11ManageDialogs.swift` | medium | Done |
 | CategoryPickDialog | `Shell/Dialogs/ViewDialogs.swift` | medium | Done |
 | CheckPartsDialog | `Shell/Dialogs/FurnitureFabricationDialogs.swift` | large | Done |
 | CheckSpellingDialog | `Shell/Dialogs/AnnotationDialogs.swift` | medium | Done |
+| ClaudeSetupView | `Claude/ClaudeSetupView.swift` | own layout | Opaque sheet background added; its layout is the MCP batch's design |
+| CNCExportDialog | `Shell/Dialogs/FurnitureFabricationDialogs.swift` | wide | Done |
 | ColorSchemesDialog | `Shell/Dialogs/RoomAnnotationDialogs.swift` | wide | Done |
 | CombineParametersDialog | `Shell/Dialogs/F12ScheduleDialogs.swift` | wide | Done |
+| ComponentActionDialog | `Library/Components/ComponentDialogs.swift` | medium | Done |
+| ComponentAssemblyDialog | `Library/Components/ComponentDialogs.swift` | large | Done |
 | ComponentLibraryView | `Library/ComponentLibraryView.swift` | browser 1120 | Done (own browser layout; header tile, footer and opaque sheet aligned) |
 | ConnectLevelsDialog | `Shell/Dialogs/F2Dialogs.swift` | small | Done |
-| DWFMarkupDialog | `Shell/Dialogs/F67InsertDialogs.swift` | medium | Done |
-| DWGUnavailableDialog | `Shell/Dialogs/ManageDialogs.swift` | large | Done |
+| CSVImportDialog | `Shell/Dialogs/ScheduleDialogs.swift` | large | Done |
 | DecalTypesDialog | `Shell/Dialogs/F67InsertDialogs.swift` | large | Done |
 | DesignOptionsDialog | `Shell/Dialogs/ManageDialogs.swift` | large | Done |
+| DWFMarkupDialog | `Shell/Dialogs/F67InsertDialogs.swift` | medium | Done |
+| DWGUnavailableDialog | `Shell/Dialogs/ManageDialogs.swift` | large | Done |
 | ExportDWFxDialog | `Shell/Dialogs/F13ExportDialogs.swift` | medium | Done |
 | ExportDWGDialog | `Shell/Dialogs/DWGExportDialog.swift` | medium | Done |
 | ExportIFCDialog | `Shell/Dialogs/ExchangeDialogs.swift` | medium | Done |
@@ -101,6 +104,7 @@ already first-party; the Settings window and Home are windows, not modals.
 | GlobalParametersDialog | `Shell/Dialogs/F11ManageDialogs.swift` | large | Done |
 | GuideGridDialog | `Shell/Dialogs/PresentationDialogs.swift` | small | Done |
 | HardwareCatalogDialog | `Shell/Dialogs/FurnitureFabricationDialogs.swift` | wide | Done |
+| HardwareRulesDialog | `Library/Components/ComponentDialogs.swift` | wide | Done |
 | ImportCADDialog | `Shell/Dialogs/ExchangeDialogs.swift` | large | Done |
 | ImportIFCDialog | `Shell/Dialogs/ExchangeDialogs.swift` | medium | Done |
 | ImportPDFDialog | `Shell/Dialogs/F67InsertDialogs.swift` | medium | Done |
@@ -140,14 +144,16 @@ already first-party; the Settings window and Home are windows, not modals.
 | ReportDialog | `Shell/Dialogs/ManageDialogs.swift` | medium | Done |
 | RevisionsDialog | `Shell/Dialogs/ManageDialogs.swift` | large | Done |
 | RevitImportDialog | `Shell/Dialogs/RevitImportDialog.swift` | medium | Done |
+| SaveComponentPresetDialog | `Library/Components/ComponentDialogs.swift` | small | Done |
 | SaveFurnitureTemplateDialog | `Shell/Dialogs/FM8Dialogs.swift` | medium | Done |
+| SaveSelectionComponentDialog | `Library/Components/ComponentDialogs.swift` | medium | Done |
 | ScheduleBordersDialog | `Shell/Dialogs/F12ScheduleDialogs.swift` | medium | Done |
 | ScheduleFontDialog | `Shell/Dialogs/F12ScheduleDialogs.swift` | small | Done |
 | SchedulePropertiesDialog | `Shell/Dialogs/ScheduleDialogs.swift` | wide | Done |
 | ScheduleShadingDialog | `Shell/Dialogs/F12ScheduleDialogs.swift` | small | Done |
 | SelectByIDDialog | `Shell/Dialogs/ManageSettingsDialogs.swift` | small | Done |
-| SelectTitleBlockDialog | `Shell/Dialogs/PresentationDialogs.swift` | medium | Done |
 | SelectionSetsDialog | `Shell/Dialogs/F11ManageDialogs.swift` | medium | Done |
+| SelectTitleBlockDialog | `Shell/Dialogs/PresentationDialogs.swift` | medium | Done |
 | SheetTitleDialog | `Shell/Dialogs/ProjectBrowserDialogs.swift` | small | Done |
 | SimplifySurfaceDialog | `Shell/Dialogs/SiteDialogs.swift` | medium | Done |
 | SiteSettingsDialog | `Shell/Dialogs/SiteDialogs.swift` | medium | Done |
@@ -163,10 +169,10 @@ already first-party; the Settings window and Home are windows, not modals.
 | TransferStandardsDialog | `Shell/Dialogs/F67InsertDialogs.swift` | medium | Done |
 | TypePropertiesDialog | `Shell/Dialogs/TypePropertiesDialog.swift` | wide | Done |
 | UnderlayDialog | `Shell/Dialogs/ExchangeDialogs.swift` | medium | Done |
+| UpdateComponentsDialog | `Library/Components/ComponentDialogs.swift` | medium | Done |
 | UserInterfaceDialog | `Shell/Dialogs/ManageSettingsDialogs.swift` | small | Done |
 | ViewRangeDialog | `Shell/Dialogs/ProjectBrowserDialogs.swift` | large | Done |
 | ViewTemplatesDialog | `Shell/Dialogs/ViewTemplatesDialog.swift` | wide | Done |
 | VisibilityGraphicsDialog | `Shell/Dialogs/VisibilityGraphicsDialog.swift` | extraWide | Done |
 | WarningsDialog | `Shell/Dialogs/ManageSettingsDialogs.swift` | large | Done |
 | WorkPlaneDialog | `Shell/Dialogs/F2Dialogs.swift` | small | Done |
-| ClaudeSetupView | `Claude/ClaudeSetupView.swift` | own layout | Opaque sheet background added; its layout is the MCP batch's design |

@@ -195,6 +195,7 @@ extension QAHarness {
         add("furniture-hardware-catalog", .fm7(.hardwareCatalog), furniture: true)
         add("furniture-cnc-export", .fm7(.cncExport), furniture: true)
         add("furniture-check-parts", .fm7(.checkParts), furniture: true)
+        if let v3 = f.model.views.first(where: { $0.view?.kind == .threeD }) { add("furniture-explode-parts", .fmg2(.explodeParts(v3.id)), furniture: true) } // FMG2
         add("furniture-save-template", .fm8(.saveTemplate), furniture: true)
         add("load-furniture", .fm8(.loadFurniture))
         d += compDialogCatalog(f) // COMP: Component Library dialogs (QAHarness+COMP.swift)
