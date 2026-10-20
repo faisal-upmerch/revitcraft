@@ -20,8 +20,8 @@ struct PrintSetupDialog: View {
         } content: {
             DialogSection("Paper", footnote: "Views print on this paper. Sheets print at their own size.") {
                 DialogRow("Size") { Picker("", selection: $setup.paper) { ForEach(PaperSize.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
-                DialogRow("Orientation") { Picker("", selection: $setup.landscape) { Text("Landscape").tag(true); Text("Portrait").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
-                DialogRow("Zoom") { Picker("", selection: $setup.zoom) { ForEach(PrintSetup.Zoom.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                DialogRow("Orientation") { PillSegmented(selection: $setup.landscape, [(true, "Landscape"), (false, "Portrait")]) } // PILLS
+                DialogRow("Zoom") { PillSegmented(selection: $setup.zoom, PrintSetup.Zoom.allCases.map { ($0, $0.rawValue) }) } // PILLS
                 DialogRow("Colors") { Picker("", selection: $setup.colors) { ForEach(PrintSetup.Colors.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
             }
             DialogSection("Hide") {

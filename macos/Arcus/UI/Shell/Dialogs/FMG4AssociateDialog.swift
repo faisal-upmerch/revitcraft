@@ -78,8 +78,7 @@ struct AssociateFamilyParameterDialog: View {
                         }
                     }
                     DialogRow("Varies by") {
-                        Picker("Varies by", selection: $newIsInstance) { Text("Type").tag(false); Text("Instance").tag(true) }
-                            .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        PillSegmented(selection: $newIsInstance, [(false, "Type"), (true, "Instance")], label: "Varies by") // PILLS
                     }
                 } else {
                     DialogRow("Parameter") {

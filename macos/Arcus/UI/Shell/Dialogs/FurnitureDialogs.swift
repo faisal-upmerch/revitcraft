@@ -303,11 +303,7 @@ struct FurnitureCategoryDialog: View {
             if let s = setup {
                 DialogSection("Family category", footnote: "Projects schedule and tag the piece by its category.") {
                     DialogRow("Category") {
-                        Picker("", selection: Binding(get: { s.family.template }, set: { setup?.family.template = $0 })) {
-                            Text("Furniture").tag(FamilyTemplate.furniture)
-                            Text("Casework").tag(FamilyTemplate.casework)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        PillSegmented(selection: Binding(get: { s.family.template }, set: { setup?.family.template = $0 }), [(FamilyTemplate.furniture, "Furniture"), (FamilyTemplate.casework, "Casework")]) // PILLS
                     }
                 }
                 DialogSection("Family parameters") {

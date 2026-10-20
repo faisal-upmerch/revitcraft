@@ -124,9 +124,9 @@ struct HomeStartCard: View {
                 }
                 Spacer(minLength: 0)
             }
-            .padding(8)
+            .padding(.vertical, 8).padding(.leading, 8).padding(.trailing, PillSpec.padding)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .homeCard(selected: selected, tint: card.tint, radius: Tokens.cardCornerRadius + 4)
+            .homeCard(selected: selected, tint: card.tint, radius: 64 * 0.22 + 8) // PILLS: concentric with the illustration (its radius + the padding)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)

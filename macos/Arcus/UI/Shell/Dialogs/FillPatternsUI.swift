@@ -162,7 +162,7 @@ struct FillPatternsSettingsView: View {
             Text("Drafting patterns are sized on paper (the same at every scale); model patterns are real-world sizes that scale with the view. Materials, filled regions, Coarse Scale Fills and view overrides pick from this list.")
                 .font(.caption).foregroundStyle(.secondary)
             HStack {
-                Picker("", selection: $filter) { ForEach(Filter.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().frame(width: 220)
+                PillSegmented(selection: $filter, Filter.allCases.map { ($0, $0.rawValue) }).frame(width: 220) // PILLS
                 TextField("Search", text: $search).textFieldStyle(.roundedBorder).frame(width: 200)
                 Spacer()
                 Text("\(list.count) of \(state.model.elements(.fillPatterns).count)").font(.caption).foregroundStyle(.secondary)

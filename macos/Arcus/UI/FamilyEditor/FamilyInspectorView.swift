@@ -243,10 +243,8 @@ struct ParameterInspector: View {
                 }
                 InspectorRow(label: "Type of parameter") { Text(p.type.displayName) }
                 InspectorRow(label: "Kind") {
-                    Picker("", selection: Binding(get: { p.isInstance }, set: { v in model.updateParameter(p.name, v ? "Make Instance Parameter" : "Make Type Parameter") { $0.isInstance = v } })) {
-                        Text("Type").tag(false); Text("Instance").tag(true)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize() // W4-AUDIT: never wraps "Instance"
+                    PillSegmented(selection: Binding(get: { p.isInstance }, set: { v in model.updateParameter(p.name, v ? "Make Instance Parameter" : "Make Type Parameter") { $0.isInstance = v } }),
+                                  [(false, "Type"), (true, "Instance")], size: .small) // W4-AUDIT: never wraps "Instance"; PILLS
                 }
                 InspectorRow(label: "Group") {
                     Picker("", selection: Binding(get: { p.group }, set: { g in model.updateParameter(p.name, "Change Parameter Group") { $0.group = g } })) {

@@ -55,7 +55,7 @@ struct ExportPDFDialog: View {
             VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
             DialogSection("Output") {
                 DialogRow("Files") {
-                    Picker("", selection: $combined) { Text("One combined PDF").tag(true); Text("Separate files").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $combined, [(true, "One combined PDF"), (false, "Separate files")]) // PILLS
                 }
                 if combined { DialogRow("File name") { TextField("", text: $fileName).labelsHidden() } }
                 else {

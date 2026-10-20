@@ -245,11 +245,7 @@ struct FamilyToolOptions: View {
                     }
                 }
                 option("Draw") {
-                    Picker("", selection: Binding(get: { model.sketchDraw }, set: { model.sketchDraw = $0; model.tool = .sketch })) {
-                        Text("Line").tag(FamilySketchDraw.line)
-                        Text("Rectangle").tag(FamilySketchDraw.rectangle)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().controlSize(.small).fixedSize()
+                    PillSegmented(selection: Binding(get: { model.sketchDraw }, set: { model.sketchDraw = $0; model.tool = .sketch }), [(FamilySketchDraw.line, "Line"), (FamilySketchDraw.rectangle, "Rectangle")], size: .small) // PILLS
                     .disabled(s.drawsPath)
                 }
                 if s.form.isForm { workPlane }
@@ -260,11 +256,7 @@ struct FamilyToolOptions: View {
                 case .referencePlane(let vertical):
                     divider
                     option("Orientation") {
-                        Picker("", selection: Binding(get: { vertical }, set: { model.tool = .referencePlane(vertical: $0) })) {
-                            Text("Vertical").tag(true)
-                            Text("Horizontal").tag(false)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().controlSize(.small).fixedSize()
+                        PillSegmented(selection: Binding(get: { vertical }, set: { model.tool = .referencePlane(vertical: $0) }), [(true, "Vertical"), (false, "Horizontal")], size: .small) // PILLS
                     }
                 case .control(let kind):
                     divider

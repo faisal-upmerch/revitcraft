@@ -50,8 +50,7 @@ struct ProjectUnitsDialog: View {
         } content: {
             DialogSection {
                 DialogRow("System") {
-                    Picker("", selection: $units.system) { Text("Metric").tag(UnitSystem.metric); Text("Imperial").tag(UnitSystem.imperial) }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $units.system, [(UnitSystem.metric, "Metric"), (UnitSystem.imperial, "Imperial")]) // PILLS
                         .onChange(of: units.system) { _, s in units = s == .metric ? .metric : .imperial }
                 }
             }
@@ -124,7 +123,7 @@ struct ProjectParametersDialog: View {
                     DialogRow("Name") { TextField("", text: $name).labelsHidden() }
                     DialogRow("Type") { Picker("", selection: $type) { ForEach(ParamType.userCreatable, id: \.self) { Text($0.displayName).tag($0) } }.labelsHidden() }
                     DialogRow("Group") { Picker("", selection: $group) { ForEach(ParameterGroup.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden() }
-                    DialogRow("Binding") { Picker("", selection: $isInstance) { Text("Instance").tag(true); Text("Type").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                    DialogRow("Binding") { PillSegmented(selection: $isInstance, [(true, "Instance"), (false, "Type")]) } // PILLS
                     DialogRow("Categories", alignment: .top) {
                         ScrollView { VStack(alignment: .leading, spacing: 4) { ForEach(Category.schedulable, id: \.self) { c in
                             Toggle(c.displayName, isOn: Binding(get: { cats.contains(c) }, set: { if $0 { cats.insert(c) } else { cats.remove(c) } }))

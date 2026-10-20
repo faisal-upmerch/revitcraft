@@ -115,7 +115,7 @@ struct PillOption<Value: Hashable>: Identifiable {
 struct PillSegmented<Value: Hashable>: View {
     enum Size {
         case small, regular, large
-        var track: CGFloat { switch self { case .small: 24; case .regular: 28; case .large: 32 } }
+        var track: CGFloat { switch self { case .small: 24; case .regular: 26; case .large: 30 } }
         var font: CGFloat { switch self { case .small: 11; case .regular: 12; case .large: 13 } }
         var symbol: CGFloat { switch self { case .small: 11; case .regular: 12.5; case .large: 13.5 } }
         /// Icon-only segments are square-ish capsules: this much padding each side of the glyph.
