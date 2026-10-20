@@ -349,7 +349,7 @@ public final class AIAgent {
                 round.failed = true
                 continue
             }
-            let risk = host.risk(of: u.name)
+            let risk = host.risk(of: u.name, arguments: u.input)
             var step = AIToolStep(id: u.id, tool: u.name, title: spec.title, summary: Self.argumentSummary(u.input), status: .running, model: model, edits: risk != .read)
             store.update(turn) { $0.items.append(.step(step)) }
             if let c = AIRiskPolicy.confirmation(tool: u.name, title: spec.title, risk: risk, arguments: u.input, documentName: host.documentName) {

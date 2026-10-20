@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import ArcusDomain
+import ArcusCalc
 import ArcusApplication
 import ArcusCAD
 import ArcusMCP
@@ -35,7 +36,17 @@ final class AIAssistantPanel {
     static func of(family model: FamilyEditorModel) -> AIAssistantPanel {
         let k = ObjectIdentifier(model)
         if let p = panels[k] { return p }
-        let p = AIAssistantPanel(host: FamilyEditorAIHost(model: model))
+        // The family tools work on the editor's family (FamilyEditingHost); project-level tools (load into project)
+        // reach the project window the family belongs to.
+        let toolbox = ArcusToolbox(host: AIWindowDocumentHost(state: model.state))
+        let family = FamilyEditorModelHost(model: model)
+        toolbox.familyHostProvider = { family }
+        let host = ToolboxAIHost(toolbox: toolbox, selection: { [weak model] in
+            guard let s = model?.selection else { return [] }
+            return [AISelectionChip(id: 0, title: String(describing: s), category: "Family item")]
+        })
+        host.undoManager = { [weak model] in model?.undo }
+        let p = AIAssistantPanel(host: host)
         p.selectionCount = { [weak model] in model?.selection == nil ? 0 : 1 }
         panels[k] = p
         return p
@@ -225,5 +236,67 @@ final class AIWindowDocumentHost: DocumentHost {
 struct OfflineTransport: AITransport {
     func open(_ request: URLRequest) async throws -> (status: Int, headers: [String: String], lines: AsyncThrowingStream<String, any Error>) {
         throw URLError(.notConnectedToInternet)
+    }
+}
+
+// AICORE: the window features the tool layer asks for (DocumentUIHost): the active view, opening views, zooming and
+// running menu commands, all in this window.
+extension AIWindowDocumentHost: DocumentUIHost {
+    var activeViewID: ElementID? { state?.activeViewID }
+
+    func activateView(_ id: ElementID) -> Bool {
+        guard let s = state, let e = s.model[id], e.view != nil || e.sheet != nil || e.schedule != nil else { return false }
+        s.open(id)
+        return true
+    }
+
+    func zoom(to ids: [ElementID]?) {
+        guard let s = state else { return }
+        if let ids, !ids.isEmpty { SelectByIDDialog.showElements(ids, state: s) } else { CommandRouter(state: s).run(.zoomExtents) }
+    }
+
+    func commandDisabledReason(_ id: CommandID) -> String? {
+        guard let s = state else { return "No window." }
+        return CommandRouter(state: s).disabledReason(id)
+    }
+
+    func runCommand(_ id: CommandID) -> CommandOutcome {
+        guard let s = state else { return .unavailable("No window.") }
+        let router = CommandRouter(state: s)
+        if let r = router.disabledReason(id) { return .unavailable(r) }
+        router.run(id)
+        if let t = s.activeTool { return .startedTool(t.prompt) }
+        return .done(CommandCatalog.info(id).title)
+    }
+
+    /// Project and Furniture windows have no family in front (the Family Editor's panel passes its own).
+    var familyHost: (any FamilyEditingHost)? { nil }
+}
+
+/// AICORE: the Family Editor window's family for the tool layer's family tools: edits go through the editor's
+/// `edit` (re-evaluated, one undo step on the family's own stack), loading through Load into Project.
+@MainActor
+final class FamilyEditorModelHost: FamilyEditingHost {
+    weak var model: FamilyEditorModel?
+    init(model: FamilyEditorModel) { self.model = model }
+
+    var family: FamilyDefinition { model?.family ?? FamilyDefinition(name: "", template: .genericModel) }
+    var currentType: String {
+        get { model?.currentType ?? "" }
+        set { model?.currentType = newValue }
+    }
+    var units: UnitsSettings { model?.units ?? .imperial }
+
+    func apply(name: String, edit: (inout FamilyDefinition) throws -> Void) throws {
+        guard let m = model else { throw ToolError("The Family Editor window is closed.") }
+        var next = m.family
+        try edit(&next)
+        m.edit(name) { $0 = next }
+    }
+
+    func loadIntoProject() throws -> String {
+        guard let m = model else { throw ToolError("The Family Editor window is closed.") }
+        guard m.loadIntoProject() else { throw ToolError(m.message ?? "The family wasn't loaded.") }
+        return m.message ?? "Loaded “\(m.family.name)” into the project."
     }
 }

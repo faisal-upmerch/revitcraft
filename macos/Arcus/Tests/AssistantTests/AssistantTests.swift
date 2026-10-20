@@ -66,8 +66,10 @@ struct AssistantTests {
         #expect(user[2]["source"]?["type"]?.stringValue == "base64" && user[2]["source"]?["data"]?.stringValue == png.base64EncodedString())
         #expect(user.last?["text"]?.stringValue == "What is this?")
         #expect(Self.breakpoints(body) == 4)
+        #expect(Self.size(tools) + Self.size(system) < 120_000, "the cached prefix stays compact")
     }
 
+    static func size(_ v: [JSONValue]) -> Int { JSONValue.array(v).jsonText.count }
     static func breakpoints(_ body: JSONValue) -> Int {
         var n = body["cache_control"] == nil ? 0 : 1
         n += (body["tools"]?.arrayValue ?? []).filter { $0["cache_control"] != nil }.count
@@ -408,5 +410,35 @@ struct AssistantTests {
         #expect(ArcusPackage.verify(dir).isHealthy)
         try ArcusPackage.write(model, to: dir, info: ArcusPackage.WriteInfo(appVersion: "1", build: "t"))
         #expect(ArcusPackage.readAssistantHistory(dir) == nil, "cleared chats leave no file")
+    }
+
+    @Test func familyPromptsUseTheFamilyToolsInOneUndoStep() async throws {
+        let s = readySettings()
+        let fileHost = FileDocumentHost()
+        let toolbox = ArcusToolbox(host: fileHost)
+        var box = FamilyDefinition(name: "Box", template: .genericModel)
+        box.types = [FamilyTypeDefinition(name: "Type 1", values: [:])]
+        let family = FileFamilyHost(family: box)
+        toolbox.familyHostProvider = { family }
+        let host = ToolboxAIHost(toolbox: toolbox)
+        host.undoManager = { family.undoManager }
+        #expect(host.documentKind == .family)
+        let names = Set(host.toolSpecs.map(\.name))
+        #expect(names.contains("add_family_parameter") && names.contains("flex_family"))
+        #expect(!names.contains("create_walls") && !names.contains("create_family"))
+        let t = MockTransport([
+            SSE.reply(nil, tools: [("f1", "add_family_parameter", ["parameters": [["name": "Shelf Count", "type": "integer", "value": 3]]])]),
+            SSE.reply(nil, tools: [("f2", "add_family_parameter", ["parameters": [["name": "Toe Kick", "type": "length", "value": 0.33]]])]),
+            SSE.reply("Added Shelf Count and Toe Kick."),
+        ])
+        let agent = AIAgent(host: host, client: await client(t, s), settings: s)
+        await agent.sendAndWait("Add shelf count and toe kick parameters")
+        #expect(t.bodies.first?["system"]?.arrayValue?.first?["text"]?.stringValue?.contains("Family Editor") == true)
+        #expect(family.family.parameters.contains { $0.name == "Shelf Count" } && family.family.parameters.contains { $0.name == "Toe Kick" })
+        let turn = try #require(agent.store.current.turns.last)
+        #expect(turn.steps.allSatisfy { $0.status == .ok }, "\(turn.steps.map(\.detail))")
+        #expect(agent.canUndo(turn))
+        agent.undo(turn.id)
+        #expect(!family.family.parameters.contains { $0.name == "Shelf Count" || $0.name == "Toe Kick" }, "one undo removes both")
     }
 }

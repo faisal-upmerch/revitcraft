@@ -20,9 +20,8 @@ public enum AIDocumentKind: String, Codable, Sendable, CaseIterable {
 }
 
 /// How much a tool call can change (owner's risk policy: ask before files, large deletes and project-wide changes).
-public enum AIToolRisk: String, Sendable, Hashable {
-    case read, edit, destructive, projectWide, file
-}
+/// The tool layer's own classes (ArcusMCP `ToolRisk`).
+public typealias AIToolRisk = ToolRisk
 
 /// One selected element, shown as a chip in the composer and sent with the prompt when "Use selection" is on.
 public struct AISelectionChip: Codable, Sendable, Hashable, Identifiable {
@@ -55,7 +54,8 @@ public protocol AIToolHost: AnyObject {
     var unitsDescription: String { get }
     /// The tools offered to the model, in a fixed order (the order is part of the cached prefix).
     var toolSpecs: [ToolSpec] { get }
-    func risk(of tool: String) -> AIToolRisk
+    /// The risk of one call (it can be higher than the tool's class: type parameters, deleting many).
+    func risk(of tool: String, arguments: [String: JSONValue]) -> AIToolRisk
     func call(_ name: String, arguments: [String: JSONValue]) async -> ToolResult
     /// A compact summary of the model and the active view (sent at the start of every prompt).
     func contextSummary() async -> String
@@ -143,7 +143,11 @@ public final class ToolboxAIHost: AIToolHost {
     public let toolbox: ArcusToolbox
     public var selectionProvider: () -> [AISelectionChip]
     public var activeViewName: () -> String?
-    public private(set) lazy var undo: any AIUndoControlling = PromptUndoGroup { [weak self] in self?.toolbox.host.session?.undoManager }
+    /// The undo stack the prompt's step goes on (the document's; the Family Editor passes the family's).
+    public var undoManager: (() -> UndoManager?)?
+    public private(set) lazy var undo: any AIUndoControlling = PromptUndoGroup { [weak self] in
+        self?.undoManager.map { $0() } ?? self?.toolbox.host.session?.undoManager
+    }
 
     public init(toolbox: ArcusToolbox, selection: @escaping () -> [AISelectionChip] = { [] }, activeView: @escaping () -> String? = { nil }) {
         self.toolbox = toolbox
@@ -152,33 +156,37 @@ public final class ToolboxAIHost: AIToolHost {
     }
 
     var session: DocumentSession? { toolbox.host.session }
-    public var documentKind: AIDocumentKind { session?.model.isFurniture == true ? .furniture : .project }
-    public var documentName: String { toolbox.host.documentName }
+    public var documentKind: AIDocumentKind {
+        switch toolbox.mode {
+        case .family: .family
+        case .furniture: .furniture
+        default: .project
+        }
+    }
+    public var documentName: String { toolbox.familyHost?.family.name ?? toolbox.host.documentName }
     public var unitsDescription: String {
+        if let f = toolbox.familyHost { return f.units.system == .imperial ? "feet and inches (plain numbers are feet)" : "millimeters (plain numbers are mm)" }
         guard let m = session?.model else { return "" }
         if m.isFurniture { return "inches (plain numbers are inches)" }
         return m.units.system == .imperial ? "feet and inches (plain numbers are feet)" : "millimeters (plain numbers are mm)"
     }
-    public var changeCount: Int { session?.changeCounter ?? 0 }
+    public var changeCount: Int {
+        if let f = toolbox.familyHost { return f.family.hashValue }
+        return session?.changeCounter ?? 0
+    }
 
     /// Tools the assistant never offers: they replace the document (the sidebar belongs to this one) or undo outside
     /// the prompt's undo step (the reply's Undo button does that).
-    public static let hidden: Set<String> = ["create_project", "create_furniture", "open_document", "undo", "redo"]
-    /// Building tools that mean nothing in a Furniture document.
-    static let projectOnly: Set<String> = ["add_level", "add_grid", "create_walls", "place_doors", "place_windows", "create_floor", "create_ceiling",
-                                           "create_roof", "add_stair", "add_railing", "place_rooms", "place_components", "set_project_info"]
+    public static let hidden: Set<String> = ["create_project", "create_furniture", "create_family", "open_document", "undo", "redo"]
 
+    /// The tool layer's tools for this document's kind (not filtered by view or selection: the list must stay the
+    /// same for the whole chat, since it is part of the cached prefix).
     public var toolSpecs: [ToolSpec] {
-        let furniture = documentKind == .furniture
-        return ArcusToolCatalog.all.filter { s in
-            if Self.hidden.contains(s.name) { return false }
-            if furniture { return !Self.projectOnly.contains(s.name) }
-            return !s.name.contains("furniture")
-        }
+        toolbox.availableTools(filterByView: false).filter { !Self.hidden.contains($0.name) }
     }
 
-    public func risk(of tool: String) -> AIToolRisk {
-        AIRiskPolicy.risk(of: ArcusToolCatalog.all.first { $0.name == tool }, name: tool)
+    public func risk(of tool: String, arguments: [String: JSONValue]) -> AIToolRisk {
+        ArcusToolbox.risk(of: tool, arguments: arguments)
     }
 
     public func call(_ name: String, arguments: [String: JSONValue]) async -> ToolResult {
@@ -186,18 +194,12 @@ public final class ToolboxAIHost: AIToolHost {
     }
 
     public func contextSummary() async -> String {
-        if ArcusToolCatalog.all.contains(where: { $0.name == "context_summary" }) {
-            let r = await toolbox.callTool("context_summary", arguments: [:])
-            if !r.isError { return withSelectionAndView(r.text) }
-        }
-        // Until the tool layer has context_summary: status plus the model summary.
+        let r = await toolbox.callTool("context_summary", arguments: [:])
+        if !r.isError { return r.text }
+        // Fallback: status plus the model summary.
         let status = await toolbox.callTool("arcus_status", arguments: [:])
         let summary = await toolbox.callTool("query_model", arguments: ["what": "summary"])
-        return withSelectionAndView([status.text, summary.text].filter { !$0.isEmpty }.joined(separator: "\n"))
-    }
-
-    private func withSelectionAndView(_ s: String) -> String {
-        var out = s
+        var out = [status.text, summary.text].filter { !$0.isEmpty }.joined(separator: "\n")
         if let v = activeViewName() { out += "\nActive view: \(v)" }
         return out
     }
@@ -210,22 +212,15 @@ public enum AIRiskPolicy {
     /// Deleting more than this many elements asks first.
     public static let smallDelete = 5
 
-    /// A tool's risk class. Uses the tool layer's own class when it has one; otherwise derives it from the annotations.
-    public static func risk(of spec: ToolSpec?, name: String) -> AIToolRisk {
-        if ["save", "export_pdf", "export_dwg"].contains(name) { return .file }
-        if ["set_project_info"].contains(name) { return .projectWide }
-        guard let spec else { return .edit }
-        if spec.destructive { return .destructive }
-        if spec.readOnly { return .read }
-        return .edit
-    }
-
     /// The question to ask before running a call, or nil to run it at once.
     public static func confirmation(tool: String, title: String, risk: AIToolRisk, arguments: [String: JSONValue], documentName: String) -> AIConfirmation? {
         switch risk {
         case .read, .edit:
             return nil
         case .destructive:
+            guard tool == "delete_elements" else {
+                return AIConfirmation(title: "\(title)?", message: "This removes content." + detail(arguments) + " You can undo it.", action: title, destructive: true)
+            }
             let ids = arguments["elements"]?.arrayValue ?? arguments["ids"]?.arrayValue ?? []
             if !ids.isEmpty && ids.count <= smallDelete { return nil }
             let n = ids.isEmpty ? "these elements" : "\(ids.count) elements"
