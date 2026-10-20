@@ -78,12 +78,16 @@ public enum FurnitureJointFasteners {
     private final class Cache: @unchecked Sendable {
         let lock = NSLock()
         var stored: [JointFastener]?
+        /// Built outside the lock (it reads the component registry, whose own one-time setup may read parameters), so no
+        /// thread ever waits on the registry while holding this lock.
         var value: [JointFastener] {
-            lock.lock(); defer { lock.unlock() }
-            if let s = stored { return s }
+            lock.lock()
+            if let s = stored { lock.unlock(); return s }
+            lock.unlock()
             let v = FurnitureJointFasteners.build()
-            stored = v
-            return v
+            lock.lock(); defer { lock.unlock() }
+            if stored == nil { stored = v }
+            return stored ?? v
         }
     }
     private static let cache = Cache()

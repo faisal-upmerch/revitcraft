@@ -51,6 +51,11 @@ public enum FurnitureJointProperties {
         if let d = e.furnitureJoint, d.isPair {
             let marks = d.parts.map { FurnitureJointParameters.mark($0, m) }
             return entries.map { x in
+                if x.id == FurnitureJointParameters.fastener.id, let j = FurnitureJointParameters.joint(e, m) { // COMPB: the joint type's connectors
+                    var y = x
+                    y.type = .choice([FurnitureJointParameters.byJointType] + FurnitureJointFasteners.options(j.type).map(\.name))
+                    return y
+                }
                 guard x.id == FurnitureJointParameters.through.id, marks.count == 2, marks[0] != marks[1] else { return x }
                 var y = x
                 y.type = .choice(marks)

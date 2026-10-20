@@ -102,7 +102,9 @@ enum FurnitureJointParameters {
 
     // COMPB: the connector component the joint uses, picked from the Component Library's fasteners for its type.
     static let byJointType = "By Joint Type"
-    static let fastener = P("furniture.joint.fastener", "Fastener", .choice([byJointType] + FurnitureJointFasteners.all.map(\.name)), .construction,
+    // The choice list is filled per joint (FurnitureJointProperties.adjust / partEntries), so the parameter catalog
+    // never reads the component registry while it is set up.
+    static let fastener = P("furniture.joint.fastener", "Fastener", .choice([byJointType]), .construction,
                             tooltip: "The connector the joint uses (Component Library). By Joint Type drills the joint type's own sizes.",
                             get: { e, ctx in joint(e, ctx.model).map { .text(FurnitureJointFasteners.fastener($0.parameters.fastener)?.name ?? byJointType) } },
                             set: { e, v, ctx in
