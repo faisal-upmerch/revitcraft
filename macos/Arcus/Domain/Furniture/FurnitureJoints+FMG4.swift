@@ -109,3 +109,104 @@ extension PartSolidContext {
         return out
     }
 }
+
+// MARK: - Turned legs
+
+/// FMG4: stretchers and rails that join a turned leg below its pommel: as a turner leaves a square block on a turned leg
+/// where a stretcher joins, the leg gets a square block round the joint (the turned body is cut away there, so only
+/// boxes are cut, never the revolve: compiling stays fast) and the mortises are cut in it at Fine.
+enum TurnedLegJoints {
+    static let margin = 0.5 * 0.0254
+
+    /// The turned leg's local family with blocks and mortises for `voids` (model boxes) below its pommel; the leg family
+    /// unchanged when none are.
+    static func cut(_ p: PlacedLocalFamily, voids: [JBox], width w: Double) -> PlacedLocalFamily {
+        var fam = p.family
+        guard let h = fam.types.first?.values["Height"]?.doubleValue, h > Tolerance.length, let body = fam.nestedFamilies.first,
+              let pommel = fam.solids.first(where: { $0.name == "Pommel" }) else { return p }
+        let neck = h * FurnitureLegShapes.pommelStart
+        let rot = -p.rotation * .pi / 180
+        func local(_ q: Vec2) -> Vec2 {
+            let d = q - Vec2(p.x.value, p.y.value)
+            return Vec2(d.x * cos(rot) - d.y * sin(rot), d.x * sin(rot) + d.y * cos(rot))
+        }
+        // Each void in the leg's frame (z from its foot).
+        let boxes: [(rect: Rect2, z0: Double, z1: Double)] = voids.map { b in
+            let corners = [Vec2(b.l(.x), b.l(.y)), Vec2(b.h(.x), b.l(.y)), Vec2(b.h(.x), b.h(.y)), Vec2(b.l(.x), b.h(.y))].map(local)
+            return (Rect2(points: corners), b.l(.z) - p.z.value, b.h(.z) - p.z.value)
+        }
+        // Blocks: the voids below the neck, merged where they overlap, a margin round each.
+        var bands: [(Double, Double)] = []
+        for b in boxes.filter({ $0.z0 < neck - 1e-6 }).sorted(by: { $0.z0 < $1.z0 }) {
+            let lo = max(0, b.z0 - margin), hi = min(neck, b.z1 + margin)
+            if let last = bands.last, lo <= last.1 { bands[bands.count - 1].1 = max(last.1, hi) } else { bands.append((lo, hi)) }
+        }
+        let n = PartSolidContext.number
+        func share(_ z: Double) -> String { "Height * \(n(z / h))" }
+        var cutIDs = [pommel.id]
+        for (k, band) in bands.enumerated() {
+            var s = FamilySolid(name: "Block \(k + 1)", profile: .rectangle(xMin: .expr(n(-w / 2)), xMax: .expr(n(w / 2)), yMin: .expr(n(-w / 2)), yMax: .expr(n(w / 2))),
+                                zMin: .expr(share(band.0)), zMax: .expr(share(band.1)), materialParameter: "Material")
+            s.id = "block-\(k + 1)"
+            fam.solids.append(s)
+            cutIDs.append(s.id)
+        }
+        if !bands.isEmpty {
+            // The turned body between the blocks: its profile clipped to each band left (shares of the body's height).
+            var b = body
+            guard case .revolve(let rev)? = body.solids.first?.profile else { return p }
+            let prof = rev.profile.compactMap { pt -> Vec2? in
+                guard case .expr(let r) = pt.x, let rv = Double(r), case .expr(let z) = pt.y, let t = Double(z.replacingOccurrences(of: "Height * ", with: "")) else { return nil }
+                return Vec2(rv, t)
+            }
+            guard prof.count == rev.profile.count else { return p }
+            var keep: [(Double, Double)] = []
+            var t0 = 0.0
+            for band in bands { keep.append((t0, band.0 / neck)); t0 = band.1 / neck }
+            keep.append((t0, 1))
+            b.solids = keep.enumerated().compactMap { k, r in
+                guard r.1 - r.0 > 1e-6 else { return nil }
+                let clipped = clip(prof, r.0, r.1)
+                guard clipped.count >= 3 else { return nil }
+                var s = FamilySolid(name: "Turned Body \(k + 1)", profile: .revolve(FamilyRevolve(profile: clipped.map { FamilyPoint(.expr(n($0.x)), .expr("Height * \(n($0.y))")) })),
+                                    zMin: .expr("0"), zMax: .expr("Height"), materialParameter: "Material")
+                s.id = "body-\(k + 1)"
+                return s
+            }
+            b.name = "\(body.name) Blocked \(bands.map { "\(n($0.0 / neck))-\(n($0.1 / neck))" }.joined(separator: ","))"
+            fam.nestedFamilies = [b]
+            for i in fam.nestedInstances.indices where fam.nestedInstances[i].familyName == body.name { fam.nestedInstances[i].familyName = b.name }
+        }
+        // The mortises, cut in the pommel and the blocks at Fine.
+        for (k, v) in boxes.enumerated() {
+            var s = FamilySolid(name: "Joint Cut \(k + 1)", profile: .rectangle(xMin: .expr(n(v.rect.min.x)), xMax: .expr(n(v.rect.max.x)), yMin: .expr(n(v.rect.min.y)), yMax: .expr(n(v.rect.max.y))),
+                                zMin: .expr(share(v.z0)), zMax: .expr(share(v.z1)), isVoid: true)
+            s.visibleAt = [.fine]
+            s.cuts = cutIDs
+            fam.solids.append(s)
+        }
+        fam.name = "\(fam.name) Joined " + boxes.map { "\(n($0.rect.min.x)),\(n($0.rect.min.y)),\(n($0.z0))" }.joined(separator: ";")
+        var q = p
+        q.family = fam
+        return q
+    }
+
+    /// A closed profile (r, t) clipped to t0 ≤ t ≤ t1.
+    static func clip(_ poly: [Vec2], _ t0: Double, _ t1: Double) -> [Vec2] {
+        func cut(_ pts: [Vec2], keep: (Vec2) -> Bool, at t: Double) -> [Vec2] {
+            guard !pts.isEmpty else { return [] }
+            var out: [Vec2] = []
+            for i in pts.indices {
+                let a = pts[i], b = pts[(i + 1) % pts.count]
+                let ka = keep(a), kb = keep(b)
+                if ka { out.append(a) }
+                if ka != kb, abs(b.y - a.y) > 1e-12 {
+                    let s = (t - a.y) / (b.y - a.y)
+                    out.append(Vec2(a.x + (b.x - a.x) * s, t))
+                }
+            }
+            return out
+        }
+        return cut(cut(poly, keep: { $0.y >= t0 - 1e-12 }, at: t0), keep: { $0.y <= t1 + 1e-12 }, at: t1)
+    }
+}

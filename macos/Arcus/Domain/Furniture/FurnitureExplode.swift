@@ -112,16 +112,26 @@ public enum FurnitureExplode {
 
     // MARK: Tags
 
+    /// FMG4: where a joint marker between `parts` is drawn in an exploded view: halfway between their offsets.
+    public static func markerOffset(_ parts: [ElementID], _ offsets: [ElementID: Vec3]) -> Vec3 {
+        guard !parts.isEmpty, !offsets.isEmpty else { return Vec3(0, 0, 0) }
+        return parts.reduce(Vec3(0, 0, 0)) { $0 + (offsets[$1] ?? Vec3(0, 0, 0)) } * (1 / Double(parts.count))
+    }
+
     /// The parts an exploded view tags: parts and fronts with a Mark.
-    static func tagged(_ e: Element) -> Bool {
+    public static func tagged(_ e: Element) -> Bool {
         (e.category.isFurniturePart && e.furnitureEdgeProfile == nil || e.category == .furnitureFronts) && !e.mark.isEmpty
     }
 
     /// Tags on an exploded 3D view's hidden-line drawing: each part's Mark in a box at the middle of its projected
     /// outline, moved clear of the tags already placed (with a leader back to the part).
-    static func tagItems(_ builder: ViewGraphicsBuilder, _ centers: [(Element, Vec2)]) -> [GItem] {
-        let h = 0.0022, pad = builder.paper(0.0008)
-        let th = builder.paper(h)
+    static func tagItems(_ builder: ViewGraphicsBuilder, _ centers: [(Element, Vec2)], drawing: Rect2? = nil) -> [GItem] {
+        // FMG4: at paper size, but never more than a thirtieth of the drawing (a 3D view's image on its own, not at its
+        // scale on a sheet, would otherwise get tags many times the parts' size).
+        let paperH = 0.0022, full = builder.paper(paperH)
+        let k = drawing.map { min(1, max($0.width, $0.height) / 30 / max(full, 1e-9)) } ?? 1
+        let h = paperH * k, pad = builder.paper(0.0008) * k
+        let th = full * k
         var placed: [Rect2] = []
         var out: [GItem] = []
         let stroke = GStroke(weight: 1, color: .black)
@@ -144,7 +154,7 @@ public enum FurnitureExplode {
                 // A leader from the box's nearest edge point to the part.
                 let q = Vec2(min(max(c.x, r.min.x), r.max.x), min(max(c.y, r.min.y), r.max.y))
                 prims.append(.polyline([q, c], closed: false, stroke))
-                prims.append(.arc(Arc2(center: c, radius: builder.paper(0.0005), startAngle: 0, sweep: 2 * .pi), stroke))
+                prims.append(.arc(Arc2(center: c, radius: builder.paper(0.0005) * k, startAngle: 0, sweep: 2 * .pi), stroke))
             }
             prims.append(.fill([Polygon2.rectangle(r)], GFill(pattern: .solid, color: .white)))
             prims.append(.polyline(Polygon2.rectangle(r).points, closed: true, stroke))

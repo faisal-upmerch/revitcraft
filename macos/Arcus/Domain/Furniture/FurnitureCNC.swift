@@ -154,8 +154,10 @@ public enum FurnitureCNC {
         let (u, v, w) = ((lf.u.0.value, lf.u.1.value), (lf.v.0.value, lf.v.1.value), (lf.w.0.value, lf.w.1.value))
         func mn(_ a: (Double, Double)) -> Double { min(a.0, a.1) }
         func mx(_ a: (Double, Double)) -> Double { max(a.0, a.1) }
-        if g.face == .front, !g.frame.isIdentity { // FMG3: a leaf on another face, in the model (canted faces: outlines only)
-            guard g.frame.isSquare else { return nil }
+        if g.face == .front, !g.frame.isIdentity, !g.frame.isSquare { // FMG4: a canted leaf in its face's frame (its operations are turned into it)
+            return Frame(lo: Vec3(mn(u), mn(w), mn(v)), hi: Vec3(mx(u), mx(w), mx(v)))
+        }
+        if g.face == .front, !g.frame.isIdentity { // FMG3: a leaf on another face, in the model
             let b = g.frame.worldBox(FurniturePartSolids.PartBox(x: (PartValue(mn(u)), PartValue(mx(u))), y: (PartValue(mn(w)), PartValue(mx(w))), z: (PartValue(mn(v)), PartValue(mx(v))))).box
             return Frame(lo: b.min, hi: b.max)
         }
@@ -204,7 +206,10 @@ public enum FurnitureCNC {
         } else if let f = frontFrame(p, m) {
             frame = f
             let lo = f.lo - Vec3(0.001, 0.001, 0.001), hi = f.hi + Vec3(0.001, 0.001, 0.001)
-            ops = (byPart[p.elementID] ?? []).filter { e in
+            // FMG4: a canted front's operations (worked out in its face's frame, then turned) back in that frame.
+            let canted = m[p.elementID].flatMap { FurnitureFronts.geometry($0, m) }.flatMap { $0.face == .front && !$0.frame.isSquare ? $0.frame : nil }
+            let mine = (byPart[p.elementID] ?? []).map { e in canted.map { FurnitureMachining.fmg4Local(e, $0) } ?? e }
+            ops = mine.filter { e in
                 let c = center(e.op)
                 return c.x >= lo.x && c.x <= hi.x && c.y >= lo.y && c.y <= hi.y && c.z >= lo.z && c.z <= hi.z
             }

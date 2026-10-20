@@ -10,6 +10,12 @@ import ArcusGeometry
     func viewport3DAccepts(_ urls: [URL]) -> Bool
     /// Loads and places the files at the view point (points, origin bottom-left); true when something was placed.
     func viewport3DDrop(_ urls: [URL], at point: CGPoint) -> Bool
+    /// FMG4: the drag moved over the view (a live placement preview); nil point: it left or ended.
+    func viewport3DDragMoved(_ urls: [URL], at point: CGPoint?)
+}
+
+public extension Viewport3DDropHandler {
+    func viewport3DDragMoved(_ urls: [URL], at point: CGPoint?) {}
 }
 
 extension Viewport3DView {
@@ -22,11 +28,19 @@ extension Viewport3DView {
     }
 
     override public func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        dropHandler?.viewport3DAccepts(droppedFiles(sender)) == true ? .copy : []
+        let urls = droppedFiles(sender)
+        guard let h = dropHandler, h.viewport3DAccepts(urls) else { return [] }
+        h.viewport3DDragMoved(urls, at: convert(sender.draggingLocation, from: nil)) // FMG4: live preview
+        return .copy
+    }
+
+    override public func draggingExited(_ sender: (any NSDraggingInfo)?) {
+        dropHandler?.viewport3DDragMoved([], at: nil) // FMG4
     }
 
     override public func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         let urls = droppedFiles(sender)
+        dropHandler?.viewport3DDragMoved([], at: nil) // FMG4
         guard let h = dropHandler, h.viewport3DAccepts(urls) else { return false }
         return h.viewport3DDrop(urls, at: convert(sender.draggingLocation, from: nil))
     }

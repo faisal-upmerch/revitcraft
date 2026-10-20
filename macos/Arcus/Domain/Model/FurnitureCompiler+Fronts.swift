@@ -93,12 +93,17 @@ extension FurnitureCompiler {
                 var inst = NestedFamilyInstance(familyName: nf.name, typeName: nf.types.first?.name, x: ctx.bound(p.x), y: ctx.bound(p.y), z: ctx.bound(p.z),
                                                 rotation: PartSolidContext.number(p.rotation), mirrored: p.mirrored)
                 if let span = p.span, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = "(\(lengthExpression(span.end, f))) - (\(lengthExpression(span.start, f)))" } // FM9: lengths on both sides
+                if let c = cantedPlacement(p, ctx) { // FMG4: on a canted face, between its corners and turned with it
+                    inst.x = c.x; inst.y = c.y; inst.rotation = c.rotation
+                    if let l = c.length, nf.parameter(named: "Length") != nil { inst.bindings["Length"] = l }
+                }
                 inst.visibleAt = [.medium, .fine]
                 inst.visibilityParameter = visibility // FMG3
                 f.nestedInstances.append(inst)
             }
             f.planLines += planSwings(front, mm).map { var l = $0; l.visibilityParameter = visibility; return l } // FMG3
-            addElevationSwings(front, mm, to: &f, visibility: visibility) // FMG3: on every face
+            f.planLines += lidPlanLines(front, mm, ctx, visibility: visibility) // FMG4: lids' plan swing
+            if !addLeafSwings(front, mm, ctx, to: &f, visibility: visibility) { addElevationSwings(front, mm, to: &f, visibility: visibility) } // FMG3: on every face; FMG4: they flex
         }
 
         // Hardware: nested families, owned instances on the front's planes, the others where they are.
@@ -135,6 +140,11 @@ extension FurnitureCompiler {
             cantedByModel[key] = c
             return c
         }
+        // FMG4: the corners of a canted front's face (hardware turns with them).
+        func cantedRotation(_ mm: BIMModel, _ owner: ElementID) -> CantAnchors? {
+            guard let fr = mm[owner], let g = FurnitureFronts.geometry(fr, mm) else { return nil }
+            return CantAnchors(g.opening, g.frame)
+        }
         for (h, mm, visibility) in hardwareWork {
             guard let c = h.component, let t = mm[h.typeID], let td = t.typeData, let nested = mm[td.familyID]?.family else { continue }
             if f.nestedFamily(named: nested.name) == nil {
@@ -152,12 +162,14 @@ extension FurnitureCompiler {
             let key = visibility ?? ""
             var x: FamilyBound = .expr(PartSolidContext.number(c.location.x)), y: FamilyBound = .expr(PartSolidContext.number(c.location.y))
             var z: FamilyBound = .expr(PartSolidContext.number(mm.baseElevation(of: h)))
+            var turned: CantAnchors? // FMG4
             if let owner = h.params[FurnitureHardware.ownerParam]?.refValue, let slot = h.params[FurnitureHardware.slotParam]?.textValue,
                let p = placements(mm, key)["\(owner.raw)|\(slot)"] {
                 x = ctx.bound(p.at.x); y = ctx.bound(p.at.y); z = ctx.bound(p.at.z)
-                if let c = canted(mm, key)["\(owner.raw)|\(slot)"] { x = c.0; y = c.1 } // FMG3
+                if let c = canted(mm, key)["\(owner.raw)|\(slot)"] { x = c.0; y = c.1; turned = cantedRotation(mm, owner) } // FMG3; FMG4: turned with the face
             }
             var inst = NestedFamilyInstance(familyName: nested.name, typeName: t.name, x: x, y: y, z: z, rotation: PartSolidContext.number(c.rotation * 180 / .pi), mirrored: c.mirrored)
+            if let a = turned, let r = a.rotationFormula(c.rotation * 180 / .pi, ctx) { inst.rotation = r } // FMG4
             for (k, v) in Parameters.familyInstanceValues(h) {
                 guard let p = nested.parameter(named: k), p.isInstance else { continue }
                 switch v {

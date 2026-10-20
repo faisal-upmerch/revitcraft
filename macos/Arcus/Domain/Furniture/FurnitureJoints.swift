@@ -110,7 +110,12 @@ public enum FurnitureJoints {
             out.solids.append(s)
             if let material { out.materials[s.id] = material }
         }
-        for (k, b0) in mods.fineVoids.enumerated() {
+        // FMG4: a turned leg's mortises go in its own family (blocks round the joints below the pommel).
+        let turned = e.furnitureLeg != nil && raw.placed.count == 1 && FurniturePartTypes.values(of: e, m).legShape == .turned
+        if turned, !mods.fineVoids.isEmpty {
+            out.placed[0] = TurnedLegJoints.cut(out.placed[0], voids: mods.fineVoids, width: FurniturePartTypes.values(of: e, m).width)
+        }
+        for (k, b0) in mods.fineVoids.enumerated() where !turned {
             let b = bind(b0, inside: true) // FMG4
             var s = FurniturePartSolids.box("\(name) Joint Cut \(k + 1)", plane: .xy, u: (b.lo[0], b.hi[0]), v: (b.lo[1], b.hi[1]), w: (b.lo[2], b.hi[2]), ctx, void: true)
             s.visibleAt = [.fine]

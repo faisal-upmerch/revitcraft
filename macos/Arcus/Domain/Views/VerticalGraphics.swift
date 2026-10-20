@@ -92,7 +92,7 @@ struct VerticalGraphics {
             items.append(GItem(elementID: e.id, category: e.category, layer: .model,
                                primitives: segs.map { .polyline([$0.start, $0.end], closed: false, st) }, hitPolygons: [.rectangle(hull)]))
         }
-        fmg3FamilyModelLines(fr, visible, into: &items) // FMG3: loaded casework's door swings and model lines
+        fmg3FamilyModelLines(fr, visible, occluders: inputs, into: &items) // FMG3: loaded casework's door swings and model lines (FMG4: hidden by all)
         items += colorFills(fr)
         items += f34Items(fr) // F34: wall-hosted reinforcement
         items += wallOpeningItems(fr) // WP3: selectable wall openings

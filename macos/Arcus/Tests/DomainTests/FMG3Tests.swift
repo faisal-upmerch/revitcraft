@@ -144,7 +144,7 @@ struct FMG3Tests {
         }
         let a = try leafX(60), c = try leafX(70)
         #expect(approx(c.1 - a.1, 5 * i, 1e-5) && approx(c.2, a.2, 1e-6) && a.2 > 11.9 * i, "\(a) \(c)")
-        #expect(f.modelLines.contains { $0.subcategory == .elevationSwing && $0.plane == .xz })
+        #expect(f.nestedInstances.contains { f.nestedFamily(named: $0.familyName)?.modelLines.contains { $0.subcategory == .elevationSwing } == true }) // FMG4: each leaf's swing is a placed swing family (it flexes)
     }
 
     @Test func sideBaysTakeDrawersSeenFromTheLeft() throws {
@@ -280,7 +280,7 @@ struct FMG3Tests {
         let w24 = try leafWidth(24), w28 = try leafWidth(28)
         #expect(approx(w28 - w24, 4 * 2.squareRoot() * i, 1e-4), "\(w24 / i) \(w28 / i)")
         // The elevation swing is in a nested family turned to the cant.
-        #expect(f.nestedInstances.contains { inst in approx(Double(inst.rotation), 45) && f.nestedFamily(named: inst.familyName)?.modelLines.isEmpty == false })
+        #expect(f.nestedInstances.contains { inst in approx(FMG4CantTests.probe(f, inst.rotation) ?? 0, 45, 1e-6) && f.nestedFamily(named: inst.familyName)?.modelLines.isEmpty == false }) // FMG4: a formula turning with the cant
     }
 
     @Test func storageBedHasDrawersAlongBothSides() throws {
@@ -479,7 +479,7 @@ struct FMG3Tests {
             return g.items.filter { $0.elementID == inst }.flatMap(\.primitives).filter { if case .polyline(_, _, let st) = $0 { st.pattern == .dash } else { false } }.count
         }
         let seen = try swings(front), behind = try swings(back)
-        #expect(seen == 4, "two leaves, two lines each: \(seen)")
+        #expect(seen >= 4, "two leaves, two lines each (FMG4: broken where a handle in front hides them): \(seen)")
         #expect(behind == 0, "hidden behind the cabinet")
     }
 

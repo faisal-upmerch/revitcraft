@@ -315,7 +315,8 @@ struct PlanGraphics {
             var prims: [GPrimitive] = []
             for s in symbols {
                 guard let so = builder.subcategoryOverride(e, o, s.subcategory) else { continue } // BL-VG
-                let sst = so == o && s.subcategory == .general ? st : builder.stroke(e, cut: false, so, s.subcategory)
+                var sst = so == o && s.subcategory == .general ? st : builder.stroke(e, cut: false, so, s.subcategory)
+                if s.subcategory == .elevationSwing { sst.weight = 1; sst.pattern = .dash } // FMG4: a casework lid's plan swing
                 switch s.curve {
                 case .line(let seg): prims.append(.polyline([seg.start, seg.end], closed: false, sst))
                 case .arc(let a): prims.append(.arc(a, sst))

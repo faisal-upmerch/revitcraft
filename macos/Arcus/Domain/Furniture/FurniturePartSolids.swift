@@ -109,6 +109,9 @@ public struct PlacedLocalFamily: Sendable {
     /// The local family's length parameter ("Length") and its span in the document, when it has one.
     public var span: (start: PartValue, end: PartValue)?
     public var material: ElementID?
+    /// FMG4: compiling a front on a canted face: where the shape sits on the face, so the loaded family keeps it
+    /// between the face's corners (and turned with the face) as the piece flexes out of square.
+    public var cant: CantPlacement? = nil
 }
 
 /// A part's solids: direct solids and placed local families.

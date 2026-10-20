@@ -244,7 +244,7 @@ public struct BayFrame: Hashable, Sendable {
 /// Compiling a front on a canted face: the face's two front corners in the model (with their planes), so the front's
 /// solids and hardware stay between them when a loaded piece flexes out of square (the face then turns a little, as a
 /// door on a reference line between two planes does).
-public struct CantAnchors {
+public struct CantAnchors: Sendable {
     public var p0: (x: PartValue, y: PartValue)
     public var p1: (x: PartValue, y: PartValue)
     public var u0: Double, v0: Double, u1: Double, v1: Double
