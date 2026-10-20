@@ -192,7 +192,8 @@ public enum FurnitureFabrication {
             let td = m[typeID]?.typeData
             let hv = FurnitureHardware.Values(td)
             out.append(HardwareItem(key: "joint/\(name)", elementID: typeID, typeID: typeID, family: td?.familyName ?? family ?? name,
-                                    typeName: typeID.flatMap { m[$0]?.name } ?? name, kind: hv.kind?.rawValue ?? "Fastener", count: count,
+                                    typeName: typeID.flatMap { m[$0]?.name } ?? (FurnitureJointFasteners.fastener(named: name) != nil ? typeName : nil) ?? name, // COMPB
+                                    kind: hv.kind?.rawValue ?? "Fastener", count: count,
                                     unitCost: td != nil ? hv.cost : fallback, manufacturer: td != nil ? identity(td, "manufacturer") : "Generic",
                                     model: identity(td, "model"), description: td != nil ? identity(td, "description") : name, source: "Joints"))
         }
@@ -201,6 +202,7 @@ public enum FurnitureFabrication {
 
     /// The hardware family and type a joint fastener name maps to, and a unit cost when there's no type.
     static func jointHardware(_ name: String) -> (family: String?, type: String?, cost: Double) {
+        if let f = FurnitureJointFasteners.fastener(named: name) { return (f.family, f.typeName, f.cost) } // COMPB: a connector component
         if name.hasPrefix("Dowel") {
             // "Dowel 5/16\" x 1 3/16\"" → the 8 x 30 mm type; other sizes pick the nearest by name.
             let sizes: [(String, String)] = [("1/4\" x 1 3/16\"", "6 x 30 mm"), ("5/16\" x 1 3/16\"", "8 x 30 mm"), ("5/16\" x 1 9/16\"", "8 x 40 mm"),

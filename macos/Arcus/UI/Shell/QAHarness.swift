@@ -484,6 +484,7 @@ enum QAHarness {
             await fmg1Screenshots(suffix) // FMG1: locked part-face dimensions, Blend Edit Top, Sweep in an elevation, pieces that flex fully
             await mcpScreenshots(suffix) // MCP: Home's Design with Claude card, the Set Up window, the bottom bar pill
             await fmg3Screenshots(suffix) // FMG3: fronts on the back, sides and canted faces, lids, Leaf Count, swings in a project elevation
+            await compbScreenshots(suffix) // COMPB: Joint Rules with connector components, a table on Component Library hairpin legs
             await dialogsScreenshots(s, w, suffix: suffix) // DIALOGS: the ten dialogs of the owner's review, as sheets
             await fm3dScreenshots(suffix) // FM3D: the Create tab in 3D, a shelf sketched in 3D, a panel on a face, shape handles
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
