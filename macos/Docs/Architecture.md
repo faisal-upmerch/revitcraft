@@ -74,6 +74,8 @@ Geometry is derived, never stored:
 
 The 3D view (`ArcusViewport3D`) builds per-element meshes (`ElementMeshes.parts`) into instanced Metal buffers, with section box, visual styles, picking, and an orientation widget.
 
+Curves are tessellated by the view's detail level (`TessellationQuality`: Coarse 24, Medium 36, Fine 72 segments a circle at least, with a 2 / 0.5 / 0.2 mm chord tolerance and a cap). `FamilyEvaluator.evaluate(quality:)` cuts circles and revolves by it and `CurveRefinement` rounds curves stored as points (sketched arcs, rounded corners, turned profiles). `GeometryCache` keeps one entry per element and detail level; the 3D view uses `shadedParts`, the meshes welded with smooth normals across faces that meet at under 35° (`MeshSmoothing`) and silhouette candidates that the GPU draws only where the surface turns away from the eye. Boolean results drop feature edges inside smooth surfaces and close their T-junctions.
+
 ## Documents, persistence and recovery
 
 - `ArcusDocument` (an NSDocument subclass) saves `.arcus` packages atomically through safe-save and autosaves in place. Writes happen on a background queue from a `Sendable` snapshot.
