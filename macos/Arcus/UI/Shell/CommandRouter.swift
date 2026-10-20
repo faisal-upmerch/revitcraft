@@ -118,6 +118,7 @@ struct CommandRouter {
             state.show("\(CommandCatalog.info(id).title): \(reason)")
             return
         }
+        NotificationCenter.default.post(name: .arcusCommandRan, object: nil) // FMG4: ribbon popovers close
         state.recentCommands.removeAll { $0 == id }
         state.recentCommands.insert(id, at: 0)
         if state.recentCommands.count > 12 { state.recentCommands.removeLast() }

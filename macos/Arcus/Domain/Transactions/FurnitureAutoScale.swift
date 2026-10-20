@@ -171,7 +171,7 @@ public enum FurnitureAutoScale {
             let half = abs(dir.x) * piece.width / 2 + abs(dir.y) * piece.height / 2
             var at = piece.center - dir * (half + dist)
             // The Front and Back markers sit a quarter of the width to the left, off Section A's line and head.
-            if abs(dir.y) > 0.5 { at.x -= piece.width / 4 }
+            if abs(dir.y) > 0.5 { at.x -= max(piece.width / 4, 0.014 * s) }
             // The view plane moves only along the view direction (across it, it sets the view's coordinates).
             let o = vd.planeOrigin.map { Vec2($0.x, $0.y) } ?? at
             let o2 = o + dir * (at - o).dot(dir)

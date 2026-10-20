@@ -84,3 +84,30 @@ struct FMG4AssociateUITests {
         NSApp.appearance = nil
     }
 }
+
+/// FMG4: the ribbon's More popover shows only the panels the row has no room for (a panel the row shows draws
+/// nothing there), and a command closes the collapsed-panel and More popovers.
+@MainActor
+@Suite("FMG4 ribbon overflow")
+struct FMG4RibbonTests {
+    @Test func morePopoverShowsOnlyHiddenPanels() {
+        func width(_ only: Set<String>?) -> CGFloat {
+            let v = CollapsibleRibbonPanel(key: "3 Modify", title: "Modify") { _ in Text("Modify tools").padding() }
+                .environment(\.ribbonOverflowOnly, only)
+            return NSHostingView(rootView: v).fittingSize.width
+        }
+        #expect(width(nil) > 20)
+        #expect(width(["3 Modify"]) > 20)
+        #expect(width(["4 Create"]) < 1)
+    }
+
+    @Test func aCommandPostsTheNotificationThatClosesPopovers() {
+        let state = DocumentState(session: DocumentSession(model: ProjectTemplates.make(.architectural, units: .imperial).0))
+        final class Flag: @unchecked Sendable { var heard = false }
+        let flag = Flag()
+        let token = NotificationCenter.default.addObserver(forName: .arcusCommandRan, object: nil, queue: nil) { _ in flag.heard = true }
+        defer { NotificationCenter.default.removeObserver(token) }
+        CommandRouter(state: state).run(.modify)
+        #expect(flag.heard)
+    }
+}

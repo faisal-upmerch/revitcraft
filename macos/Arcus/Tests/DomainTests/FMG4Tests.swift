@@ -512,3 +512,23 @@ struct FMG4DropTests {
         #expect(w.map { abs($0.point.y - 2) < 1e-9 && $0.offset == 0 } == true, "\(String(describing: w))")
     }
 }
+
+/// FMG4: Part Tag leaders on a shop drawing never cross: the tags in a column are in the order of their parts.
+@Suite("FMG4 tag leaders")
+struct FMG4TagLeaderTests {
+    @Test func leadersDontCross() {
+        var rng = SystemRandomNumberGenerator()
+        let outline = Rect2(min: Vec2(-0.5, 0), max: Vec2(0.5, 0.8))
+        for _ in 0..<40 {
+            let parts = (0..<9).map { k in
+                (id: ElementID(UInt64(100 + k)), anchor: Vec2(Double.random(in: -0.48...0.48, using: &rng), Double.random(in: 0.02...0.78, using: &rng)))
+            }
+            let placed = FurnitureTagLayout.layout(parts, outline: outline, obstacles: [], scale: 12)
+            #expect(placed.count == parts.count)
+            let leaders = placed.map { Segment2($0.elbow ?? $0.head, $0.anchor) }
+            for i in leaders.indices { for j in leaders.indices where j > i {
+                #expect(leaders[i].intersection(leaders[j]) == nil, "\(placed[i].part) and \(placed[j].part) cross")
+            } }
+        }
+    }
+}
