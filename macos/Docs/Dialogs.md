@@ -69,6 +69,7 @@ already first-party; the Settings window and Home are windows, not modals.
 |---|---|---|---|
 | AdditionalSettingsDialog | `Shell/Dialogs/ManageSettingsDialogs.swift` | wide | Done |
 | AddToSetDialog | `Shell/Dialogs/F11ManageDialogs.swift` | medium | Done |
+| AssociateFamilyParameterDialog | `Shell/Dialogs/FMG4AssociateDialog.swift` | medium | Done |
 | CategoryPickDialog | `Shell/Dialogs/ViewDialogs.swift` | medium | Done |
 | CheckPartsDialog | `Shell/Dialogs/FurnitureFabricationDialogs.swift` | large | Done |
 | CheckSpellingDialog | `Shell/Dialogs/AnnotationDialogs.swift` | medium | Done |

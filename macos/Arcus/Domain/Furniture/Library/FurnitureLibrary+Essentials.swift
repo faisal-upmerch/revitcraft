@@ -452,13 +452,15 @@ enum Essentials {
     // MARK: Entryway and Bathroom
 
     static func entrywayBench() -> BIMModel {
-        LibraryKit.piece("Entryway Bench", sizes: [Size("36\"", w: 36, d: 15, h: 19), Size("42\"", w: 42, d: 16, h: 19), Size("48\"", w: 48, d: 16, h: 19)],
-                         description: "Oak bench with three shoe cubbies, a bottom shelf and a piped seat cushion") { k in
+        // FMG4: an 18" seat (16" box and a 2" cushion) on a plinth, in 36", 48" and 60".
+        LibraryKit.piece("Entryway Bench", sizes: [Size("36\"", w: 36, d: 15, h: 18), Size("48\"", w: 48, d: 16, h: 18), Size("60\"", w: 60, d: 16, h: 18)],
+                         description: "Oak bench: 18\" seat, three shoe cubbies over a bottom shelf, a piped seat cushion, on a plinth") { k in
             oak(k)
-            try k.carcass(CarcassSpec(z: 0...17, panel: oakPly, top: .over("1\" Solid White Oak Top", front: 0.5, sides: 0.5), base: .plinth(height: 2.5, setback: 0.75),
+            try k.carcass(CarcassSpec(z: 0...16, panel: oakPly, top: .over("1\" Solid White Oak Top", front: 0.5, sides: 0.5), base: .plinth(height: 2.5, setback: 0.75),
                                       back: "1/4\" Plywood", columns: [CarcassColumn(), CarcassColumn(), CarcassColumn()], shelf: "3/4\" Oak Veneer Shelf"))
-            try k.cushion(x: (k.l + 0.75)...(k.r - 0.75), y: (k.f + 0.75)...(k.b - 0.75), z: 17, height: 2, crown: 0.5, radius: 1.25,
+            let cushion = try k.cushion(x: (k.l + 0.75)...(k.r - 0.75), y: (k.f + 0.75)...(k.b - 0.75), z: 16, height: 2, crown: 0.5, radius: 1.25,
                           material: "Fabric - Charcoal Weave")
+            try k.optional([cushion], by: "Seat Cushion") // FMG4: the cushion is a Yes/No type parameter
         }
     }
 

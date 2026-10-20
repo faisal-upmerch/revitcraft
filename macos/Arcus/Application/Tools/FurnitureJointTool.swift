@@ -15,6 +15,8 @@ public struct ToolWorldMarker: Sendable {
     public var emphasis: Int
     /// Square (set by the user) or round (by rule).
     public var square: Bool
+    /// FMG4: the parts the marker joins (an exploded 3D view draws it between where they are drawn).
+    public var parts: [ElementID] = []
 }
 
 /// Tools that draw markers on the model in 3D views (the 3D overlay asks for them).
@@ -168,7 +170,7 @@ public final class FurnitureJointTool: BaseTool, InteractiveTool, ToolWorldMarke
     // MARK: Markers
 
     public var worldMarkers: [ToolWorldMarker] {
-        joints.map { ToolWorldMarker(position: $0.marker, emphasis: $0.key == picked ? 2 : $0.key == hovered ? 1 : 0, square: $0.isUserSet) }
+        joints.map { ToolWorldMarker(position: $0.marker, emphasis: $0.key == picked ? 2 : $0.key == hovered ? 1 : 0, square: $0.isUserSet, parts: [$0.throughID, $0.otherID]) }
     }
 
     func rebuild() {

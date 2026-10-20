@@ -212,36 +212,49 @@ extension FurnitureCompiler {
 extension FurnitureCompiler {
     /// The stock slide length a drawer gets as a formula of its bay's depth, as the document picks it (the longest
     /// standard length that fits with its rear clearance), so a loaded cabinet made shallower or deeper gets the slides
-    /// and drawer boxes that fit. nil when the bay's depth doesn't follow formula planes.
-    static func slideLengthFormula(_ front: Element, _ m: BIMModel, _ f: FamilyDefinition) -> (formula: String, start: String)? {
-        guard let g = FurnitureFronts.geometry(front, m), g.frame.isIdentity, let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil } // FMG3: front faces
+    /// and drawer boxes that fit. FMG4: on any face square to the piece (back and side drawers too), `start` being the
+    /// box front's model coordinate along `axis` and the box running toward `sign` along it. nil when the bay's depth
+    /// doesn't follow formula planes.
+    static func slideLengthFormula(_ front: Element, _ m: BIMModel, _ f: FamilyDefinition)
+        -> (formula: String, start: String, axis: FamilyAxis, sign: Double)? {
+        guard let g = FurnitureFronts.geometry(front, m), let depth = g.frame.vAxis, let box = FurnitureFronts.drawerBox(front, m), let st = box.slideTypeID else { return nil }
         let sv = FurnitureHardware.Values(m[st]?.typeData)
         let tv = FurnitureFrontTypes.values(of: front, m)
         let stable = stablePlanes(f)
         let start = tv.overlay == .inset ? g.opening.value("y0").shifted(tv.thickness) : g.opening.value("y0")
-        guard let y0 = stableExpression(start, f, stable), let y1 = stableExpression(g.opening.value("y1"), f, stable) else { return nil }
+        // FMG4: a turned face's coordinates follow sums of planes (its local depth is ± a model axis).
+        func local(_ v: PartValue) -> String? {
+            guard PlaneTerms.isSum(v.plane), let n = v.plane else { return stableExpression(v, f, stable) }
+            return PlaneTerms.expression(n, offset: v.offset) { stableExpression(PartValue(0, plane: $0), f, stable) }
+        }
+        guard let y0 = local(start), let y1 = local(g.opening.value("y1")) else { return nil }
         let available = "((\(y1)) - (\(y0)))"
         var formula = "\(PartSolidContext.number(box.depth)) m"
         for l in FurnitureHardware.slideLengths.sorted() {
             formula = "if(\(available) >= \(PartSolidContext.number(l * 0.0254 + sv.rearClearance)) m, \(PartSolidContext.number(l * 0.0254)) m, \(formula))"
         }
-        return (formula, y0)
+        return (formula, depth.sign > 0 ? y0 : "-(\(y0))", depth.axis, depth.sign)
     }
 
-    /// Rewrites a drawer's box solids so their depth is `length` (a formula) from the box front at `start`.
-    static func flexDrawerBox(_ solids: inout [FamilySolid], mark: String, length: String, start: String, back: Double) {
+    /// Rewrites a drawer's box solids so their depth is `length` (a formula) from the box front at `start` (the model
+    /// coordinate along `axis`), running toward `sign` (FMG4: back and side drawers run along -y and ±x).
+    static func flexDrawerBox(_ solids: inout [FamilySolid], mark: String, length: String, start: String, back: Double, axis: FamilyAxis = .y, sign: Double = 1) {
         let b = PartSolidContext.number(back)
+        let op = sign > 0 ? "+" : "-"
+        func at(_ d: String) -> String { "(\(start)) \(op) (\(d))" }
         for i in solids.indices {
-            guard solids[i].name.hasPrefix("\(mark) Box "), case .rectangle(let x0, let x1, _, _) = solids[i].profile else { continue }
-            let y: (String, String)? = switch solids[i].name.dropFirst(mark.count + 5) {
-            case "Left Side", "Right Side": ("(\(start))", "(\(start)) + (\(length))")
-            case "Front": ("(\(start))", "(\(start)) + \(b) m")
-            case "Back": ("(\(start)) + (\(length)) - \(b) m", "(\(start)) + (\(length))")
-            case "Bottom": ("(\(start)) + \(b) m", "(\(start)) + (\(length)) - \(b) m")
+            guard solids[i].name.hasPrefix("\(mark) Box "), case .rectangle(let x0, let x1, let y0, let y1) = solids[i].profile else { continue }
+            let r: (String, String)? = switch solids[i].name.dropFirst(mark.count + 5) {
+            case "Left Side", "Right Side": (at("0 m"), at(length))
+            case "Front": (at("0 m"), at("\(b) m"))
+            case "Back": (at("(\(length)) - \(b) m"), at(length))
+            case "Bottom": (at("\(b) m"), at("(\(length)) - \(b) m"))
             default: nil
             }
-            guard let y else { continue }
-            solids[i].profile = .rectangle(xMin: x0, xMax: x1, yMin: .expr(y.0), yMax: .expr(y.1))
+            guard let r else { continue }
+            let lo = sign > 0 ? r.0 : r.1, hi = sign > 0 ? r.1 : r.0
+            solids[i].profile = axis == .y ? .rectangle(xMin: x0, xMax: x1, yMin: .expr(lo), yMax: .expr(hi))
+                                           : .rectangle(xMin: .expr(lo), xMax: .expr(hi), yMin: y0, yMax: y1)
         }
     }
 }

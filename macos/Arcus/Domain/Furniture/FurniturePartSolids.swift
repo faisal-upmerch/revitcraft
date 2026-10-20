@@ -59,6 +59,8 @@ public final class PartSolidContext {
     public var planeFormula: ((String) -> String?)?
     /// FMG3: compiling a canted front: its face's front corners (see CantAnchors).
     public var cantAnchors: CantAnchors?
+    /// FMG4: the formula faces of the model's parts, found once per compile (see FormulaFaces).
+    var formulaFacesCache: [ElementID: FormulaFaces]?
 
     /// FMG1: a coordinate as a length formula, when compiling with plane formulas and its plane has one.
     public func formula(_ v: PartValue) -> String? {
@@ -107,6 +109,9 @@ public struct PlacedLocalFamily: Sendable {
     /// The local family's length parameter ("Length") and its span in the document, when it has one.
     public var span: (start: PartValue, end: PartValue)?
     public var material: ElementID?
+    /// FMG4: compiling a front on a canted face: where the shape sits on the face, so the loaded family keeps it
+    /// between the face's corners (and turned with the face) as the piece flexes out of square.
+    public var cant: CantPlacement? = nil
 }
 
 /// A part's solids: direct solids and placed local families.

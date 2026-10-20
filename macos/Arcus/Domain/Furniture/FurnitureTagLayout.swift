@@ -88,12 +88,29 @@ public enum FurnitureTagLayout {
             let x = edge + side * half.x
             // The shoulder: a short horizontal run from the tag towards the piece, then the leader turns to the part.
             let shoulder = side < 0 ? edge + min(2 * clear, (outline.min.x - edge) / 2) : edge - min(2 * clear, (edge - outline.max.x) / 2)
+            let items = uncrossed(items, ys, shoulder: shoulder) // FMG4: tags in the order of their parts along the leaders
             return zip(items, ys).map { it, y in
                 let elbow: Vec2? = abs(y - it.anchor.y) < 1e-6 ? nil : Vec2(shoulder, y)
                 return Placement(part: it.id, head: Vec2(x, y), anchor: it.anchor, elbow: elbow)
             }
         }
         return column(left, side: -1) + column(right, side: 1)
+    }
+
+    /// FMG4: the column's parts reordered so no two leaders cross: each leader runs from the shoulder at its tag's
+    /// height to its part, and two that cross swap parts (which shortens them both; so it ends).
+    static func uncrossed(_ items: [(id: ElementID, anchor: Vec2)], _ ys: [Double], shoulder: Double) -> [(id: ElementID, anchor: Vec2)] {
+        var out = items
+        guard out.count > 1 else { return out }
+        func leader(_ k: Int) -> Segment2 { Segment2(Vec2(shoulder, ys[k]), out[k].anchor) }
+        for _ in 0..<(out.count * out.count) {
+            var swapped = false
+            for i in out.indices { for j in out.indices where j > i {
+                if leader(i).intersection(leader(j)) != nil { out.swapAt(i, j); swapped = true }
+            } }
+            if !swapped { break }
+        }
+        return out
     }
 
     /// The paper box of a tag placed at `head` in a view at `scale`.

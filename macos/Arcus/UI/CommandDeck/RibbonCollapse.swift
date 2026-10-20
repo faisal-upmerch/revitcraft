@@ -15,6 +15,14 @@ extension EnvironmentValues {
     @Entry var ribbonFrames: RibbonFrames? = nil
     /// False inside the More popover: panels shown there don't report frames as the ribbon's.
     @Entry var ribbonRecording: Bool = true
+    /// FMG4: inside the More popover, the panels it shows (the ones the row has no room for); nil shows every panel.
+    @Entry var ribbonOverflowOnly: Set<String>? = nil
+}
+
+extension Notification.Name {
+    /// FMG4: a command ran (a ribbon button, a menu, a shortcut): collapsed-panel and More popovers close, as Revit's
+    /// slide-outs do once a tool is picked.
+    static let arcusCommandRan = Notification.Name("ArcusCommandRan")
 }
 
 /// Marks the row's More button (the last resort when even collapsed panels don't fit).
@@ -191,8 +199,17 @@ struct CollapsibleRibbonPanel<Content: View>: View {
     var contextual = false
     let content: (Int) -> Content
     @Environment(\.ribbonFrames) private var frames
+    @Environment(\.ribbonOverflowOnly) private var overflowOnly
 
     var body: some View {
+        if let only = overflowOnly, !only.contains(key) {
+            EmptyView() // FMG4: the More popover shows only the panels the row hides
+        } else {
+            panels
+        }
+    }
+
+    @ViewBuilder var panels: some View {
         ViewThatFits(in: .horizontal) {
             variant(0)
             variant(1)
@@ -268,6 +285,7 @@ struct RibbonCollapsedPanel<Panel: View>: View {
             .popover(isPresented: $open, arrowEdge: .bottom) {
                 panel().padding(6)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .arcusCommandRan)) { _ in open = false } // FMG4
         }
         .help("\(title): the window is too narrow for this panel. Click to show its tools.")
         .accessibilityElement(children: .contain)
@@ -281,6 +299,12 @@ struct RibbonOverflowButton<Panels: View>: View {
     @ViewBuilder let panels: () -> Panels
     @Environment(\.ribbonFrames) private var frames
     @State private var open = false
+
+    /// FMG4: the panels parked out of the row (nil when the ribbon doesn't record its panels: every panel).
+    var hidden: Set<String>? {
+        guard let frames, !frames.inOverflow.isEmpty else { return nil }
+        return Set(frames.inOverflow)
+    }
 
     var body: some View {
         PanelCard(title: "More") {
@@ -297,8 +321,10 @@ struct RibbonOverflowButton<Panels: View>: View {
             .popover(isPresented: $open, arrowEdge: .bottom) {
                 RibbonFlow(spacing: 4, maxWidth: 760) { panels() }
                     .environment(\.ribbonRecording, false)
+                    .environment(\.ribbonOverflowOnly, hidden) // FMG4: only the panels the row has no room for
                     .padding(8)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .arcusCommandRan)) { _ in open = false } // FMG4
         }
         .fixedSize()
         .onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { r in frames?.overflow = r }

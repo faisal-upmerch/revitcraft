@@ -126,8 +126,9 @@ public enum FurnitureDimensionLocks {
                 move(id, face, by: delta, lockTo: anchor, in: tx)
                 moved = true
             }
-            if !moved { return }
+            if !moved { break }
         }
+        bindFaceToFace(tx) // FMG4: face-to-face locks hold in loaded families too
     }
 
     /// Moves a part's face along its axis: the coordinate on the face stretches the part (and locks to the plane the

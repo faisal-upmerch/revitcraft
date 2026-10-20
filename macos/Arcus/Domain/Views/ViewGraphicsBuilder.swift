@@ -220,7 +220,8 @@ struct ThreeDGraphics {
                 let b = byTag[tag]!.reduce(Rect2.empty) { var r = $0; r.include($1.segment.start); r.include($1.segment.end); return r }
                 return b.isEmpty ? nil : (e, b.center)
             }
-            items += FurnitureExplode.tagItems(builder, centers)
+            let drawing = edges.reduce(Rect2.empty) { var r = $0; r.include($1.segment.start); r.include($1.segment.end); return r }
+            items += FurnitureExplode.tagItems(builder, centers, drawing: drawing.isEmpty ? nil : drawing) // FMG4: tags in proportion
         }
         return items
     }

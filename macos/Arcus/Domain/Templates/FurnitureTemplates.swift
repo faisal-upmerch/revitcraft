@@ -113,7 +113,9 @@ public enum FurnitureTemplates {
         var plan = ViewData(kind: .floorPlan, scale: viewScale)
         plan.phaseID = phase
         plan.detailLevel = .fine
-        let planID = tx.create(.views, name: "Ref. Level", data: .view(plan), levelID: level) { $0.params[FurnitureViews.autoCrop] = .bool(true) }
+        let planID = tx.create(.views, name: "Ref. Level", data: .view(plan), levelID: level) {
+            $0.params[FurnitureViews.autoCrop] = .bool(true); $0.params[FurnitureAutoScale.onParam] = .bool(true) // FMG4
+        }
         var elevations: [String: ElementID] = [:]
         let reach = 1.5
         for (n, dir) in [("Front", Vec2(0, 1)), ("Back", Vec2(0, -1)), ("Left", Vec2(1, 0)), ("Right", Vec2(-1, 0))] {
@@ -125,13 +127,15 @@ public enum FurnitureTemplates {
             ev.phaseID = phase
             ev.detailLevel = .fine
             ev.markerPosition = origin - dir * 0.15
-            elevations[n] = tx.create(.views, name: n, data: .view(ev)) { $0.params[FurnitureViews.autoCrop] = .bool(true) }
+            elevations[n] = tx.create(.views, name: n, data: .view(ev)) {
+                $0.params[FurnitureViews.autoCrop] = .bool(true); $0.params[FurnitureAutoScale.onParam] = .bool(true) // FMG4
+            }
         }
         var v3 = ViewData(kind: .threeD, scale: viewScale)
         v3.camera = Camera3D(eye: Vec3(-1.7, -2.3, 1.5), target: Vec3(0, 0, defaultHeight / 2), orthoHeight: 1.5)
         v3.phaseID = phase
         v3.detailLevel = .fine
-        let threeD = tx.create(.views, name: "{3D}", data: .view(v3))
+        let threeD = tx.create(.views, name: "{3D}", data: .view(v3)) { $0.params[FurnitureAutoScale.onParam] = .bool(true) } // FMG4
 
         // The eight framing planes: centres and Bottom define the origin and are pinned.
         let ext = (x: (-defaultWidth / 2 - FurniturePlanes.margin)...(defaultWidth / 2 + FurniturePlanes.margin),
@@ -151,7 +155,8 @@ public enum FurnitureTemplates {
             var d = DimensionData(kind: .aligned, references: refs.map(ref), linePoint: p, fallbackPoints: near)
             d.labelParameter = label
             d.equality = eq
-            tx.create(.dimensions, data: .dimension(d), typeID: dimType, ownerViewID: view)
+            // FMG4: the EQ string nearest the piece, the labelled dimension a row out (placed at the view's scale).
+            tx.create(.dimensions, data: .dimension(d), typeID: dimType, ownerViewID: view) { $0.params[FurnitureAutoScale.rowParam] = .int(eq ? 1 : 2) }
         }
         let inch = 0.0254
         let front = -defaultDepth / 2, right = defaultWidth / 2, back = defaultDepth / 2

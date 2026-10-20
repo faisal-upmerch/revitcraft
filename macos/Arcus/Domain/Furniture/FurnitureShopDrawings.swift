@@ -56,7 +56,8 @@ public enum FurnitureShopDrawings {
     public static let partListName = "Part List", hardwareName = "Hardware Schedule", takeoffName = "Material Takeoff", bandingName = "Edge Banding",
                       costName = "Cost"
     /// The scales arrangement tries, finest first.
-    static let scales = [4, 8, 12, 16, 24, 32, 48, 64, 96] // POLISH: 3" = 1'-0" for small pieces
+    /// FMG4: the standard furniture scales only (3" to 1/4" = 1'-0"): coarser ones make the annotations dominate.
+    static let scales = FurnitureAutoScale.scales
 
     // MARK: Template
 
@@ -86,7 +87,9 @@ public enum FurnitureShopDrawings {
             sv.farClip = 1.5
             sv.phaseID = phase
             sv.detailLevel = .fine
-            tx.create(.views, name: sectionName, data: .view(sv)) { $0.params[FurnitureViews.autoCrop] = .bool(true) }
+            tx.create(.views, name: sectionName, data: .view(sv)) {
+                $0.params[FurnitureViews.autoCrop] = .bool(true); $0.params[FurnitureAutoScale.onParam] = .bool(true) // FMG4
+            }
         }
         if !tx.model.views.contains(where: { $0.name == back3DName && $0.view?.kind == .threeD }) {
             var v3 = ViewData(kind: .threeD, scale: FurnitureTemplates.viewScale)
@@ -115,7 +118,7 @@ public enum FurnitureShopDrawings {
            let f101 = tx.model.sheets.first(where: { $0.sheet?.number == shopDrawing }) {
             // Section A joins F101: the sheet is laid out again in three columns.
             _ = try? SheetPlacement.place(s.id, onSheet: f101.id, at: Vec2(0.17, 0.08), in: tx)
-            arrangeShopDrawing(f101.id, in: tx)
+            arrangeShopDrawing(f101.id, keepScales: true, in: tx) // FMG4: placing a view doesn't change the views' scale
         }
         if let b = tx.model.views.first(where: { $0.name == back3DName }), tx.model.viewports(showing: b.id).isEmpty {
             _ = try? SheetPlacement.place(b.id, onSheet: f104, at: Vec2(0.09, 0.17), in: tx)
@@ -245,10 +248,44 @@ public enum FurnitureShopDrawings {
 
     /// F101: plan, Section A and {3D} over the Front and Right elevations. POLISH: in three columns, or two when that
     /// gives a larger scale (small pieces).
-    static func arrangeShopDrawing(_ f101: ElementID, in tx: TransactionContext) {
+    static func arrangeShopDrawing(_ f101: ElementID, keepScales: Bool = false, in tx: TransactionContext) {
         let views = ["Ref. Level", sectionName, "{3D}", "Front", "Right"].compactMap { n in tx.model.views.first { $0.name == n && $0.view?.kind != .nesting }?.id }
-        let three = fittingScale(views, onSheet: f101, columns: 3, in: tx), two = fittingScale(views, onSheet: f101, columns: 2, in: tx)
-        arrange(views, onSheet: f101, columns: two < three ? 2 : 3, in: tx)
+        // FMG4: when the views keep their scale (a view placed on the sheet), at the plan's, in three columns.
+        if keepScales, let fixed = views.first.flatMap({ tx.model[$0]?.view?.scale }) {
+            arrange(views, onSheet: f101, columns: 3, fixedScale: fixed, in: tx)
+            return
+        }
+        // The largest scale at which the views fit: three columns, two, or (FMG4) rows of their own widths (a wide Front
+        // with its tags beside a narrow Right), the grids first at the same scale.
+        FurnitureAutoScale.followScales(tx) // FMG4: measured where the views' current scale puts their annotations
+        let cache = LayoutCache()
+        var best: (scale: Int, columns: Int, rows: [Int]?) = (Int.max, 3, nil)
+        for c in [3, 2] {
+            let s = fittingScale(views, onSheet: f101, columns: c, cache: cache, in: tx)
+            if s < best.scale { best = (s, c, nil) }
+        }
+        for split in rowSplits(views.count) {
+            let s = fittingScale(views, onSheet: f101, columns: 3, rowSplit: split, cache: cache, in: tx)
+            if s < best.scale { best = (s, 3, split) }
+        }
+        arrange(views, onSheet: f101, columns: best.columns, rowSplit: best.rows, cache: cache, in: tx)
+    }
+
+    /// FMG4: what a view takes on paper (its crop and how far its annotations reach), measured once per arrangement.
+    final class LayoutCache {
+        var fixed: [ElementID: (base: Rect2, reach: (l: Double, r: Double, b: Double, t: Double))] = [:]
+    }
+
+    /// FMG4: the ways to cut `n` views, in order, into rows of at most three (fewest rows first).
+    static func rowSplits(_ n: Int) -> [[Int]] {
+        guard n > 0 else { return [] }
+        var out: [[Int]] = []
+        func go(_ left: Int, _ acc: [Int]) {
+            if left == 0 { out.append(acc); return }
+            for k in 1...min(3, left) { go(left - k, acc + [k]) }
+        }
+        go(n, [])
+        return out.sorted { $0.count < $1.count }
     }
 
     /// The scales of F101's views, to tell when an arrangement has settled.
@@ -329,8 +366,10 @@ public enum FurnitureShopDrawings {
 
     /// Places `views` on the sheet in a grid of `columns`, every view at the finest common scale that fits its cell
     /// (views already on another sheet are left there).
-    static func arrange(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2 = drawingArea, in tx: TransactionContext) {
-        guard let plan = gridPlan(views, onSheet: sheetID, columns: columns, area: area, in: tx) else { return }
+    static func arrange(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2 = drawingArea, fixedScale: Int? = nil, rowSplit: [Int]? = nil,
+                        cache: LayoutCache? = nil, in tx: TransactionContext) {
+        FurnitureAutoScale.followScales(tx) // FMG4: the template's dimensions and markers where the views' scale puts them
+        guard let plan = gridPlan(views, onSheet: sheetID, columns: columns, area: area, fixedScale: fixedScale, rowSplit: rowSplit, cache: cache, in: tx) else { return }
         for (id, center) in plan.centers {
             if tx.model[id]?.view?.scale != plan.scale { tx.update(id) { $0.view?.scale = plan.scale } }
             if let vp = tx.model.viewports(showing: id).first(where: { $0.ownerViewID == sheetID }) {
@@ -338,35 +377,47 @@ public enum FurnitureShopDrawings {
             } else {
                 _ = try? SheetPlacement.place(id, onSheet: sheetID, at: center, in: tx)
             }
+            // FMG4: the view title sits under what the view draws below its crop (dimensions, elevation markers).
+            let drop = plan.below[id] ?? 0
+            let offset = Vec2(0, -max(0.012, drop + 0.0065)) // 0.012: the viewport's default
+            if let vp = tx.model.viewports(showing: id).first(where: { $0.ownerViewID == sheetID }), vp.viewport?.titleOffset != offset {
+                tx.update(vp.id) { $0.viewport?.titleOffset = offset }
+            }
         }
+        FurnitureAutoScale.followScales(tx) // FMG4: and for the scale just set (Part Tags are laid out round them next)
     }
 
     /// The scale `arrange` would choose for `columns` (POLISH: to compare layouts).
-    static func fittingScale(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2 = drawingArea, in tx: TransactionContext) -> Int {
-        gridPlan(views, onSheet: sheetID, columns: columns, area: area, in: tx)?.scale ?? scales.last!
+    static func fittingScale(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2 = drawingArea, rowSplit: [Int]? = nil,
+                             cache: LayoutCache? = nil, in tx: TransactionContext) -> Int {
+        guard let p = gridPlan(views, onSheet: sheetID, columns: columns, area: area, rowSplit: rowSplit, cache: cache, in: tx), p.fits else { return Int.max }
+        return p.scale
     }
 
     /// The grid arrangement: the finest scale at which every view fits its cell, and each viewport's centre.
-    static func gridPlan(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2, in tx: TransactionContext) -> (scale: Int, centers: [(ElementID, Vec2)])? {
+    static func gridPlan(_ views: [ElementID], onSheet sheetID: ElementID, columns: Int, area: Rect2, fixedScale: Int? = nil, rowSplit: [Int]? = nil,
+                         cache: LayoutCache? = nil, in tx: TransactionContext) -> (scale: Int, centers: [(ElementID, Vec2)], fits: Bool, below: [ElementID: Double])? {
         let ids = views.filter { v in tx.model.viewports(showing: v).allSatisfy { $0.ownerViewID == sheetID } }
         guard !ids.isEmpty else { return nil }
         let cols = max(1, min(columns, ids.count)), rows = (ids.count + cols - 1) / cols
         let groups = FurnitureFabrication.nesting(tx.model)
         // Cropped views: the crop, and how far their annotations (dimensions, datum labels, Part Tags) reach past it
         // on paper, each side (POLISH: so tags and dimensions don't run into the next view).
-        var fixed: [ElementID: (base: Rect2, reach: (l: Double, r: Double, b: Double, t: Double))] = [:]
+        let store = cache ?? LayoutCache() // FMG4: shared by the layouts one arrangement compares
         func measured(_ id: ElementID, _ v: Element) -> (base: Rect2, reach: (l: Double, r: Double, b: Double, t: Double)) {
-            if let f = fixed[id] { return f }
+            if let f = store.fixed[id] { return f }
             let g = ViewGraphicsBuilder(model: tx.model, view: v).build()
             let base = SheetGraphicsBuilder.viewRegion(g)
             var all = base
             if v.view?.cropActive == true, v.view?.cropRegion != nil {
                 let ac = base.expanded(by: Double(max(g.scale, 1)) * max(SheetGraphicsBuilder.annotationMargin, v.view?.annotationCropOffset ?? 0))
                 for o in FurnitureTagLayout.scene(g).obstacles { all.include(o.intersection(ac)) }
+                // FMG4: view markers (elevation and section heads) beside the piece take room too.
+                for item in g.items where item.layer == .annotation && item.targetViewID != nil && item.bounds.intersects(ac) { all.include(item.bounds.intersection(ac)) }
             }
             let k = 1 / Double(max(g.scale, 1))
             let f = (base, (l: (base.min.x - all.min.x) * k, r: (all.max.x - base.max.x) * k, b: (base.min.y - all.min.y) * k, t: (all.max.y - base.max.y) * k))
-            fixed[id] = f
+            store.fixed[id] = f
             return f
         }
         // A view's region on the sheet at scale `s` (Nesting views leave room for their titles at their scale), and the
@@ -385,31 +436,59 @@ public enum FurnitureShopDrawings {
             r.max.x = max(r.max.x, m.base.min.x + titleWidth * d)
             return (r, (r.center - m.base.center) / d)
         }
+        // FMG4: a grid of `cols`, or rows of the given sizes (each row as wide as its views), whichever was asked for.
+        let rowMembers: [[Int]] = {
+            if let split = rowSplit {
+                var out: [[Int]] = [], k = 0
+                for n in split where k < ids.count { out.append(Array(k..<min(ids.count, k + n))); k += n }
+                return out
+            }
+            return (0..<rows).map { r in Array(r * cols..<min(ids.count, (r + 1) * cols)) }
+        }()
         func layout(_ s: Int) -> (regions: [(rect: Rect2, offset: Vec2)], colW: [Double], rowH: [Double]) {
             let regions = ids.map { region($0, s) }
             let colW = (0..<cols).map { c in stride(from: c, to: ids.count, by: cols).map { regions[$0].rect.width }.max() ?? 0 }
-            let rowH = (0..<rows).map { r in (r * cols..<min(ids.count, (r + 1) * cols)).map { regions[$0].rect.height }.max() ?? 0 }
+            let rowH = rowMembers.map { r in r.map { regions[$0].rect.height }.max() ?? 0 }
             return (regions, colW, rowH)
         }
         // Columns as wide as their widest view, rows as tall as their tallest, with room between them and for titles.
         let padX = 0.012, padY = 0.022
-        let scale = scales.first { s in
-            let l = layout(s)
-            return l.colW.reduce(0, +) / Double(s) + padX * Double(cols) <= area.width && l.rowH.reduce(0, +) / Double(s) + padY * Double(rows) <= area.height
-        } ?? scales.last!
-        let (regions, colW, rowH) = layout(scale)
-        // Spread what's left evenly.
-        let spareX = max(0, area.width - colW.reduce(0, +) / Double(scale)) / Double(cols)
-        let spareY = max(0, area.height - rowH.reduce(0, +) / Double(scale)) / Double(rows)
-        var centers: [(ElementID, Vec2)] = []
-        for (k, id) in ids.enumerated() {
-            let r = k / cols, c = k % cols
-            let x0 = area.min.x + colW[..<c].reduce(0, +) / Double(scale) + spareX * Double(c)
-            let y0 = area.max.y - rowH[..<r].reduce(0, +) / Double(scale) - spareY * Double(r)
-            let cell = Vec2(x0 + (colW[c] / Double(scale) + spareX) / 2, y0 - (rowH[r] / Double(scale) + spareY) / 2 + 0.006)
-            centers.append((id, cell - regions[k].offset))
+        func fits(_ s: Int) -> Bool {
+            let l = layout(s), d = Double(s)
+            let height = l.rowH.reduce(0, +) / d + padY * Double(rowMembers.count) <= area.height
+            if rowSplit != nil {
+                return height && rowMembers.allSatisfy { r in r.map { l.regions[$0].rect.width }.reduce(0, +) / d + padX * Double(r.count) <= area.width }
+            }
+            return height && l.colW.reduce(0, +) / d + padX * Double(cols) <= area.width
         }
-        return (scale, centers)
+        let fitting = fixedScale ?? scales.first(where: fits)
+        let scale = fitting ?? scales.last!
+        let (regions, colW, rowH) = layout(scale)
+        let d = Double(scale)
+        // Spread what's left evenly.
+        let spareY = max(0, area.height - rowH.reduce(0, +) / d) / Double(rowMembers.count)
+        var centers: [(ElementID, Vec2)] = []
+        for (r, members) in rowMembers.enumerated() {
+            let y0 = area.max.y - rowH[..<r].reduce(0, +) / d - spareY * Double(r)
+            let cy = y0 - (rowH[r] / d + spareY) / 2 + 0.006
+            if rowSplit != nil {
+                let widths = members.map { regions[$0].rect.width / d }
+                let spareX = max(0, area.width - widths.reduce(0, +)) / Double(members.count)
+                var x = area.min.x
+                for (j, k) in members.enumerated() {
+                    centers.append((ids[k], Vec2(x + (widths[j] + spareX) / 2, cy) - regions[k].offset))
+                    x += widths[j] + spareX
+                }
+            } else {
+                let spareX = max(0, area.width - colW.reduce(0, +) / d) / Double(cols)
+                for k in members {
+                    let c = k % cols
+                    let x0 = area.min.x + colW[..<c].reduce(0, +) / d + spareX * Double(c)
+                    centers.append((ids[k], Vec2(x0 + (colW[c] / d + spareX) / 2, cy) - regions[k].offset))
+                }
+            }
+        }
+        return (scale, centers, fitting != nil, Dictionary(uniqueKeysWithValues: ids.compactMap { id in store.fixed[id].map { (id, $0.reach.b) } }))
     }
 
     /// Stacks a sheet's schedules from the top left of the drawing area (starting at `left`), a column at a time.

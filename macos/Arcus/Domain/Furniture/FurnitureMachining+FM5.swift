@@ -197,3 +197,16 @@ extension FurnitureMachining {
         return out
     }
 }
+
+extension FurnitureMachining {
+    /// FMG4: a machining operation in the model, back in a bay's frame (a canted front's CNC program is drawn there).
+    static func fmg4Local(_ e: MachiningEntry, _ f: BayFrame) -> MachiningEntry {
+        var out = e
+        switch e.op {
+        case .drill(let c, let a, let d, let depth): out.op = .drill(center: f.local(c), axis: f.local(a), diameter: d, depth: depth)
+        case .groove(let s, let t, let a, let w, let depth): out.op = .groove(start: f.local(s), end: f.local(t), axis: f.local(a), width: w, depth: depth)
+        case .pocket(let o, let a, let depth): out.op = .pocket(outline: o.map(f.local), axis: f.local(a), depth: depth)
+        }
+        return out
+    }
+}

@@ -26,6 +26,8 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     let overlay = Viewport3DToolOverlay(frame: .zero)
     /// The work-plane level picked in the Options Bar for this view (nil: follow the default).
     var chosenLevel: ElementID?
+    /// FMG4: the piece being dragged onto the view from Finder, drawn where it would land.
+    var dropPreview: DropPreview3D?
 
     private enum Press {
         case none
@@ -551,6 +553,8 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     func drawOverlay(_ cg: CGContext, bounds: CGRect) {
         guard let v = viewport else { return }
         drawShownWorkPlane(cg, viewport: v) // F2: Work Plane ▸ Show
+        drawDropPreview(cg, viewport: v) // FMG4: a piece being dragged in from Finder
+        drawExplodeTags(cg, viewport: v) // FMG4: Explode Parts tags on the live view
         drawFM3D(cg, viewport: v) // FM3D: shape handles, temporary dimensions, moves
         let tool = state.activeTool
         let dragging = dragTool?.isDragging == true

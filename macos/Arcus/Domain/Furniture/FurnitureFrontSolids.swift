@@ -36,7 +36,7 @@ public enum FurnitureFrontSolids {
                     for edge in [PartEdge(axis: .x, firstAtMax: false, secondAtMax: false), PartEdge(axis: .x, firstAtMax: false, secondAtMax: true),
                                  PartEdge(axis: .z, firstAtMax: false, secondAtMax: false), PartEdge(axis: .z, firstAtMax: true, secondAtMax: false)] {
                         if let v = FurniturePartSolids.edgeVoid(name: "\(name) Edge", host: host, edge: edge, shape: shape, size: size, depth: 0, offset: 0,
-                                                                inSecondFace: false, ctx: ctx) { out.placed.append(g.frame.placed(v)) } // FMG3
+                                                                inSecondFace: false, ctx: ctx) { out.placed.append(g.frame.placed(v, anchors: ctx.cantAnchors, spanAlongU: edge.axis == .x)) } // FMG3; FMG4: canted
                     }
                 }
                 continue
@@ -110,6 +110,10 @@ public enum FurnitureFrontSolids {
                 let zc = pv.0.value + pitch * (Double(k) + 0.5)
                 let c = Vec2(yc, zc)
                 let pts = [c - d * half - nrm * thick / 2, c + d * half - nrm * thick / 2, c + d * half + nrm * thick / 2, c - d * half + nrm * thick / 2]
+                if let fr = ctx.frame, !fr.isSquare { // FMG4: louvers on a canted face keep their tilt
+                    out.placed.append(fr.louver("\(name) Louver \(k + 1)", pts, u: pu, ctx, material: tv.material))
+                    continue
+                }
                 add(FurniturePartSolids.prism("\(name) Louver \(k + 1)", plane: .yz, pts, w: pu, ctx), tv.material)
             }
         }

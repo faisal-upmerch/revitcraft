@@ -109,6 +109,13 @@ extension ViewGraphicsBuilder {
                 items.append(lineItem(e, s.start, s.end, stroke(e.category, cut: false, o)))
             case .furnitureFront(let f):
                 let level = detailLevel(e.category)
+                // FMG4: a lid's plan swing (dashed, pointing at its hinge), when the lid is below the cut plane.
+                if level != .coarse, let g = FurnitureFronts.geometry(e, model), g.face == .top, (g.leaves.map(\.w.1.value).max() ?? 0) <= cutZ {
+                    let st = swingStroke(e, o)
+                    let segs = FurnitureSwings.lidPlan(e, model)
+                    if !segs.isEmpty { items.append(GItem(elementID: e.id, category: e.category, layer: .model, primitives: segs.map { .polyline([$0.start, $0.end], closed: false, st) }, hitPolygons: [])) }
+                    continue
+                }
                 guard level != .coarse, let g = FurnitureFronts.geometry(e, model), g.face == .front else { continue }
                 // Fronts above the cut plane aren't in this plan.
                 guard (g.leaves.map(\.v.0.value).min() ?? 0) <= cutZ else { continue }
