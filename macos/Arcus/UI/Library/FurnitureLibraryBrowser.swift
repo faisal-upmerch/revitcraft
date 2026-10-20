@@ -164,7 +164,8 @@ struct FurnitureFileThumbnail: View {
                 ProgressView().controlSize(.small).opacity(0.5)
             }
         }
-        .frame(width: size.width, height: size.height)
+        // Rendered at `size`, drawn no wider than its cell: a fixed width made gallery tiles spill into their neighbours.
+        .frame(minWidth: 0, maxWidth: size.width, minHeight: size.height, maxHeight: size.height)
         .task(id: url) {
             image = await FurnitureThumbnailCache.shared.image(url, width: Int(size.width * 2), height: Int(size.height * 2))
             done = true
