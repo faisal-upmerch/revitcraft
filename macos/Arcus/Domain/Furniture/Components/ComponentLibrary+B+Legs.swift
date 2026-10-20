@@ -465,7 +465,7 @@ extension ComponentLibrary {
     static func crossBase() -> ComponentDefinition {
         var b = legBuilder("Cross Base", "Table Bases", "X-shaped table base: two crossed flat bars at the floor, a column and a cross top plate.", .matteBlack, height: ComponentKit.inch(28.25), inset: 0)
         b.tags("cross base", "x base", "table base", "four star", "column", "cafe table")
-        b.aliases("x-base", "cross table base", "4-prong base", "spider base", "star base")
+        b.aliases("x-base", "cross table base", "4-prong base", "spider base", "four-arm base")
         b.host([.top], faces: [.bottom], align: .center)
         b.length("Span", ComponentKit.inch(22))
         b.length("Arm Width", ComponentKit.inch(2.5))
