@@ -103,14 +103,14 @@ enum DrawingCheck {
         var dims = dimensions(in: view, m)
         var deleted = 0
         if removeDuplicates {
-            var seen: [String: DimInfo] = [:]
+            var seen: [String: [DimInfo]] = [:]
             var keep: [DimInfo] = []
             for d in dims {
                 let k = d.references.map { "\($0.elementID?.raw ?? 0)-\($0.kind)" }.sorted().joined(separator: ",")
-                if let o = seen[k], parallel(o.direction, d.direction), abs(o.linePoint.dot(o.normal) - d.linePoint.dot(o.normal)) < gap * 4 {
+                if (seen[k] ?? []).contains(where: { o in parallel(o.direction, d.direction) && abs(o.linePoint.dot(o.normal) - d.linePoint.dot(o.normal)) < gap * 4 }) {
                     tx.delete(d.id); deleted += 1; continue
                 }
-                seen[k] = d; keep.append(d)
+                seen[k, default: []].append(d); keep.append(d)
             }
             dims = keep
         }
@@ -160,7 +160,8 @@ enum DrawingCheck {
             let paper = sheet.paper.landscapeSize
             var boxes: [(Element, Rect2)] = []
             for vp in m.owned(byView: e.id) where vp.viewport != nil {
-                guard let v = vp.viewport, let shown = m[v.viewID] else { continue }
+                // Schedules size to their rows; only views are checked for paper and overlap.
+                guard let v = vp.viewport, let shown = m[v.viewID], shown.schedule == nil else { continue }
                 let size = ArcusToolbox.paperSize(of: shown, m)
                 let r = Rect2(min: v.center - size * 0.5, max: v.center + size * 0.5)
                 boxes.append((shown, r))
@@ -184,7 +185,7 @@ enum DrawingCheck {
         let dims = dimensions(in: e, m)
         stats["dimensions"] = .int(dims.count)
         out += dimensionProblems(e, m)
-        if vd.kind.isPlan || vd.kind.isVerticalCut {
+        if vd.kind.isPlan {
             let visible = Set(g.items.compactMap(\.elementID))
             let untagged = TagAll.untagged(in: e.id, visible: visible, m)
             var coverage: [String: JSONValue] = [:]

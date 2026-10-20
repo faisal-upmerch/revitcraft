@@ -34,7 +34,7 @@ extension ArcusToolCatalog {
                  required: ["elements"]),
         ToolSpec("create_legend", "Legend", "A legend view with a component of each named type in rows (doors, windows, wall/floor types…), and a label for each. Place it on sheets with place_on_sheet.",
                  risk: .edit, group: .annotation, modes: .model,
-                 properties: ["name": S.str(), "types": S.array(S.ref(), "Type names or ids"), "category": S.str("Or every type of a category, e.g. doors"), "scale": S.int("Default 48 / 50")]),
+                 properties: ["name": S.str(), "types": S.array(S.ref(), "Type names or ids"), "category": S.str("Or the types of a category in use, e.g. doors"), "scale": S.int("Default 48 / 50")]),
         ToolSpec("add_revision_cloud", "Revision Cloud", "A revision cloud around a boundary in a view, tagged with a revision (default the latest; add_revision makes one). " + viewNote,
                  risk: .edit, group: .annotation, modes: .model,
                  properties: ["view": S.ref(), "boundary": S.points(), "revision": S.ref("Revision number or description")], required: ["boundary"]),
@@ -185,7 +185,12 @@ extension ArcusToolbox {
             guard let e = hits.first ?? m.elements(.elementTypes).first(where: { ToolContext.typeLabel($0, m).localizedCaseInsensitiveContains(s) }) else { throw ToolError("types[\(k)]: no type “\(s)”. list_types shows them.") }
             types.append(e)
         }
-        if let cs = c.args.string("category") { types += m.types(for: try Self.category(cs)) }
+        if let cs = c.args.string("category") {
+            // The category's types in use (a legend shows what the project has), else its first dozen.
+            let all = m.types(for: try Self.category(cs))
+            let used = all.filter { m.instanceCount(ofType: $0.id) > 0 }
+            types += used.isEmpty ? Array(all.prefix(12)) : used
+        }
         guard !types.isEmpty else { throw ToolError("Give types or a category.") }
         let scale = c.args.int("scale") ?? (m.units.system == .imperial ? 48 : 50)
         let name = c.args.string("name") ?? "Legend \(m.views.filter { $0.view?.kind == .legend }.count + 1)"

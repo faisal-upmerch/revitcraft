@@ -82,6 +82,27 @@ extension ArcusToolCatalog {
         all.filter { $0.applies(to: mode, context: context) }
     }
 
+    /// AITOOLS: the tools a small model gets first (about 45 per kind; the Family Editor gets all of its own). The rest
+    /// stay callable and are found with find_tools, which returns their schemas to add to the conversation.
+    public static let coreNames: Set<String> = [
+        "context_summary", "query_model", "get_selection", "select_elements", "find_tools", "list_commands", "run_command", "save",
+        "create_walls", "place_doors", "place_windows", "create_floor", "create_roof", "create_ceiling", "place_rooms", "place_components",
+        "add_level", "add_grid", "add_stair", "add_railing", "place_columns", "create_curtain_wall",
+        "set_parameters", "change_type", "move_elements", "copy_elements", "rotate_elements", "mirror_elements", "delete_elements", "align_elements",
+        "create_views", "open_view", "set_view_properties", "create_sheet", "place_on_sheet", "set_sheet_info", "create_schedule",
+        "add_dimensions", "add_tags", "add_text", "arrange_dimensions", "verify_drawing", "render_view", "export_pdf", "model_health",
+        "list_types", "list_families",
+        "set_furniture_size", "add_furniture_parts", "add_bays", "add_fronts", "add_hardware", "fabrication_report", "create_shop_drawings",
+        "set_furniture_parameter", "flex_furniture", "check_parts", "edit_furniture_part",
+    ]
+
+    /// The tools that apply, core ones only when `coreOnly` (the Family Editor's own tools are always all there).
+    public static func tools(for mode: DocumentMode, context: ToolCatalogContext? = nil, coreOnly: Bool) -> [ToolSpec] {
+        let list = tools(for: mode, context: context)
+        guard coreOnly else { return list }
+        return list.filter { coreNames.contains($0.name) || $0.group == .family || $0.group == .document && mode == .none }
+    }
+
     /// The spec of a tool by name.
     public static func spec(_ name: String) -> ToolSpec? { byName[name] }
     static let byName: [String: ToolSpec] = Dictionary(all.map { ($0.name, $0) }, uniquingKeysWith: { a, _ in a })

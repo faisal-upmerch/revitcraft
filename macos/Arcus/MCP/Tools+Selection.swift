@@ -36,6 +36,9 @@ extension ArcusToolCatalog {
                               "section_box": S.oneOf(["elements", "level", "off"]), "elements": S.ids(), "level": S.ref()]),
     ]
     static let commandTools: [ToolSpec] = [
+        ToolSpec("find_tools", "Find Tools", "Find more Arcus tools by words or group (Architecture, Annotation, Views & Sheets, Schedules, Exports, Furniture, Edit, Model Checks…) with their input schemas, e.g. 'curtain grid', 'revision', 'joint'.",
+                 risk: .read, group: .commands,
+                 properties: ["search": S.str(), "group": S.str(), "limit": S.int("Default 8")]),
         ToolSpec("list_commands", "List Commands",
                  "Every Arcus command (ribbon, menus) with whether it can run now and why not. Search by words. For anything no other tool covers.",
                  risk: .read, group: .commands, properties: ["search": S.str("Words, e.g. 'wall sweep' or 'color fill'"), "available_only": S.bool("Default false"), "limit": S.int("Default 30")]),
@@ -59,6 +62,7 @@ extension ArcusToolbox {
         "set_3d_view": { b, c in try b.set3DView(c) },
     ]
     static let commandHandlers: [String: ToolHandler] = [
+        "find_tools": { b, c in try b.findTools(c) },
         "list_commands": { b, c in try b.listCommands(c) },
         "run_command": { b, c in try await b.runCommand(c) },
     ]
@@ -268,6 +272,22 @@ extension ArcusToolbox {
     }
 
     // MARK: Commands
+
+    func findTools(_ c: ToolContext) throws -> ToolOutput {
+        let q = c.args.string("search").map { ToolContext.tokens($0) } ?? []
+        let g = c.args.string("group")?.lowercased()
+        guard !q.isEmpty || g != nil else { throw ToolError("Give search words or a group (\(ToolGroup.allCases.map(\.rawValue).joined(separator: ", "))).") }
+        let limit = max(1, min(c.args.int("limit") ?? 8, 30))
+        let pool = ArcusToolCatalog.tools(for: mode)
+        let hits = pool.map { t -> (ToolSpec, Int) in
+            let hay = ToolContext.tokens(t.name.replacingOccurrences(of: "_", with: " ") + " " + t.title + " " + t.description)
+            let score = q.filter { w in hay.contains { $0.hasPrefix(w) } }.count
+            return (t, score)
+        }.filter { (t, s) in (g == nil || t.group.rawValue.lowercased().hasPrefix(g!)) && (q.isEmpty || s > 0) }
+            .sorted { $0.1 > $1.1 }.prefix(limit)
+        return ToolOutput(["tools": .array(hits.map { t, _ in ["name": .string(t.name), "description": .string(t.description), "risk": .string(t.risk.rawValue), "input_schema": t.inputSchema] }),
+                           "note": "Call these by name with the schema shown."])
+    }
 
     func listCommands(_ c: ToolContext) throws -> ToolOutput {
         let ui = host as? any DocumentUIHost

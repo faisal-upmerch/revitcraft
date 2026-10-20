@@ -241,8 +241,10 @@ extension ArcusToolbox {
                                  width: try r["width"].map { try c.length($0, what + ".width") } ?? defW))
         }
         let rise = (top.level?.elevation ?? 0) - (base.level?.elevation ?? 0)
-        let maxRiser = m.units.system == .imperial ? 7.75 * 0.0254 : 0.18
-        let total = max(3, Int((rise / maxRiser).rounded(.up)))
+        // The riser count the type's Maximum Riser Height asks for (as Desired Number of Risers).
+        let probe = Element(id: ElementID(UInt64.max - 5), category: .stairs, data: .stair(StairData(origin: runs[0].start, direction: runs[0].direction, width: runs[0].width, topLevelID: top.id)),
+                            typeID: type.id, levelID: base.id)
+        let total = max(3, StairGeometry.numbers(probe, m)?.desired ?? Int((rise / (m.units.system == .imperial ? 7 * 0.0254 : 0.18)).rounded(.up)))
         if runs.allSatisfy({ $0.risers <= 0 }) {
             let each = total / runs.count
             for i in runs.indices { runs[i].risers = i == runs.count - 1 ? total - each * (runs.count - 1) : each }
