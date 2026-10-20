@@ -1,5 +1,6 @@
 import Foundation
 import ArcusGeometry
+import ArcusCalc
 
 // FMG4: joints keep the formulas a part's faces follow in a compiled family. The joint solver works on the document's
 // boxes (each face a plane and an offset), so a part whose faces follow formulas there (FMG1: the slats of a Slats part
@@ -151,31 +152,11 @@ enum TurnedLegJoints {
             fam.solids.append(s)
             cutIDs.append(s.id)
         }
-        if !bands.isEmpty {
-            // The turned body between the blocks: its profile clipped to each band left (shares of the body's height).
-            var b = body
-            guard case .revolve(let rev)? = body.solids.first?.profile else { return p }
-            let prof = rev.profile.compactMap { pt -> Vec2? in
-                guard case .expr(let r) = pt.x, let rv = Double(r), case .expr(let z) = pt.y, let t = Double(z.replacingOccurrences(of: "Height * ", with: "")) else { return nil }
-                return Vec2(rv, t)
-            }
-            guard prof.count == rev.profile.count else { return p }
-            var keep: [(Double, Double)] = []
-            var t0 = 0.0
-            for band in bands { keep.append((t0, band.0 / neck)); t0 = band.1 / neck }
-            keep.append((t0, 1))
-            b.solids = keep.enumerated().compactMap { k, r in
-                guard r.1 - r.0 > 1e-6 else { return nil }
-                let clipped = clip(prof, r.0, r.1)
-                guard clipped.count >= 3 else { return nil }
-                var s = FamilySolid(name: "Turned Body \(k + 1)", profile: .revolve(FamilyRevolve(profile: clipped.map { FamilyPoint(.expr(n($0.x)), .expr("Height * \(n($0.y))")) })),
-                                    zMin: .expr("0"), zMax: .expr("Height"), materialParameter: "Material")
-                s.id = "body-\(k + 1)"
-                return s
-            }
-            b.name = "\(body.name) Blocked \(bands.map { "\(n($0.0 / neck))-\(n($0.1 / neck))" }.joined(separator: ","))"
-            fam.nestedFamilies = [b]
-            for i in fam.nestedInstances.indices where fam.nestedInstances[i].familyName == body.name { fam.nestedInstances[i].familyName = b.name }
+        // The turned body between the blocks: its profile clipped to each band left (shares of the body's height). When
+        // it can't be read the body stays whole (the blocks overlap it), never losing the mortises.
+        if !bands.isEmpty, let split = splitBody(body, height: neck, keeping: bands) {
+            fam.nestedFamilies = [split]
+            for i in fam.nestedInstances.indices where fam.nestedInstances[i].familyName == body.name { fam.nestedInstances[i].familyName = split.name }
         }
         // The mortises, cut in the pommel and the blocks at Fine.
         for (k, v) in boxes.enumerated() {
@@ -191,22 +172,69 @@ enum TurnedLegJoints {
         return q
     }
 
-    /// A closed profile (r, t) clipped to t0 ≤ t ≤ t1.
-    static func clip(_ poly: [Vec2], _ t0: Double, _ t1: Double) -> [Vec2] {
-        func cut(_ pts: [Vec2], keep: (Vec2) -> Bool, at t: Double) -> [Vec2] {
+    /// LEGFIX: one point of a turned body's profile: its radius and height as shares of the body's Height (at the body's
+    /// height now), with the formulas it was written with (VIS: bead points are a share plus a length, so beads stay
+    /// round as the leg flexes).
+    struct ProfilePoint {
+        var r: Double, t: Double
+        var x: FamilyBound, y: FamilyBound
+    }
+
+    /// The turned body `body` (height `hb`) as the parts of it outside `bands` (leg z ranges below the neck), or nil when
+    /// its profile can't be read. Points kept keep their formulas; the points cut at a band are shares of Height, so
+    /// they stay on the blocks' faces as the leg flexes.
+    static func splitBody(_ body: FamilyDefinition, height hb: Double, keeping bands: [(Double, Double)]) -> FamilyDefinition? {
+        guard hb > Tolerance.length, case .revolve(let rev)? = body.solids.first?.profile else { return nil }
+        func eval(_ b: FamilyBound) -> Double? {
+            guard case .expr(let src) = b else { return nil }
+            if let v = Double(src) { return v }
+            guard let f = try? Formula(src, knownNames: ["Height"]),
+                  let v = try? f.evaluate(units: .metric, { $0 == "Height" ? .quantity(hb, .length) : nil }) else { return nil }
+            return v.quantityValue
+        }
+        let prof = rev.profile.compactMap { pt -> ProfilePoint? in
+            guard let r = eval(pt.x), let z = eval(pt.y) else { return nil }
+            return ProfilePoint(r: r, t: z / hb, x: pt.x, y: pt.y)
+        }
+        guard prof.count == rev.profile.count, prof.count >= 3 else { return nil }
+        let n = PartSolidContext.number
+        var keep: [(Double, Double)] = []
+        var t0 = 0.0
+        for band in bands { keep.append((t0, band.0 / hb)); t0 = band.1 / hb }
+        keep.append((t0, 1))
+        var b = body
+        b.solids = keep.enumerated().compactMap { k, r in
+            guard r.1 - r.0 > 1e-6 else { return nil }
+            let clipped = clip(prof, r.0, r.1)
+            guard clipped.count >= 3 else { return nil }
+            var s = FamilySolid(name: "Turned Body \(k + 1)", profile: .revolve(FamilyRevolve(profile: clipped.map { FamilyPoint($0.x, $0.y) })),
+                                zMin: .expr("0"), zMax: .expr("Height"), materialParameter: "Material")
+            s.id = "body-\(k + 1)"
+            return s
+        }
+        guard !b.solids.isEmpty else { return nil }
+        b.name = "\(body.name) Blocked \(bands.map { "\(n($0.0 / hb))-\(n($0.1 / hb))" }.joined(separator: ","))"
+        return b
+    }
+
+    /// A closed profile clipped to t0 ≤ t ≤ t1 (Sutherland–Hodgman on the two heights); the points made at a cut are
+    /// shares of Height.
+    static func clip(_ poly: [ProfilePoint], _ t0: Double, _ t1: Double) -> [ProfilePoint] {
+        let n = PartSolidContext.number
+        func cut(_ pts: [ProfilePoint], keep: (ProfilePoint) -> Bool, at t: Double) -> [ProfilePoint] {
             guard !pts.isEmpty else { return [] }
-            var out: [Vec2] = []
+            var out: [ProfilePoint] = []
             for i in pts.indices {
                 let a = pts[i], b = pts[(i + 1) % pts.count]
                 let ka = keep(a), kb = keep(b)
                 if ka { out.append(a) }
-                if ka != kb, abs(b.y - a.y) > 1e-12 {
-                    let s = (t - a.y) / (b.y - a.y)
-                    out.append(Vec2(a.x + (b.x - a.x) * s, t))
+                if ka != kb, abs(b.t - a.t) > 1e-12 {
+                    let r = a.r + (b.r - a.r) * (t - a.t) / (b.t - a.t)
+                    out.append(ProfilePoint(r: r, t: t, x: .expr(n(r)), y: .expr("Height * \(n(t))")))
                 }
             }
             return out
         }
-        return cut(cut(poly, keep: { $0.y >= t0 - 1e-12 }, at: t0), keep: { $0.y <= t1 + 1e-12 }, at: t1)
+        return cut(cut(poly, keep: { $0.t >= t0 - 1e-12 }, at: t0), keep: { $0.t <= t1 + 1e-12 }, at: t1)
     }
 }
