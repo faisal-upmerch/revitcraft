@@ -18,7 +18,8 @@ struct FamilyEditorShellView: View {
             let region = DockRegion(width: geo.size.width, height: geo.size.height)
             let docks = DockLayout.layout(region: region,
                                           leading: DockRequest(edge: .leading, width: chrome.docks.prefs.leadingWidth, visible: chrome.browserShown),
-                                          trailing: DockRequest(edge: .trailing, width: chrome.docks.prefs.trailingWidth, visible: chrome.propertiesShown),
+                                          trailing: DockRequest(edge: .trailing, width: chrome.docks.prefs.trailingWidth,
+                                                                 visible: chrome.propertiesShown || AIAssistantPanel.existing(family: model)?.isShown == true), // AICORE
                                           metrics: .familyEditor)
             let shell = ShellLayout.layout(shellRequest(region, docks), metrics: .arcus)
             ZStack(alignment: .topLeading) {
@@ -146,7 +147,7 @@ struct FamilyEditorDocksView: View {
                 .transition(.move(edge: .leading).combined(with: .opacity))
             }
             if let p = layout.placement(.trailing) {
-                panel(p) { FamilyInspectorView(model: model).frame(maxWidth: .infinity, maxHeight: .infinity) }
+                panel(p) { FamilyTrailingDock(model: model) } // AICORE: Properties and/or the AI assistant
                     .accessibilityLabel("Properties")
                     .transition(.move(edge: .trailing).combined(with: .opacity))
             }

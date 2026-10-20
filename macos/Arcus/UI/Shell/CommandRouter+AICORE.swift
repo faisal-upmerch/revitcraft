@@ -9,5 +9,9 @@ extension CommandRouter {
     /// The interactive tool for one of this batch's commands, or nil.
     func aicoreMakeTool(_ id: CommandID, _ c: ToolContext) -> (any InteractiveTool)? { nil }
     /// Runs one of this batch's commands; true when handled.
-    func aicorePerform(_ id: CommandID) -> Bool { false }
+    func aicorePerform(_ id: CommandID) -> Bool {
+        guard id == .aiAssistant else { return false }
+        AIAssistantPanel.toggle(in: state)
+        return true
+    }
 }

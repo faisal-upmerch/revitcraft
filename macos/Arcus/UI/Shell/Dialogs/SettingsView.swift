@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("ribbon.stayOnModify") private var stayOnModify = false
     @AppStorage("navigationBar.visible") private var navigationBar = true
     var body: some View {
+        ScrollViewReader { proxy in // AICORE: the assistant's settings link scrolls to its section
         Form {
             Section("New projects") { // HOME: Architectural projects start in Imperial
                 Text("New architectural projects and furniture start in Imperial (feet and inches). Change a project's units in Manage ▸ Project Units.").font(.caption).foregroundStyle(.secondary)
@@ -41,13 +42,16 @@ struct SettingsView: View {
             CanvasSettingsSections() // BL-CANVAS: Colors, temporary dimensions, tooltips, double-click
             Section("Notifications") { SaveReminderSettingsSection() } // F11
             Section("DWG") { DWGEngineSettingsSection(); DWGConverterSettingsSection() } // W2-DWG; DWG: bundled engines and the last file read
+            Section("AI Assistant") { AISettingsSection() }.id("ai") // AICORE: the in-app assistant (opt-in, the one network exception)
             Section("Claude (MCP)") { MCPSettingsSection() } // MCP: Docs/MCP.md
             Section("Privacy") {
-                Text("Arcus makes no network connections, collects no analytics and requires no special permissions. Diagnostics stay on this Mac unless you export them.").font(.caption).foregroundStyle(.secondary)
+                Text("Arcus makes no network connections, collects no analytics and requires no special permissions. The one exception is the AI assistant, only while you turn it on above: it then talks to Anthropic with your key. Diagnostics stay on this Mac unless you export them.").font(.caption).foregroundStyle(.secondary) // AICORE
             }
             Section("Updates") { Text(LocalOnlyUpdateProvider().statusMessage).font(.caption).foregroundStyle(.secondary) }
         }
         .formStyle(.grouped)
+        .onReceive(NotificationCenter.default.publisher(for: AISettingsLink.notification)) { _ in withAnimation { proxy.scrollTo("ai", anchor: .top) } } // AICORE
+        }
         .frame(width: 540, height: 560)
     }
 }

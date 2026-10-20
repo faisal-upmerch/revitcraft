@@ -79,6 +79,7 @@ final class FamilyEditorWindowController: NSWindowController, NSWindowDelegate, 
         trafficLightsHosts.removeAllObjects(); placeTrafficLights() // the buttons return to the title bar before the host goes
         host?.removeFromSuperview()
         host = nil
+        AIAssistantPanel.existing(family: model)?.agent.stop(); AIAssistantPanel.forget(model) // AICORE
     }
     /// Edit ▸ Undo/Redo and ⌘Z in the window use the family's own undo stack.
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { model.undo }

@@ -44,7 +44,8 @@ struct DockVisibility: Equatable {
         let navigator = state.showNavigator && !PanelWindows.isDetached(.navigator)
         let properties = state.showProperties && !PanelWindows.isDetached(.properties)
         leading = !state.docks.prefs.leadingCollapsed && (navigator || (familiar && properties))
-        trailing = !state.docks.prefs.trailingCollapsed && ((!familiar && properties) || ComponentPanelModel.of(state).isShown) // COMP: the Components panel
+        trailing = !state.docks.prefs.trailingCollapsed && ((!familiar && properties) || ComponentPanelModel.of(state).isShown // COMP: the Components panel
+            || AIAssistantPanel.isShown(state)) // AICORE: the AI assistant
     }
 }
 

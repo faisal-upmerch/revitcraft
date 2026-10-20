@@ -291,7 +291,16 @@ struct InspectorDock: View {
     @Bindable var state: DocumentState
     var body: some View {
         let properties = state.workspace == .macSpacious && state.showProperties && !PanelWindows.isDetached(.properties)
-        if ComponentPanelModel.of(state).isShown { // COMP: the Components panel, under Properties in Mac Spacious
+        if let ai = AIAssistantPanel.existing(state), ai.isShown { // AICORE: the AI assistant, under Properties in Mac Spacious
+            let sidebar = AISidebarView(panel: ai) { AIAssistantPanel.toggle(in: state) }
+            if properties {
+                PersistentVSplit(key: "inspectorDock.assistantFraction", defaultFraction: 0.32, minTop: 160, minBottom: 360) {
+                    PropertiesView(state: state)
+                } bottom: { sidebar }
+            } else {
+                sidebar.frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        } else if ComponentPanelModel.of(state).isShown { // COMP: the Components panel, under Properties in Mac Spacious
             if properties {
                 PersistentVSplit(key: "inspectorDock.componentsFraction", defaultFraction: 0.45, minTop: 200, minBottom: 300) {
                     PropertiesView(state: state)

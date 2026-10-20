@@ -26,6 +26,8 @@ final class ArcusDocument: NSDocument, TransactionObserver {
     private let journalQueue = JournalQueue()
     /// Snapshot used by (possibly asynchronous, background-thread) saves.
     private let snapshot = SaveSnapshot()
+    /// AICORE: the AI assistant's chats as read from the package (the open sidebar's chats replace them on save).
+    var assistantHistory: Data?
 
     override init() {
         session = DocumentSession(model: BIMModel())
@@ -94,6 +96,7 @@ final class ArcusDocument: NSDocument, TransactionObserver {
             }
             documentID = result.manifest.documentID
             created = result.manifest.created
+            assistantHistory = ArcusPackage.readAssistantHistory(url) // AICORE
             session.replaceModel(result.model)
             fingerprint = fp
             if state != nil { state.openInitialView() }
@@ -105,6 +108,8 @@ final class ArcusDocument: NSDocument, TransactionObserver {
 
     override func save(to url: URL, ofType typeName: String, for saveOperation: NSDocument.SaveOperationType, completionHandler: @escaping ((any Error)?) -> Void) {
         snapshot.set(session.model, documentID: documentID, created: created)
+        if let s = state, let h = AIAssistantPanel.historyData(s) { assistantHistory = h.isEmpty ? nil : h } // AICORE
+        snapshot.assistantHistory = assistantHistory
         // Warn before overwriting a file changed by another process.
         if saveOperation == .saveOperation, let fp = fingerprint, let fileURL, ExternalChangeDetector.hasChanged(fileURL, since: fp) {
             let alert = NSAlert()
@@ -136,7 +141,8 @@ final class ArcusDocument: NSDocument, TransactionObserver {
         let t0 = CFAbsoluteTimeGetCurrent()
         guard let model = snapshot.model else { throw CocoaError(.fileWriteUnknown) }
         let thumbnail = Thumbnailer.png(model: model)
-        let info = AppVersionInfo.current.writeInfo(documentID: snapshot.documentID, created: snapshot.created ?? Date(), thumbnailPNG: thumbnail)
+        var info = AppVersionInfo.current.writeInfo(documentID: snapshot.documentID, created: snapshot.created ?? Date(), thumbnailPNG: thumbnail)
+        info.assistantHistory = snapshot.assistantHistory // AICORE
         try ArcusPackage.write(model, to: url, info: info)
         DiagnosticsLog.shared.recordTiming("save", seconds: CFAbsoluteTimeGetCurrent() - t0)
     }
@@ -170,6 +176,7 @@ final class ArcusDocument: NSDocument, TransactionObserver {
         let j = AppServices.shared.journal
         journalQueue.submit { try? await j.end(documentID: id) }
         for (_, v) in state?.canvases ?? [:] { v.removeFromSuperview() }
+        if let s = state { AIAssistantPanel.existing(s)?.agent.stop(); AIAssistantPanel.forget(s) } // AICORE
         super.close()
         state?.tearDown()
         if !NSDocumentController.shared.documents.contains(where: { $0 is ArcusDocument }) { DerivedCaches.purgeAll() }
@@ -237,6 +244,12 @@ nonisolated final class SaveSnapshot: @unchecked Sendable {
     var model: BIMModel? { lock.lock(); defer { lock.unlock() }; return _model }
     var documentID: UUID { lock.lock(); defer { lock.unlock() }; return _documentID }
     var created: Date? { lock.lock(); defer { lock.unlock() }; return _created }
+    /// AICORE: the assistant's chats to write with the package.
+    private var _assistantHistory: Data?
+    var assistantHistory: Data? {
+        get { lock.lock(); defer { lock.unlock() }; return _assistantHistory }
+        set { lock.lock(); _assistantHistory = newValue; lock.unlock() }
+    }
 }
 
 /// A FIFO of async operations executed one at a time, in order.

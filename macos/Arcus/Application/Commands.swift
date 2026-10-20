@@ -155,6 +155,7 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
     case componentAddHangingRod, componentAddShoeRack, componentAddLighting, componentAddSlidingSystem
 
     // AICORE commands:
+    case aiAssistant
 
     // AITOOLS commands:
 

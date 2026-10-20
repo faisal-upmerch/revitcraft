@@ -130,7 +130,7 @@ enum UserTemplates {
 struct OnboardingView: View {
     let onFinish: () -> Void
     @State private var step: Int
-    static let steps = 4 // MCP: + Design with Claude
+    static let steps = 5 // MCP: + Design with Claude; AICORE: + AI Assistant
 
     init(onFinish: @escaping () -> Void, step: Int = 0) {
         self.onFinish = onFinish
@@ -144,6 +144,7 @@ struct OnboardingView: View {
                 case 0: welcome
                 case 1: start
                 case 2: claude // MCP
+                case 3: AIOnboardingStep() // AICORE
                 default: finish
                 }
             }
@@ -229,7 +230,7 @@ struct OnboardingView: View {
     var finish: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Your work stays on this Mac").font(.title2.weight(.semibold))
-            row("externaldrive", "Local documents", "Projects, furniture and families are packages on your Mac. No account, no network.")
+            row("externaldrive", "Local documents", "Projects, furniture and families are packages on your Mac. No account, no network (the AI assistant is the one opt-in exception).") // AICORE
             row("clock.arrow.circlepath", "Autosave and recovery", "Changes are saved and journaled as you work. If Arcus quits unexpectedly, you're offered them next launch.")
             row("arrow.left.arrow.right", "Exchange", "IFC import and export, DXF and DWG link, import and export, vector PDF sets. Revit files aren't supported; export IFC from Revit instead.")
             HStack(spacing: 12) {
