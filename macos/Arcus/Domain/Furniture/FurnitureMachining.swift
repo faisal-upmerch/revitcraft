@@ -68,7 +68,8 @@ public enum FurnitureMachining {
     /// Every machining operation in a Furniture document.
     public static func entries(_ m: BIMModel) -> [MachiningEntry] {
         guard m.projectInfo.documentKind == .furniture else { return [] }
-        return fm5Machining(m) + fm6Machining(m)
+        return fm5Machining(m) + fm6Machining(m) + compMachining(m) // COMP: placed components' mounting data
+            + compbMachining(m) // COMPB: bay items' right-side, bottom and top holes
     }
 
     /// Every derived part in a Furniture document.

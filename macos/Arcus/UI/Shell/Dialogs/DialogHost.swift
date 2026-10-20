@@ -79,10 +79,11 @@ struct DialogHost: View {
             case .fmg2(let d): FMG2DialogHost(state: state, dialog: d) // FMG2
             case .fmg4(let d): FMG4DialogHost(state: state, dialog: d) // FMG4
             case .fm8(let d): FM8DialogHost(state: state, dialog: d) // FM8
+            case .comp(let d): COMPDialogHost(state: state, dialog: d) // COMP
             }
         }
-        .frame(minWidth: 420)
         .presentationSizing(.fitted)
+        .opaqueDialogBackground() // DIALOGS: never the translucent sheet material (the canvas showed through)
         .onExitCommand { state.presented = nil } // W4-AUDIT: Escape closes dialogs that have only a Done button (Cancel buttons keep their own .cancelAction)
         .background(DialogEscapeCloser(dialogID: dialog.id) { if state.presented?.id == $0 { state.presented = nil } })
         .background(SheetEscapeCloser { state.presented = nil }) // Escape regardless of which control has focus
@@ -115,37 +116,71 @@ private struct SheetEscapeCloser: NSViewRepresentable {
     }
 }
 
-/// Standard dialog chrome: title, content, and a button row.
+/// A document sheet in the dialog design system (`ArcusDialog`, Docs/Dialogs.md): Cancel and Escape close it
+/// (`state.presented = nil`). `icon` defaults to one picked from the title; `size` sets the width class.
 struct DialogFrame<Content: View>: View {
     let title: String
+    var icon: String? = nil
+    var tint: Color = .accentColor
+    var file: URL? = nil
+    var size: DialogSize = .medium
     var subtitle: String = ""
     var okTitle = "OK"
     var okDisabled = false
+    var disabledReason: String? = nil
     var showCancel = true
+    var destructive = false
+    var scrolls = false
+    var labelWidth: CGFloat? = nil
+    /// Window-like editors: the content fills the dialog, which starts this tall.
+    var height: CGFloat? = nil
+    var padded = true
     let state: DocumentState
     let onOK: () -> Void
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: DialogMetrics.spacing) { // W4-SHELL: DialogGrammar.swift
-            DialogTitle(title: title, subtitle: subtitle)
-            content
-            DialogButtonRow(okTitle: okTitle, okDisabled: okDisabled, showCancel: showCancel, onCancel: { state.presented = nil }, onOK: onOK)
-        }
-        .padding(DialogMetrics.padding)
+        ArcusDialog(icon: icon ?? DialogIcons.symbol(for: title), tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth,
+                    okTitle: okTitle, okDisabled: okDisabled, disabledReason: disabledReason, showCancel: showCancel, destructive: destructive,
+                    scrolls: scrolls, height: height, padded: padded, onCancel: { state.presented = nil }, onOK: onOK) { content }
     }
 }
 
-/// Labeled form row with a fixed label column.
+/// A `DialogFrame` with secondary footer actions on the left (Copy Report, Check All / Check None, Help).
+struct DialogFrameWithActions<Content: View, Actions: View>: View {
+    let title: String
+    var icon: String? = nil
+    var tint: Color = .accentColor
+    var file: URL? = nil
+    var size: DialogSize = .medium
+    var subtitle: String = ""
+    var okTitle = "OK"
+    var okDisabled = false
+    var disabledReason: String? = nil
+    var showCancel = true
+    var destructive = false
+    var scrolls = false
+    var labelWidth: CGFloat? = nil
+    /// Window-like editors: the content fills the dialog, which starts this tall.
+    var height: CGFloat? = nil
+    var padded = true
+    let state: DocumentState
+    let onOK: () -> Void
+    @ViewBuilder let content: Content
+    @ViewBuilder let actions: Actions
+
+    var body: some View {
+        ArcusDialog(icon: icon ?? DialogIcons.symbol(for: title), tint: tint, title: title, subtitle: subtitle, file: file, size: size, labelWidth: labelWidth,
+                    okTitle: okTitle, okDisabled: okDisabled, disabledReason: disabledReason, showCancel: showCancel, destructive: destructive,
+                    scrolls: scrolls, height: height, padded: padded, onCancel: { state.presented = nil }, onOK: onOK) { content } leading: { actions }
+    }
+}
+
+/// Labeled form row in the dialog's shared label column (`DialogRow`).
 struct FormRow<Content: View>: View {
     let label: String
     @ViewBuilder let content: Content
-    var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Text(label).frame(width: 150, alignment: .trailing).foregroundStyle(.secondary)
-            content
-        }
-    }
+    var body: some View { DialogRow(label) { content } }
 }
 
 /// Escape closes the dialog even when nothing in it has focus (`onExitCommand` needs a focused view, and Done-only

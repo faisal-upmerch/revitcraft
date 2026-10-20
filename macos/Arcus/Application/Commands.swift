@@ -145,6 +145,15 @@ public enum CommandID: String, CaseIterable, Sendable, Codable {
 
     // FMG4 commands:
 
+    // FM3D commands:
+    case furniture3DDesign, furnitureEditSketch
+
+    // COMP commands:
+    case components, componentBrowser, componentPlace, componentReplace, componentAssembly, componentHardwareRules, componentSaveSelection
+    case componentBOM, componentPowerSummary, componentUpdate, componentNewFamily
+    case componentAddHandle, componentAddHinges, componentAddLock, componentAddSoftClose, componentAddPushToOpen, componentAddSlides, componentAddOrganizer
+    case componentAddHangingRod, componentAddShoeRack, componentAddLighting, componentAddSlidingSystem
+
 }
 
 public enum CommandGroup: String, CaseIterable, Sendable {
@@ -174,7 +183,7 @@ public struct CommandInfo: Sendable, Hashable, Identifiable {
 public enum CommandCatalog {
     public static let all: [CommandInfo] = coreCommands + portCommands
     /// Commands of the RevitCraft port feature batches (Commands+F*.swift).
-    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands + polishCommands + fmg1Commands + fmg2Commands + fmg3Commands + fmg4Commands + mcpCommands
+    static let portCommands: [CommandInfo] = f1Commands + f2Commands + f34Commands + f5Commands + f67Commands + f810Commands + f11Commands + f1415Commands + dwgCommands + homeCommands + fesCommands + fm3Commands + fm4Commands + fm5Commands + fm6Commands + fm7Commands + fm8Commands + fm9Commands + stairCommands + polishCommands + fmg1Commands + fmg2Commands + fmg3Commands + fmg4Commands + fm3dCommands + compCommands + mcpCommands
     static let coreCommands: [CommandInfo] = [
         // Modify
         CommandInfo(.modify, "Modify", .modify, "cursorarrow", shortcut: "⎋⎋", aliases: ["MD"], help: "Return to selection mode."),

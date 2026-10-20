@@ -29,6 +29,7 @@ public enum FurnitureLegShapes {
 
     /// The leg's local family for its type at `height`.
     public static func family(_ tv: FurniturePartTypes.Values, height: Double) -> FamilyDefinition {
+        if let f = ComponentLegTypes.family(tv, height: height) { return f } // COMPB: Leg types from the Component Library
         var f = FamilyDefinition(name: "\(tv.legShape.rawValue) Leg \(n(tv.width))x\(n(tv.depth))x\(n(tv.taper))x\(n(tv.rod))", template: .furniture)
         f.parameters = [FamilyParameter(name: "Height", type: .length), FamilyParameter(name: "Material", type: .elementRef(.materials), group: .materials)]
         var values: [String: ParamValue] = ["Height": .double(height)]
@@ -130,6 +131,9 @@ public enum EdgeProfileShapes {
         switch shape {
         case .chamfer:
             return [Vec2(-m, -m), Vec2(s, -m), Vec2(s, 0), Vec2(0, s), Vec2(-m, s)]
+        case .bevel: // COMPD: an unequal chamfer, Size by Depth
+            let d = depth > Tolerance.length ? depth : s
+            return [Vec2(-m, -m), Vec2(s, -m), Vec2(s, 0), Vec2(0, d), Vec2(-m, d)]
         case .roundOver:
             return [Vec2(-m, -m), Vec2(s, -m)] + arc(Vec2(s, s), s, from: -.pi / 2, to: -.pi) + [Vec2(-m, s)]
         case .cove:

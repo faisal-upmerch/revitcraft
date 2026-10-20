@@ -25,15 +25,11 @@ struct TypePropertiesDialog: View {
     var body: some View {
         let _ = state.session.changeCounter
         let t = editor.type
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Type Properties").font(.title3.weight(.semibold))
-            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 10, verticalSpacing: 8) {
-                GridRow {
-                    Text("Family:").foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-                    Text(t.map { PaletteLayout.familyLabel($0) } ?? "").textSelection(.enabled)
-                }
-                GridRow {
-                    Text("Type:").foregroundStyle(.secondary)
+        ArcusDialog(icon: "square.grid.2x2", tint: .blue, title: "Type Properties", subtitle: subtitle, size: .wide, labelWidth: 70, height: 640,
+                    onCancel: { editor.cancel(); state.presented = nil }, onOK: { ok() }) {
+            DialogSection {
+                DialogRow("Family") { Text(t.map { PaletteLayout.familyLabel($0) } ?? "").textSelection(.enabled) }
+                DialogRow("Type") {
                     HStack {
                         Picker("", selection: Binding(get: { editor.typeID }, set: { editor.show($0) })) {
                             ForEach(editor.siblingTypes, id: \.id) { Text($0.name).tag($0.id) }
@@ -55,7 +51,6 @@ struct TypePropertiesDialog: View {
                     }
                 }
             }
-            Text(subtitle).font(.callout).foregroundStyle(.secondary)
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0, pinnedViews: [.sectionHeaders]) {
                     ForEach(groups, id: \.0) { group, entries in
@@ -87,23 +82,17 @@ struct TypePropertiesDialog: View {
                     }
                 }
             }
-            .frame(minHeight: 320, idealHeight: 460, maxHeight: 560)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
-            HStack {
-                Button("Apply") { if !editor.apply() { reportError() } }
-                    .disabled(!editor.hasChanges)
-                    .help("Save the changes and keep the dialog open")
-                Spacer()
-                Button("Cancel") { editor.cancel(); state.presented = nil }
-                    .keyboardShortcut(.cancelAction)
-                Button("OK") { ok() }
-                    .keyboardShortcut(.return, modifiers: .command)
-                    .buttonStyle(.borderedProminent)
-                    .help("Save the changes and close (⌘Return)")
-            }
+            .frame(minHeight: 320, maxHeight: .infinity)
+            .background(DialogColors.sectionFill, in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .clipShape(RoundedRectangle(cornerRadius: Tokens.radiusSection))
+            .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(DialogColors.sectionStroke))
+        } trailing: {
+            Button("Apply") { if !editor.apply() { reportError() } }
+                .disabled(!editor.hasChanges)
+                .help("Save the changes and keep the dialog open")
+                .dialogButton()
         }
-        .padding(20)
-        .frame(minWidth: 720, idealWidth: 760)
+        .okKeyboardShortcut(KeyboardShortcut(.return, modifiers: .command)) // OK is ⌘Return: Return commits the field being edited
     }
 
     var groups: [(ParameterGroup, [ParameterEntry])] {
@@ -181,7 +170,7 @@ struct NamePromptView: View {
                 .focused($focused)
                 .onSubmit(ok)
                 .onChange(of: name) { _, _ in error = nil }
-            if let error { Text(error).font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
+            if let error { Label(error, systemImage: "exclamationmark.circle.fill").font(.caption).foregroundStyle(.red).fixedSize(horizontal: false, vertical: true) }
             HStack {
                 Spacer()
                 Button("Cancel", action: dismiss).keyboardShortcut(.cancelAction)

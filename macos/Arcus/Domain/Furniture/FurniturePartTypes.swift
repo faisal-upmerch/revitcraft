@@ -206,6 +206,8 @@ public enum FurniturePartTypes {
             tx.create(.elementTypes, name: spec.name, data: .type(TypeData(instanceCategory: spec.category, familyName: spec.family, params: params)))
         }
         ensurePartTag(in: tx)
+        ComponentLegTypes.ensureStandard(in: tx) // COMPB: legs, feet and bases from the Component Library
+        ComponentLibrary.ensureGroupDEdgeTypes(in: tx) // COMPD: edge profile types and edge band materials from the Component Library
     }
 
     /// The Part Tag: Mark over the nominal size (W x L), for every part category, in a 24 × 7 mm box.

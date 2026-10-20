@@ -294,6 +294,8 @@ public enum ElementData: Hashable, Codable, Sendable {
     // FMG2 element data:
     // FMG3 element data:
     // FMG4 element data:
+    // FM3D element data:
+    // COMP element data:
 
 
 

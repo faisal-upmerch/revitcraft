@@ -242,6 +242,7 @@ extension SketchTool {
 
     /// The work plane position of a form sketched in this view (Ref. Level in plans; the view side's plane in elevations).
     var fm4WorkPlane: Double {
+        if let p = ctx.furniture3D, let map = fm4Map, p.axis == map.plane.axes.w { return p.depth } // FM3D: the 3D view's work plane
         guard let map = fm4Map, map.plane != .xy else { return ctx.levelElevation }
         let planes = FurniturePlanes.positionsByName(ctx.model)
         let f = map.forward
@@ -295,17 +296,19 @@ extension SketchTool {
                 f.topProfile = sorted[1].points
             default:
                 let toSketch = { (p: Vec2) in map.toSketch(p) }
+                let up = ctx.furniture3D?.extrusionSign ?? 1 // FM3D: out of a picked face (down from a bottom face)
                 f = FurnitureFormData(kind: .extrusion, isVoid: isVoid, plane: map.plane, profile: outer.points.map(toSketch),
-                                      w0: w + min(fm4.start, fm4.end), w1: w + max(fm4.start, fm4.end))
+                                      w0: w + min(up * fm4.start, up * fm4.end), w1: w + max(up * fm4.start, up * fm4.end))
                 f.holes = polys.filter { $0 != outer }.map { $0.points.map(toSketch) }
                 // In an elevation the extrusion runs from the work plane into the view.
                 if map.plane != .xy {
-                    let sign: Double = (map.plane == .xz ? map.forward.y : map.forward.x) > 0 ? 1 : -1
+                    let sign: Double = ctx.furniture3D?.extrusionSign ?? ((map.plane == .xz ? map.forward.y : map.forward.x) > 0 ? 1 : -1) // FM3D
                     let a = w + sign * fm4.start, b = w + sign * fm4.end
                     f.w0 = min(a, b); f.w1 = max(a, b)
                 }
             }
             guard f.kind != .extrusion || f.w1 - f.w0 > Tolerance.length else { message("Give the extrusion a depth."); return }
+            if fm3dUpdateExtrusion(f) { return } // FM3D: Edit Sketch of a selected extrusion
             var created: ElementID?
             ctx.session.perform("Create \(t.title)") { tx in created = try FurniturePartOperations.createForm(f, in: tx) }
             if ctx.session.lastError == nil { keepSelected(created) }
@@ -357,7 +360,7 @@ extension SketchTool {
             }
             let into: Double = ctx.isPlan ? 1 : ((map.plane == .xz ? map.forward.y : map.forward.x) > 0 ? 1 : -1)
             func local(_ poly: Polygon2) -> [Vec2] { let b = poly.bounds; return poly.points.map { Vec2($0.x - b.center.x, into * ($0.y - b.min.y)) } }
-            let w0 = ctx.isPlan ? ctx.levelElevation + fm4.start : fm4WorkPlane + into * fm4.start
+            let w0 = ctx.isPlan ? fm4WorkPlane + fm4.start : fm4WorkPlane + into * fm4.start // FM3D: the plan's work plane is the level's, or the 3D view's
             f = FurnitureFormData(kind: k, isVoid: isVoid, plane: ctx.isPlan ? .xy : map.plane, profile: local(prof), w0: w0, w1: 0)
             f.path = path
             if k == .sweptBlend { f.endProfile = local(loops[1]) }

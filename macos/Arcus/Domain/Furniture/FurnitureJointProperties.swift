@@ -51,6 +51,11 @@ public enum FurnitureJointProperties {
         if let d = e.furnitureJoint, d.isPair {
             let marks = d.parts.map { FurnitureJointParameters.mark($0, m) }
             return entries.map { x in
+                if x.id == FurnitureJointParameters.fastener.id, let j = FurnitureJointParameters.joint(e, m) { // COMPB: the joint type's connectors
+                    var y = x
+                    y.type = .choice([FurnitureJointParameters.byJointType] + FurnitureJointFasteners.options(j.type).map(\.name))
+                    return y
+                }
                 guard x.id == FurnitureJointParameters.through.id, marks.count == 2, marks[0] != marks[1] else { return x }
                 var y = x
                 y.type = .choice(marks)
@@ -77,11 +82,14 @@ public enum FurnitureJointProperties {
             if j.isCorner && j.type != .miter { list.append(FurnitureJointParameters.through) }
             list.append(FurnitureJointParameters.byRule)
             list += j.type.parameterKeys.compactMap { k in FurnitureJointParameters.values.first { $0.id == FurnitureJointParameters.value(k).id } }
+            let fasteners = FurnitureJointFasteners.options(j.type) // COMPB: the joint's connector component
+            if !fasteners.isEmpty { list.append(FurnitureJointParameters.fastener) }
             for b in list {
                 let reason = b.lockedReason?(je, ctx)
                 var type = b.type
                 if b.id == FurnitureJointParameters.through.id { type = .choice([FurnitureJointParameters.mark(j.key.a, m), FurnitureJointParameters.mark(j.key.b, m)]) }
                 if b.id == FurnitureJointParameters.jointType.id { type = .choice(JointType.allCases.filter { $0 != .miter || j.canMiter }.map(\.rawValue)) }
+                if b.id == FurnitureJointParameters.fastener.id { type = .choice([FurnitureJointParameters.byJointType] + fasteners.map(\.name)) } // COMPB
                 let label = b.id == FurnitureJointParameters.jointType.id ? "Joint" : (JointParameterKey.allCases.first { FurnitureJointParameters.value($0).id == b.id }?.label(for: j.type) ?? b.name)
                 out.append(ParameterEntry(id: partRowID(other, b.id), name: "\(name) \(label)", type: type, group: .construction, isType: false,
                                           isReadOnly: b.isReadOnly || reason != nil, value: b.getter(je, ctx), formula: nil,

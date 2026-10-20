@@ -798,8 +798,9 @@ enum BuiltInCatalog {
         case .structuralFraming:
             return td.familyID == nil ? [beamWidth, beamDepth, materialParam] + identity : identity
         case .structuralRebar, .fabricReinforcement: return ReinforcementParameters.typeParameters(td) + [materialParam] + identity // F34
-        case let c where c.isFurniturePart: return FurniturePartParameters.type(for: td) + identity // FM4
-        case .furnitureFronts: return FurnitureFrontParameters.type(for: td) + identity // FM5
+        case let c where c.isFurniturePart: return ComponentParameters.withEdgeBand(FurniturePartParameters.type(for: td)) + identity // FM4; COMP: Edge Band picker
+        case .furnitureFronts: return ComponentParameters.withEdgeBand(FurnitureFrontParameters.type(for: td)) + identity // FM5; COMP: Edge Band picker
+        case .furnitureHardware: return ComponentParameters.type(identity) // COMP: SKU and library version
         default: return identity
         }
     }

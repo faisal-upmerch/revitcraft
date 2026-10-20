@@ -1,43 +1,34 @@
 import SwiftUI
 
-// W4-SHELL: one dialog grammar for every sheet and window-like dialog: a 15 pt semibold title with an optional
-// 12 pt secondary subtitle, 20 pt outer padding, 12 pt between sections, and a trailing button row whose buttons are
-// never narrower than 76 pt (OK/Cancel keep their keyboard equivalents). Window-like dialogs (Materials, Component
-// Library) use `DialogChrome`: content fills the dialog, a hairline, then the button row on its own strip.
+// W4-SHELL → DIALOGS: the older dialog grammar, now thin adapters over the dialog design system
+// (Dialogs/DesignSystem, Docs/Dialogs.md). New dialogs use `ArcusDialog` (or `DialogFrame` for a document sheet)
+// with `DialogSection` / `DialogRow`; these names stay so older call sites keep compiling and look the same.
 
 enum DialogMetrics {
-    static let padding: CGFloat = 20
-    static let spacing: CGFloat = 12
-    static let buttonMinWidth: CGFloat = 76
-    static let title = Font.system(size: 15, weight: .semibold)
-    static let subtitle = Font.system(size: 12)
-    static let sectionHeader = Font.system(size: 11, weight: .semibold)
+    static let padding: CGFloat = DialogStyle.outer
+    static let spacing: CGFloat = DialogStyle.sectionSpacing
+    static let buttonMinWidth: CGFloat = DialogStyle.buttonMinWidth
+    static let title = DialogStyle.title
+    static let subtitle = DialogStyle.subtitle
+    static let sectionHeader = DialogStyle.sectionTitle
 }
 
-/// Dialog title (and subtitle) block.
+/// Dialog title (and subtitle) block: the design system's header with an icon chosen from the title.
 struct DialogTitle: View {
     let title: String
     var subtitle: String = ""
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(DialogMetrics.title).lineLimit(1).truncationMode(.middle)
-            if !subtitle.isEmpty { Text(subtitle).font(DialogMetrics.subtitle).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true) }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .accessibilityAddTraits(.isHeader)
-    }
+    var icon: String? = nil
+    var body: some View { DialogHeader(icon: icon ?? DialogIcons.symbol(for: title), title: title, subtitle: subtitle) }
 }
 
-/// Gives a dialog button the grammar's minimum width so short titles ("OK") match their neighbours.
-struct DialogButtonWidth: ViewModifier {
-    func body(content: Content) -> some View { content.frame(minWidth: DialogMetrics.buttonMinWidth) }
-}
 extension View {
-    func dialogButton() -> some View { modifier(DialogButtonWidth()) }
+    /// Gives a dialog button the minimum width so short titles ("OK") match their neighbours.
+    func dialogButton() -> some View { frame(minWidth: DialogStyle.buttonMinWidth) }
 }
 
 /// The trailing button row: optional leading accessories (Apply, Reset, Paint Selection…), a spacer, Cancel, then the
-/// default button. `okTitle` "Done" without Cancel is the close-only form.
+/// default button. `okTitle` "Done" without Cancel is the close-only form. (The footer bar's buttons without its
+/// separator and padding; dialogs use `ArcusDialog`'s footer.)
 struct DialogButtonRow<Leading: View>: View {
     var okTitle = "OK"
     var okDisabled = false
@@ -53,7 +44,7 @@ struct DialogButtonRow<Leading: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: DialogStyle.itemSpacing) {
             leading
             Spacer(minLength: 16)
             if showCancel { Button("Cancel", action: onCancel).keyboardShortcut(.cancelAction).dialogButton() }
@@ -70,8 +61,9 @@ struct DialogChrome<Content: View, Buttons: View>: View {
         VStack(spacing: 0) {
             content.frame(maxWidth: .infinity, maxHeight: .infinity)
             Divider()
-            buttons.padding(.horizontal, DialogMetrics.padding).padding(.vertical, 12)
+            buttons.padding(.horizontal, DialogStyle.outer).padding(.vertical, DialogStyle.footerPaddingV)
         }
+        .background(DialogColors.background)
     }
 }
 
@@ -89,5 +81,26 @@ struct DialogNameField: View {
             .lineLimit(1)
             .frame(height: 30)
             .onSubmit(onCommit)
+    }
+}
+
+/// The header icon for a dialog that doesn't name one: picked from words in its title.
+enum DialogIcons {
+    static func symbol(for title: String) -> String {
+        let t = title.lowercased()
+        let table: [(String, String)] = [
+            ("export", "square.and.arrow.up"), ("import", "square.and.arrow.down"), ("link", "link"), ("print", "printer"),
+            ("schedule", "tablecells"), ("sheet", "doc.richtext"), ("revision", "cloud"), ("view", "rectangle.on.rectangle"),
+            ("phase", "clock.arrow.circlepath"), ("option", "square.stack.3d.up"), ("material", "paintpalette"), ("unit", "ruler"),
+            ("parameter", "slider.horizontal.3"), ("family", "cube"), ("type", "square.grid.2x2"), ("level", "square.3.layers.3d"),
+            ("location", "location"), ("coordinate", "scope"), ("health", "stethoscope"), ("warning", "exclamationmark.triangle"),
+            ("purge", "trash"), ("rename", "pencil"), ("filter", "line.3.horizontal.decrease.circle"), ("select", "cursorarrow.rays"),
+            ("snap", "dot.squareshape.split.2x2"), ("render", "camera.aperture"), ("site", "mountain.2"), ("topo", "mountain.2"),
+            ("surface", "mountain.2"), ("joint", "square.split.diagonal"), ("stock", "rectangle.split.3x3"), ("hardware", "wrench.and.screwdriver"),
+            ("part", "checklist"), ("furniture", "chair.lounge"), ("template", "doc.badge.gearshape"), ("setting", "gearshape"),
+            ("style", "paintbrush"), ("tag", "tag"), ("color", "paintpalette"), ("area", "square.dashed"), ("spell", "textformat.abc"),
+            ("find", "magnifyingglass"), ("keyboard", "keyboard"), ("shortcut", "keyboard"), ("report", "doc.text.magnifyingglass"),
+        ]
+        return table.first { t.contains($0.0) }?.1 ?? "macwindow"
     }
 }

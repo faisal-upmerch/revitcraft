@@ -4,7 +4,7 @@ import ArcusApplication
 
 // FMG4: Associate Family Parameter (the small = button beside a property in Properties, as in a Revit-style Family
 // Editor): pick the family parameter of a compatible type that sets the property, or make a new one; <None> removes
-// the association. OK applies it in one undo step.
+// the association. OK applies it in one undo step. Built on the dialog design system (Docs/Dialogs.md).
 
 enum FMG4Dialog: Equatable {
     /// The property `property` (shown as `name`) of `elements`.
@@ -44,8 +44,8 @@ struct AssociateFamilyParameterDialog: View {
     var element: Element? { elements.first.flatMap { state.model[$0] } }
     var types: [ParamType] { element.flatMap { FurnitureAssociations.compatibleTypes(property, $0) } ?? [] }
     var parameters: [FamilyParameter] { element.map { FurnitureAssociations.compatibleParameters(property, $0, state.model) } ?? [] }
+    var typeText: String { types.isEmpty ? "Yes/No" : types.map(\.displayName).joined(separator: " or ") }
     var article: String { "aeiouAEIOU".contains(typeText.first ?? "x") ? "an" : "a" }
-    var typeText: String { types.map(\.displayName).joined(separator: " or ") }
     var newNameProblem: String? {
         let n = newName.trimmingCharacters(in: .whitespaces)
         if n.isEmpty { return "Name the parameter." }
@@ -55,66 +55,46 @@ struct AssociateFamilyParameterDialog: View {
     }
 
     var body: some View {
-        DialogChrome {
-            VStack(alignment: .leading, spacing: DialogMetrics.spacing) {
-                header
-                AssociateSection(title: "Property") {
-                    AssociateRow(label: "Property") { Text(propertyName) }
-                    AssociateRow(label: "Element") { Text(elementText).foregroundStyle(.secondary) }
-                    AssociateRow(label: "Compatible types") { Text(typeText).foregroundStyle(.secondary) }
-                }
-                AssociateSection(title: "Family Parameters") {
-                    list
-                }
-                AssociateSection(title: "New Parameter") {
-                    if adding {
-                        AssociateRow(label: "Name") {
-                            TextField("Parameter name", text: $newName).textFieldStyle(.roundedBorder).frame(width: 220)
+        ArcusDialog(icon: "equal.square", title: "Associate Family Parameter", subtitle: "Each family type sets \(propertyName) through the parameter you choose.",
+                    size: .medium, okDisabled: adding && newNameProblem != nil, disabledReason: adding ? newNameProblem : nil,
+                    onCancel: { state.presented = nil }, onOK: apply) {
+            DialogSection("Property") {
+                DialogValueRow(label: "Property", value: propertyName)
+                DialogValueRow(label: "Element", value: elementText)
+                DialogValueRow(label: "Compatible types", value: typeText)
+            }
+            DialogSection("Family Parameters", rows: false) {
+                list
+            }
+            DialogSection("New Parameter", footnote: adding ? nil : "Adds \(article) \(typeText) parameter to the family (Family Types) and associates it.") {
+                if adding {
+                    DialogRow("Name") {
+                        TextField("Parameter name", text: $newName).textFieldStyle(.roundedBorder).labelsHidden().frame(maxWidth: 260)
+                    }
+                    if types.count > 1 {
+                        DialogRow("Type of parameter") {
+                            Picker("Type of parameter", selection: $newType) { ForEach(types, id: \.self) { Text($0.displayName).tag($0) } }
+                                .labelsHidden().fixedSize()
                         }
-                        if types.count > 1 {
-                            AssociateRow(label: "Type of parameter") {
-                                Picker("", selection: $newType) { ForEach(types, id: \.self) { Text($0.displayName).tag($0) } }
-                                    .labelsHidden().fixedSize()
-                            }
-                        }
-                        AssociateRow(label: "Varies by") {
-                            Picker("", selection: $newIsInstance) { Text("Type").tag(false); Text("Instance").tag(true) }
-                                .pickerStyle(.segmented).labelsHidden().fixedSize()
-                        }
-                        if let p = newNameProblem, !newName.isEmpty { FMG4Notice(text: p) }
-                    } else {
-                        HStack {
-                            Text("Add \(article) \(typeText) parameter to the family and associate it.").foregroundStyle(.secondary)
-                            Spacer()
-                            Button("New Parameter…") { adding = true; newType = types.first ?? .bool }
-                        }
+                    }
+                    DialogRow("Varies by") {
+                        Picker("Varies by", selection: $newIsInstance) { Text("Type").tag(false); Text("Instance").tag(true) }
+                            .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    }
+                } else {
+                    DialogRow("Parameter") {
+                        Button("New Parameter…") { adding = true; newType = types.first ?? .bool }
                     }
                 }
             }
-            .padding(DialogMetrics.padding)
-        } buttons: {
-            DialogButtonRow(okDisabled: adding && newNameProblem != nil, onCancel: { state.presented = nil }, onOK: apply) {
-                if adding { Button("Back to List") { adding = false; newName = "" } }
-            }
+        } leading: {
+            if adding { Button("Back to List") { adding = false; newName = "" } }
         }
-        .frame(width: 480)
-        .fixedSize(horizontal: false, vertical: true)
-        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             guard !loaded, let e = element else { return }
             loaded = true
             choice = FurnitureAssociations.association(property, e)
             newType = types.first ?? .bool
-        }
-    }
-
-    var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "equal.square.fill")
-                .font(.system(size: 26))
-                .foregroundStyle(Color.accentColor)
-                .frame(width: 32, height: 32)
-            DialogTitle(title: "Associate Family Parameter", subtitle: "Each family type sets \(propertyName) through the parameter you choose.")
         }
     }
 
@@ -126,20 +106,19 @@ struct AssociateFamilyParameterDialog: View {
     }
 
     @ViewBuilder var list: some View {
-        VStack(spacing: 0) {
-            AssociateChoiceRow(title: "<None>", detail: "The property's own value", selected: choice == nil && !adding) { choice = nil; adding = false }
-            ForEach(parameters, id: \.name) { p in
-                Divider()
-                AssociateChoiceRow(title: p.name, detail: "\(p.type.displayName) · \(p.isInstance ? "Instance" : "Type")", selected: choice == p.name && !adding) {
-                    choice = p.name; adding = false
+        DialogListBox(count: parameters.count + 1, minRows: 2, maxRows: 7) {
+            VStack(spacing: 0) {
+                AssociateChoiceRow(title: "<None>", detail: "The property's own value", selected: choice == nil && !adding) { choice = nil; adding = false }
+                ForEach(parameters, id: \.name) { p in
+                    Divider()
+                    AssociateChoiceRow(title: p.name, detail: "\(p.type.displayName) · \(p.isInstance ? "Instance" : "Type")", selected: choice == p.name && !adding) {
+                        choice = p.name; adding = false
+                    }
                 }
             }
         }
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor)))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(Color(nsColor: .separatorColor)))
         if parameters.isEmpty {
-            Text("No \(typeText) parameters in this family yet. Make one with New Parameter.")
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+            DialogNotice(.info, "This family has no \(typeText) parameters yet. Make one with New Parameter.")
         }
     }
 
@@ -160,31 +139,6 @@ struct AssociateFamilyParameterDialog: View {
     }
 }
 
-/// A titled group of rows on a rounded background (the dialog's sections).
-struct AssociateSection<Content: View>: View {
-    let title: String
-    @ViewBuilder let content: Content
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(DialogMetrics.sectionHeader).foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: 8) { content }
-        }
-    }
-}
-
-/// A label and its value, labels aligned in one column.
-struct AssociateRow<Content: View>: View {
-    let label: String
-    @ViewBuilder let content: Content
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(label).foregroundStyle(.secondary).frame(width: 120, alignment: .trailing)
-            content
-            Spacer(minLength: 0)
-        }
-    }
-}
-
 /// One selectable parameter in the list.
 struct AssociateChoiceRow: View {
     let title: String
@@ -193,28 +147,12 @@ struct AssociateChoiceRow: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : Color.secondary)
-                Text(title)
-                Spacer()
-                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
+            DialogListRow(icon: selected ? "checkmark.circle.fill" : "circle", iconTint: selected ? .accentColor : .secondary, title: title) {
+                Text(detail).font(.caption).foregroundStyle(.secondary)
             }
-            .padding(.horizontal, 10).padding(.vertical, 7)
-            .contentShape(Rectangle())
+            .padding(.horizontal, 10).padding(.vertical, 4)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
-    }
-}
-
-/// A short notice under a field (instead of raw coloured text).
-struct FMG4Notice: View {
-    let text: String
-    var body: some View {
-        Label(text, systemImage: "exclamationmark.triangle.fill")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .symbolRenderingMode(.multicolor)
     }
 }

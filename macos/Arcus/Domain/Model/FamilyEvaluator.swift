@@ -354,6 +354,16 @@ public enum FamilyEvaluator {
                     continue
                 }
                 let mesh = FamilyFormGeometry.blendMesh(bottom: bottom, top: top, z0: z0, z1: z1)
+                if let wp = s.workPlane, wp != .xy, !mesh.isEmpty { // COMPA: a blend on a side work plane runs along its normal
+                    let placed = mesh.transformed(wp.transform)
+                    guard let foot = FamilyFormGeometry.boxFootprint(placed) else {
+                        errors.append("Blend “\(s.name)” can't be built for this type.")
+                        continue
+                    }
+                    let b = placed.bounds
+                    solids.append(make(.blend, foot, b.min.z, b.max.z, mesh: placed))
+                    continue
+                }
                 guard !mesh.isEmpty, let foot = FamilyFormGeometry.blendFootprint(bottom: bottom, top: top) else {
                     errors.append("Blend “\(s.name)” can't be built for this type.")
                     continue
@@ -381,6 +391,16 @@ public enum FamilyEvaluator {
                 let segments = max(4, Int((abs(sweep) / Angle.twoPi * 48).rounded(.up)))
                 let raw = MeshBuilder.revolve(profile: prof.points.map { Vec2(max(0, $0.x), $0.y + z0) }, around: Vec3(axis, z: 0), segments: segments, angle: sweep)
                 let mesh = raw.transformed(Transform3(Transform2.rotation(a0, around: axis)))
+                if let wp = s.workPlane, wp != .xy, !mesh.isEmpty { // COMPA: a revolve on a side work plane turns about that plane's normal axis
+                    let placed = mesh.transformed(wp.transform)
+                    guard let foot = FamilyFormGeometry.boxFootprint(placed) else {
+                        errors.append("Revolve “\(s.name)” can't be built for this type.")
+                        continue
+                    }
+                    let b = placed.bounds
+                    solids.append(make(.revolve, foot, b.min.z, b.max.z, mesh: placed))
+                    continue
+                }
                 guard !mesh.isEmpty, let foot = FamilyFormGeometry.revolveFootprint(axis: axis, rMin: max(0, rs.min() ?? 0), rMax: rs.max() ?? 0, start: a0, sweep: sweep) else {
                     errors.append("Revolve “\(s.name)” can't be built for this type.")
                     continue

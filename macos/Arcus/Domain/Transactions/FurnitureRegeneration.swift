@@ -25,6 +25,7 @@ public enum FurnitureRegeneration {
         FurniturePartRegeneration.regenerate(tx, touched) // FM4: parts follow their planes (after the planes)
         FurnitureDimensionLocks.regenerate(tx) // FMG1: locked dimensions to part faces keep their parts
         FurnitureOpeningsRegeneration.regenerate(tx, touched) // FM5: bays follow the parts; fronts and their hardware follow the bays
+        ComponentPlacement.regenerate(tx, touched) // COMP: placed components follow their hosts
         FurnitureJointOperations.regenerate(tx) // FM6: joint elements whose parts are gone
         FurnitureAutoScale.regenerate(tx, touched) // FMG4: the template views' scale, dimensions and markers follow the piece
     }

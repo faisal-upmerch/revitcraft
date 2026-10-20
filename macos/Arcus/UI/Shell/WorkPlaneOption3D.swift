@@ -9,7 +9,9 @@ struct WorkPlaneOption3D: View {
     let state: DocumentState
     var body: some View {
         let _ = state.toolRevision
-        if let tools = state.active3DTools, state.activeTool != nil {
+        if (state.activeTool as? BaseTool)?.ctx.furniture3D != nil {
+            FM3DPlacementOption(state: state) // FM3D: Furniture tools' Placement Plane
+        } else if let tools = state.active3DTools, state.activeTool != nil {
             let levels = WorkPlane3D.levels(in: state.model)
             let current = (state.activeTool as? BaseTool)?.ctx.levelID ?? tools.workPlaneLevel
             let sketch = (state.activeTool as? BaseTool)?.ctx.sketchPlane // S3D2: drawing on a reference plane or face

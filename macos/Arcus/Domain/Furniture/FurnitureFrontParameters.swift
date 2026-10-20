@@ -199,7 +199,7 @@ enum FurnitureFrontParameters {
     /// Extra Properties of hardware instances (placed after the component's own).
     static func hardwareInstance(_ e: Element) -> [P] {
         guard e.category == .furnitureHardware else { return [] }
-        return [hwKind, hwCount] + (e.params[FurnitureHardware.ownerParam] != nil ? [owner] : [])
+        return [hwKind, hwCount] + (e.params[FurnitureHardware.ownerParam] != nil ? [owner] : []) + ComponentParameters.instance(e) // COMP: placement and library data
     }
 
     // MARK: Types

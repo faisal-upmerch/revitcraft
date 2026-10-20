@@ -39,6 +39,7 @@ enum DialogKind: Identifiable, Equatable {
     case fm8(FM8Dialog) // FM8: Load Furniture, Save as Furniture Template (Dialogs/FM8Dialogs.swift)
     case fmg2(FMG2Dialog) // FMG2: Explode Parts (Dialogs/FurnitureExplodeDialog.swift)
     case fmg4(FMG4Dialog) // FMG4: Associate Family Parameter (Dialogs/FMG4AssociateDialog.swift)
+    case comp(COMPDialog) // COMP: one-click hardware, assemblies, hardware rules, custom components (Library/Components/ComponentDialogs.swift)
     var id: String { String(describing: self) }
 }
 

@@ -60,6 +60,8 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     private var tooltipTimer: Timer?
     /// Snapping to the model geometry of the view (Viewport3DSnapping.swift). // S3D
     let snapping3D = Viewport3DSnapping()
+    /// Furniture editing in 3D: shape handles, moves, temporary dimensions, Tab (Viewport3DFurniture*.swift). // FM3D
+    let fm3d = FM3DViewState()
 
     init(state: DocumentState, viewID: ElementID, viewport: Viewport3DView, host: NSView) {
         self.state = state
@@ -192,6 +194,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
             Task { @MainActor in
                 guard let self else { return }
                 let ids = self.state.session.selection.ids
+                self.overlay.needsDisplay = true // FM3D: shape handles follow the selection
                 if self.host?.window != nil, !ids.isEmpty, let l = WorkPlane3D.level(of: ids, in: self.state.model),
                    let plan = WorkPlane3D.planView(forLevel: l, in: self.state.model) {
                     self.listen(plan)
@@ -237,6 +240,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     private func toolInput(_ event: NSEvent, at p: CGPoint, tool: any InteractiveTool) -> ToolInput? {
+        if (tool as? BaseTool)?.ctx.furniture3D != nil { return fm3dToolInput(event, at: p, tool: tool) } // FM3D: Furniture tools on their 3D placement
         if (tool as? BaseTool)?.ctx.sketchPlane != nil { return sketchToolInput(event, at: p, tool: tool) } // S3D2: any work plane
         guard let ctx = (tool as? BaseTool)?.ctx ?? context(), let s = sample(event, at: p) else { return nil }
         let z = ctx.isPlan ? ctx.levelElevation : ctx.model.elevation(ofLevel: workPlaneLevel)
@@ -267,6 +271,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     private func mouseDown(_ event: NSEvent, at p: CGPoint) -> Bool {
         lastMouse = p
         downPoint = p
+        if fm3dMouseDown(event, at: p) { refresh(); return true } // FM3D: handles, values, parts, Tab, Pick a plane
         if let tool = state.activeTool {
             press = .tool
             guard let i = toolInput(event, at: p, tool: tool) else { return true }
@@ -291,6 +296,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
 
     private func mouseDragged(_ event: NSEvent, at p: CGPoint) -> Bool {
         lastMouse = p
+        if fm3dMouseDragged(event, at: p) { return true } // FM3D
         pointerMovedForTooltip()
         switch press {
         case .none:
@@ -326,6 +332,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
 
     private func mouseUp(_ event: NSEvent, at p: CGPoint) -> Bool {
         defer { refresh() }
+        if fm3dMouseUp(event, at: p) { return true } // FM3D
         switch press {
         case .none:
             return false
@@ -353,6 +360,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     private func mouseMoved(_ event: NSEvent, at p: CGPoint) -> Bool {
+        if fm3dMouseMoved(event, at: p) { return true } // FM3D: a shape handle hovered, a Tab choice held; Place on Face
         guard let tool = state.activeTool else { return false }
         lastMouse = p
         pointerMovedForTooltip()
@@ -374,7 +382,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
     }
 
     func viewport3DCameraDidChange() {
-        guard state.activeTool != nil || dragTool != nil || showsWorkPlane else { return } // F2: a shown work plane follows the camera
+        guard state.activeTool != nil || dragTool != nil || showsWorkPlane || fm3dShowsOverlay else { return } // F2: a shown work plane follows the camera; FM3D: handles
         overlay.needsDisplay = true
     }
 
@@ -382,6 +390,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         let flags = event.modifierFlags.intersection([.command, .option, .control])
         let chars = event.charactersIgnoringModifiers ?? ""
         let tool = state.activeTool
+        if fm3dKeyDown(event) { refresh(); return true } // FM3D: Tab through stacked elements, Esc drops a handle drag
         switch event.keyCode {
         case 53: // Escape
             numericField?.removeFromSuperview(); numericField = nil
@@ -530,6 +539,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
 
     var tooltipText: String? {
         if let st = dragTool, st.isDragging { return "Drag to new position" }
+        if let t = fm3dTooltip { return t } // FM3D
         guard let tool = state.activeTool else { return nil }
         if snapLabelShown, !(tool is InsertTool) { return nil } // S3D: the snap label shows beside the marker, as in plan
         if let s = snap, !(tool is InsertTool) { return s.shortLabel ?? s.kind.rawValue }
@@ -545,6 +555,7 @@ final class Viewport3DToolController: NSObject, Viewport3DPointerHandler, NSText
         drawShownWorkPlane(cg, viewport: v) // F2: Work Plane ▸ Show
         drawDropPreview(cg, viewport: v) // FMG4: a piece being dragged in from Finder
         drawExplodeTags(cg, viewport: v) // FMG4: Explode Parts tags on the live view
+        drawFM3D(cg, viewport: v) // FM3D: shape handles, temporary dimensions, moves
         let tool = state.activeTool
         let dragging = dragTool?.isDragging == true
         guard tool != nil || dragging else { return }

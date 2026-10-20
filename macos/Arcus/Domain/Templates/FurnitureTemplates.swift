@@ -188,6 +188,7 @@ public enum FurnitureTemplates {
         FurnitureFrontTypes.ensureStandard(in: tx) // FM5: hardware families, door/drawer/flap types, Bay and Front Tags
         FurnitureJointOperations.ensureCutSizeTag(in: tx) // FM6: the Cut Size Tag
         FurnitureShopDrawings.ensureStandard(in: tx) // FM7: Part List, Hardware Schedule, Material Takeoff, Edge Banding, Cost; sheets F101–F104
+        FurnitureDesignView.ensure(in: tx) // FM3D: the 3D Design view (orbit camera, work plane shown)
     }
 
     /// A new untitled piece from a saved Furniture document (a library piece or the user's own template), renamed and
