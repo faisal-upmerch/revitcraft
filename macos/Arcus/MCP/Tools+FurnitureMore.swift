@@ -12,6 +12,16 @@ import ArcusApplication
 extension ArcusToolCatalog {
     static let inchNote = "Furniture lengths are inches (numbers) or text like 1'-6\". Front points are [x, z]: x across (Left −W/2 … Right +W/2), z up from Bottom."
     static let furnitureTools: [ToolSpec] = [
+        ToolSpec("add_furniture_form", "Furniture Form", "A free form (or void) in a Furniture document: extrusion or blend of a profile, revolve about an axis, sweep along a path, or a cushion. plane xy draws in plan between heights w0–w1; xz/yz draw in the front/side elevation between depths. " + inchNote,
+                 risk: .edit, group: .furniture, modes: .furniture,
+                 properties: ["kind": S.oneOf(["extrusion", "blend", "revolve", "sweep", "cushion"]), "profile": S.points(), "top_profile": S.points("Blend top"), "path": S.points("Sweep path"),
+                              "axis": S.point("Revolve axis point"), "plane": S.oneOf(["xy", "xz", "yz"], "Default xy"), "w0": S.len(), "w1": S.len(), "void": S.bool()],
+                 required: ["kind", "profile"]),
+        ToolSpec("edit_furniture_part", "Edit Part", "Change parts: opening (a rectangular cut-out in a panel: s0–s1 along it, t0–t1 up from its base), profile (a new face outline, or reset), attach (panels/legs run to a shelf or top) or detach. Materials and sizes: set_parameters (type: true for the part type). " + inchNote,
+                 risk: .edit, group: .furniture, modes: .furniture,
+                 properties: ["action": S.oneOf(["opening", "profile", "reset_profile", "attach", "detach"]), "parts": S.ids(), "s0": S.len(), "s1": S.len(), "t0": S.len(), "t1": S.len(),
+                              "outline": S.points("Profile in face coordinates [[s, t], …]"), "to": S.int("Attach: the shelf or top id")],
+                 required: ["action", "parts"]),
         ToolSpec("add_bays", "Bay", "Place bays (front openings bounded by parts, like rooms) at front points [x, z], or auto: one in every opening of the front; optionally divide each into rows (drawer stack) or columns. " + inchNote,
                  risk: .edit, group: .furniture, modes: .furniture,
                  properties: ["points": S.points("[[x, z], …] inside openings"), "auto": S.bool(), "face": S.oneOf(["front", "top"], "Default front"),
@@ -67,6 +77,8 @@ extension ArcusToolCatalog {
 
 extension ArcusToolbox {
     static let furnitureHandlers: [String: ToolHandler] = [
+        "add_furniture_form": { b, c in try b.addFurnitureForm(c) },
+        "edit_furniture_part": { b, c in try b.editFurniturePart(c) },
         "add_bays": { b, c in try b.addBays(c) },
         "add_fronts": { b, c in try b.addFronts(c) },
         "add_hardware": { b, c in try b.addHardware(c) },
@@ -93,6 +105,52 @@ extension ArcusToolbox {
         var o = fields
         if let b = Self.furnitureBox(m) { o["overall"] = [c.out(b.max.x - b.min.x, m), c.out(b.max.y - b.min.y, m), c.out(b.max.z - b.min.z, m)] }
         return result(c, o, ids: ids, problems: extra + flex.prefix(6) + parts)
+    }
+
+    // MARK: Forms and part edits
+
+    func addFurnitureForm(_ c: ToolContext) throws -> ToolOutput {
+        _ = try requireFurniture(c)
+        let kn = try c.args.requireString("kind").lowercased()
+        guard let kind = FurnitureFormKind.allCases.first(where: { $0.rawValue.lowercased() == kn }) else { throw ToolError("kind must be extrusion, blend, revolve, sweep or cushion.") }
+        let profile = try c.points(c.args["profile"] ?? .null, "profile", min: kind == .sweep ? 3 : 3)
+        let plane = FamilySketchPlane(rawValue: (c.args.string("plane") ?? "xy").uppercased()) ?? .xy
+        let w0 = try c.length("w0") ?? 0, w1 = try c.length("w1") ?? 0.0254 * 2
+        guard w1 > w0 || kind == .revolve || kind == .sweep else { throw ToolError("w1 must be above w0 (the form's thickness range).") }
+        var f = FurnitureFormData(kind: kind, isVoid: c.args.bool("void", default: false), plane: plane, profile: profile, w0: w0, w1: w1)
+        if kind == .blend { guard let tp = c.args["top_profile"] else { throw ToolError("A blend needs top_profile.") }; f.topProfile = try c.points(tp, "top_profile", min: 3) }
+        if kind == .sweep { guard let pv = c.args["path"] else { throw ToolError("A sweep needs path.") }; f.path = try c.points(pv, "path") }
+        if kind == .revolve { f.axis = try c.args["axis"].map { try c.point($0, "axis") } ?? .zero }
+        let final = f
+        var id: ElementID?
+        try c.edit("Form") { tx in id = try FurniturePartOperations.createForm(final, in: tx) }
+        return try furnitureResult(c, ["form": id?.json ?? .null, "kind": .string(kind.rawValue)], ids: id.map { [$0] } ?? [])
+    }
+
+    func editFurniturePart(_ c: ToolContext) throws -> ToolOutput {
+        _ = try requireFurniture(c)
+        let action = try c.args.requireString("action").lowercased()
+        let parts = try c.elementIDs("parts")
+        try c.edit("Edit Part") { tx in
+            switch action {
+            case "opening":
+                guard let s0 = try c.length("s0"), let s1 = try c.length("s1"), let t0 = try c.length("t0"), let t1 = try c.length("t1"), s1 > s0, t1 > t0 else {
+                    throw TransactionError("An opening needs s0 < s1 and t0 < t1 (inches along the panel and up from its base).")
+                }
+                for p in parts { try FurniturePartOperations.addOpening(p, PanelOpening(s0: s0, s1: s1, t0: t0, t1: t1), in: tx) }
+            case "profile":
+                guard let ov = c.args["outline"] else { throw TransactionError("profile needs outline [[s, t], …].") }
+                let outline = try c.points(ov, "outline", min: 3)
+                for p in parts { try FurniturePartOperations.setProfile(p, outline, in: tx) }
+            case "reset_profile": for p in parts { try FurniturePartOperations.setProfile(p, nil, in: tx) }
+            case "attach":
+                guard let tv = c.args["to"] else { throw TransactionError("attach needs to (a shelf or top id).") }
+                try FurniturePartOperations.attach(parts, to: try c.element(tv, "to").id, in: tx)
+            case "detach": FurniturePartOperations.detach(parts, in: tx)
+            default: throw TransactionError("action must be opening, profile, reset_profile, attach or detach.")
+            }
+        }
+        return try furnitureResult(c, ["parts": .array(parts.map(\.json)), "action": .string(action)], ids: parts)
     }
 
     // MARK: Bays and fronts

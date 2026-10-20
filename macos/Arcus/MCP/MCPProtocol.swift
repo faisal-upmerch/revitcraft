@@ -92,10 +92,12 @@ public final class MCPServer {
     public var serverName = "arcus"
     public var serverVersion = "1.0.0"
     public var instructions = """
-        Arcus is a native macOS BIM app (Revit-like). Start with arcus_status. Create or open a document, then build \
-        with coarse tools (walls by polyline, all doors at once, rooms automatically). Lengths are in the document's unit \
-        (ft for Imperial projects, mm for Metric, in for Furniture) or strings like 12'-6". Check work with query_model \
-        (rooms with areas, warnings) and render_view; save when done.
+        Arcus is a native macOS BIM app (Revit-like). Start with arcus_status or context_summary. Create or open a \
+        document, then build with coarse tools (walls by polyline, all doors at once, rooms automatically). Lengths are in \
+        the document's unit (ft for Imperial projects, mm for Metric, in for Furniture) or strings like 12'-6". Editing \
+        results carry a verification block (ok, problems): fix what it reports. Check drawings with verify_drawing and \
+        work with model_health and render_view. Tools default to the selection and the active view. For anything no \
+        tool covers, list_commands then run_command. Ask the user before destructive, project-wide and file tools.
         """
     /// Set once the client has sent `initialize`.
     public private(set) var clientName: String?

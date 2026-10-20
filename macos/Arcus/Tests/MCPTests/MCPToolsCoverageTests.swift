@@ -169,6 +169,8 @@ struct MCPToolsCoverageTests {
         // Furniture
         "set_furniture_size": (.furniture, { _ in ["width": 30] }),
         "add_furniture_parts": (.furniture, { _ in ["parts": [["kind": "shelf", "z": 26]]] }),
+        "add_furniture_form": (.furniture, { _ in ["kind": "extrusion", "profile": [[-6, -6], [6, -6], [6, 6], [-6, 6]], "w0": 34, "w1": 36] }),
+        "edit_furniture_part": (.furniture, { f in ["action": "opening", "parts": [.int(f.parts["sides"] ?? 0)], "s0": 4, "s1": 8, "t0": 10, "t1": 14] }),
         "add_bays": (.furniture, { _ in ["auto": true] }),
         "add_fronts": (.furniture, { f in try await f.t.call("add_bays", ["auto": true]); return ["kind": "door"] }),
         "add_hardware": (.furniture, { f in try await f.t.call("add_bays", ["auto": true]); try await f.t.call("add_fronts", ["kind": "door"]); return ["action": "handle"] }),
@@ -238,6 +240,7 @@ struct MCPToolsCoverageTests {
         "verify_drawing": (.project, { _ in ["view": "Level 1", "image": true, "width": 400] }),
         // Commands
         "list_commands": (.project, { _ in ["search": "wall"] }),
+        "find_tools": (.project, { _ in ["search": "curtain grid"] }),
         "run_command": (.project, { _ in ["command": "Select All"] }),
     ]
 
@@ -338,6 +341,9 @@ struct MCPToolsCoverageTests {
         #expect(family.contains("add_form") && !project.contains("add_form") && !furniture.contains("add_form"))
         #expect(none.contains("create_project") && !none.contains("create_walls"))
         #expect(project.count < ArcusToolCatalog.all.count && family.count < 30)
+        let core = ArcusToolCatalog.tools(for: .project, coreOnly: true)
+        #expect(core.count < 50 && core.contains { $0.name == "find_tools" } && core.contains { $0.name == "create_walls" })
+        #expect(ArcusToolCatalog.tools(for: .family, coreOnly: true).contains { $0.name == "add_form" })
         // Tools that need a selection only appear with one.
         let noSel = ArcusToolCatalog.tools(for: .project, context: ToolCatalogContext(viewKind: .floorPlan))
         #expect(noSel.allSatisfy { !$0.needsSelection })
@@ -352,6 +358,28 @@ struct MCPToolsCoverageTests {
         let counts = Dictionary(uniqueKeysWithValues: ArcusToolCatalog.countsByGroup)
         #expect(counts.values.reduce(0, +) == ArcusToolCatalog.all.count)
         #expect(ArcusToolCatalog.all.count >= 120)
+    }
+
+    /// ARCUS_TOOL_DUMP=1 writes the tool table for Docs/MCP.md to /tmp/arcus-aitools/tools.md.
+    @Test func toolTableForTheDocs() throws {
+        guard ProcessInfo.processInfo.environment["ARCUS_TOOL_DUMP"] != nil else { return }
+        var md = ""
+        for (g, n) in ArcusToolCatalog.countsByGroup {
+            md += "\n**\(g.rawValue)** (\(n))\n\n| Tool | Risk | Documents | What it does |\n|---|---|---|---|\n"
+            for t in ArcusToolCatalog.all where t.group == g {
+                let modes = t.modes.isEmpty ? "any" : t.modes.map(\.rawValue).sorted().joined(separator: ", ")
+                let first = t.description.split(separator: ".").first.map(String.init) ?? t.description
+                md += "| `\(t.name)` | \(t.risk.rawValue) | \(modes) | \(first.replacingOccurrences(of: "|", with: "/")). |\n"
+            }
+        }
+        md += "\nTotal: \(ArcusToolCatalog.all.count)\n"
+        for mode in [DocumentMode.none, .project, .furniture, .family] {
+            let list = ArcusToolCatalog.tools(for: mode)
+            let core = ArcusToolCatalog.tools(for: mode, coreOnly: true)
+            md += "\n\(mode.rawValue): \(list.count) tools, \(JSONValue.array(list.map(\.listing)).jsonText.count) characters; core \(core.count) tools, \(JSONValue.array(core.map(\.listing)).jsonText.count) characters"
+        }
+        try FileManager.default.createDirectory(atPath: "/tmp/arcus-aitools", withIntermediateDirectories: true)
+        try md.write(toFile: "/tmp/arcus-aitools/tools.md", atomically: true, encoding: .utf8)
     }
 
     @Test func toolUndoStepsNestInsideThePromptGroup() async throws {
