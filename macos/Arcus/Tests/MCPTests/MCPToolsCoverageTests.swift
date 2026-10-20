@@ -368,7 +368,7 @@ struct MCPToolsCoverageTests {
             md += "\n**\(g.rawValue)** (\(n))\n\n| Tool | Risk | Documents | What it does |\n|---|---|---|---|\n"
             for t in ArcusToolCatalog.all where t.group == g {
                 let modes = t.modes.isEmpty ? "any" : t.modes.map(\.rawValue).sorted().joined(separator: ", ")
-                let first = t.description.split(separator: ".").first.map(String.init) ?? t.description
+                let first = t.description.components(separatedBy: ". ").first ?? t.description
                 md += "| `\(t.name)` | \(t.risk.rawValue) | \(modes) | \(first.replacingOccurrences(of: "|", with: "/")). |\n"
             }
         }
