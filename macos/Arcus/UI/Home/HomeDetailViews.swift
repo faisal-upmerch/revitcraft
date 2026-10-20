@@ -133,7 +133,7 @@ struct HomeIncludesTile: View {
 
 struct HomeFurniturePane: View {
     @Bindable var model: HomeModel
-    static let columns = [GridItem(.adaptive(minimum: 112, maximum: 148), spacing: 12, alignment: .top)]
+    static let columns = [GridItem(.adaptive(minimum: 132, maximum: 172), spacing: 12, alignment: .top)]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
