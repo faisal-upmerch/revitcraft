@@ -1,4 +1,5 @@
 import Foundation
+import ArcusDomain
 
 // MCP: the Model Context Protocol over JSON-RPC 2.0 (Docs/MCP.md §1). Transport-agnostic: `handle` takes one message
 // (a line from stdin) and returns the response line, or nil for notifications.
@@ -9,23 +10,46 @@ public struct ToolSpec: Sendable {
     public var title: String
     public var description: String
     public var inputSchema: JSONValue
+    /// AITOOLS: what the tool can change, so the assistant knows when to ask first (Docs/MCP.md §5).
+    public var risk: ToolRisk
+    /// AITOOLS: the catalog group (Architecture, Annotation, Views & Sheets…).
+    public var group: ToolGroup
+    /// AITOOLS: document kinds the tool applies to (empty: any, including no document).
+    public var modes: Set<DocumentMode>
+    /// AITOOLS: view kinds the active view must be for the tool to apply (nil: any view or none).
+    public var viewKinds: Set<ViewKind>?
+    /// AITOOLS: the tool works on the current selection (listed only when something is selected).
+    public var needsSelection: Bool
+
     /// True for tools that never change the document (query, list, render, export).
-    public var readOnly: Bool
+    public var readOnly: Bool { risk == .read || risk == .file && !changesDocument }
     /// True for tools that remove content (delete, undo).
-    public var destructive: Bool
+    public var destructive: Bool { risk == .destructive }
+    /// File tools that also change the document (create, open, save replace or write it).
+    public var changesDocument: Bool
 
     public init(_ name: String, _ title: String, _ description: String, readOnly: Bool = false, destructive: Bool = false,
+                risk: ToolRisk? = nil, group: ToolGroup = .document, modes: Set<DocumentMode> = [], viewKinds: Set<ViewKind>? = nil,
+                needsSelection: Bool = false, changesDocument: Bool = false,
                 properties: [String: JSONValue] = [:], required: [String] = []) {
-        self.name = name; self.title = title; self.description = description; self.readOnly = readOnly; self.destructive = destructive
+        self.name = name; self.title = title; self.description = description
+        self.risk = risk ?? (destructive ? .destructive : readOnly ? .read : .edit)
+        self.group = group; self.modes = modes; self.viewKinds = viewKinds; self.needsSelection = needsSelection
+        self.changesDocument = changesDocument
         var schema: [String: JSONValue] = ["type": "object", "properties": .object(properties), "additionalProperties": false]
         if !required.isEmpty { schema["required"] = .array(required.map { .string($0) }) }
         inputSchema = .object(schema)
     }
 
+    /// The property names the schema accepts.
+    public var propertyNames: Set<String> { Set(inputSchema["properties"]?.objectValue?.keys.map { $0 } ?? []) }
+    /// The required property names.
+    public var requiredNames: [String] { inputSchema["required"]?.arrayValue?.compactMap(\.stringValue) ?? [] }
+
     public var listing: JSONValue {
         ["name": .string(name), "title": .string(title), "description": .string(description), "inputSchema": inputSchema,
          "annotations": ["title": .string(title), "readOnlyHint": .bool(readOnly), "destructiveHint": .bool(destructive),
-                         "idempotentHint": .bool(readOnly), "openWorldHint": false]]
+                         "idempotentHint": .bool(risk == .read), "openWorldHint": false]]
     }
 }
 

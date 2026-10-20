@@ -35,7 +35,36 @@ enum S {
 public enum ArcusToolCatalog {
     static let lengthNote = "Lengths: numbers are in the document unit (ft in Imperial projects, mm in Metric, in in Furniture) or text like 12'-6\"."
 
-    public static let all: [ToolSpec] = [
+    /// Every tool, grouped (AITOOLS: the original tools with their group, risk and modes, then the batch's tools).
+    public static let all: [ToolSpec] = core.map(annotated) + contextTools + architectureTools + annotationTools + viewTools + scheduleTools
+        + exportTools + familyTools + furnitureTools + editTools + selectionTools + navigationTools + checkTools + commandTools
+
+    /// Group, risk and document kinds of the original tools.
+    static let coreMeta: [String: (ToolGroup, ToolRisk, Set<DocumentMode>)] = [
+        "arcus_status": (.document, .read, []), "create_project": (.document, .file, []), "create_furniture": (.document, .file, []),
+        "open_document": (.document, .file, []), "save": (.document, .file, .open), "set_project_info": (.document, .projectWide, .project),
+        "undo": (.document, .destructive, .open), "redo": (.document, .edit, .open),
+        "add_level": (.architecture, .edit, .project), "add_grid": (.architecture, .edit, .project), "create_walls": (.architecture, .edit, .project),
+        "place_doors": (.architecture, .edit, .project), "place_windows": (.architecture, .edit, .project), "create_floor": (.architecture, .edit, .project),
+        "create_ceiling": (.architecture, .edit, .project), "create_roof": (.architecture, .edit, .project), "add_stair": (.architecture, .edit, .project),
+        "add_railing": (.architecture, .edit, .project), "place_rooms": (.architecture, .edit, .project), "place_components": (.architecture, .edit, .project),
+        "set_parameters": (.edit, .edit, .model), "move_elements": (.edit, .edit, .model), "delete_elements": (.edit, .destructive, .model),
+        "create_views": (.views, .edit, .model), "create_sheet": (.views, .edit, .model), "create_schedule": (.schedules, .edit, .model),
+        "add_dimensions": (.annotation, .edit, .model), "add_tags": (.annotation, .edit, .model),
+        "query_model": (.query, .read, .model), "list_types": (.query, .read, .model), "list_families": (.query, .read, .project),
+        "render_view": (.exports, .read, .model), "export_pdf": (.exports, .file, .model), "export_dwg": (.exports, .file, .model),
+        "set_furniture_size": (.furniture, .edit, .furniture), "add_furniture_parts": (.furniture, .edit, .furniture),
+    ]
+
+    static func annotated(_ t: ToolSpec) -> ToolSpec {
+        var t = t
+        guard let (g, r, m) = coreMeta[t.name] else { return t }
+        t.group = g; t.risk = r; t.modes = m
+        t.changesDocument = ["create_project", "create_furniture", "open_document", "save"].contains(t.name)
+        return t
+    }
+
+    static let core: [ToolSpec] = [
         // MARK: Document
         ToolSpec("arcus_status", "Status", "Where tools run (file mode or the live Arcus app), the open document, its units and element counts, and what to do next. Call first.",
                  readOnly: true),
