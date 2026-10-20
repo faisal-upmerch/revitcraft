@@ -219,8 +219,9 @@ public struct Sketch: Hashable, Codable, Sendable {
     public var allCurves: [Curve2] { loops.flatMap { $0 } }
     public var bounds: Rect2 { allCurves.reduce(Rect2.empty) { $0.union($1.bounds) } }
 
-    /// Converts loops to polygons (arcs tessellated). Returns nil with a reason if a loop is open.
-    public func polygons(chordTolerance: Double = 0.005) -> Result<[Polygon2], SketchError> {
+    /// Converts loops to polygons (arcs tessellated; by `quality` when given, VIS). Returns nil with a reason if a loop
+    /// is open.
+    public func polygons(chordTolerance: Double = 0.005, quality: TessellationQuality? = nil) -> Result<[Polygon2], SketchError> {
         var out: [Polygon2] = []
         for (i, loop) in loops.enumerated() {
             guard !loop.isEmpty else { continue }
@@ -228,7 +229,7 @@ public struct Sketch: Hashable, Codable, Sendable {
             guard let ordered else { return .failure(.openLoop(i)) }
             var pts: [Vec2] = []
             for c in ordered {
-                let t = c.tessellate(chordTolerance: chordTolerance)
+                let t = quality.flatMap { q in c.asArc.map { $0.tessellate(quality: q) } } ?? c.tessellate(chordTolerance: chordTolerance)
                 pts.append(contentsOf: t.dropLast())
             }
             let poly = Polygon2(pts).simplified()

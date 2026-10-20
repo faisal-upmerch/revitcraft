@@ -172,10 +172,10 @@ struct FamilyPreviewDrawing {
         case .front, .back, .left, .right, .threeD:
             let proj = mode == .threeD ? orbit.projection : projection(mode)
             if fast { // F1415: plain edges while orbiting
-                for s in solids where visible(s) { d.strokes += featureEdges(s.familyMesh, proj).map { Stroke(points: $0, closed: false, style: .solid, item: item(s)) } }
+                for s in solids where visible(s) { d.strokes += featureEdges(s.displayMesh, proj).map { Stroke(points: $0, closed: false, style: .solid, item: item(s)) } }
             } else {
                 var inputs: [HLRInput] = []
-                for (i, s) in solids.enumerated() where visible(s) { inputs.append(HLRInput(tag: i, mesh: s.familyMesh)) }
+                for (i, s) in solids.enumerated() where visible(s) { inputs.append(HLRInput(tag: i, mesh: s.displayMesh)) }
                 for e in HiddenLineRenderer.render(inputs, projection: proj) {
                     let src = solids.indices.contains(e.tag) ? item(solids[e.tag]) : nil
                     d.strokes.append(Stroke(points: [e.segment.start, e.segment.end], closed: false, style: .solid, item: src))
@@ -183,9 +183,9 @@ struct FamilyPreviewDrawing {
             }
             if !applyVisibility {
                 for s in solids where !visible(s) {
-                    d.strokes += featureEdges(s.familyMesh, proj).map { Stroke(points: $0, closed: false, style: .hiddenByVisibility, item: item(s)) }
+                    d.strokes += featureEdges(s.displayMesh, proj).map { Stroke(points: $0, closed: false, style: .hiddenByVisibility, item: item(s)) }
                 }
-                for v in voids { d.strokes += featureEdges(v.familyMesh, proj).map { Stroke(points: $0, closed: false, style: .void, item: item(v)) } }
+                for v in voids { d.strokes += featureEdges(v.displayMesh, proj).map { Stroke(points: $0, closed: false, style: .void, item: item(v)) } }
             }
         }
         // F1415: model lines (black) and reference lines (green) on their work planes, in every view.

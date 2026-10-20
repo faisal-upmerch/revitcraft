@@ -311,7 +311,10 @@ public enum RailingGeometry {
 
     static func railProfile(_ size: Double, circular: Bool) -> Polygon2 {
         let r = size / 2
-        if circular { return Polygon2((0..<12).map { Vec2.fromAngle(Double($0) / 12 * 2 * .pi, length: r) }) }
+        if circular { // VIS: round rails smooth (10° facets or finer: no lines along them, smooth shading)
+            let n = TessellationQuality.medium.fullCircleSegments(radius: r)
+            return Polygon2((0..<n).map { Vec2.fromAngle(Double($0) / Double(n) * 2 * .pi, length: r) })
+        }
         return Polygon2([Vec2(-r, -r), Vec2(r, -r), Vec2(r, r), Vec2(-r, r)])
     }
 

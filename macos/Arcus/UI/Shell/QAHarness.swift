@@ -487,6 +487,7 @@ enum QAHarness {
             await compbScreenshots(suffix) // COMPB: Joint Rules with connector components, a table on Component Library hairpin legs
             await dialogsScreenshots(s, w, suffix: suffix) // DIALOGS: the ten dialogs of the owner's review, as sheets
             await fm3dScreenshots(suffix) // FM3D: the Create tab in 3D, a shelf sketched in 3D, a panel on a face, shape handles
+            await visScreenshots(suffix) // VIS: round legs, caster, round-over top and curved walls at each detail level; View Control Bar states
             await auditCaptures(s, w, plan: plan.id, suffix: suffix) // W4-AUDIT: every remaining dialog, workspaces × widths, Family Editor
             s.commandSearchVisible = true
             await pause(500)

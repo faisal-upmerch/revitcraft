@@ -64,8 +64,9 @@ public struct PlanSymbol: Sendable {
 }
 
 public enum FamilyInstanceGeometry {
-    /// Evaluates the family for an instance, supplying host-derived parameters.
-    public static func evaluate(_ e: Element, _ model: BIMModel) -> EvaluatedFamily? {
+    /// Evaluates the family for an instance, supplying host-derived parameters. `detail` sets how finely curves are
+    /// tessellated (VIS: Medium when nil).
+    public static func evaluate(_ e: Element, _ model: BIMModel, detail: DetailLevel? = nil) -> EvaluatedFamily? {
         let typeElement = e.isType ? e : model.type(of: e)
         guard let famID = (e.typeData ?? typeElement?.typeData)?.familyID, let famElement = model[famID], let fam = famElement.family else { return nil }
         var instance = Parameters.familyInstanceValues(e)
@@ -77,9 +78,12 @@ public enum FamilyInstanceGeometry {
         h.combine(typeElement?.id); h.combine(typeElement?.revision)
         for (k, v) in instance.sorted(by: { $0.key < $1.key }) { h.combine(k); h.combine(v) }
         h.combine(model.units)
+        let quality = (detail ?? .medium).tessellation // VIS
+        h.combine(quality)
         let key = h.finalize()
         if let hit = FamilyEvalCache.shared.get(key) { return hit }
-        let r = FamilyEvaluator.evaluate(Parameters.effectiveFamily(fam, for: e, model), typeName: "project", instance: instance, units: model.units)
+        let r = FamilyEvaluator.evaluate(Parameters.effectiveFamily(fam, for: e, model), typeName: "project", instance: instance, units: model.units,
+                                         quality: quality)
         FamilyEvalCache.shared.put(key, r)
         return r
     }
@@ -95,11 +99,11 @@ public enum FamilyInstanceGeometry {
     }
 
     public static func meshParts(_ e: Element, _ model: BIMModel, transform t: Transform3, detail: DetailLevel = .fine) -> [MeshPart] {
-        guard let ev = evaluate(e, model) else { return [] }
+        guard let ev = evaluate(e, model, detail: detail) else { return [] }
         let front = Vec2(t.yAxis.x, t.yAxis.y)
         let frontAxis = front.lengthSquared > 0 ? front.normalized : nil
         return ev.solids.filter { !$0.isVoid && $0.visibleAt.contains(detail) }.map { s in
-            MeshPart(mesh: s.familyMesh.transformed(t), materialID: material(s, ev, e, model), subcategory: s.subcategory,
+            MeshPart(mesh: s.displayMesh.transformed(t), materialID: material(s, ev, e, model), subcategory: s.subcategory,
                      views: views(s), frontAxis: frontAxis)
         }
     }
@@ -198,7 +202,7 @@ public enum ComponentGeometry {
             let top = model.topElevation(base: base, topLevelID: c.topLevelID, topOffset: c.topOffset, unconnectedHeight: c.unconnectedHeight)
             let h = max(top - base, Tolerance.shortCurve)
             if Parameters.familyDefinition(for: e, model) == nil {
-                let prof = columnProfile(e, model)
+                let prof = columnProfile(e, model, detail: detail)
                 return SlantedColumns.lean([MeshPart(mesh: MeshBuilder.extrude(prof, bottom: 0, top: h).transformed(p.world),
                                                      materialID: model.typeParam(e, ParameterID("type.material"))?.refValue)], c, base: base, height: h) // F2
             }
@@ -210,10 +214,10 @@ public enum ComponentGeometry {
         return FamilyInstanceGeometry.meshParts(e, model, transform: p.world, detail: detail)
     }
 
-    public static func columnProfile(_ e: Element, _ model: BIMModel) -> Profile2 {
+    public static func columnProfile(_ e: Element, _ model: BIMModel, detail: DetailLevel? = nil) -> Profile2 {
         let d = model.typeLength(e, ParameterID("column.diameter"), default: 0)
         if d > Tolerance.length {
-            let pts = Arc2(center: .zero, radius: d / 2, startAngle: 0, sweep: Angle.twoPi).tessellate(chordTolerance: 0.002)
+            let pts = Arc2(center: .zero, radius: d / 2, startAngle: 0, sweep: Angle.twoPi).tessellate(quality: (detail ?? .medium).tessellation) // VIS
             return Profile2(outer: Polygon2(Array(pts.dropLast())))
         }
         let w = model.typeLength(e, ParameterID("column.width"), default: 0.4)
@@ -226,9 +230,9 @@ public enum ComponentGeometry {
     public static func planOutline(_ e: Element, _ model: BIMModel, detail: DetailLevel? = nil) -> [Polygon2] {
         guard let p = placement(e, model) else { return [] }
         if case .column = e.data, Parameters.familyDefinition(for: e, model) == nil {
-            return [columnProfile(e, model).outer.transformed(p.plan)]
+            return [columnProfile(e, model, detail: detail).outer.transformed(p.plan)]
         }
-        guard let ev = FamilyInstanceGeometry.evaluate(e, model) else { return [] }
+        guard let ev = FamilyInstanceGeometry.evaluate(e, model, detail: detail) else { return [] }
         return ev.solids.filter { !$0.isVoid && $0.visibleInPlan && detail.map($0.visibleAt.contains) != false }.map { $0.profile.outer.transformed(p.plan) }
     }
 
@@ -242,9 +246,9 @@ public enum ComponentGeometry {
     public static func planLoops(_ e: Element, _ model: BIMModel, detail: DetailLevel? = nil) -> [Polygon2] {
         guard let p = placement(e, model) else { return [] }
         if case .column = e.data, Parameters.familyDefinition(for: e, model) == nil {
-            return [columnProfile(e, model).outer.transformed(p.plan)]
+            return [columnProfile(e, model, detail: detail).outer.transformed(p.plan)]
         }
-        guard let ev = FamilyInstanceGeometry.evaluate(e, model) else { return [] }
+        guard let ev = FamilyInstanceGeometry.evaluate(e, model, detail: detail) else { return [] }
         return ev.solids.filter { !$0.isVoid && $0.visibleInPlan && detail.map($0.visibleAt.contains) != false }
             .flatMap { $0.profile.loops.map { $0.transformed(p.plan) } }
     }

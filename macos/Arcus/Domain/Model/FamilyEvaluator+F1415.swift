@@ -34,13 +34,16 @@ extension FamilyEvaluator {
     static func cutVoids(_ solids: [EvaluatedFamily.Solid]) -> [EvaluatedFamily.Solid] {
         let voids = solids.filter(\.isVoid)
         guard !voids.isEmpty else { return solids }
+        let voidBounds = voids.map(\.bounds) // VIS: each bounds once (mesh bounds walk every vertex)
         var out: [EvaluatedFamily.Solid] = []
         for s in solids {
             guard !s.isVoid else { out.append(s); continue }
             var parts = [s]
-            for v in voids where s.bounds.intersects(v.bounds) && (v.cuts.map { c in s.sourceID.map(c.contains) ?? false } ?? true) { // FM6: Cut Geometry
+            let sb = s.bounds
+            for (v, vb) in zip(voids, voidBounds) where sb.intersects(vb) && (v.cuts.map { c in s.sourceID.map(c.contains) ?? false } ?? true) { // FM6: Cut Geometry
+                let whole = parts.count == 1 // still the solid's own extent (cuts only shrink it)
                 parts = parts.flatMap { p -> [EvaluatedFamily.Solid] in
-                    guard p.bounds.intersects(v.bounds) else { return [p] }
+                    guard (whole ? sb : p.bounds).intersects(vb) else { return [p] }
                     // FM6: a void cuts at the detail levels it shows at; the solid keeps an uncut copy for the others.
                     let common = p.visibleAt.intersection(v.visibleAt)
                     guard !common.isEmpty else { return [p] }
@@ -62,6 +65,7 @@ extension FamilyEvaluator {
         guard !mesh.isEmpty else { return [] }
         var c = s
         c.mesh = mesh
+        c.booleanCut = true // VIS
         let b = mesh.bounds
         c.zMin = b.min.z; c.zMax = b.max.z
         return [c]

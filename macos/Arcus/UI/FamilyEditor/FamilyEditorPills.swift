@@ -331,20 +331,23 @@ struct FamilyViewControls: View {
         HStack(spacing: 10) {
             Menu {
                 ForEach(FamilyPreviewMode.allCases) { v in
-                    Button { model.view = v } label: { if v == model.view { Label(v.viewTitle, systemImage: "checkmark") } else { Text(v.viewTitle) } }
+                    Toggle(v.viewTitle, isOn: Binding(get: { v == model.view }, set: { _ in model.view = v })) // VIS: checkmark on the current view
                 }
             } label: { Image(systemName: model.view.symbol) }
             .menuStyle(.borderlessButton).fixedSize()
             .help("View: \(model.view.viewTitle)").accessibilityLabel("View \(model.view.viewTitle)")
             Menu {
                 ForEach(DetailLevel.allCases, id: \.self) { d in
-                    Button { model.detail = d } label: { if d == model.detail { Label(d.rawValue, systemImage: "checkmark") } else { Text(d.rawValue) } }
+                    Toggle(isOn: Binding(get: { d == model.detail }, set: { _ in model.detail = d })) { // VIS: checkmark and icon per level
+                        Label { Text(d.rawValue) } icon: { Image(nsImage: ViewStateIcons.detail(d)) }
+                    }
                 }
-            } label: { Image(systemName: model.detail == .coarse ? "circle.dotted" : model.detail == .medium ? "circle.lefthalf.filled" : "circle.fill") }
+            } label: { ViewControlIcon(image: ViewStateIcons.detail(model.detail)) }
             .menuStyle(.borderlessButton).fixedSize()
             .disabled(!model.applyVisibility)
-            .help(model.applyVisibility ? "Detail level: \(model.detail.rawValue)" : "Detail level (turn on Preview Visibility to use it)")
-            .accessibilityLabel("Detail level \(model.detail.rawValue)")
+            .help(model.applyVisibility ? model.detail.controlHelp : "Detail Level (turn on Preview Visibility to use it)")
+            .accessibilityLabel("Detail Level")
+            .accessibilityValue(model.detail.rawValue)
             Button { model.applyVisibility.toggle() } label: {
                 Image(systemName: model.applyVisibility ? "eye" : "eye.slash")
                     .font(.system(size: 12))

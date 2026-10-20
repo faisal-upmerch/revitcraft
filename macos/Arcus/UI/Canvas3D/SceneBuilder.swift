@@ -45,19 +45,20 @@ nonisolated public enum SceneBuilder {
     /// Builds one scene element (nil when it has no geometry or lies outside the section box).
     nonisolated static func element(_ e: Element, override o: GraphicOverride, model: BIMModel, detail: DetailLevel, sectionBox: Box3?, realistic: Bool = false,
                                     offset: Vec3? = nil) -> SceneElement? {
-        var parts = GeometryCache.shared.parts(e, model, detail: detail)
-        if let offset { parts = parts.map { var p = $0; p.mesh = p.mesh.transformed(.translation(offset)); return p } } // FMG2: Explode Parts
+        // VIS: smooth-shaded meshes (welded, smooth normals, silhouette candidates), cached per element and detail level.
+        var parts = GeometryCache.shared.shadedParts(e, model, detail: detail)
+        if let offset { parts = parts.map { ($0.part, $0.shaded.translated(offset)) } } // FMG2: Explode Parts
         var out: [ScenePart] = []
         out.reserveCapacity(parts.count)
         var bounds = Box3.empty
-        for p in parts where !p.mesh.isEmpty && p.isVisibleIn3D && p.styles.shows(realistic: realistic) { // F67: decal images in Realistic
+        for (p, shaded) in parts where !p.mesh.isEmpty && p.isVisibleIn3D && p.styles.shows(realistic: realistic) { // F67: decal images in Realistic
             var c = p.color ?? color(for: p.materialID, category: e.category, model: model) // F67: linked and point colours
             if let s = o.surfaceColor { c = RGBColor(s.r, s.g, s.b, c.a) }
             if let t = o.transparency { c.a = max(0.05, min(1, 1 - t)) }
             if o.halftone == true { c = c.mixed(with: RGBColor(1, 1, 1, c.a), amount: 0.5) }
-            bounds.include(p.mesh.bounds)
+            bounds.include(shaded.mesh.bounds)
             let finish = p.roughness.map { SurfaceFinish(roughness: $0) } ?? model[p.materialID]?.material.map { SurfaceFinish.typical(for: $0.materialClass) } ?? .matte // F67
-            out.append(ScenePart(mesh: p.mesh, color: c, finish: finish))
+            out.append(ScenePart(shaded: shaded, color: c, finish: finish))
         }
         guard !out.isEmpty, !bounds.isEmpty else { return nil }
         if let sb = sectionBox, !sb.intersects(bounds) { return nil }

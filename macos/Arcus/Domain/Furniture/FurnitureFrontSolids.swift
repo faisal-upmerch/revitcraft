@@ -158,12 +158,12 @@ public enum FurnitureFrontSolids {
     public static func meshParts(_ e: Element, _ m: BIMModel, detail: DetailLevel) -> [MeshPart] {
         let (f, mats) = displayFamily(e, m)
         guard !f.solids.isEmpty else { return [] }
-        let ev = FamilyEvaluator.evaluate(f, typeName: "Front", units: m.units)
+        let ev = FamilyEvaluator.evaluate(f, typeName: "Front", units: m.units, quality: detail.tessellation) // VIS: curves by detail level
         let tv = FurnitureFrontTypes.values(of: e, m)
         let face = tv.faceMaterial.flatMap { m[$0]?.material }
         return ev.solids.filter { !$0.isVoid && $0.visibleAt.contains(detail) }.map { s in
             let mat = s.resolvedMaterial ?? s.sourceID.flatMap { mats[$0] } ?? tv.material
-            var part = MeshPart(mesh: s.familyMesh, materialID: mat)
+            var part = MeshPart(mesh: s.displayMesh, materialID: mat)
             if let face, mat == tv.material { part.color = RGBColor(face.color.r, face.color.g, face.color.b, 1 - face.transparency) }
             return part
         }

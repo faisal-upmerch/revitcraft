@@ -246,7 +246,9 @@ public struct MeshCSG: Sendable {
             let n = p.vertices.count
             for i in 0..<n {
                 let a = p.vertices[i], b = p.vertices[(i + 1) % n]
-                if (b - a).cross(q - a).dot(p.plane.normal) < -1e-10 { return false }
+                // VIS: a point on the edge itself is inside (within 0.1 µm), so neighbours across a shared edge are found
+                // however the BSP rounded their vertices.
+                if (b - a).cross(q - a).dot(p.plane.normal) < -1e-7 * max((b - a).length, 1e-9) { return false }
             }
             return true
         }

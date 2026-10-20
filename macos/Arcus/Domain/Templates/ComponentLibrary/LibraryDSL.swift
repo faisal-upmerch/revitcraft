@@ -270,6 +270,7 @@ struct FB {
 
     /// Vertical disc facing ±Y (signs, portholes, fan grilles): centered at (cx, cy) with its center at height zc.
     mutating func vDisc(_ name: String, _ cx: LX, _ cy: LX, _ zc: LX, _ r: LX, thickness t: Double, _ m: LM, sides: Int = 16, plan: Bool = false) {
+        let sides = max(sides, 32) // VIS: discs read round (the view refines them further at Fine)
         vShape(name, (0..<sides).map { i in
             let a = (Double(i) / Double(sides) * 360 + 90) * .pi / 180
             return (r * cos(a), r * sin(a))
@@ -315,6 +316,7 @@ struct FB {
 
     /// Horizontal round bar from `a` to `b` (plan points) with its axis at height `z` (the path may have more points).
     mutating func bar(_ name: String, _ path: [(LX, LX)], z: LX, r: LX, _ m: LM, sides: Int = 10, plan: Bool = true) {
+        let sides = max(sides, 24) // VIS: round bars, not prisms (the view refines them further at Fine)
         let prof = (0..<sides).map { i -> FamilyPoint in
             let a = Double(i) / Double(sides) * 2 * .pi
             return FB.pt(r * cos(a), r * sin(a) + r)
@@ -332,6 +334,7 @@ struct FB {
     /// Sphere-like revolve (a polygonal ball) centered at (cx, cy, zc).
     mutating func ball(_ name: String, _ cx: LX, _ cy: LX, _ zc: LX, _ r: LX, _ m: LM, plan: Bool = true, steps: Int = 8) {
         var prof: [(LX, LX)] = [(LX(0), LX(0))]
+        let steps = max(steps, 12) // VIS: balls and casters read round
         for i in 1..<steps {
             let a = Double(i) / Double(steps) * .pi
             prof.append((r * sin(a), r - r * cos(a)))

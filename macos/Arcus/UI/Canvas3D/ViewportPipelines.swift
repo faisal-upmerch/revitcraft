@@ -32,6 +32,8 @@ nonisolated final class ViewportPipelines: @unchecked Sendable {
     let faceOpaque: any MTLRenderPipelineState
     let faceBlend: any MTLRenderPipelineState
     let edge: any MTLRenderPipelineState
+    /// VIS: silhouette candidates (edges drawn only where the surface turns away from the eye).
+    let silhouette: any MTLRenderPipelineState
     let overlay: any MTLRenderPipelineState
     /// Overlay for single-sample post passes (composite).
     let overlaySingle: any MTLRenderPipelineState
@@ -106,6 +108,7 @@ nonisolated final class ViewportPipelines: @unchecked Sendable {
             "faceOpaque": Spec(label: "Faces opaque", vertex: "face_vertex", fragment: "face_fragment", colors: [(c, false, .all)], depth: d, samples: s),
             "faceBlend": Spec(label: "Faces blended", vertex: "face_vertex", fragment: "face_fragment", colors: [(c, true, .all)], depth: d, samples: s),
             "edge": Spec(label: "Edges", vertex: "edge_vertex", fragment: "edge_fragment", colors: [(c, true, .all)], depth: d, samples: s),
+            "silhouette": Spec(label: "Silhouettes", vertex: "silhouette_vertex", fragment: "edge_fragment", colors: [(c, true, .all)], depth: d, samples: s), // VIS
             "overlay": Spec(label: "Overlay", vertex: "overlay_vertex", fragment: "overlay_fragment", colors: [(c, true, .all)], depth: d, samples: s),
             "overlaySingle": Spec(label: "Overlay (post)", vertex: "overlay_vertex", fragment: "overlay_fragment", colors: [(c, true, .all)], depth: .invalid, samples: 1),
             "facePick": Spec(label: "Face pick", vertex: "face_vertex", fragment: "face_pick_fragment", colors: [(.r32Uint, false, .all), (.rgba32Float, false, .all)], depth: d, samples: 1),
@@ -174,8 +177,9 @@ nonisolated final class ViewportPipelines: @unchecked Sendable {
         }
         guard let bg = built["background"], let fo = built["faceOpaque"], let fb = built["faceBlend"], let ed = built["edge"],
               let ov = built["overlay"], let ov1 = built["overlaySingle"], let fp = built["facePick"], let ep = built["edgePick"],
-              let sh = built["shadow"], let ao = built["occlusion"], let co = built["composite"] else { return nil }
+              let sh = built["shadow"], let ao = built["occlusion"], let co = built["composite"], let si = built["silhouette"] else { return nil }
         background = bg; faceOpaque = fo; faceBlend = fb; edge = ed; overlay = ov; overlaySingle = ov1
+        silhouette = si
         facePick = fp; edgePick = ep; shadow = sh; occlusion = ao; composite = co
         func depth(_ compare: MTLCompareFunction, write: Bool) -> (any MTLDepthStencilState)? {
             let d = MTLDepthStencilDescriptor()

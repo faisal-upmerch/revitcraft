@@ -33,19 +33,22 @@ public enum FurniturePartMeshes {
         return (f, parts.materials)
     }
 
-    /// The part evaluated, with its materials per solid id.
-    public static func evaluated(_ e: Element, _ m: BIMModel, detail: DetailLevel? = nil) -> (EvaluatedFamily, [String: ElementID])? {
+    /// The part evaluated, with its materials per solid id. Curves are cut as finely as `quality` asks (VIS: the detail
+    /// level's quality when nil).
+    public static func evaluated(_ e: Element, _ m: BIMModel, detail: DetailLevel? = nil,
+                                 quality: TessellationQuality? = nil) -> (EvaluatedFamily, [String: ElementID])? {
         guard e.category.isFurniturePart else { return nil }
+        let quality = quality ?? (detail ?? .medium).tessellation
         var (f, mats) = displayFamily(e, m, detail: detail)
         guard !f.solids.isEmpty || !f.nestedInstances.isEmpty else { return nil }
-        var ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units)
+        var ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units, quality: quality)
         // Void forms cut the parts they reach, as voids cut solids in a family.
         if e.furnitureForm == nil, e.furnitureEdgeProfile == nil {
             let b = ev.bounds
             let voids = voidForms(m).filter { $0.1.intersects(b) }.flatMap(\.0)
             if !voids.isEmpty {
                 (f, mats) = displayFamily(e, m, voids: voids, detail: detail)
-                ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units)
+                ev = FamilyEvaluator.evaluate(f, typeName: "Part", units: m.units, quality: quality)
             }
         }
         return (ev, mats)
@@ -65,13 +68,13 @@ public enum FurniturePartMeshes {
     }
 
     /// The part's 3D representation: one mesh part per solid, with its material (faces coloured by a face material).
-    public static func meshParts(_ e: Element, _ m: BIMModel, detail: DetailLevel) -> [MeshPart] {
-        guard let (ev, mats) = evaluated(e, m, detail: detail) else { return [] }
+    public static func meshParts(_ e: Element, _ m: BIMModel, detail: DetailLevel, quality: TessellationQuality? = nil) -> [MeshPart] {
+        guard let (ev, mats) = evaluated(e, m, detail: detail, quality: quality) else { return [] }
         let tv = FurniturePartTypes.values(of: e, m)
         let face = tv.faceMaterial.flatMap { m[$0]?.material }
         return ev.solids.filter { !$0.isVoid && $0.visibleAt.contains(detail) }.map { s in
             let mat = s.resolvedMaterial ?? s.sourceID.flatMap { mats[$0] } ?? tv.material
-            var part = MeshPart(mesh: s.familyMesh, materialID: mat)
+            var part = MeshPart(mesh: s.displayMesh, materialID: mat)
             if let face { part.color = RGBColor(face.color.r, face.color.g, face.color.b, 1 - face.transparency) }
             return part
         }
@@ -142,7 +145,7 @@ public enum FurniturePartMeshes {
             q.area = l * w * Double(count(e))
         }
         if case .furnitureShelf(let s) = e.data { q.area = Polygon2(s.boundary).area; q.perimeter = Polygon2(s.boundary).perimeter }
-        let parts = meshParts(e, m, detail: .fine)
+        let parts = meshParts(e, m, detail: .fine, quality: .medium) // VIS: Fine's parts, Medium's curves are exact enough for volumes
         let vol = parts.reduce(0) { $0 + abs($1.mesh.signedVolume) }
         if vol > 0 { q.volume = vol }
         let bb = parts.reduce(Box3.empty) { $0.union($1.mesh.bounds) }
