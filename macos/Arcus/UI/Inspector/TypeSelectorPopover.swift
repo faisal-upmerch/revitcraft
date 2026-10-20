@@ -133,8 +133,10 @@ struct TypeSelectorPopover: View {
                 Spacer(minLength: 4)
                 if t.id == current { Image(systemName: "checkmark").font(.system(size: 10, weight: .bold)).foregroundStyle(Tokens.selectionColor) }
             }
-            .padding(.horizontal, 12).padding(.vertical, 3)
-            .background(RoundedRectangle(cornerRadius: 5).fill(isHighlighted ? Tokens.selectionColor.opacity(0.16) : .clear).padding(.horizontal, 4))
+            .padding(.horizontal, PillSpec.rowPadding).padding(.vertical, 4)
+            // PILLS: the highlight sits 4 pt inside the list and 12 pt around the row's content.
+            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(isHighlighted ? Tokens.selectionColor.opacity(0.16) : .clear))
+            .padding(.horizontal, PillSpec.inset)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

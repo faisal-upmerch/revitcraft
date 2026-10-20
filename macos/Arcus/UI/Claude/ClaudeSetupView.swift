@@ -130,8 +130,7 @@ struct ClaudeSetupView: View {
 
     var connect: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Claude app", selection: $client) { ForEach(Client.allCases) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
+            PillSegmented(selection: $client, Client.allCases.map { ($0, $0.rawValue) }, label: "Claude app") // PILLS
             switch client {
             case .desktop:
                 clientStatus(claude.desktop, app: "Claude Desktop")

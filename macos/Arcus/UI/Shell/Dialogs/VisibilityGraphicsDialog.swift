@@ -80,8 +80,7 @@ struct VisibilityGraphicsDialog: View {
                 .background(Color.accentColor.opacity(0.08), in: RoundedRectangle(cornerRadius: Tokens.radiusSection))
                 .overlay(RoundedRectangle(cornerRadius: Tokens.radiusSection).strokeBorder(Color.accentColor.opacity(0.22)))
             }
-            Picker("", selection: $tab) { ForEach(tabs) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
+            PillSegmented(selection: $tab, tabs.map { ($0, $0.rawValue) }).frame(maxWidth: .infinity) // PILLS
             Group {
                 switch tab {
                 case .model, .annotation: categoriesTab

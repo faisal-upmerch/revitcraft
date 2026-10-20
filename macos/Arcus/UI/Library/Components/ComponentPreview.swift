@@ -41,26 +41,23 @@ struct ComponentPreview: View {
                 .accessibilityLabel("Preview of \(definition.name), \(model.previewMode.rawValue) \(model.previewView.rawValue)")
             }
             .frame(height: height)
+            // PILLS: 3D / 2D and the zoom on one row, Iso / Front / Side / Top under it across the preview's width.
             HStack(spacing: 4) {
-                Picker("Mode", selection: $model.previewMode) { ForEach(ComponentPreviewMode.allCases) { Text($0.rawValue).tag($0) } }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                PillSegmented(selection: $model.previewMode, ComponentPreviewMode.allCases.map { ($0, $0.rawValue) }, size: .small, label: "Mode")
                 Spacer(minLength: 2)
-                ForEach(ComponentPreviewView.allCases) { v in
-                    Button(v.rawValue) { model.setPreview(v) }
-                        .buttonStyle(.borderless).font(.system(size: 10.5, weight: model.previewView == v ? .semibold : .regular))
-                        .foregroundStyle(model.previewView == v ? Color.accentColor : Color.secondary)
-                }
-                Button { model.zoom = max(0.3, model.zoom / 1.25) } label: { Image(systemName: "minus.magnifyingglass") }.buttonStyle(.borderless).help("Zoom Out")
-                Button { model.zoom = min(8, model.zoom * 1.25) } label: { Image(systemName: "plus.magnifyingglass") }.buttonStyle(.borderless).help("Zoom In")
-                Button { model.fit() } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }.buttonStyle(.borderless).help("Zoom to Fit")
                 if model.previewMode == .plan {
                     Picker("Detail Level", selection: $detail) {
                         Text("Coarse").tag(DetailLevel.coarse); Text("Medium").tag(DetailLevel.medium); Text("Fine").tag(DetailLevel.fine)
                     }
                     .labelsHidden().fixedSize().help("Detail Level")
                 }
+                Button { model.zoom = max(0.3, model.zoom / 1.25) } label: { Image(systemName: "minus.magnifyingglass") }.buttonStyle(.borderless).help("Zoom Out")
+                Button { model.zoom = min(8, model.zoom * 1.25) } label: { Image(systemName: "plus.magnifyingglass") }.buttonStyle(.borderless).help("Zoom In")
+                Button { model.fit() } label: { Image(systemName: "arrow.up.left.and.down.right.magnifyingglass") }.buttonStyle(.borderless).help("Zoom to Fit")
             }
             .controlSize(.small)
+            PillSegmented(selection: Binding(get: { model.previewView }, set: { model.setPreview($0) }),
+                          ComponentPreviewView.allCases.map { ($0, $0.rawValue) }, size: .small, label: "View", fill: true)
         }
     }
 

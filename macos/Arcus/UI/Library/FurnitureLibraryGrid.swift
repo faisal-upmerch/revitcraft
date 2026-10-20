@@ -115,10 +115,8 @@ struct FurnitureRoomList: View {
             }
             .font(.system(size: 12.5, weight: on ? .medium : .regular))
             .foregroundStyle(on ? Color.white : Color.primary)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Color.accentColor : .clear))
-            .modifier(HoverBackground(radius: 7))
-            .contentShape(Rectangle())
+            .padding(.horizontal, PillSpec.rowPadding).padding(.vertical, 5) // PILLS: 12 pt either side of the selected row's content
+            .pillHighlight(on, .solid(Color.accentColor), cornerRadius: 8)
         }
         .buttonStyle(RibbonPressStyle())
         .accessibilityLabel("\(label), \(count) pieces")

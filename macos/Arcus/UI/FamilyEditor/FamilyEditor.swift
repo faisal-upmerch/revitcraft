@@ -109,7 +109,7 @@ final class FamilyEditorModel {
     /// Bumped whenever the canvas drawing must be rebuilt (evaluation, view, detail level, visibility).
     private(set) var drawingRevision = 0
     var selection: FamilyEditing.Item?
-    var tool: FamilyCanvasTool?
+    var tool: FamilyCanvasTool? { didSet { if oldValue == nil, tool != nil { chrome.ribbonShowsContextual = true } } } // PILLS: the tab switches with the tool
     /// Incremented to ask the canvas to zoom to fit.
     var fitRequest = 0
     /// Cursor position readout from the canvas.
@@ -125,7 +125,7 @@ final class FamilyEditorModel {
     /// True while the 3D view is being orbited: the canvas draws plain edges until the drag ends.
     var orbiting = false { didSet { drawingRevision += 1 } }
     /// The sketch in progress (sketch mode), or nil.
-    var sketch: FamilyEditing.Sketch?
+    var sketch: FamilyEditing.Sketch? { didSet { if oldValue == nil, sketch != nil { chrome.ribbonShowsContextual = true } } } // PILLS
     /// Draw panel choice while sketching.
     var sketchDraw: FamilySketchDraw = .line
     /// Depth of new extrusions and blends.

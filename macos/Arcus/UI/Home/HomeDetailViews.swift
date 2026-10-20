@@ -139,13 +139,7 @@ struct HomeFurniturePane: View {
         VStack(alignment: .leading, spacing: 16) {
             HomeFormRow(label: "Name") { HomeNameField(placeholder: "Piece name", text: $model.furnitureName) }
             HomeFormRow(label: "Category") {
-                Picker("Category", selection: $model.furnitureCategory) {
-                    Text("Furniture").tag(FamilyTemplate.furniture)
-                    Text("Casework").tag(FamilyTemplate.casework)
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .fixedSize()
+                PillSegmented(selection: $model.furnitureCategory, [(FamilyTemplate.furniture, "Furniture"), (.casework, "Casework")], label: "Category") // PILLS
                 .help("Furniture for loose pieces; Casework for built-in cabinets and millwork")
             }
             ClaudeFurnitureHint() // MCP: Claude can design pieces
@@ -339,7 +333,7 @@ struct HomeCategoryTile: View {
             }
             .frame(height: 32)
             .padding(6)
-            .homeCard(selected: selected, tint: tint, radius: Tokens.cardCornerRadius - 2, outlined: true)
+            .homeCard(selected: selected, tint: tint, radius: 7 + 6, outlined: true) // PILLS: concentric with the icon's square
         }
         .buttonStyle(.plain)
         .accessibilityLabel(template.rawValue)

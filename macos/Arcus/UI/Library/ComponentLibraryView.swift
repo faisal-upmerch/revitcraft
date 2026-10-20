@@ -171,14 +171,8 @@ struct ComponentLibraryView: View {
             .labelsHidden()
             .frame(width: 124)
             .help("Show items typical of a region; global items always show")
-            Picker("Layout", selection: $listLayout) {
-                Image(systemName: "square.grid.2x2").tag(false).accessibilityLabel("Grid")
-                Image(systemName: "list.bullet").tag(true).accessibilityLabel("List")
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 80)
-            .help("Grid or list")
+            PillSegmented(selection: $listLayout, options: [PillOption(value: false, title: "", symbol: "square.grid.2x2", help: "Grid"),
+                                                            PillOption(value: true, title: "", symbol: "list.bullet", help: "List")], label: "Layout") // PILLS
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
     }
@@ -234,10 +228,8 @@ struct ComponentLibraryView: View {
             }
             .font(.system(size: 12.5, weight: on ? .medium : .regular))
             .foregroundStyle(on ? Color.white : Color.primary)
-            .padding(.horizontal, 8).padding(.vertical, 5)
-            .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(on ? Color.accentColor : .clear))
-            .modifier(HoverBackground(radius: 7))
-            .contentShape(Rectangle())
+            .padding(.horizontal, PillSpec.rowPadding).padding(.vertical, 5) // PILLS: 12 pt either side of the selected row's content
+            .pillHighlight(on, .solid(Color.accentColor), cornerRadius: 8)
         }
         .buttonStyle(RibbonPressStyle())
         .accessibilityLabel("\(label), \(count) items")
@@ -379,9 +371,10 @@ struct ComponentLibraryView: View {
         }
         .padding(6)
         .frame(width: Self.cardWidth)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(on ? Color.accentColor.opacity(0.14) : .clear))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).strokeBorder(on ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: on ? 2 : 0.5))
-        .modifier(HoverBackground(radius: 12))
+        // PILLS: concentric with the 10 pt preview inside (10 + 6 pt padding).
+        .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(on ? Color.accentColor.opacity(0.14) : .clear))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(on ? Color.accentColor : Color.primary.opacity(0.08), lineWidth: on ? 2 : 0.5))
+        .modifier(HoverBackground(radius: 16))
         .contentShape(Rectangle())
         .onTapGesture(count: 2) { selectedID = item.id; place(item) }
         .onTapGesture { selectedID = item.id }
@@ -409,10 +402,8 @@ struct ComponentLibraryView: View {
             Image(systemName: "checkmark.circle.fill").foregroundStyle(on ? .white : .green).opacity(loaded ? 1 : 0)
         }
         .foregroundStyle(on ? Color.white : Color.primary)
-        .padding(.horizontal, 8).padding(.vertical, 4)
-        .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(on ? Color.accentColor : .clear))
-        .modifier(HoverBackground(radius: 8))
-        .contentShape(Rectangle())
+        .padding(.leading, 4).padding(.trailing, PillSpec.rowPadding).padding(.vertical, 4) // PILLS: the thumbnail's 6 pt corners + 4 pt = the row's 10
+        .pillHighlight(on, .solid(Color.accentColor), cornerRadius: 10)
         .onTapGesture(count: 2) { selectedID = item.id; place(item) }
         .onTapGesture { selectedID = item.id }
         .contextMenu { itemMenu(item) }
@@ -455,11 +446,7 @@ struct ComponentLibraryView: View {
                         RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(LinearGradient(colors: [Color(white: 0.98), Color(white: 0.89)], startPoint: .top, endPoint: .bottom))
                         LibraryPreview(item: item, type: current, plan: planPreview, size: CGSize(width: 252, height: 176)).padding(12)
-                        Picker("Preview", selection: $planPreview) {
-                            Text("3D").tag(false)
-                            Text("Plan").tag(true)
-                        }
-                        .pickerStyle(.segmented).labelsHidden().frame(width: 96).padding(8)
+                        PillSegmented(selection: $planPreview, [(false, "3D"), (true, "Plan")], size: .small, label: "Preview").padding(8) // PILLS
                         .help("Preview the 3D model or the plan symbol")
                     }
                     .frame(height: 200)
@@ -514,10 +501,8 @@ struct ComponentLibraryView: View {
                 Spacer(minLength: 2)
                 if loaded { Image(systemName: "checkmark").font(.system(size: 10, weight: .semibold)).foregroundStyle(.green).help("In this project") }
             }
-            .padding(.horizontal, 6).padding(.vertical, 4)
-            .background(RoundedRectangle(cornerRadius: 6, style: .continuous).fill(on ? Color.accentColor.opacity(0.12) : .clear))
-            .modifier(HoverBackground(radius: 6))
-            .contentShape(Rectangle())
+            .padding(.horizontal, 10).padding(.vertical, 4) // PILLS
+            .pillHighlight(on, .tint(Color.accentColor), cornerRadius: 8)
         }
         .buttonStyle(.plain)
         .simultaneousGesture(TapGesture(count: 2).onEnded { chosenType[item.id] = t.name; place(item) })

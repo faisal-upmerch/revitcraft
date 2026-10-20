@@ -205,7 +205,7 @@ struct CollapsibleRibbonPanel<Content: View>: View {
         if let only = overflowOnly, !only.contains(key) {
             EmptyView() // FMG4: the More popover shows only the panels the row hides
         } else {
-            panels
+            panels.modifier(RibbonFrameRecorder(key: key, density: nil, frames: frames)) // PILLS: the panel's frame, whichever variant shows
         }
     }
 
@@ -228,14 +228,15 @@ struct CollapsibleRibbonPanel<Content: View>: View {
 /// Records a laid-out panel's frame (window coordinates) and density.
 struct RibbonFrameRecorder: ViewModifier {
     let key: String
-    let density: Int
+    /// The variant's density, or nil for the whole panel (its frame only).
+    let density: Int?
     let frames: RibbonFrames?
     @Environment(\.ribbonRecording) private var recording
     func body(content: Content) -> some View {
         if let frames, recording {
             content.onGeometryChange(for: CGRect.self) { $0.frame(in: .global) } action: { r in
                 frames.panels[key] = r
-                frames.density[key] = density
+                if let density { frames.density[key] = density }
             }
         } else {
             content

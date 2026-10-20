@@ -55,10 +55,13 @@ class GlassShieldView: NSView {
     required init?(coder: NSCoder) { fatalError() }
 
     var effectiveRadius: CGFloat { cornerRadius ?? bounds.height / 2 }
+    /// PILLS (offscreen captures): draw the opaque surface, as Reduce Transparency does. Offscreen glass can't follow
+    /// a dark appearance, so dark captures use this to show the pills as they read on screen.
+    nonisolated(unsafe) static var forceOpaque = false
 
     /// Chooses glass or the opaque fallback; called when the accessibility settings or the appearance may have changed.
     func applyAppearance() {
-        let wantGlass = !(AccessibilityPrefs.reduceTransparency || AccessibilityPrefs.increaseContrast)
+        let wantGlass = !(Self.forceOpaque || AccessibilityPrefs.reduceTransparency || AccessibilityPrefs.increaseContrast)
         if wantGlass != usesGlass || (glass.isHidden && solid.isHidden) {
             usesGlass = wantGlass
             glass.isHidden = !wantGlass
@@ -215,10 +218,11 @@ struct PillIconButton: View {
     let action: () -> Void
     var body: some View {
         Button(action: action) {
-            Image(systemName: symbol).font(.system(size: 13, weight: .medium)).frame(width: 28, height: 26).contentShape(RoundedRectangle(cornerRadius: 7))
+            Image(systemName: symbol).font(.system(size: 13, weight: .medium))
+                .frame(width: PillSpec.shellItemHeight + 4, height: PillSpec.shellItemHeight)
+                .pillHighlight(false) // PILLS: a 28 pt capsule, 4 pt inside the 36 pt pill
         }
         .buttonStyle(RibbonPressStyle())
-        .modifier(HoverBackground(radius: 7))
         .opacity(enabled ? 1 : 0.4)
         .disabled(!enabled)
         .help(help)
@@ -251,12 +255,11 @@ struct UndoHistoryMenu: View {
                 Image(systemName: redo ? "arrow.uturn.forward" : "arrow.uturn.backward").font(.system(size: 13, weight: .medium))
                 Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold)).foregroundStyle(.secondary)
             }
-            .frame(width: 36, height: 26).contentShape(RoundedRectangle(cornerRadius: 7))
+            .frame(width: 40, height: PillSpec.shellItemHeight).pillHighlight(false) // PILLS
         } primaryAction: {
             if redo { um.redo() } else { um.undo() }
         }
         .menuStyle(.button).buttonStyle(RibbonPressStyle()).menuIndicator(.hidden)
-        .modifier(HoverBackground(radius: 7))
         .opacity(enabled ? 1 : 0.4)
         .help(redo ? "Redo (⇧⌘Z). Click the arrow for the list of steps." : "Undo (⌘Z). Click the arrow for the list of steps.")
         .accessibilityLabel(redo ? "Redo" : "Undo")
@@ -270,7 +273,7 @@ struct ShellControlsPill: View {
     let compact: Bool
     var body: some View {
         let router = CommandRouter(state: state)
-        HStack(spacing: 1) {
+        HStack(spacing: PillSpec.gap) {
             UndoHistoryMenu(state: state, redo: false)
             UndoHistoryMenu(state: state, redo: true)
             if !compact {
@@ -296,17 +299,16 @@ struct ShellControlsPill: View {
                     Image(systemName: "rectangle.3.group").font(.system(size: 13, weight: .medium))
                     Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold)).foregroundStyle(.secondary)
                 }
-                .frame(width: 36, height: 26).contentShape(RoundedRectangle(cornerRadius: 7))
+                .frame(width: 40, height: PillSpec.shellItemHeight).pillHighlight(false) // PILLS
             }
             .menuStyle(.button).buttonStyle(RibbonPressStyle()).menuIndicator(.hidden)
-            .modifier(HoverBackground(radius: 7))
             .help("Choose a panel layout")
             .accessibilityLabel("Workspace")
             PillIconButton(symbol: "sidebar.trailing", help: state.workspace == .macSpacious ? "Show or hide the inspector" : "Show or hide Properties") {
                 (state.window?.windowController as? DocumentWindowController)?.toggleInspector(nil)
             }
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, PillSpec.inset) // PILLS: the end buttons' capsules 4 pt from the pill's ends
         .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))
         .modifier(GlassPill(role: .controls))
         .accessibilityElement(children: .contain)
@@ -356,7 +358,6 @@ struct RibbonTabsPill: View {
     @Bindable var state: DocumentState
     var body: some View {
         RibbonTabsBar(state: state)
-            .padding(.horizontal, 5)
             .frame(height: CGFloat(ShellMetrics.arcus.pillHeight))
             .modifier(GlassPill(role: .tabs))
     }
@@ -407,7 +408,13 @@ struct ViewTabPills: View {
                 }
                 Divider()
                 Button("Close Inactive Views") { state.closeInactiveViews() }.disabled(state.openViews.count < 2)
-            } label: { Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold)).frame(width: 26, height: CGFloat(ShellMetrics.arcus.viewTabsHeight)) }
+            } label: {
+                // PILLS: a 22 pt hover circle 4 pt inside the 30 pt glass circle, as the tabs' capsules.
+                Image(systemName: "chevron.down").font(.system(size: 10, weight: .semibold))
+                    .frame(width: PillSpec.viewTabItemHeight, height: PillSpec.viewTabItemHeight)
+                    .pillHighlight(false)
+                    .padding(PillSpec.inset)
+            }
             .menuStyle(.button).buttonStyle(.plain).menuIndicator(.hidden).fixedSize()
             .modifier(GlassPill(role: .viewTab))
             .help("All open views")

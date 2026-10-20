@@ -37,7 +37,7 @@ struct FindReplaceDialog: View {
                 DialogRow("Find") { TextField("", text: $find).labelsHidden() }
                 DialogRow("Replace with") { TextField("", text: $replace).labelsHidden() }
                 DialogRow("Search in") {
-                    Picker("", selection: $scope) { ForEach(TextSearch.Scope.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $scope, TextSearch.Scope.allCases.map { ($0, $0.rawValue) }) // PILLS
                 }
                 DialogRow("") { HStack(spacing: 16) { Toggle("Match case", isOn: $matchCase); Toggle("Whole words only", isOn: $wholeWords) } }
             }

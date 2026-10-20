@@ -15,13 +15,8 @@ struct HomeRecentsPane: View {
             HStack(alignment: .center) {
                 Text("Recent").font(.system(size: 22, weight: .semibold))
                 Spacer()
-                Picker("Show", selection: $model.recentFilter) {
-                    Text("All").tag(HomeDocumentKind?.none)
-                    ForEach(HomeDocumentKind.allCases, id: \.self) { k in Text(k.filterTitle).tag(HomeDocumentKind?.some(k)) }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-                .frame(width: 300)
+                PillSegmented(selection: $model.recentFilter, [(HomeDocumentKind?.none, "All")] + HomeDocumentKind.allCases.map { (HomeDocumentKind?.some($0), $0.filterTitle) },
+                              size: .large, label: "Show") // PILLS
                 .disabled(model.recents.isEmpty)
                 .accessibilityLabel("Show recent files of kind")
             }

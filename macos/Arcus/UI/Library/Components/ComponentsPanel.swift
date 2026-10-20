@@ -61,13 +61,10 @@ struct ComponentsPanel: View {
 
     private var toolbar: some View {
         HStack(spacing: 6) {
-            Picker("Show", selection: $model.section) {
-                Image(systemName: "square.grid.2x2").help("All").tag(ComponentSection.all)
-                Image(systemName: "star").help("Favorites").tag(ComponentSection.favorites)
-                Image(systemName: "clock").help("Recently Used").tag(ComponentSection.recent)
-                Image(systemName: "person.crop.square").help("My Components").tag(ComponentSection.mine)
-            }
-            .pickerStyle(.segmented).labelsHidden().fixedSize()
+            PillSegmented(selection: $model.section, options: [PillOption(value: ComponentSection.all, title: "", symbol: "square.grid.2x2", help: "All"),
+                                                               PillOption(value: .favorites, title: "", symbol: "star", help: "Favorites"),
+                                                               PillOption(value: .recent, title: "", symbol: "clock", help: "Recently Used"),
+                                                               PillOption(value: .mine, title: "", symbol: "person.crop.square", help: "My Components")], size: .small, label: "Show") // PILLS
             ComponentCategoryMenu(model: model)
             Spacer(minLength: 0)
             ComponentFilterMenu(model: model)
@@ -89,11 +86,8 @@ struct ComponentsPanel: View {
                     ComponentFilterMenu(model: model)
                     Picker("Sort", selection: $model.sort) { ForEach(ComponentSort.allCases) { Text($0.rawValue).tag($0) } }
                         .labelsHidden().fixedSize().help("Sort by")
-                    Picker("View", selection: $model.gridView) {
-                        Image(systemName: "square.grid.2x2").tag(true)
-                        Image(systemName: "list.bullet").tag(false)
-                    }
-                    .pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $model.gridView, options: [PillOption(value: true, title: "", symbol: "square.grid.2x2", help: "Grid"),
+                                                                        PillOption(value: false, title: "", symbol: "list.bullet", help: "List")], size: .small, label: "View") // PILLS
                 }
                 .controlSize(.regular)
                 .padding(12)
@@ -235,7 +229,8 @@ struct ComponentSidebar: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .listRowBackground(selected ? Color.accentColor.opacity(0.14) : Color.clear)
+        .listRowBackground(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(selected ? Color.accentColor.opacity(0.14) : .clear)
+            .padding(.horizontal, PillSpec.inset + 6)) // PILLS: a rounded selection inside the sidebar, not an edge-to-edge band
     }
 }
 
@@ -331,9 +326,7 @@ struct ComponentCell: View {
             Text(d.name).font(.system(size: 11)).lineLimit(2).multilineTextAlignment(.center).frame(height: 28, alignment: .top)
         }
         .padding(4)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(selected ? Color.accentColor.opacity(0.16) : .clear))
-        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous).strokeBorder(selected ? Color.accentColor.opacity(0.6) : .clear))
-        .contentShape(Rectangle())
+        .pillHighlight(selected, .tint(Color.accentColor), cornerRadius: 12) // PILLS: the thumbnail's 8 pt corners + 4 pt
         .onTapGesture(count: 2) { model.select(result); ComponentPanelActions.insert(state) }
         .onTapGesture { model.select(result) }
         .contextMenu { ComponentContextMenu(definition: d, model: model, state: state) }
@@ -361,9 +354,9 @@ struct ComponentRow: View {
             Spacer(minLength: 0)
             if model.store.isFavorite(d.id) { Image(systemName: "star.fill").font(.system(size: 9)).foregroundStyle(.yellow) }
         }
-        .padding(.horizontal, 10).padding(.vertical, 4)
-        .background(selected ? Color.accentColor.opacity(0.16) : .clear)
-        .contentShape(Rectangle())
+        .padding(.horizontal, PillSpec.rowPadding).padding(.vertical, 4)
+        .pillHighlight(selected, .tint(Color.accentColor), cornerRadius: 8) // PILLS: a rounded selection, inset from the list's edges
+        .padding(.horizontal, PillSpec.inset)
         .onTapGesture(count: 2) { model.select(result); ComponentPanelActions.insert(state) }
         .onTapGesture { model.select(result) }
         .contextMenu { ComponentContextMenu(definition: d, model: model, state: state) }

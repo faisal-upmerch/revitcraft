@@ -53,8 +53,7 @@ struct StructuralSettingsDialog: View {
             state.session.perform("Structural Settings") { tx in StructuralFraming.setSettings(out, in: tx) }
             state.presented = nil
         } content: {
-            Picker("", selection: $tab) { ForEach(Tab.allCases, id: \.self) { Text($0.rawValue).tag($0) } }
-                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
+            PillSegmented(selection: $tab, Tab.allCases.map { ($0, $0.rawValue) }).frame(maxWidth: .infinity) // PILLS
             Group {
                 switch tab {
                 case .symbolic: symbolic
@@ -81,7 +80,7 @@ struct StructuralSettingsDialog: View {
             }
             DialogSection("Brace symbols") {
                 DialogRow("Plan representation") {
-                    Picker("", selection: $s.braceParallel) { Text("Parallel Line").tag(true); Text("Line w/Angle").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $s.braceParallel, [(true, "Parallel Line"), (false, "Line w/Angle")]) // PILLS
                 }
                 DialogRow("Parallel line offset") { TextField("", text: $texts[3]).labelsHidden().multilineTextAlignment(.trailing).frame(width: 110) }
                 Toggle("Show brace above", isOn: $s.kickerSymbol)

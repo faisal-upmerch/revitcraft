@@ -34,7 +34,7 @@ extension ViewControlStrip {
                 }
             }
         } label: { ViewControlIcon(image: ViewStateIcons.detail(vd.detailLevel)) }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
         .help(vd.detailLevel.controlHelp)
         .accessibilityLabel("Detail Level")
         .accessibilityValue(vd.detailLevel.rawValue)
@@ -52,7 +52,7 @@ extension ViewControlStrip {
                 }
             }
         } label: { ViewControlIcon(image: ViewStateIcons.style(current)) }
-        .menuStyle(.borderlessButton).fixedSize()
+        .menuStyle(.borderlessButton).fixedSize().barMenuItem().pillHighlight(false)
         .help("Visual Style: \(current.rawValue)")
         .accessibilityLabel("Visual Style")
         .accessibilityValue(current.rawValue)

@@ -136,14 +136,14 @@ struct RenderingDialog: View {
                         DialogRow("Setting") { Picker("", selection: $s.quality) { ForEach(RenderEngine.Quality.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden() }
                     }
                     DialogSection("Output", footnote: "\(size.width) × \(size.height) pixels") {
-                        DialogRow("Resolution") { Picker("", selection: $s.printer) { Text("Screen").tag(false); Text("Printer").tag(true) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                        DialogRow("Resolution") { PillSegmented(selection: $s.printer, [(false, "Screen"), (true, "Printer")]) } // PILLS
                         DialogRow("DPI") { Picker("", selection: $s.dpi) { ForEach(RenderEngine.dpiChoices, id: \.self) { Text("\($0) DPI").tag($0) } }.labelsHidden().disabled(!s.printer) }
                     }
                     DialogSection("Lighting", footnote: sunText) {
                         DialogRow("Scheme") { Picker("", selection: $s.sun) { Text("Sun and shadows").tag(true); Text("Sun, no shadows").tag(false) }.labelsHidden() }
                     }
                     DialogSection("Background") {
-                        DialogRow("Style") { Picker("", selection: $s.sky) { Text("Sky").tag(true); Text("Plain").tag(false) }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                        DialogRow("Style") { PillSegmented(selection: $s.sky, [(true, "Sky"), (false, "Plain")]) } // PILLS
                     }
                 }
                 .frame(width: 320)

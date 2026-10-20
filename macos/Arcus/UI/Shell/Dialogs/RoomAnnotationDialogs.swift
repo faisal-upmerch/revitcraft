@@ -65,7 +65,7 @@ struct TagAllDialog: View {
                     }
                 }
                 DialogRow("Orientation") {
-                    Picker("", selection: $orientation) { ForEach(TagOrientation.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $orientation, TagOrientation.allCases.map { ($0, $0.rawValue) }) // PILLS
                 }
             }
         }
@@ -133,11 +133,7 @@ struct ColorSchemesDialog: View {
         } content: {
             HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Picker("", selection: $category) {
-                        Text("Rooms").tag(Category.rooms)
-                        Text("Areas").tag(Category.areas)
-                    }
-                    .pickerStyle(.segmented).labelsHidden()
+                    PillSegmented(selection: $category, [(Category.rooms, "Rooms"), (Category.areas, "Areas")]) // PILLS
                     VStack(spacing: 0) {
                         List(selection: $selected) {
                             ForEach(drafts.filter { $0.data.category == category }) { d in DialogListRow(icon: "paintpalette", title: d.name).tag(d.id) }
@@ -197,10 +193,7 @@ struct ColorSchemesDialog: View {
                             ForEach(params, id: \.id) { p in Text(p.name).tag(p.id) }
                         }
                         .labelsHidden().frame(width: 220)
-                        Picker("", selection: Binding(get: { d.data.mode }, set: { setMode(i, $0, m) })) {
-                            ForEach(ColorFillMode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
-                        }
-                        .pickerStyle(.segmented).labelsHidden().fixedSize().disabled(!numeric)
+                        PillSegmented(selection: Binding(get: { d.data.mode }, set: { setMode(i, $0, m) }), ColorFillMode.allCases.map { ($0, $0.rawValue) }).disabled(!numeric) // PILLS
                     }
                 }
                 if d.data.category == .areas {

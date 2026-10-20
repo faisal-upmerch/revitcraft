@@ -368,15 +368,11 @@ struct CNCExportOptions: View {
             HStack(alignment: .top, spacing: DialogStyle.sectionSpacing) {
                 DialogSection("Output") {
                     DialogRow("Files") {
-                        Picker("", selection: $layout) { ForEach(CNCExport.Layout.allCases, id: \.self) { Text($0.rawValue).tag($0.rawValue) } }
-                            .pickerStyle(.segmented).labelsHidden().fixedSize()
+                        PillSegmented(selection: $layout, CNCExport.Layout.allCases.map { ($0.rawValue, $0.rawValue) }) // PILLS
                     }
                     DialogRow("Format") {
                         HStack {
-                            Picker("", selection: $format) {
-                                ForEach(dwgReason == nil ? CNCExport.Format.allCases : [.dxf], id: \.self) { Text($0.rawValue).tag($0.rawValue) }
-                            }
-                            .pickerStyle(.segmented).labelsHidden().fixedSize()
+                            PillSegmented(selection: $format, (dwgReason == nil ? CNCExport.Format.allCases : [.dxf]).map { ($0.rawValue, $0.rawValue) }) // PILLS
                             .help(dwgReason ?? "DWG is written by the bundled DWG engine")
                             if dwgReason != nil { Text("DWG needs the bundled DWG engine.").font(.caption).foregroundStyle(.secondary) }
                         }

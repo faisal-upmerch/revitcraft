@@ -259,6 +259,7 @@ final class DocumentState {
 
     func setTool(_ tool: (any InteractiveTool)?) {
         activeTool = tool
+        if tool != nil { ribbonShowsContextual = true } // PILLS: the contextual tab switches in the same update as the tool, never a frame later
         toolRevision += 1
         numericEntry = nil
         paletteToolChanged() // BL-PROPS

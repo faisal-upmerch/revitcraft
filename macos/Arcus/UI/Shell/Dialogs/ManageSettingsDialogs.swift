@@ -35,8 +35,7 @@ struct ObjectStylesDialog: View {
     var body: some View {
         ArcusDialog(icon: "paintbrush", tint: .indigo, title: "Object Styles", subtitle: "Line weights, colours, patterns and materials every view starts from.",
                     size: .extraWide, height: 640, onCancel: { state.presented = nil }, onOK: { save(); state.presented = nil }) {
-            Picker("", selection: $tab) { Text("Model Objects").tag(0); Text("Annotation Objects").tag(1); Text("Imported Objects").tag(2) }
-                .pickerStyle(.segmented).labelsHidden().fixedSize().frame(maxWidth: .infinity)
+            PillSegmented(selection: $tab, [(0, "Model Objects"), (1, "Annotation Objects"), (2, "Imported Objects")]).frame(maxWidth: .infinity) // PILLS
             Table(rows, children: \.children, selection: $selection) {
                 TableColumn("Category") { r in Text(r.name).fontWeight(overridden(r) ? .semibold : .regular) }.width(min: 180, ideal: 220)
                 TableColumn("Projection") { r in weightPicker(r, cut: false) }.width(90)
@@ -295,7 +294,7 @@ struct AdditionalSettingsDialog: View {
     var body: some View {
         ArcusDialog(icon: "gearshape", tint: .gray, title: "Additional Settings", subtitle: "Line weights, patterns, arrowheads and temporary dimensions.",
                     size: .wide, okTitle: "Done", showCancel: false, onCancel: { state.presented = nil }, onOK: { state.presented = nil }) {
-            Picker("", selection: $tab) { ForEach(AdditionalSettingsTab.allCases) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden()
+            PillSegmented(selection: $tab, AdditionalSettingsTab.allCases.map { ($0, $0.rawValue) }) // PILLS
                 .fixedSize().frame(maxWidth: .infinity)
             Group {
                 switch tab {

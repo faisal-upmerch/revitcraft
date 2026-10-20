@@ -78,8 +78,7 @@ struct SchedulePropertiesDialog: View {
             state.session.perform("Edit Schedule") { tx in tx.update(scheduleID) { $0.schedule = d } }
             if let e = state.session.lastError { state.show(e.message, error: true); state.session.clearError() } else { state.presented = nil }
         } content: {
-            Picker("", selection: $tab) { ForEach(ScheduleTab.allCases, id: \.rawValue) { Text($0.title).tag($0.rawValue) } }
-                .pickerStyle(.segmented).labelsHidden().fixedSize()
+            PillSegmented(selection: $tab, ScheduleTab.allCases.map { ($0.rawValue, $0.title) }) // PILLS
                 .frame(maxWidth: .infinity)
                 .accessibilityLabel("Schedule Properties tab")
             Group {
@@ -297,7 +296,7 @@ struct SchedulePropertiesDialog: View {
                 VStack(alignment: .leading, spacing: DialogStyle.sectionSpacing) {
                     DialogSection("Field") {
                         DialogRow("Heading") { TextField("", text: $def.fields[i].heading).labelsHidden() }
-                        DialogRow("Alignment") { Picker("", selection: $def.fields[i].alignment) { ForEach(HorizontalAlign.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize() }
+                        DialogRow("Alignment") { PillSegmented(selection: $def.fields[i].alignment, HorizontalAlign.allCases.map { ($0, $0.rawValue) }) } // PILLS
                         DialogRow("Width") { Stepper("\(Int((def.fields[i].width * 1000).rounded())) mm", value: $def.fields[i].width, in: 0.008...0.2, step: 0.002).monospacedDigit() }
                         DialogRow("Totals") { Picker("", selection: $def.fields[i].total) { ForEach(ScheduleTotal.allCases, id: \.self) { Text($0.rawValue).tag($0) } }.labelsHidden().fixedSize() }
                         DialogRow("Field format") {

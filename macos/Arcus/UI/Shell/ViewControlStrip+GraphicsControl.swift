@@ -30,8 +30,8 @@ extension ViewControlStrip {
             Button("Apply Template Properties to Current View…") { CommandRouter(state: state).run(.viewTemplateApplyProperties) }
             Button("Manage View Templates…") { CommandRouter(state: state).run(.viewTemplatesManage) }
         } label: { Image(systemName: "clock.badge").foregroundStyle(active ? Tokens.selectionColor : .primary) }
-        .menuStyle(.borderlessButton).fixedSize()
-        .modifier(HoverBackground(active: active, tint: Tokens.selectionColor, radius: 5)) // VIS
+        .menuStyle(.borderlessButton).fixedSize().barMenuItem()
+        .pillHighlight(active, .tint(Tokens.selectionColor)) // VIS
         .help(active ? "Temporary View Properties is on" : "Temporary View Properties")
         .accessibilityLabel(active ? "Temporary view properties, active" : "Temporary view properties")
     }

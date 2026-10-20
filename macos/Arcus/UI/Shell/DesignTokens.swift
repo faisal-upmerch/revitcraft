@@ -68,6 +68,45 @@ enum Tokens {
     static let groupHeader = Font.system(size: 11, weight: .semibold)
 }
 
+/// PILLS: the one geometry for a selected or hovered capsule inside a pill, a segmented track or any container: tabs,
+/// segmented controls, chips, toggles and selected rows. A selected capsule never hugs its container or its content.
+/// See Docs/Dialogs.md, "Pills and selection".
+enum PillSpec {
+    /// Gap between a selected capsule and the glass pill around it, all round (36 pt pill → 28 pt capsule).
+    static let inset: CGFloat = 4
+    /// Gap between a segment and its segmented track, all round (smaller tracks, same look).
+    static let trackInset: CGFloat = 3
+    /// Side padding between a capsule's edge and its text or icon, each side.
+    static let padding: CGFloat = 12
+    /// Trailing padding before a close button: its 16 pt circle carries ~4 pt of air, so the ✕ sits 12 pt in, as the
+    /// leading icon does.
+    static let closePadding: CGFloat = 8
+    /// Space between neighbouring capsules in one container.
+    static let gap: CGFloat = 2
+    /// Side padding of a selected list row inside its list (the row itself sits `inset` or more from the list edge).
+    static let rowPadding: CGFloat = 12
+
+    /// A capsule's height inside a container `outer` tall.
+    static func height(in outer: CGFloat, inset: CGFloat = inset) -> CGFloat { max(0, outer - 2 * inset) }
+    /// A rounded selection's corner radius inside a container of radius `outer` (concentric corners).
+    static func radius(inside outer: CGFloat, inset: CGFloat = inset) -> CGFloat { max(0, outer - inset) }
+
+    /// Capsule heights: shell pills (ribbon tabs, controls, bottom bar), view tabs, and segmented controls.
+    static let shellItemHeight: CGFloat = 28 // 36 pt pill
+    static let viewTabItemHeight: CGFloat = 22 // 30 pt view-tab pill
+    /// The close button's circle in a view tab.
+    static let closeButtonSize: CGFloat = 16
+
+    // Fills (light and dark come from `primary` and the tint).
+    /// Hover wash.
+    static let hoverOpacity: Double = 0.07
+    /// Selected, neutral (ribbon tabs, a chosen toggle without a tint).
+    static let selectedOpacity: Double = 0.11
+    /// Selected, tinted (the active view tab, a contextual tab, an "on" toggle): fill and edge.
+    static let tintOpacity: Double = 0.2
+    static let tintEdgeOpacity: Double = 0.5
+}
+
 extension RGBColor {
     var nsColor: NSColor { NSColor(srgbRed: r, green: g, blue: b, alpha: a) }
     var color: Color { Color(nsColor: nsColor) }

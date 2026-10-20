@@ -147,7 +147,7 @@ struct ImportPDFDialog: View {
             DialogSection(footnote: "Stored in the project as an image at its printed size (scaled by the view scale in model views). Use Link PDF to keep it linked to the file.") {
                 DialogRow("Page") { Stepper("\(page) of \(pageCount)", value: $page, in: 1...max(pageCount, 1)).monospacedDigit() }
                 DialogRow("Resolution") {
-                    Picker("", selection: $dpi) { ForEach([72, 150, 300], id: \.self) { Text("\($0) dpi").tag($0) } }.pickerStyle(.segmented).labelsHidden().fixedSize()
+                    PillSegmented(selection: $dpi, [72, 150, 300].map { ($0, "\($0) dpi") }) // PILLS
                 }
             }
         }
