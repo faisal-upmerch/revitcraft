@@ -23,15 +23,19 @@ public struct AIImage: Sendable, Hashable {
 @MainActor
 @Observable
 public final class AIAgent {
-    /// Requests per prompt before the agent stops and says so.
-    public var maxSteps = 24
-    /// Tokens (all kinds) per prompt before the agent stops: a guard against runaway loops.
-    public var tokenGuard = 1_500_000
+    /// Requests per prompt before the agent stops and says so (a whole building with drawings takes dozens).
+    public var maxSteps = 80
+    /// Tokens (all kinds, mostly cache reads) per prompt before the agent stops: a guard against runaway loops.
+    public var tokenGuard = 6_000_000
     /// Sonnet retries per prompt.
     public var maxEscalations = 3
     /// Rounds of "fix what the final check found" per prompt.
     public var maxFinalChecks = 1
-    public var maxTokensPerRequest = 16_000
+    /// Output tokens per request. Haiku 5.5 thinks by default and thinking counts here, so a big request needs room
+    /// (the API allows 128K when streaming; the budget cap still applies).
+    public var maxTokensPerRequest = 64_000
+    /// Times a prompt continues after a reply hits `maxTokensPerRequest`, before it stops and says so.
+    public var maxContinuations = 3
 
     public let store: AIChatStore
     @ObservationIgnored public let host: any AIToolHost
@@ -187,6 +191,7 @@ public final class AIAgent {
         var escalateNext = false
         var escalations = 0
         var finalChecks = 0
+        var continuations = 0
         var tokens = 0
 
         for _ in 0..<maxSteps {
@@ -260,9 +265,18 @@ public final class AIAgent {
                 }
                 messages.append(["role": "user", "content": .array(results)])
             case "max_tokens":
-                if !uses.isEmpty { unanswered = uses.map(\.id) }
-                note(turnID, AINotice(.warning, "The reply was cut off", "Ask again with a smaller request."))
-                return
+                // The reply ran out of output tokens (usually thinking through a big request in one go). Its tool calls
+                // may be incomplete, so none run; the model is told and continues in smaller steps.
+                guard continuations < maxContinuations else {
+                    if !uses.isEmpty { unanswered = uses.map(\.id) }
+                    note(turnID, AINotice(.warning, "The reply was cut off", "Ask for one part at a time, e.g. the levels and ground floor first."))
+                    return
+                }
+                continuations += 1
+                var content: [JSONValue] = uses.map { Self.toolResult($0.id, text: "Not run: your reply hit the output limit before this call was complete.", error: true) }
+                content.append(["type": "text", "text": .string(Self.continueText(cutTools: !uses.isEmpty))])
+                messages.append(["role": "user", "content": .array(content)])
+                note(turnID, AINotice(.info, "Long reply: continuing in smaller steps"))
             case "refusal":
                 note(turnID, AINotice(.warning, "Claude declined this request", "Rephrase it, or try a different request."))
                 return
@@ -448,6 +462,13 @@ public final class AIAgent {
     }
 
     // MARK: Helpers
+
+    /// The nudge after a cut-off reply.
+    static func continueText(cutTools: Bool) -> String {
+        "Arcus: your last reply hit the output limit and was cut off" + (cutTools ? "; its tool calls were not run" : "")
+            + ". Continue from where you stopped, in smaller steps: think briefly, call update_plan if you haven't, then build "
+            + "one part per call (one level's walls, then its doors, then its rooms) and keep each call's arguments short."
+    }
 
     static func toolResult(_ id: String, text: String, error: Bool) -> JSONValue {
         var o: [String: JSONValue] = ["type": "tool_result", "tool_use_id": .string(id), "content": .string(text)]

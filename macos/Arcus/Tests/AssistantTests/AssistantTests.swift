@@ -311,6 +311,46 @@ struct AssistantTests {
         #expect(ids == ["x1"])
     }
 
+    @Test func continuesInSmallerStepsAfterACutOffReply() async throws {
+        let s = readySettings()
+        let (fileHost, _, host) = await project()
+        // A reply that thinks, starts a tool call and runs out of output tokens.
+        var cut = SSE.start()
+        cut += SSE.thinking(0)
+        cut += SSE.event("content_block_start", ["type": "content_block_start", "index": 1, "content_block": ["type": "tool_use", "id": "c1", "name": "create_walls", "input": [:]]])
+        cut += SSE.event("content_block_delta", ["type": "content_block_delta", "index": 1, "delta": ["type": "input_json_delta", "partial_json": "{\"level\": \"Lev"]])
+        cut += SSE.end("max_tokens", output: 64_000)
+        let t = MockTransport([
+            MockTransport.Canned(lines: cut),
+            SSE.reply(nil, tools: [("c2", "create_walls", Self.walls)]),
+            SSE.reply("Added 4 walls."),
+        ])
+        let agent = AIAgent(host: host, client: await client(t, s), settings: s)
+        await agent.sendAndWait("Design a whole building")
+        let session = try #require(fileHost.session)
+        #expect(session.model.elements(.walls).count == 4, "the cut-off call never ran; the continued one did")
+        let turn = try #require(agent.store.current.turns.last)
+        #expect(turn.status == .done && turn.finalText == "Added 4 walls.")
+        #expect(t.bodies.first?["max_tokens"]?.intValue == 64_000)
+        // The cut-off call got an error result and the nudge, in one user message.
+        let second = try #require(t.bodies.dropFirst().first?["messages"]?.arrayValue?.last?["content"]?.arrayValue)
+        #expect(second.first?["tool_use_id"]?.stringValue == "c1" && second.first?["is_error"]?.boolValue == true)
+        #expect(second.last?["text"]?.stringValue?.contains("smaller steps") == true)
+    }
+
+    @Test func stopsAfterRepeatedCutOffs() async throws {
+        let s = readySettings()
+        let (_, _, host) = await project()
+        func cut() -> MockTransport.Canned { MockTransport.Canned(lines: SSE.start() + SSE.thinking(0) + SSE.end("max_tokens", output: 64_000)) }
+        let t = MockTransport([cut(), cut(), cut()])
+        let agent = AIAgent(host: host, client: await client(t, s), settings: s)
+        agent.maxContinuations = 2
+        await agent.sendAndWait("Design a whole city")
+        #expect(t.requests.count == 3)
+        let notices: [AINotice] = (agent.store.current.turns.last?.items ?? []).compactMap { item -> AINotice? in if case .notice(let n) = item { return n }; return nil }
+        #expect(notices.last?.title == "The reply was cut off")
+    }
+
     // MARK: Pricing, history, key
 
     @Test func pricesFollowThePublishedTable() {

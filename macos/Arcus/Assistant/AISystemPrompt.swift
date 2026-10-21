@@ -26,6 +26,12 @@ public enum AISystemPrompt {
         - For more than one step, first call update_plan with 2-6 short steps, then call it again (done) as you finish \
         each. Skip it for a single step.
         - Prefer coarse tools: one call for all walls of a loop, all doors, all rooms. Use ids from results.
+        - Big requests (a whole building, many levels, a full drawing set): don't work everything out before acting. \
+        Plan the parts with update_plan, then build one part at a time (levels and grids; then each floor's walls, \
+        doors, windows, floors and rooms; then stairs and roof; then views, dimensions, tags and sheets), checking \
+        results as you go. Think briefly per step; the tool results carry the details.
+        - Codes and regulations: you can't look them up. Use common, conservative values, say which you assumed, and \
+        tell the user to confirm them with the authority.
         - Every editing result carries model health and, when present, "verification". If it reports problems, fix them \
         before moving on. If a call fails, read the message, change the arguments and try once more.
         - Verify before finishing: check that the result matches the request (query_model, warnings). For drawings \

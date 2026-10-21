@@ -18,7 +18,7 @@ public struct AIRequest: Sendable {
     /// breakpoint so every step of the prompt re-reads tools + system + history + context from the cache.
     public var contextBreakpoint: (message: Int, block: Int)?
 
-    public init(model: AIModel, maxTokens: Int = 16_000, system: [String], tools: [JSONValue], messages: [JSONValue], contextBreakpoint: (message: Int, block: Int)? = nil) {
+    public init(model: AIModel, maxTokens: Int = 64_000, system: [String], tools: [JSONValue], messages: [JSONValue], contextBreakpoint: (message: Int, block: Int)? = nil) {
         self.model = model; self.maxTokens = maxTokens; self.system = system; self.tools = tools; self.messages = messages
         self.contextBreakpoint = contextBreakpoint
     }

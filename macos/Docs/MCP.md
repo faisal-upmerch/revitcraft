@@ -430,6 +430,9 @@ Furniture documents and the Family Editor. It uses the same tool layer in-proces
   for drawing checks or attached pictures.
 - Models: `claude-haiku-5-5` works through the tools; a step that fails verification twice runs once on
   `claude-sonnet-5-5`, then back to Haiku. Drawing tasks run `verify_drawing` before finishing.
+- Limits per prompt: 64K output tokens per request (Haiku 5.5 thinks by default; thinking counts), up to 80 requests.
+  A reply that hits the output limit doesn't end the prompt: its unfinished calls get error results and the model
+  continues in smaller steps (up to 3 times). Big requests (a whole building) are planned, then built part by part.
 - Each prompt is one undo step ("AI: …") with a change summary and Undo; risky calls (files, deletes over 5 elements,
   project-wide settings) ask in the chat first.
 - Prompt caching: breakpoints on the last tool, the system prompt and the per-prompt context block, plus automatic
