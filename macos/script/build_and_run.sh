@@ -9,7 +9,7 @@
 #   script/build_and_run.sh --release-build  use BUILD_NUMBER exactly (used by release_local.sh)
 #
 # Signing: ARCUS_SIGN_IDENTITY (a name or SHA-1 from `security find-identity -v -p codesigning`) if set, otherwise the
-# first "Apple Development" identity in the keychain, otherwise ad hoc. A stable certificate keeps the app's designated
+# Apple Development identity of team 7K32QQ2FX8 (Abu Mohammad Faisal), otherwise ad hoc. A stable certificate keeps the app's designated
 # requirement the same from build to build, so macOS privacy grants (Accessibility, Screen Recording) survive rebuilds.
 #
 # DWG engines (Docs/DWGSDKSetup.md): Arcus.app/Contents/Helpers gets arcus-dwg (Rust, acadrust; built with
@@ -152,7 +152,7 @@ mkdir -p "$STAGE/$APP_NAME.app/Contents/Helpers"
 cp "$BIN_DIR/arcus-mcp" "$STAGE/$APP_NAME.app/Contents/Helpers/"
 SIGN_IDENTITY="${ARCUS_SIGN_IDENTITY:-}"
 if [[ -z "$SIGN_IDENTITY" ]]; then
-  SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development: /{print $2; exit}')"
+  SIGN_IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null | awk '/"Apple Development: Abu Mohammad Faisal \(/{print $2; exit}')"
 fi
 # Inside-out: the helpers first, then the app (no --deep). Hardened runtime is not used.
 for h in "$STAGE/$APP_NAME.app/Contents/Helpers/"*; do
@@ -164,7 +164,7 @@ if [[ -n "$SIGN_IDENTITY" ]]; then
   SIGNED_BY="$(codesign -dv --verbose=2 "$STAGE/$APP_NAME.app" 2>&1 | sed -n 's/^Authority=//p' | head -n1)"
 else
   codesign --force --sign - --timestamp=none "$STAGE/$APP_NAME.app" >/dev/null
-  SIGNED_BY="ad hoc (no Apple Development identity found)"
+  SIGNED_BY="ad hoc (no Apple Development identity for team 7K32QQ2FX8 found)"
 fi
 rm -rf "$APP"
 mv "$STAGE/$APP_NAME.app" "$APP"

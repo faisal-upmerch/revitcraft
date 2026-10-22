@@ -28,9 +28,9 @@ Other entry points:
 | `swift test --filter "LibraryTests\."` | The Furniture Library: every piece builds, flexes, compiles and loads, and every essential's shop drawing (F101) is clean, rendered to `/tmp/arcus-polish/` (about 10 min; kept out of DomainTests) |
 | `swift run -c release arcus-bench [--quick] [--out file.json]` | Engine benchmarks on the generated fixtures (see [Docs/Performance.md](Docs/Performance.md)) |
 | `script/qa_capture.sh all <dir>` | Scripted end-to-end QA workflow plus light/dark screenshots at minimum and spacious window sizes |
-| `script/release_local.sh patch\|minor\|major` | Bumps `VERSION`/`BUILD_NUMBER`, writes release notes and builds and verifies the release. Local only: no signing identity, notarization or upload |
+| `script/release_local.sh patch\|minor\|major` | Bumps `VERSION`/`BUILD_NUMBER`, writes release notes and builds and verifies the release. Local only: development signing, no Developer ID, notarization or upload |
 
-The app bundle is staged at `build/Arcus.app`, signed with the first "Apple Development" certificate in the keychain (or `ARCUS_SIGN_IDENTITY`; ad hoc when there is none), installed to `/Applications/Arcus.app` and launched from there. A stable certificate keeps macOS privacy grants across rebuilds. Pass `--no-install` to keep it in `build/` only.
+The app bundle is staged at `build/Arcus.app`, signed with the Apple Development certificate of team 7K32QQ2FX8 (or `ARCUS_SIGN_IDENTITY`; ad hoc when there is none), installed to `/Applications/Arcus.app` and launched from there. A stable certificate keeps macOS privacy grants across rebuilds. Pass `--no-install` to keep it in `build/` only.
 
 ## What you can do
 
