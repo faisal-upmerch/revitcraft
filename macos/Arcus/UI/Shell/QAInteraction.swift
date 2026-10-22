@@ -137,11 +137,7 @@ extension QAHarness {
         /// Posts an event through the application's event queue and waits for it to be dispatched, so AppKit runs
         /// its end-of-event processing (which closes the automatic undo group) as it does after real input.
         func flushEvents() async {
-            if let e = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                          windowNumber: window.windowNumber, context: nil, subtype: 0, data1: 0, data2: 0) {
-                NSApp.postEvent(e, atStart: false)
-            }
-            await pause(30)
+            await QAHarness.dispatchEvent()
         }
 
         func settle() async {

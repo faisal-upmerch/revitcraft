@@ -54,7 +54,8 @@ enum QAHarness {
     // MARK: Helpers
 
     static func step(_ name: String, _ body: () async throws -> String) async {
-        // Return to the run loop so each step is its own undo group (as separate user events would be).
+        // Each step is its own undo group, as separate user events would be.
+        await dispatchEvent()
         await pause(30)
         let t0 = CFAbsoluteTimeGetCurrent()
         do {
@@ -69,6 +70,24 @@ enum QAHarness {
     static func check(_ c: Bool, _ msg: String) throws { if !c { throw QAError(msg) } }
 
     static func pause(_ ms: Int) async { try? await Task.sleep(for: .milliseconds(ms)) }
+
+    /// Posts an event through the application's event queue and waits until AppKit has dispatched it. AppKit closes
+    /// the automatic (groups-by-event) undo group only when it handles an event (`NSApplication.run`), never on a bare
+    /// run loop pass, so scripted actions with no event between them would otherwise share one undo group.
+    static func dispatchEvent() async {
+        final class Seen { var value = false }
+        let seen = Seen(), tag = Int.random(in: 1...Int.max)
+        guard let e = NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                         windowNumber: 0, context: nil, subtype: 0x51, data1: tag, data2: 0) else { return }
+        let monitor = NSEvent.addLocalMonitorForEvents(matching: .applicationDefined) { ev in
+            guard ev.data1 == tag else { return ev }
+            seen.value = true
+            return nil
+        }
+        NSApp.postEvent(e, atStart: false)
+        for _ in 0..<400 where !seen.value { await pause(5) }
+        if let monitor { NSEvent.removeMonitor(monitor) }
+    }
 
     static func waitForGraphics(_ state: DocumentState, _ view: ElementID, timeout: Double = 20) async -> ViewGraphics? {
         let t0 = CFAbsoluteTimeGetCurrent()
@@ -203,19 +222,22 @@ enum QAHarness {
             s.session.setParameter(ParameterID("wall.topOffset"), text: "300", on: [w.id], type: .length, name: "Top Offset")
             try check(abs((s.model[w.id]?.wall?.topOffset ?? 0) - 0.3) < 1e-9, "Top offset not applied")
             guard let door = s.model.elements(.doors).first else { throw QAError("No door") }
-            await pause(30)
+            await dispatchEvent() // the Width edit is a separate user action
             @MainActor func width() -> Double { s.model[door.id].flatMap { InsertGeometry.openingSize($0, s.model)?.width } ?? -1 }
-            let original = width()
-            s.session.setParameter(Parameters.familyParamID("Width"), text: "1000", on: [door.id], type: .length, name: "Width")
-            try check(abs(width() - 1.1) < 1e-6, "Type width not applied (\(width()))")
-            await pause(30)
+            let widthID = Parameters.familyParamID("Width")
+            guard let param = s.model[door.id].flatMap({ s.model.type(of: $0) })?.typeData?.params[widthID]?.doubleValue else { throw QAError("Door type has no Width") }
+            let original = width(), target = original + 0.2 // a real change, whatever the template's default door is
+            s.session.setParameter(widthID, text: String(Int(((param + 0.2) * 1000).rounded())), on: [door.id], type: .length, name: "Width")
+            try check(abs(width() - target) < 1e-6, "Type width not applied (\(width()), expected \(target))")
+            await dispatchEvent() // ⌘Z
             let undoName = s.session.undoManager.undoActionName
             s.session.undoManager.undo()
             let t = s.model[door.id].flatMap { s.model.type(of: $0) }
-            try check(abs(width() - original) < 1e-6, "Undo “\(undoName)” failed (\(width())); type \(t?.name ?? "?") width param \(t?.typeData?.params[Parameters.familyParamID("Width")]?.description ?? "?")")
+            try check(abs(width() - original) < 1e-6, "Undo “\(undoName)” failed (\(width())); type \(t?.name ?? "?") width param \(t?.typeData?.params[widthID]?.description ?? "?")")
+            try check(abs((s.model[w.id]?.wall?.topOffset ?? 0) - 0.3) < 1e-9, "Undo “\(undoName)” also undid the Top Offset edit")
             s.session.undoManager.redo()
-            try check(abs(width() - 1.1) < 1e-6, "Redo failed (\(width()))")
-            return String(format: "wall top offset; door type width %.2f → 1.10 → undo %.2f → redo 1.10", original, original)
+            try check(abs(width() - target) < 1e-6, "Redo failed (\(width()))")
+            return String(format: "wall top offset; door type width %.2f → %.2f → undo %.2f → redo %.2f", original, target, original, target)
         }
         await step("Dimension, tags, text, revision cloud") {
             let d = DimensionTool(ctx: s.toolContext(for: l1.id), kind: .aligned)
